@@ -1,0 +1,32 @@
+{
+  "name": "@botplatform/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "tsx src/main.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@fastify/cookie": "^9.4.0",
+    "@prisma/client": "^6.11.1",
+    "bcryptjs": "^3.0.3",
+    "cheerio": "^1.2.0",
+    "dotenv": "^17.4.2",
+    "fastify": "^4.28.1",
+    "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.3.0",
+    "@types/nodemailer": "^8.0.1",
+    "prisma": "^6.11.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.8"
+  }
+}

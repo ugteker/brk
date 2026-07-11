@@ -1,0 +1,12 @@
+{
+  "name": "github-copilot-resources",
+  "private": true,
+  "scripts": {
+    "build:api": "npm --prefix apps/api run build",
+    "start:api": "npm --prefix apps/api run start",
+    "build:web": "npm --prefix apps/web run build",
+    "start:web": "npm --prefix apps/web run start",
+    "test:api": "npm --prefix apps/api run test",
+    "test:web": "npm --prefix apps/web run test"
+  }
+}

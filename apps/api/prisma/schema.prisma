@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?
+  googleId     String?  @unique
+  displayName  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Agent {
+  id              String      @id @default(cuid())
+  ownerUserId     String
+  name            String
+  description     String      @default("")
+  status          String      @default("active")
+  preferencesJson String      @default("{}")
+  recipientsJson  String      @default("[]")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  sources     AgentSource[]
+  schedules   AgentSchedule[]
+  runs        AgentRun[]
+  promptVersions AgentPromptVersion[]
+  runReports  AgentRunReport[]
+  sourceCursors AgentSourceCursor[]
+  sourceCrawlConfigs AgentSourceCrawlConfig[]
+}
+
+model AgentSource {
+  id      String  @id @default(cuid())
+  agentId   String
+  type    String
+  value   String
+  enabled Boolean @default(true)
+  frequencyMinutes Int @default(60)
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
+}
+
+model AgentSchedule {
+  id        String   @id @default(cuid())
+  agentId     String
+  mode      String   @default("interval")
+  intervalMinutes Int?
+  dailyTime String?
+  timezone  String?
+  nextRunAt DateTime
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  agent       Agent      @relation(fields: [agentId], references: [id], onDelete: Restrict)
+}
+
+model AgentRun {
+  id           String   @id @default(cuid())
+  agentId        String
+  scheduledFor DateTime
+  status       String
+  workerId     String?
+  retryCount   Int      @default(0)
+  errorCode    String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  agent          Agent      @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  artifacts    AgentRunArtifact[]
+  report       AgentRunReport?
+
+  @@unique([agentId, scheduledFor])
+}
+
+model AgentPromptVersion {
+  id           String   @id @default(cuid())
+  agentId        String
+  version      Int
+  model        String
+  systemPrompt String
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  agent          Agent      @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  reports      AgentRunReport[]
+
+  @@unique([agentId, version])
+}
+
+model AgentRunArtifact {
+  id          String   @id @default(cuid())
+  agentId       String
+  agentRunId    String
+  kind        String
+  sourceRef   String
+  payloadJson String
+  fidelity    String
+  createdAt   DateTime @default(now())
+  agentRun      AgentRun   @relation(fields: [agentRunId], references: [id], onDelete: Restrict)
+}
+
+model AgentRunReport {
+  id                 String   @id @default(cuid())
+  agentId              String
+  agentRunId           String   @unique
+  promptVersionId    String
+  summary            String
+  sourceWarningsJson String
+  needsHumanReview   Boolean
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  agent                Agent              @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  agentRun             AgentRun           @relation(fields: [agentRunId], references: [id], onDelete: Restrict)
+  promptVersion      AgentPromptVersion @relation(fields: [promptVersionId], references: [id], onDelete: Restrict)
+  signals            AgentSignal[]
+}
+
+model AgentSignal {
+  id            String   @id @default(cuid())
+  agentRunReportId String
+  symbol        String
+  side          String
+  confidence    Int
+  rationale     String
+  citationsJson String
+  createdAt     DateTime @default(now())
+  report        AgentRunReport @relation(fields: [agentRunReportId], references: [id], onDelete: Restrict)
+}
+
+model AgentSourceCursor {
+  id                  String    @id @default(cuid())
+  agentId             String
+  sourceValue         String
+  strategy            String
+  seenItemIdsJson     String?
+  lastItemPublishedAt DateTime?
+  lastContentHash     String?
+  updatedAt           DateTime  @updatedAt
+  agent               Agent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
+
+  @@unique([agentId, sourceValue])
+}
+
+model AgentSourceCrawlConfig {
+  id                   String    @id @default(cuid())
+  agentId              String
+  sourceValue          String
+  siteType             String
+  configJson           String
+  inspectedAt          DateTime  @default(now())
+  inspectionModel      String?
+  confidence           Float?
+  lastReinspectionAt   DateTime?
+  reinspectionCount24h Int       @default(0)
+  agent                Agent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
+
+  @@unique([agentId, sourceValue])
+}

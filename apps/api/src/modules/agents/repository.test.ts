@@ -1,0 +1,122 @@
+import { describe, expect, it, vi } from 'vitest';
+import { AgentRepository } from './repository';
+import type { CreateAgentInput } from './types';
+
+describe('AgentRepository', () => {
+  it('creates agent with supported source types only', async () => {
+    const fakeDb = {
+      agent: {
+        create: async ({ data }: { data: { ownerUserId: string; name: string; sources: { create: Array<{ type: string; value: string }> } } }) => ({
+          id: 'agent_1',
+          ownerUserId: data.ownerUserId,
+          name: data.name,
+          status: 'active',
+          createdAt: new Date('2026-07-10T00:00:00.000Z'),
+          updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+          sources: data.sources.create
+        }),
+        update: async () => ({})
+      }
+    };
+
+    const repo = new AgentRepository(fakeDb as never);
+    const input: CreateAgentInput = {
+      name: 'Housing Agent',
+      sources: [{ type: 'podcast_feeds', value: 'https://pod.example/feed.xml' }],
+      preferences: { sector: ['housing'] },
+      recipients: ['team@example.com'],
+      schedule: { mode: 'interval', intervalMinutes: 120 }
+    };
+
+    const agent = await repo.createAgent('admin-user-id', input);
+    expect(agent.name).toBe('Housing Agent');
+    expect(agent.sources[0]?.type).toBe('podcast_feeds');
+  });
+
+  it('lists agents with their sources', async () => {
+    const fakeDb = {
+      agent: {
+        findMany: async () => [
+          {
+            id: 'agent_1',
+            ownerUserId: 'admin-user-id',
+            name: 'Housing Agent',
+            status: 'active',
+            createdAt: new Date('2026-07-10T00:00:00.000Z'),
+            updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+            sources: [{ type: 'web_urls', value: 'https://example.com' }]
+          }
+        ]
+      }
+    };
+
+    const repo = new AgentRepository(fakeDb as never);
+    const agents = await repo.listAgents('admin-user-id');
+
+    expect(agents).toHaveLength(1);
+    expect(agents[0]?.name).toBe('Housing Agent');
+    expect(agents[0]?.sources[0]?.value).toBe('https://example.com');
+  });
+
+  it('gets a single agent with its sources', async () => {
+    const fakeDb = {
+      agent: {
+        findUnique: async () => ({
+          id: 'agent_1',
+          ownerUserId: 'admin-user-id',
+          name: 'Housing Agent',
+          status: 'active',
+          createdAt: new Date('2026-07-10T00:00:00.000Z'),
+          updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+          sources: [{ type: 'web_urls', value: 'https://example.com' }]
+        })
+      }
+    };
+
+    const repo = new AgentRepository(fakeDb as never);
+    const agent = await repo.getAgent('agent_1');
+    expect(agent?.name).toBe('Housing Agent');
+  });
+
+  it('returns null when a agent does not exist', async () => {
+    const fakeDb = { agent: { findUnique: async () => null } };
+    const repo = new AgentRepository(fakeDb as never);
+    expect(await repo.getAgent('missing')).toBeNull();
+  });
+
+  it('enables a disabled agent', async () => {
+    const update = vi.fn(async ({ data }: { data: { status: string } }) => ({ status: data.status }));
+    const fakeDb = { agent: { update } };
+    const repo = new AgentRepository(fakeDb as never);
+
+    await repo.enableAgent('agent_1');
+
+    expect(update).toHaveBeenCalledWith({ where: { id: 'agent_1' }, data: { status: 'active' } });
+  });
+
+  it('deletes a agent and its related records inside a transaction', async () => {
+    const findMany = vi.fn(async () => [{ id: 'report_1' }]);
+    const deleteMany = vi.fn(async () => ({ count: 0 }));
+    const deleteAgent = vi.fn(async () => ({}));
+    const tx = {
+      agentRunReport: { findMany, deleteMany },
+      agentSignal: { deleteMany },
+      agentRunArtifact: { deleteMany },
+      agentRun: { deleteMany },
+      agentPromptVersion: { deleteMany },
+      agentSchedule: { deleteMany },
+      agentSource: { deleteMany },
+      agent: { delete: deleteAgent }
+    };
+    const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<void>) => fn(tx));
+    const fakeDb = { $transaction };
+
+    const repo = new AgentRepository(fakeDb as never);
+    await repo.deleteAgent('agent_1');
+
+    expect($transaction).toHaveBeenCalled();
+    expect(findMany).toHaveBeenCalledWith({ where: { agentId: 'agent_1' }, select: { id: true } });
+    expect(deleteMany).toHaveBeenCalledWith({ where: { agentRunReportId: { in: ['report_1'] } } });
+    expect(deleteAgent).toHaveBeenCalledWith({ where: { id: 'agent_1' } });
+  });
+});
