@@ -9,6 +9,7 @@ function resetUrl(token: string): string {
   return `${config.appBaseUrl}/?resetToken=${encodeURIComponent(token)}`;
 }
 
+
 export async function sendEmailConfirmationLink(mailer: MailerLike, to: string, token: string): Promise<void> {
   const url = confirmationUrl(token);
   await mailer.send({
@@ -52,3 +53,32 @@ export async function sendPasswordResetLink(mailer: MailerLike, to: string, toke
     `
   });
 }
+
+/** Notifies the configured admin (`ADMIN_EMAIL`) whenever a new user account is created, via
+ * either password signup or Google sign-in. Best-effort only - a failure here must never block
+ * or fail the signup flow itself, so callers should catch/log rather than await-and-throw. */
+export async function sendAdminNewUserNotification(
+  mailer: MailerLike,
+  adminEmail: string,
+  newUserEmail: string,
+  signupMethod: 'password' | 'google'
+): Promise<void> {
+  const methodLabel = signupMethod === 'google' ? 'Google sign-in' : 'email/password';
+  await mailer.send({
+    to: adminEmail,
+    subject: 'New ChatTrader account created',
+    text: [
+      `A new user account was created via ${methodLabel}:`,
+      '',
+      newUserEmail,
+      '',
+      new Date().toISOString()
+    ].join('\n'),
+    html: `
+      <p>A new user account was created via ${methodLabel}:</p>
+      <p><strong>${newUserEmail}</strong></p>
+      <p style="color:#666;font-size:12px;">${new Date().toISOString()}</p>
+    `
+  });
+}
+
