@@ -109,6 +109,8 @@ export class AgentRunner {
             });
           }
         } catch (error) {
+          // eslint-disable-next-line no-console
+          console.warn(`[agent-runner] Failed to fetch source ${source.value}:`, error);
           sourceWarnings.push(
             `Failed to fetch source ${source.value}: ${error instanceof Error ? error.message : 'unknown error'}`
           );
