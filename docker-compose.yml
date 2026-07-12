@@ -1,0 +1,28 @@
+# ChatTrader production stack — single Hetzner VPS, single all-in-one
+# container (API + web + cloudflared), fronted by a Cloudflare Quick Tunnel
+# (no owned domain yet; see deploy/README.md).
+#
+# Secrets: loaded from `.env` at the repo root on the server (git-ignored,
+# mode 600 — see apps/api/.env.example for the template of required keys).
+# Nothing sensitive is baked into the image or written into this file.
+
+services:
+  ChatTrader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    volumes:
+      - api-data:/app/api/prisma
+    # No published ports needed in production — cloudflared dials out to
+    # Cloudflare's edge, nothing needs to reach this container from the
+    # host. Uncomment for local testing without a tunnel:
+    # ports:
+    #   - "127.0.0.1:8080:80"
+
+volumes:
+  api-data:
