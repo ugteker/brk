@@ -169,4 +169,33 @@ existed in developers' local `apps/api/.env` files:
 | SPA loads but API calls fail | Confirm the API process is running inside the container: `docker compose exec chattrader sh -c "wget -qO- http://127.0.0.1:3000/api/agents"` (expect 401, not a connection error) |
 | Container keeps restarting | `docker compose logs chattrader` — the entrypoint shuts down all three processes (API/nginx/cloudflared) if any one exits, so check which one failed first |
 | Data lost after redeploy | Confirm the `api-data` volume exists: `docker volume ls | grep api-data` — SQLite's `dev.db` lives there, not in the container filesystem |
-| Manual episode-picker run always shows "no content", but works fine locally | YouTube blocks/rate-limits unauthenticated caption/transcript requests from known datacenter/VPS IP ranges (Hetzner included) more aggressively than residential IPs — confirmed via server logs showing `playabilityStatus: "LOGIN_REQUIRED"` on every client impersonation. The app already impersonates several browser/app clients with realistic headers to reduce this, but if a video still fails only from the server: (1) **cheapest fix** — set `YOUTUBE_COOKIE` in `.env` to a signed-in Google account's exported cookies (see `.env.example`), which directly satisfies the login check; (2) if cookies aren't enough or expire too often, set `YOUTUBE_PROXY_URL` to a residential/mobile proxy service URL to route around the IP-based block entirely. Check the Runs view: the warning message now always includes the failing episode's clickable URL, and `docker compose logs chattrader | grep youtube-adapter` shows exactly which stage failed (missing API key / per-client rejection reason / fallback scrape failure). |
+| Manual episode-picker run always shows "no content", but works fine locally | YouTube blocks caption/transcript requests from known datacenter/VPS IP ranges (Hetzner included) — confirmed via server logs showing `playabilityStatus: "LOGIN_REQUIRED"` on every client impersonation, even with realistic headers and multiple client impersonations (ANDROID/IOS/WEB). A signed-in session's `YOUTUBE_COOKIE` alone did **not** fix this (modern YouTube bot-detection is IP-reputation-based, not just session-based) — the fix that worked was routing YouTube requests through a residential IP via `YOUTUBE_PROXY_URL` (see "YouTube proxy dependency" below). Check the Runs view: the warning message always includes the failing episode's clickable URL, and `docker compose logs chattrader | grep youtube-adapter` shows exactly which stage failed (missing API key / per-client rejection reason / fallback scrape failure). |
+
+### YouTube proxy dependency
+
+The YouTube caption-fetch feature depends on `YOUTUBE_PROXY_URL` being set to a
+working residential-IP HTTP proxy — direct requests from Hetzner get blocked
+by YouTube with `LOGIN_REQUIRED` regardless of headers/cookies.
+
+Current setup: a self-hosted [Tinyproxy](https://tinyproxy.github.io/) instance
+runs on a home Linux mini server, exposed via port-forwarding + DuckDNS
+(`YOUTUBE_PROXY_URL=http://<user>:<pass>@<duckdns-host>:8888`). Tinyproxy's
+`Allow` directive restricts access to the Hetzner server's IP only.
+
+This is a **soft dependency** — if the mini server or home internet connection
+goes down, YouTube crawls will start failing again (other features are
+unaffected). To verify the proxy is reachable:
+
+```bash
+# From any machine (confirms the port is open, not that auth succeeds):
+Test-NetConnection -ComputerName <duckdns-host> -Port 8888   # PowerShell
+nc -zv <duckdns-host> 8888                                    # Linux/macOS
+
+# On the mini server (confirms Tinyproxy itself is healthy):
+sudo systemctl status tinyproxy
+```
+
+If Tinyproxy fails to start after a config edit, check for **duplicate
+`Port`/`Listen` directives** (the default config already defines these
+uncommented) — `grep -n -E "^Port|^Listen" /etc/tinyproxy/tinyproxy.conf`
+should show each only once.
