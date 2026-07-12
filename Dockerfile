@@ -16,6 +16,13 @@ COPY apps/api/prisma ./prisma
 RUN npx prisma generate
 COPY apps/api/tsconfig.json apps/api/tsconfig.build.json ./
 COPY apps/api/src ./src
+# tsc is run here purely as a build-time type-check gate (fails the image
+# build on type errors). The compiled dist/ output is intentionally NOT used
+# at runtime: apps/api is an ESM package whose source imports omit the
+# ".js" extension Node's ESM loader requires for compiled output, so the
+# app is run straight from source via tsx at runtime instead (see the
+# runtime stage below and apps/api/package.json's own "start"/"dev"
+# scripts, which do the same).
 RUN npm run build
 
 FROM node:20-alpine AS web-build
@@ -31,12 +38,13 @@ RUN apk add --no-cache nginx bash
 WORKDIR /app
 
 # ---- API runtime ----
+# Run from source via tsx (same as apps/api's own "start"/"dev" scripts),
+# not the compiled dist/ output — see the api-build stage comment above.
+COPY --from=api-build /app/api/node_modules ./api/node_modules
+COPY --from=api-build /app/api/prisma ./api/prisma
+COPY apps/api/src ./api/src
+COPY apps/api/tsconfig.json apps/api/tsconfig.build.json ./api/
 COPY apps/api/package.json apps/api/package-lock.json ./api/
-RUN npm ci --omit=dev --prefix ./api
-COPY --from=api-build /app/api/node_modules/.prisma ./api/node_modules/.prisma
-COPY --from=api-build /app/api/node_modules/@prisma ./api/node_modules/@prisma
-COPY --from=api-build /app/api/dist ./api/dist
-COPY apps/api/prisma ./api/prisma
 # SQLite db file lives here at runtime; mount a volume at this path in
 # compose so data survives container recreation.
 VOLUME ["/app/api/prisma"]

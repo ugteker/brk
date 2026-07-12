@@ -11,9 +11,9 @@ it updated. For architecture background, trade-offs, and upgrade paths
 - A Cloudflare account (used only for the outbound Quick Tunnel — no domain
   or DNS setup required for this procedure).
 - Push access to `ugteker/brk` (for the GitHub Actions steps).
-- **Not yet done**: the all-in-one Docker image has not been build-tested
-  (no Docker daemon in the environment it was authored in). Do step 1 before
-  anything else.
+- The all-in-one Docker image has been build-tested locally end-to-end
+  (image builds, and the API/nginx/cloudflared trio start and serve traffic
+  correctly). See "Build verification notes" below.
 
 ## Step 1 — Build-test the image before first deploy
 
@@ -22,13 +22,42 @@ On any machine with Docker running (your laptop or the Hetzner server itself):
 ```bash
 git clone https://github.com/ugteker/brk.git
 cd brk
-docker build -t ChatTrader:test .
+docker build -t chattrader:test .
+docker run -d --name chattrader-test -p 127.0.0.1:8080:80 \
+  -e JWT_SECRET=test-secret -e AUTH_COOKIE_SECURE=false chattrader:test
+docker logs chattrader-test   # confirm API/nginx/cloudflared all start
+curl -i http://127.0.0.1:8080/          # expect 200 (SPA)
+curl -i http://127.0.0.1:8080/api/health  # any non-5xx confirms the proxy works
+docker rm -f chattrader-test
 ```
 
-Fix anything that fails (this image was written from documentation, not a
-verified build — likely trouble spots: Alpine's `nginx` package config path
-`/etc/nginx/http.d/default.conf`, or the `cloudflared` binary `COPY --from=`
-in the `Dockerfile`). Do not proceed until this build succeeds.
+Do not proceed until this build succeeds and both curl checks return.
+
+### Build verification notes
+Verified locally on 2026-07-12. Two real bugs were found and fixed in the
+process (both already applied to the `Dockerfile`/`deploy/entrypoint.sh` in
+this repo, not just noted here):
+
+1. **CRLF line endings in `deploy/entrypoint.sh`.** A Windows git checkout
+   had converted the file's line endings to CRLF, which broke its `#!/usr/bin/env bash`
+   shebang inside the Linux container (`env: can't execute 'bash\r'`). Fixed
+   by normalizing the file to LF and adding `.gitattributes` (`*.sh text
+   eol=lf`) so this can't recur regardless of the committer's OS/git config.
+2. **ESM import resolution.** `apps/api` is an ESM package
+   (`"type": "module"`) whose source imports omit the `.js` extension (e.g.
+   `import { buildServer } from './server'`). Node's ESM loader requires
+   explicit extensions for compiled output, so running the `tsc`-compiled
+   `dist/main.js` directly with plain `node` failed with
+   `ERR_MODULE_NOT_FOUND`. Fixed by running the API from source via `tsx`
+   at runtime instead (matching `apps/api/package.json`'s own existing
+   `start`/`dev` scripts) — `tsc` is still run during the image build as a
+   type-check gate, but its `dist/` output isn't what actually runs.
+
+Local-sandbox-only note: build-testing in a corporate-proxied dev machine
+may require temporarily trusting a local root CA for `apk`/`npm` HTTPS
+fetches (not needed on Hetzner, which has normal internet access) — see
+`deploy/README.md` if you hit TLS errors during `docker build` on such a
+machine.
 
 ## Step 2 — One-time server setup
 

@@ -131,13 +131,21 @@ beyond internal testing:
   undoes the single-container simplification made for this initial,
   no-real-traffic deployment.
 
-## Known gaps / not yet verified
+## Known gaps / build verification history
 
-- **The all-in-one image has not been build-tested** in this environment
-  (no Docker daemon available in the sandbox this was authored in — only
-  `docker compose config` was validated, which checks YAML/env wiring but
-  not the actual image build). **Before the first real deploy**, run
-  `docker compose build` (or `docker build .`) on a machine with Docker
-  running and fix anything that comes up (Alpine's `nginx` package config
-  paths, `cloudflared` binary compatibility, etc. were written from
-  documentation, not a verified build).
+- **The all-in-one image has been build-tested locally** (build + run +
+  curl-verified SPA and `/api/*` proxy routing). Two real bugs were found
+  and fixed along the way:
+  1. `deploy/entrypoint.sh` had CRLF line endings from a Windows checkout,
+     breaking its bash shebang inside the Linux container — fixed, and a
+     `.gitattributes` (`*.sh text eol=lf`) added so this can't recur.
+  2. The API's compiled `dist/main.js` failed under Node's ESM loader
+     (`apps/api` is `"type": "module"` but its source imports omit `.js`
+     extensions, which compiled ESM output requires) — fixed by running the
+     API from source via `tsx` at runtime, matching
+     `apps/api/package.json`'s existing `start`/`dev` scripts. `tsc` still
+     runs during the build as a type-check gate; its output just isn't what
+     ships/runs.
+- Not yet verified: a real deploy against the actual Hetzner server (this
+  was only tested on a local machine). Follow
+  `docs/deployment-procedure.md` for that.

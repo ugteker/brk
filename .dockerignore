@@ -6,7 +6,7 @@ apps/api/.env.*
 apps/api/prisma/dev.db
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal
-# apps/api/certs (temporarily allowed for local CA-trust test build)
+apps/api/certs
 apps/web/test-results
 apps/web/playwright-report
 apps/web/blob-report

@@ -23,8 +23,8 @@ cleanup() {
 }
 trap cleanup TERM INT
 
-echo "[entrypoint] starting API (node /app/api/dist/main.js)..."
-node /app/api/dist/main.js &
+echo "[entrypoint] starting API (tsx /app/api/src/main.ts)..."
+(cd /app/api && node_modules/.bin/tsx src/main.ts) &
 PIDS+=($!)
 
 echo "[entrypoint] starting nginx..."
