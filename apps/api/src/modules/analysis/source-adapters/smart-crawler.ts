@@ -112,7 +112,15 @@ async function crawlFeed(
     : items.filter((item) => !seenIds.has(item.itemId)).slice(0, resolveMaxItems(source));
 
   if (selected.length === 0) {
-    return { evidence: [] };
+    // If a specific episode was requested (episode picker) but isn't found in the current feed
+    // fetch, surface a clear warning instead of silently reporting "no content" - the feed may
+    // have changed/rotated the item out, or the stored link no longer matches exactly.
+    return {
+      evidence: [],
+      warning: options?.forcedItemLink
+        ? `Could not find the requested episode (${options.forcedItemLink}) in the current feed fetch — it may have been removed or the feed may have changed.`
+        : undefined
+    };
   }
 
   const evidence: EvidenceBlock[] = [];

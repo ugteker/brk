@@ -333,7 +333,17 @@ export class YouTubeAdapter implements SourceAdapter {
           .slice(0, resolveMaxItems(source));
 
     if (candidates.length === 0) {
-      return { evidence: [] };
+      // If a specific episode was requested (episode picker) but isn't found in the current feed
+      // fetch, surface a clear warning instead of silently reporting "no content" - the feed may
+      // only expose a limited recent window (e.g. YouTube's public playlist/channel feeds cap at
+      // 15 items) and no longer include the requested video, or the stored link may not match
+      // exactly.
+      return {
+        evidence: [],
+        warning: options?.forcedItemLink
+          ? `Could not find the requested episode (${options.forcedItemLink}) in the current feed fetch — it may have been removed, or no longer appear in YouTube's recent-items feed.`
+          : undefined
+      };
     }
 
     const evidence: EvidenceBlock[] = [];
