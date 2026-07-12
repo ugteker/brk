@@ -24,7 +24,16 @@ export class SmtpMailer implements MailerLike {
         host: config.smtp.host,
         port: config.smtp.port,
         secure: config.smtp.secure,
-        auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.password } : undefined
+        auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.password } : undefined,
+        // Without these, nodemailer/Node's default socket timeouts can leave a
+        // send() hanging for a long time (well past nginx's own proxy
+        // timeout) if the configured SMTP host is unreachable/blocked from
+        // this network - callers awaiting send() would otherwise appear to
+        // hang the whole HTTP request. 10s is generous for any real SMTP
+        // provider's connect/greeting/response steps.
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 10_000
       });
     }
     return this.transporter;
