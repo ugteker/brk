@@ -21,7 +21,11 @@ function createDeps(overrides: Partial<Parameters<typeof AgentRunner>[0]> = {}) 
   const reportRepository = {
     saveRunReport: vi.fn(async (input) => ({ ...input, id: 'report-1', createdAt: new Date() }))
   };
-  const cursorRepository = { getCursor: vi.fn(async () => null), saveCursor: vi.fn(async () => undefined) };
+  const cursorRepository = {
+    getCursor: vi.fn(async () => null),
+    saveCursor: vi.fn(async () => undefined),
+    touchCrawlAttempt: vi.fn(async () => undefined)
+  };
 
   return {
     agentRepository: { getAgent: vi.fn(async () => agent) },
@@ -69,6 +73,60 @@ describe('AgentRunner', () => {
     expect(result.status).toBe('succeeded');
     expect(deps.reportRepository.saveRunReport).toHaveBeenCalledTimes(1);
     expect(deps.artifactRepository.saveArtifact).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips fetching a source whose frequencyMinutes has not elapsed since its last crawl', async () => {
+    const deps = createDeps({
+      cursorRepository: {
+        getCursor: vi.fn(async () => ({
+          agentId: 'agent-1',
+          sourceValue: 'https://example.com/article',
+          strategy: 'content_hash' as const,
+          seenItemIds: [],
+          lastItemPublishedAt: null,
+          lastContentHash: null,
+          lastCrawledAt: new Date(Date.now() - 5 * 60_000).toISOString() // crawled 5 min ago
+        })),
+        saveCursor: vi.fn(async () => undefined),
+        touchCrawlAttempt: vi.fn(async () => undefined)
+      }
+    });
+    const runner = new AgentRunner(deps as never);
+
+    const result = await runner.run('agent-1', 'run-1');
+
+    expect(deps.sourceAdapters.web_urls.fetch).not.toHaveBeenCalled();
+    expect(deps.cursorRepository.touchCrawlAttempt).not.toHaveBeenCalled();
+    expect(result.status).toBe('succeeded_no_new_content');
+  });
+
+  it('re-fetches a source once its frequencyMinutes has elapsed since its last crawl', async () => {
+    const deps = createDeps({
+      cursorRepository: {
+        getCursor: vi.fn(async () => ({
+          agentId: 'agent-1',
+          sourceValue: 'https://example.com/article',
+          strategy: 'content_hash' as const,
+          seenItemIds: [],
+          lastItemPublishedAt: null,
+          lastContentHash: null,
+          lastCrawledAt: new Date(Date.now() - 120 * 60_000).toISOString() // crawled 2h ago, frequency is 60 min
+        })),
+        saveCursor: vi.fn(async () => undefined),
+        touchCrawlAttempt: vi.fn(async () => undefined)
+      }
+    });
+    const runner = new AgentRunner(deps as never);
+
+    const result = await runner.run('agent-1', 'run-1');
+
+    expect(deps.sourceAdapters.web_urls.fetch).toHaveBeenCalledTimes(1);
+    expect(deps.cursorRepository.touchCrawlAttempt).toHaveBeenCalledWith(
+      'agent-1',
+      'https://example.com/article',
+      expect.any(String)
+    );
+    expect(result.status).toBe('succeeded');
   });
 
   it('forces crawling one specific episode from one source when forcedEpisode is given, skipping other sources', async () => {

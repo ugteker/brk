@@ -11,6 +11,10 @@ export interface EvidenceBlock {
   citations: string[];
   itemId?: string;
   publishedAt?: string;
+  // Human-readable title for this piece of evidence (episode/video/article title), when the
+  // source adapter has one available - shown in the report notification email so recipients can
+  // see at a glance which specific episode(s)/item(s) the report was generated from.
+  title?: string;
 }
 
 export interface SourceConfig {
@@ -61,6 +65,11 @@ export interface SourceCursorState {
   seenItemIds: string[];
   lastItemPublishedAt: string | null;
   lastContentHash: string | null;
+  /** ISO timestamp of the last time this source was actually fetched over the network (success or
+   * failure). Used to enforce each source's `frequencyMinutes` crawl cadence independently of the
+   * agent's overall run schedule. Distinct from `lastItemPublishedAt`, which only advances when new
+   * content is found. */
+  lastCrawledAt?: string | null;
 }
 
 export type SiteType = 'feed' | 'listing_page' | 'single_page';

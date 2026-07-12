@@ -134,7 +134,8 @@ async function crawlFeed(
       fidelity: resolved.fidelity,
       citations: [resolved.sourceRef],
       itemId: item.itemId,
-      publishedAt: item.pubDate ?? undefined
+      publishedAt: item.pubDate ?? undefined,
+      title: item.title || undefined
     });
   }
 

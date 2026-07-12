@@ -82,9 +82,25 @@ export class AgentRunner {
 
       for (const source of sourcesToCrawl) {
         try {
+          // Enforce each source's own crawl cadence (frequencyMinutes), independent of how often
+          // the agent's overall schedule triggers a run. A forced episode-picker run always bypasses
+          // this, since it's an explicit user-initiated request for that specific source/item.
+          if (!forcedEpisode && source.frequencyMinutes) {
+            const cursor = await this.deps.cursorRepository.getCursor(agentId, source.value);
+            if (cursor?.lastCrawledAt) {
+              const elapsedMs = Date.now() - new Date(cursor.lastCrawledAt).getTime();
+              if (elapsedMs < source.frequencyMinutes * 60_000) {
+                continue;
+              }
+            }
+          }
+
           const adapter = this.deps.sourceAdapters[source.type];
           const fetchOptions = forcedEpisode ? { forcedItemLink: forcedEpisode.itemLink } : undefined;
           const result = await adapter.fetch(agentId, source, fetchOptions);
+          // Recorded immediately (not deferred like pendingCursorUpdates) so the cadence is
+          // enforced even if this run ultimately fails or finds no new content.
+          await this.deps.cursorRepository.touchCrawlAttempt(agentId, source.value, new Date().toISOString());
 
           if (result.warning) {
             sourceWarnings.push(result.warning);
@@ -164,7 +180,10 @@ export class AgentRunner {
       await this.setPhase(agentRunId, 'notifying');
       // Best-effort: sendReportNotification already catches/logs per-recipient failures
       // internally and never throws, so a flaky SMTP server can't fail an otherwise-successful run.
-      await sendReportNotification(this.deps.mailer, agent, report);
+      // Falls back to the source URL for any evidence block without a resolved title (e.g. plain
+      // web-page sources), and de-dupes in case the same item appears from more than one source.
+      const itemTitles = [...new Set(evidence.map((block) => block.title || block.sourceRef))];
+      await sendReportNotification(this.deps.mailer, agent, report, itemTitles);
 
       return { status: 'succeeded', reportId: report.id };
     } catch (error) {

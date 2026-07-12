@@ -169,7 +169,14 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
   const [personaId, setPersonaId] = useState(DEFAULT_PROMPT_PERSONA_ID);
   const [systemPrompt, setSystemPrompt] = useState(initialPrompt?.systemPrompt ?? DEFAULT_SYSTEM_PROMPT);
 
-  const [mode, setMode] = useState<'interval' | 'daily' | 'weekly'>(agent?.schedule?.mode ?? 'interval');
+  // Global crawl cadence for all sources, edited from the Schedule step. Seeded from the first
+  // existing source's frequencyMinutes when editing an agent (all sources share one value going
+  // forward), falling back to 60 minutes for new agents.
+  const [crawlIntervalMinutes, setCrawlIntervalMinutes] = useState(
+    agent && agent.sources.length > 0 ? agent.sources[0].frequencyMinutes ?? 60 : 60
+  );
+
+  const [mode, setMode] = useState<'interval' | 'daily' | 'weekly'>(agent?.schedule?.mode ?? 'daily');
   const [intervalMinutes, setIntervalMinutes] = useState(
     agent?.schedule?.mode === 'interval' ? agent.schedule.intervalMinutes : 60
   );
@@ -254,7 +261,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
       const cleanRecipients = recipients.map((r) => r.trim()).filter(Boolean);
       const validSources = sources
         .filter((s) => s.enabled && s.value.trim())
-        .map((s) => ({ type: s.type, value: s.value.trim(), frequencyMinutes: s.frequencyMinutes, maxItems: s.maxItems }));
+        .map((s) => ({ type: s.type, value: s.value.trim(), frequencyMinutes: crawlIntervalMinutes, maxItems: s.maxItems }));
 
       const schedule =
         mode === 'interval'
@@ -465,7 +472,23 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
         {currentStep === 3 && (
           <Card title="Schedule & recipients">
             <Form layout="vertical">
-              <Form.Item label="Schedule mode">
+              <Form.Item
+                label="Crawl interval"
+                extra="How often each source is checked for new content. Applies to every source in this agent."
+              >
+                <InputNumber
+                  aria-label="Crawl interval minutes"
+                  min={15}
+                  value={crawlIntervalMinutes}
+                  onChange={(value) => setCrawlIntervalMinutes(value ?? 60)}
+                  addonAfter="minutes"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              <Form.Item
+                label="Notification interval"
+                extra="How often ChatTrader analyzes the newly crawled evidence and emails a report."
+              >
                 <Select
                   aria-label="Schedule mode"
                   value={mode}
@@ -566,7 +589,10 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
         <p className="text-sm">Sources: {sources.length}</p>
         <p className="text-sm">Enabled sources: {enabledSourceCount}</p>
         <p className="text-sm">
-          Schedule: {mode === 'interval' ? `Every ${intervalMinutes} min` : `${dailyTime} (${timezone})`}
+          Crawl interval: every {crawlIntervalMinutes} min
+        </p>
+        <p className="text-sm">
+          Notifications: {mode === 'interval' ? `Every ${intervalMinutes} min` : `${dailyTime} (${timezone})`}
         </p>
         <p className="text-sm">Persona: {getPromptPersona(personaId)?.name ?? personaId}</p>
       </Card>

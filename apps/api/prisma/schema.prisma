@@ -157,6 +157,7 @@ model AgentSourceCursor {
   seenItemIdsJson     String?
   lastItemPublishedAt DateTime?
   lastContentHash     String?
+  lastCrawledAt       DateTime?
   updatedAt           DateTime  @updatedAt
   agent               Agent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
 
