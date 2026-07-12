@@ -23,7 +23,7 @@ npm install
 
 ## Anthropic Claude API Setup
 
-Brokerino agents crawl their configured sources (web URLs / podcast feeds), then send the
+ChatTrader agents crawl their configured sources (web URLs / podcast feeds), then send the
 gathered evidence plus the agent's system prompt to the Anthropic Claude API, which returns
 structured long/short stock signals with confidence scores and citations.
 
@@ -85,7 +85,7 @@ Set-Location G:\brk\apps\web
 npm run start
 ```
 
-Opens the Ant Design-based Brokerino dashboard on `http://localhost:4173`. From there you can:
+Opens the Ant Design-based ChatTrader dashboard on `http://localhost:4173`. From there you can:
 - Create a new agent via the 6-step wizard (**Create Agent**)
 - Select an existing agent to browse its **Reports** (symbol badges, date, headline, confidence)
   or edit its **System prompt**

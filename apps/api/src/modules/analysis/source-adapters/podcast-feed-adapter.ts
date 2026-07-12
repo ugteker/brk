@@ -1,4 +1,4 @@
-import type { SourceAdapter, SourceConfig, SourceFetchResult } from '../types';
+import type { SourceAdapter, SourceConfig, SourceFetchOptions, SourceFetchResult } from '../types';
 import { crawlSource, type SmartCrawlerDeps } from './smart-crawler';
 
 /**
@@ -9,7 +9,7 @@ import { crawlSource, type SmartCrawlerDeps } from './smart-crawler';
 export class PodcastFeedAdapter implements SourceAdapter {
   constructor(private readonly deps: SmartCrawlerDeps) {}
 
-  async fetch(agentId: string, source: SourceConfig): Promise<SourceFetchResult> {
-    return crawlSource(this.deps, agentId, source);
+  async fetch(agentId: string, source: SourceConfig, options?: SourceFetchOptions): Promise<SourceFetchResult> {
+    return crawlSource(this.deps, agentId, source, options);
   }
 }

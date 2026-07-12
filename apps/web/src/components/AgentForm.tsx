@@ -139,7 +139,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
   const { user } = useAuth();
   const isEditing = Boolean(agent);
   const [currentStep, setCurrentStep] = useState(0);
-  const [name, setName] = useState(agent?.name ?? 'Brokerino Agent');
+  const [name, setName] = useState(agent?.name ?? 'ChatTrader Agent');
   const [description, setDescription] = useState(agent?.description ?? '');
   const [active, setActive] = useState(agent ? agent.status === 'active' : true);
 

@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, Empty, Layout, message, Popconfirm, Tabs, Typography } from 'antd';
+import { Badge, Button, Card, Empty, Layout, message, Popconfirm, Tabs, Tag, Typography } from 'antd';
 import {
   ArrowLeftOutlined,
   CaretRightOutlined,
+  ClockCircleOutlined,
   DeleteOutlined,
   EditOutlined,
+  FileTextOutlined,
+  HistoryOutlined,
+  LinkOutlined,
   LogoutOutlined,
+  MailOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   PlusOutlined,
@@ -17,6 +22,7 @@ import { ThemePicker } from '../components/ThemePicker';
 import { AgentReportsBrowser } from '../components/AgentReportsBrowser';
 import { AgentRunsBrowser } from '../components/AgentRunsBrowser';
 import { AgentPromptEditor } from '../components/AgentPromptEditor';
+import { EpisodePickerModal } from '../components/EpisodePickerModal';
 import { TouchSafeTooltip } from '../components/TouchSafeTooltip';
 import { AdminUsersPage } from './AdminUsersPage';
 import { SymbolPerformancePage } from './SymbolPerformancePage';
@@ -27,9 +33,12 @@ import {
   getAgent,
   listAgents,
   listAgentRuns,
+  listAgentEpisodeOptions,
   runAgentNow,
   type AgentDetail,
   type AgentSummary,
+  type EpisodeOptionDto,
+  type ForcedEpisodeSelection,
   type RunDetailDto
 } from '../api/agents';
 import { getLatestAgentPrompt, listAgentReports, type PromptVersionDto, type RunReportDto } from '../api/agents';
@@ -53,6 +62,12 @@ function formatAgentSchedule(schedule: AgentSummary['schedule']): string {
   return `Weekly ${schedule.dailyTime} on ${days} (${schedule.timezone})`;
 }
 
+/** Only podcast/YouTube sources have "episodes" to pick from - web_urls sources (single/listing
+ * pages) keep the old "run now = crawl immediately" behavior with no picker. */
+function hasEpisodicSource(agent: AgentSummary): boolean {
+  return agent.sources.some((source) => source.type === 'podcast_feeds' || source.type === 'youtube_videos');
+}
+
 export function AgentsPage() {
   const { user, isAdmin, logout } = useAuth();
   const [showAdminUsers, setShowAdminUsers] = useState(false);
@@ -71,8 +86,12 @@ export function AgentsPage() {
   const [togglingAgentId, setTogglingAgentId] = useState<string | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
   const [runningAgentId, setRunningAgentId] = useState<string | null>(null);
+  const [episodePickerAgent, setEpisodePickerAgent] = useState<AgentSummary | null>(null);
+  const [episodeOptions, setEpisodeOptions] = useState<EpisodeOptionDto[]>([]);
+  const [loadingEpisodeOptions, setLoadingEpisodeOptions] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState('reports');
   const [highlightedReportId, setHighlightedReportId] = useState<string | null>(null);
+  const [hasAppliedSymbolDeepLink, setHasAppliedSymbolDeepLink] = useState(false);
 
 
   async function refreshAgents() {
@@ -106,6 +125,25 @@ export function AgentsPage() {
       alive = false;
     };
   }, []);
+
+  // Applies a symbol deep link from a report notification email (?agentId=&symbol=), which opens
+  // straight into that agent's SymbolPerformancePage. Runs once agents have loaded (so we can
+  // confirm the linked agent actually exists) and only once, then strips the query params from
+  // the URL so refreshing/navigating afterwards doesn't repeatedly re-trigger it.
+  useEffect(() => {
+    if (hasAppliedSymbolDeepLink) return;
+    if (agents.length === 0) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const linkedAgentId = params.get('agentId');
+    const linkedSymbol = params.get('symbol');
+    if (linkedAgentId && linkedSymbol && agents.some((agent) => agent.id === linkedAgentId)) {
+      setSelectedAgentId(linkedAgentId);
+      setViewingSymbol(linkedSymbol);
+    }
+    setHasAppliedSymbolDeepLink(true);
+    window.history.replaceState({}, '', window.location.pathname);
+  }, [agents, hasAppliedSymbolDeepLink]);
 
   useEffect(() => {
     if (!selectedAgentId) return;
@@ -159,11 +197,10 @@ export function AgentsPage() {
     }
   }
 
-  async function onRunNow(agent: AgentSummary, event?: React.MouseEvent) {
-    event?.stopPropagation();
+  async function executeRun(agent: AgentSummary, forcedEpisode?: ForcedEpisodeSelection) {
     setRunningAgentId(agent.id);
     try {
-      const result = await runAgentNow(agent.id);
+      const result = await runAgentNow(agent.id, forcedEpisode);
       if (result.status === 'failed') {
         message.error(`Run failed${result.errorCode ? `: ${result.errorCode}` : ''}`);
       } else if (result.status === 'no_run_claimed') {
@@ -180,6 +217,45 @@ export function AgentsPage() {
       message.error(err instanceof Error ? err.message : 'Failed to run agent');
     } finally {
       setRunningAgentId(null);
+    }
+  }
+
+  async function onRunNow(agent: AgentSummary, event?: React.MouseEvent) {
+    event?.stopPropagation();
+    if (!hasEpisodicSource(agent)) {
+      await executeRun(agent);
+      return;
+    }
+
+    setEpisodePickerAgent(agent);
+    setEpisodeOptions([]);
+    setLoadingEpisodeOptions(true);
+    try {
+      const options = await listAgentEpisodeOptions(agent.id);
+      setEpisodeOptions(options);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to load episode options');
+    } finally {
+      setLoadingEpisodeOptions(false);
+    }
+  }
+
+  function closeEpisodePicker() {
+    setEpisodePickerAgent(null);
+    setEpisodeOptions([]);
+  }
+
+  async function onRunNormallyFromPicker() {
+    const agent = episodePickerAgent;
+    closeEpisodePicker();
+    if (agent) await executeRun(agent);
+  }
+
+  async function onSelectEpisodeFromPicker(episode: EpisodeOptionDto) {
+    const agent = episodePickerAgent;
+    closeEpisodePicker();
+    if (agent) {
+      await executeRun(agent, { sourceType: episode.sourceType, sourceValue: episode.sourceValue, itemLink: episode.link });
     }
   }
 
@@ -211,6 +287,17 @@ export function AgentsPage() {
 
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? null;
 
+  // Resets every overlay/detail view back to the plain agent-list dashboard - used by the
+  // clickable app-name header so it works as a "home" link from anywhere (agent detail, wizard,
+  // symbol performance page, admin users page).
+  function goToDashboard() {
+    setSelectedAgentId(null);
+    setViewingSymbol(null);
+    setIsCreatingAgent(false);
+    setEditingAgent(null);
+    setShowAdminUsers(false);
+  }
+
   return (
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
       <Header style={{ background: 'transparent', height: 'auto', padding: '24px 24px 0' }}>
@@ -218,15 +305,21 @@ export function AgentsPage() {
           <div style={{ minWidth: 0 }}>
             <Title
               level={2}
+              onClick={goToDashboard}
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') goToDashboard();
+              }}
               style={{
                 margin: 0,
                 whiteSpace: 'nowrap',
                 wordBreak: 'keep-all',
                 overflowWrap: 'normal',
-                fontSize: 'clamp(1.25rem, 5vw, 1.875rem)'
+                fontSize: 'clamp(1.25rem, 5vw, 1.875rem)',
+                cursor: 'pointer'
               }}
             >
-              Brokerino
+              ChatTrader
             </Title>
             <Text type="secondary">Agent Dashboard</Text>
           </div>
@@ -439,14 +532,32 @@ export function AgentsPage() {
                               status={agent.status === 'disabled' ? 'default' : 'success'}
                               text={agent.name}
                             />
+                            {agent.status === 'disabled' ? (
+                              <Tag color="default" style={{ marginLeft: 8 }}>Paused</Tag>
+                            ) : (
+                              <Tag color="success" style={{ marginLeft: 8 }}>Active</Tag>
+                            )}
                           </h3>
-                          <p className="text-sm text-gray-700">
-                            Sources: {agent.sources.length} · Runs: {agent.runCount ?? 0} · Reports: {agent.reportCount ?? 0}
-                            {agent.latestReportAt ? ` (latest ${new Date(agent.latestReportAt).toLocaleDateString()})` : ''}
+                          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700">
+                            <span className="inline-flex items-center gap-1">
+                              <LinkOutlined /> Sources: {agent.sources.length}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <HistoryOutlined /> Runs: {agent.runCount ?? 0}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <FileTextOutlined /> Reports: {agent.reportCount ?? 0}
+                              {agent.latestReportAt ? ` (latest ${new Date(agent.latestReportAt).toLocaleDateString()})` : ''}
+                            </span>
                           </p>
-                          <p className="text-xs text-gray-500">
-                            Schedule: {formatAgentSchedule(agent.schedule)} · Emails:{' '}
-                            {agent.recipients && agent.recipients.length > 0 ? agent.recipients.join(', ') : 'none'}
+                          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                            <span className="inline-flex items-center gap-1">
+                              <ClockCircleOutlined /> Schedule: {formatAgentSchedule(agent.schedule)}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <MailOutlined />{' '}
+                              Emails: {agent.recipients && agent.recipients.length > 0 ? agent.recipients.join(', ') : 'none'}
+                            </span>
                           </p>
                         </div>
                         <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
@@ -498,6 +609,14 @@ export function AgentsPage() {
         </div>
         )}
       </Content>
+      <EpisodePickerModal
+        open={Boolean(episodePickerAgent)}
+        loading={loadingEpisodeOptions}
+        episodes={episodeOptions}
+        onRunNormally={onRunNormallyFromPicker}
+        onSelectEpisode={onSelectEpisodeFromPicker}
+        onCancel={closeEpisodePicker}
+      />
     </Layout>
   );
 }

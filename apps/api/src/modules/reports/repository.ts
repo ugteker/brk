@@ -15,6 +15,11 @@ type ReportRow = {
   needsHumanReview: boolean;
   createdAt: Date;
   signals: SignalRow[];
+  model: string | null;
+  promptVersionNumber: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostUsd: number | null;
 };
 
 export class ReportRepository {
@@ -29,6 +34,11 @@ export class ReportRepository {
         summary: input.summary,
         needsHumanReview: input.needsHumanReview,
         sourceWarningsJson: JSON.stringify(input.sourceWarnings),
+        model: input.model ?? null,
+        promptVersionNumber: input.promptVersionNumber ?? null,
+        inputTokens: input.inputTokens ?? null,
+        outputTokens: input.outputTokens ?? null,
+        estimatedCostUsd: input.estimatedCostUsd ?? null,
         signals: {
           create: input.signals.map((signal) => ({
             symbol: signal.symbol,
@@ -110,7 +120,12 @@ export class ReportRepository {
         rationale: signal.rationale,
         citations: JSON.parse(signal.citationsJson) as string[]
       })),
-      createdAt: row.createdAt
+      createdAt: row.createdAt,
+      model: row.model,
+      promptVersionNumber: row.promptVersionNumber,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      estimatedCostUsd: row.estimatedCostUsd
     };
   }
 }

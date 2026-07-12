@@ -138,8 +138,39 @@ export interface RunAgentNowResult {
   errorCode?: string;
 }
 
-export async function runAgentNow(agentId: string): Promise<RunAgentNowResult> {
-  const response = await fetch(`/api/agents/${agentId}/run`, { method: 'POST' });
+export interface EpisodeOptionDto {
+  sourceType: 'podcast_feeds' | 'youtube_videos';
+  sourceValue: string;
+  title: string;
+  link: string;
+  pubDate: string | null;
+}
+
+/**
+ * Sneak preview (last 10, combined across an agent's episodic sources) shown by the manual-run
+ * episode picker, letting the user pick a specific episode to run against instead of always
+ * crawling for "new content since last run".
+ */
+export async function listAgentEpisodeOptions(agentId: string): Promise<EpisodeOptionDto[]> {
+  const response = await fetch(`/api/agents/${agentId}/episode-options`);
+  if (!response.ok) {
+    throw new Error(response.status === 503 ? 'Episode preview is not available right now' : 'Failed to load episode options');
+  }
+  return response.json();
+}
+
+export interface ForcedEpisodeSelection {
+  sourceType: 'podcast_feeds' | 'youtube_videos';
+  sourceValue: string;
+  itemLink: string;
+}
+
+export async function runAgentNow(agentId: string, forcedEpisode?: ForcedEpisodeSelection): Promise<RunAgentNowResult> {
+  const response = await fetch(`/api/agents/${agentId}/run`, {
+    method: 'POST',
+    headers: forcedEpisode ? { 'content-type': 'application/json' } : undefined,
+    body: forcedEpisode ? JSON.stringify(forcedEpisode) : undefined
+  });
   if (!response.ok) {
     throw new Error(response.status === 503 ? 'Manual runs are not available right now' : 'Failed to run agent');
   }
@@ -188,6 +219,11 @@ export interface RunReportDto {
   needsHumanReview: boolean;
   signals: SignalDto[];
   createdAt: string;
+  model: string | null;
+  promptVersionNumber: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostUsd: number | null;
 }
 
 export interface PromptVersionDto {
@@ -267,6 +303,7 @@ export interface RunDetailDto {
   id: string;
   agentId: string;
   status: string;
+  phase: string | null;
   scheduledFor: string;
   startedAt: string | null;
   finishedAt: string | null;

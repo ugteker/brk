@@ -63,7 +63,7 @@ export const config = {
       return process.env.SMTP_PASSWORD ?? '';
     },
     get from() {
-      return process.env.SMTP_FROM ?? 'Brokerino <no-reply@brokerino.local>';
+      return process.env.SMTP_FROM ?? 'ChatTrader <no-reply@ChatTrader.local>';
     }
   },
   get appBaseUrl() {

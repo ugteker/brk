@@ -18,11 +18,17 @@ export interface AgentRepositoryLike {
 }
 
 export interface SourceProbeLike {
-  probeSource(source: SourceConfig): Promise<SourceProbeResult>;
+  probeSource(source: SourceConfig, previewLimit?: number): Promise<SourceProbeResult>;
+}
+
+export interface RunEpisodeSelection {
+  sourceType: SourceConfig['type'];
+  sourceValue: string;
+  itemLink: string;
 }
 
 export interface RunTriggerLike {
-  triggerRun(agentId: string): Promise<{ status: string; errorCode?: string }>;
+  triggerRun(agentId: string, options?: { forcedEpisode?: RunEpisodeSelection }): Promise<{ status: string; errorCode?: string }>;
 }
 
 export interface AgentRoutesOptions {
@@ -118,6 +124,49 @@ export async function registerAgentRoutes(app: FastifyInstance, repo: AgentRepos
     }
   });
 
+  const EPISODIC_SOURCE_TYPES: SourceConfig['type'][] = ['podcast_feeds', 'youtube_videos'];
+  // Sneak-preview count for the manual-run episode picker - deliberately larger than the wizard's
+  // PREVIEW_ITEM_COUNT (5), per the "last 10 episodes" requirement for this feature.
+  const EPISODE_OPTIONS_LIMIT = 10;
+
+  app.get('/api/agents/:agentId/episode-options', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string };
+    const agent = await repo.getAgent(agentId);
+    if (!agent) {
+      return reply.status(404).send({ code: 'not_found', message: 'Agent not found' });
+    }
+    if (!sourceProbe) {
+      return reply.status(503).send({ code: 'probe_unavailable', message: 'Episode preview is not available' });
+    }
+
+    const episodicSources = agent.sources.filter((source) => EPISODIC_SOURCE_TYPES.includes(source.type));
+    const perSource = await Promise.all(
+      episodicSources.map(async (source) => {
+        const probe = await sourceProbe.probeSource(source, EPISODE_OPTIONS_LIMIT);
+        return (probe.previewItems ?? [])
+          .filter((item) => item.link)
+          .map((item) => ({
+            sourceType: source.type,
+            sourceValue: source.value,
+            title: item.title,
+            link: item.link as string,
+            pubDate: item.pubDate
+          }));
+      })
+    );
+
+    const combined = perSource
+      .flat()
+      .sort((a, b) => {
+        const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+        const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+        return bTime - aTime;
+      })
+      .slice(0, EPISODE_OPTIONS_LIMIT);
+
+    return reply.status(200).send(combined);
+  });
+
   app.post('/api/agents/:agentId/run', async (req, reply) => {
     if (!runTrigger) {
       return reply.status(503).send({ code: 'run_trigger_unavailable', message: 'Manual runs are not available' });
@@ -129,7 +178,13 @@ export async function registerAgentRoutes(app: FastifyInstance, repo: AgentRepos
       return reply.status(404).send({ code: 'not_found', message: 'Agent not found' });
     }
 
-    const result = await runTrigger.triggerRun(agentId);
+    const body = (req.body ?? {}) as Partial<RunEpisodeSelection>;
+    const forcedEpisode =
+      body.sourceType && body.sourceValue && body.itemLink
+        ? { sourceType: body.sourceType, sourceValue: body.sourceValue, itemLink: body.itemLink }
+        : undefined;
+
+    const result = await runTrigger.triggerRun(agentId, forcedEpisode ? { forcedEpisode } : undefined);
     return reply.status(200).send(result);
   });
 

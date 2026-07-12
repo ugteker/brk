@@ -84,6 +84,9 @@ async function start() {
 
   await bootstrapAdminAccount(userRepository);
 
+  const runStore = new PrismaRunStore(prisma);
+  const queue = new RunQueueService(runStore);
+
   const agentRunner = new AgentRunner({
     agentRepository: agentRepository,
     promptRepository,
@@ -91,6 +94,8 @@ async function start() {
     reportRepository,
     claudeClient,
     cursorRepository,
+    mailer,
+    onPhaseChange: (agentRunId, phase) => queue.setPhase(agentRunId, phase),
     sourceAdapters: {
       web_urls: new WebUrlAdapter(smartCrawlerDeps),
       podcast_feeds: new PodcastFeedAdapter(smartCrawlerDeps),
@@ -98,8 +103,6 @@ async function start() {
     }
   });
 
-  const runStore = new PrismaRunStore(prisma);
-  const queue = new RunQueueService(runStore);
   const manualRunTrigger = new ManualRunTrigger(queue, agentRunner);
 
   const app = await buildServer({
@@ -108,10 +111,10 @@ async function start() {
     runs: { runsRepository },
     auth: { userRepository, googleOAuthClient: new GoogleOAuthHttpClient(), mailer },
     sourceProbe: {
-      probeSource: (source) =>
+      probeSource: (source, previewLimit) =>
         source.type === 'youtube_videos'
-          ? probeYouTubeSource({ httpGet: defaultHttpGet, httpPostJson: defaultHttpPostJson }, source)
-          : probeSource({ httpGet: defaultHttpGet, siteInspector }, source)
+          ? probeYouTubeSource({ httpGet: defaultHttpGet, httpPostJson: defaultHttpPostJson }, source, previewLimit)
+          : probeSource({ httpGet: defaultHttpGet, siteInspector }, source, previewLimit)
     },
     runTrigger: manualRunTrigger
   });

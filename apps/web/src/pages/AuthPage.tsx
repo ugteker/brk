@@ -115,7 +115,7 @@ export function AuthPage() {
     <div className="flex min-h-screen items-center justify-center p-6">
       <Card style={{ width: 400 }}>
         <Title level={3} style={{ marginBottom: 0 }}>
-          Brokerino
+          ChatTrader
         </Title>
         <Paragraph type="secondary">Sign in to manage your AI trading agents.</Paragraph>
 

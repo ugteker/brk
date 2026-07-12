@@ -73,6 +73,7 @@ model AgentRun {
   agentId        String
   scheduledFor DateTime
   status       String
+  phase        String?
   workerId     String?
   retryCount   Int      @default(0)
   errorCode    String?
@@ -123,6 +124,11 @@ model AgentRunReport {
   summary            String
   sourceWarningsJson String
   needsHumanReview   Boolean
+  model              String?
+  promptVersionNumber Int?
+  inputTokens        Int?
+  outputTokens       Int?
+  estimatedCostUsd   Float?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   agent                Agent              @relation(fields: [agentId], references: [id], onDelete: Restrict)

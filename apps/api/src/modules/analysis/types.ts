@@ -19,6 +19,13 @@ export interface SourceConfig {
   maxItems?: number;
 }
 
+/** Optional per-fetch override used by the manual-run episode picker: force crawling one specific
+ * feed item (matched by `link`) regardless of seen-status/max-items cap, instead of the normal
+ * "N most recent unseen items" selection. Ignored by non-feed (web listing/single page) sources. */
+export interface SourceFetchOptions {
+  forcedItemLink?: string;
+}
+
 export interface SourceFetchResult {
   evidence: EvidenceBlock[];
   cursorUpdate?: SourceCursorState;
@@ -26,7 +33,7 @@ export interface SourceFetchResult {
 }
 
 export interface SourceAdapter {
-  fetch(agentId: string, source: SourceConfig): Promise<SourceFetchResult>;
+  fetch(agentId: string, source: SourceConfig, options?: SourceFetchOptions): Promise<SourceFetchResult>;
 }
 
 export interface ClaudeAnalysisRequest {
@@ -40,6 +47,9 @@ export interface ClaudeAnalysisResult {
   signals: SignalRecord[];
   sourceWarnings: string[];
   needsHumanReview: boolean;
+  // Token usage reported by the Claude API for this call, when available - used to show AI
+  // cost/usage stats on the report and is never required for the run to succeed.
+  usage?: { inputTokens: number; outputTokens: number };
 }
 
 export type CrawlStrategy = 'feed_items' | 'content_hash';

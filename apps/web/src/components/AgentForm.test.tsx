@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import type { ComponentProps } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createAgent, deleteAgent, getAgent, listAgents, updateAgent } from '../api/agents';
+import { createAgent, deleteAgent, getAgent, listAgents, updateAgent, listAgentEpisodeOptions, runAgentNow } from '../api/agents';
 import { saveAgentPrompt } from '../api/agents';
 import { AgentForm } from './AgentForm';
 import { AgentsPage } from '../pages/AgentsPage';
@@ -74,6 +74,7 @@ vi.mock('../api/agents', () => ({
   disableAgent: vi.fn().mockResolvedValue(undefined),
   deleteAgent: vi.fn().mockResolvedValue(undefined),
   runAgentNow: vi.fn().mockResolvedValue({ status: 'succeeded' }),
+  listAgentEpisodeOptions: vi.fn().mockResolvedValue([]),
   saveAgentPrompt: vi.fn().mockResolvedValue({ id: 'prompt-1' }),
   listAgentReports: vi.fn().mockResolvedValue([]),
   listAgentRuns: vi.fn().mockResolvedValue([]),
@@ -208,8 +209,29 @@ it('cancels the wizard and returns to the dashboard', () => {
 
   fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
 
-  expect(screen.getByRole('heading', { name: 'Brokerino' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'ChatTrader' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /create agent/i })).toBeInTheDocument();
+});
+
+it('clicking the app name returns to the dashboard from an agent detail view', async () => {
+  vi.mocked(listAgents).mockResolvedValueOnce([
+    {
+      id: 'agent-1',
+      name: 'Housing Agent',
+      status: 'active',
+      sources: [{ type: 'web_urls', value: 'https://example.com' }]
+    }
+  ]);
+
+  renderAgentsPage();
+
+  fireEvent.click(await screen.findByText(/housing agent/i));
+  expect(await screen.findByRole('button', { name: /back to dashboard/i })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('heading', { name: 'ChatTrader' }));
+
+  expect(screen.getByText(/housing agent/i)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /back to dashboard/i })).not.toBeInTheDocument();
 });
 
 it('loads agents from the backend when the dashboard opens', async () => {
@@ -228,9 +250,9 @@ it('loads agents from the backend when the dashboard opens', async () => {
   expect(await screen.findByText(/housing agent/i)).toBeInTheDocument();
 });
 
-it('renders brokerino dashboard by default', () => {
+it('renders ChatTrader dashboard by default', () => {
   renderAgentsPage();
-  expect(screen.getByRole('heading', { name: 'Brokerino' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'ChatTrader' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: /^agent dashboard$/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /create agent/i })).toBeInTheDocument();
 });
@@ -273,7 +295,116 @@ it('runs an agent now via the run-now button', async () => {
   fireEvent.click(screen.getByRole('button', { name: /run agent now/i }));
 
   const { runAgentNow } = await import('../api/agents');
-  await vi.waitFor(() => expect(runAgentNow).toHaveBeenCalledWith('agent-1'));
+  await vi.waitFor(() => expect(runAgentNow).toHaveBeenCalledWith('agent-1', undefined));
+});
+
+it('shows an episode picker for an agent with a podcast source, and runs the selected episode', async () => {
+  vi.mocked(listAgents).mockResolvedValueOnce([
+    {
+      id: 'agent-1',
+      name: 'Podcast Agent',
+      status: 'active',
+      sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
+    }
+  ]);
+  vi.mocked(listAgentEpisodeOptions).mockResolvedValueOnce([
+    { sourceType: 'podcast_feeds', sourceValue: 'https://example.com/feed.xml', title: 'Episode 2', link: 'https://example.com/ep-2', pubDate: null }
+  ]);
+
+  renderAgentsPage();
+
+  expect(await screen.findByText(/podcast agent/i)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /run agent now/i }));
+
+  expect(await screen.findByText(/run against a specific episode/i)).toBeInTheDocument();
+  expect(await screen.findByText(/episode 2/i)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /run this episode/i }));
+
+  await vi.waitFor(() =>
+    expect(runAgentNow).toHaveBeenCalledWith('agent-1', {
+      sourceType: 'podcast_feeds',
+      sourceValue: 'https://example.com/feed.xml',
+      itemLink: 'https://example.com/ep-2'
+    })
+  );
+});
+
+it('runs normally from the episode picker without a forced episode', async () => {
+  vi.mocked(listAgents).mockResolvedValueOnce([
+    {
+      id: 'agent-1',
+      name: 'Podcast Agent',
+      status: 'active',
+      sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
+    }
+  ]);
+  vi.mocked(listAgentEpisodeOptions).mockResolvedValueOnce([]);
+
+  renderAgentsPage();
+
+  expect(await screen.findByText(/podcast agent/i)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /run agent now/i }));
+
+  fireEvent.click(await screen.findByRole('button', { name: /run normally/i }));
+
+  await vi.waitFor(() => expect(runAgentNow).toHaveBeenCalledWith('agent-1', undefined));
+});
+
+it('shows only the first 5 episodes in the picker, revealing the rest via "Show more"', async () => {
+  vi.mocked(listAgents).mockResolvedValueOnce([
+    {
+      id: 'agent-1',
+      name: 'Podcast Agent',
+      status: 'active',
+      sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
+    }
+  ]);
+  const episodes = Array.from({ length: 8 }, (_, i) => ({
+    sourceType: 'podcast_feeds' as const,
+    sourceValue: 'https://example.com/feed.xml',
+    title: `Episode ${i + 1}`,
+    link: `https://example.com/ep-${i + 1}`,
+    pubDate: null
+  }));
+  vi.mocked(listAgentEpisodeOptions).mockResolvedValueOnce(episodes);
+
+  renderAgentsPage();
+
+  expect(await screen.findByText(/podcast agent/i)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /run agent now/i }));
+
+  expect(await screen.findByText(/episode 1$/i)).toBeInTheDocument();
+  expect(screen.getByText(/episode 5$/i)).toBeInTheDocument();
+  expect(screen.queryByText(/episode 6$/i)).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /show more/i }));
+
+  expect(await screen.findByText(/episode 6$/i)).toBeInTheDocument();
+  expect(screen.getByText(/episode 8$/i)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /show more/i })).not.toBeInTheDocument();
+});
+
+it('does not show a "Show more" button in the picker when there are 5 or fewer episodes', async () => {
+  vi.mocked(listAgents).mockResolvedValueOnce([
+    {
+      id: 'agent-1',
+      name: 'Podcast Agent',
+      status: 'active',
+      sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
+    }
+  ]);
+  vi.mocked(listAgentEpisodeOptions).mockResolvedValueOnce([
+    { sourceType: 'podcast_feeds', sourceValue: 'https://example.com/feed.xml', title: 'Episode 1', link: 'https://example.com/ep-1', pubDate: null }
+  ]);
+
+  renderAgentsPage();
+
+  expect(await screen.findByText(/podcast agent/i)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /run agent now/i }));
+
+  expect(await screen.findByText(/episode 1$/i)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /show more/i })).not.toBeInTheDocument();
 });
 
 it('toggles between light and dark theme', () => {

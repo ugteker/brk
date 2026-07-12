@@ -11,6 +11,11 @@ function createFakeDb() {
     sourceWarningsJson: string;
     needsHumanReview: boolean;
     createdAt: Date;
+    model: string | null;
+    promptVersionNumber: number | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    estimatedCostUsd: number | null;
     signals: Array<{ symbol: string; side: string; confidence: number; rationale: string; citationsJson: string }>;
   }> = [];
   let seq = 0;
@@ -27,6 +32,11 @@ function createFakeDb() {
           summary: string;
           sourceWarningsJson: string;
           needsHumanReview: boolean;
+          model: string | null;
+          promptVersionNumber: number | null;
+          inputTokens: number | null;
+          outputTokens: number | null;
+          estimatedCostUsd: number | null;
           signals: { create: Array<{ symbol: string; side: string; confidence: number; rationale: string; citationsJson: string }> };
         };
       }) => {
@@ -40,6 +50,11 @@ function createFakeDb() {
           sourceWarningsJson: data.sourceWarningsJson,
           needsHumanReview: data.needsHumanReview,
           createdAt: new Date('2026-07-10T00:00:00.000Z'),
+          model: data.model,
+          promptVersionNumber: data.promptVersionNumber,
+          inputTokens: data.inputTokens,
+          outputTokens: data.outputTokens,
+          estimatedCostUsd: data.estimatedCostUsd,
           signals: data.signals.create
         };
         rows.push(row);
@@ -175,6 +190,51 @@ describe('ReportRepository', () => {
   it('returns null when getReportById is given an unknown id', async () => {
     const repo = new ReportRepository(createFakeDb() as never);
     expect(await repo.getReportById('report-unknown')).toBeNull();
+  });
+
+  it('persists AI usage/cost stats when provided', async () => {
+    const repo = new ReportRepository(createFakeDb() as never);
+
+    const saved = await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-1',
+      promptVersionId: 'prompt-1',
+      summary: 'with stats',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: [],
+      model: 'claude-sonnet-4-5',
+      promptVersionNumber: 3,
+      inputTokens: 1200,
+      outputTokens: 340,
+      estimatedCostUsd: 0.00846
+    });
+
+    expect(saved.model).toBe('claude-sonnet-4-5');
+    expect(saved.promptVersionNumber).toBe(3);
+    expect(saved.inputTokens).toBe(1200);
+    expect(saved.outputTokens).toBe(340);
+    expect(saved.estimatedCostUsd).toBeCloseTo(0.00846);
+  });
+
+  it('defaults AI usage/cost stats to null when omitted (legacy-style report)', async () => {
+    const repo = new ReportRepository(createFakeDb() as never);
+
+    const saved = await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-1',
+      promptVersionId: 'prompt-1',
+      summary: 'no stats',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: []
+    });
+
+    expect(saved.model).toBeNull();
+    expect(saved.promptVersionNumber).toBeNull();
+    expect(saved.inputTokens).toBeNull();
+    expect(saved.outputTokens).toBeNull();
+    expect(saved.estimatedCostUsd).toBeNull();
   });
 
   it('lists signal history for a symbol across multiple reports for the same agent', async () => {

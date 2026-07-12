@@ -31,3 +31,25 @@ it('renders an empty state when there are no signals', () => {
   render(<AgentSignalReport signals={[]} />);
   expect(screen.getByText(/no signals were extracted/i)).toBeInTheDocument();
 });
+
+it('renders a URL citation as a clickable link but leaves a non-URL citation as plain text', () => {
+  render(
+    <AgentSignalReport
+      signals={[
+        {
+          symbol: 'AAPL',
+          side: 'long',
+          confidence: 81,
+          rationale: 'Strong guidance',
+          citations: ['https://example.com/article', 'ep1@10:12']
+        }
+      ]}
+    />
+  );
+
+  const link = screen.getByRole('link', { name: 'https://example.com/article' });
+  expect(link).toHaveAttribute('href', 'https://example.com/article');
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(screen.getByText(/ep1@10:12/)).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /ep1@10:12/ })).not.toBeInTheDocument();
+});
