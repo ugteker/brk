@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Alert, Button, Card, Empty, Progress, Tag, Typography } from 'antd';
 import { DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
 import { artifactDownloadUrl, type RunDetailDto } from '../api/agents';
@@ -29,6 +29,29 @@ const PHASE_LABELS: Record<string, string> = {
   analyzing: 'Analyzing with AI…',
   notifying: 'Sending notifications…'
 };
+
+const URL_PATTERN = /https?:\/\/[^\s)]+/g;
+
+/** Renders `text` with any http(s) URLs inside it turned into clickable links, so error/warning
+ * messages that reference a specific episode (e.g. a YouTube video URL) let the user jump
+ * straight to it instead of having to copy-paste the raw text. */
+function linkifyText(text: string): ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  URL_PATTERN.lastIndex = 0;
+  while ((match = URL_PATTERN.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    parts.push(
+      <a key={match.index} href={match[0]} target="_blank" rel="noreferrer">
+        {match[0]}
+      </a>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts;
+}
 
 function formatDuration(durationMs: number | null): string {
   if (durationMs === null) return '—';
@@ -118,13 +141,13 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
               showIcon
               style={{ marginTop: 8 }}
               message={`Error: ${run.errorCode}`}
-              description={run.errorMessage ?? 'No further details are available for this failure.'}
+              description={run.errorMessage ? linkifyText(run.errorMessage) : 'No further details are available for this failure.'}
             />
           ) : run.status === 'succeeded_no_new_content' && run.errorMessage ? (
             // No error occurred, but a warning was collected while crawling (e.g. a manually
             // picked episode couldn't be located in the current feed fetch) - surface it instead
             // of leaving "no new content" unexplained.
-            <Alert type="warning" showIcon style={{ marginTop: 8 }} message="No content found" description={run.errorMessage} />
+            <Alert type="warning" showIcon style={{ marginTop: 8 }} message="No content found" description={linkifyText(run.errorMessage)} />
           ) : null}
 
           {run.artifacts.length > 0 ? (

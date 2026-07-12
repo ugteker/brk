@@ -131,6 +131,34 @@ describe('fetchYouTubeTranscript', () => {
     const httpPostJson = async () => JSON.stringify({ playabilityStatus: { status: 'OK' } });
     await expect(fetchYouTubeTranscript('novid', httpGet, httpPostJson)).rejects.toThrow(/No transcript/);
   });
+
+  it('includes the full watch URL (not just the bare video id) in the "no captions" error, so it can be linked to in the UI', async () => {
+    const httpGet = async () => '<html><body>no captions here</body></html>';
+    const httpPostJson = async () => JSON.stringify({ playabilityStatus: { status: 'OK' } });
+    await expect(fetchYouTubeTranscript('novid', httpGet, httpPostJson)).rejects.toThrow(
+      'https://www.youtube.com/watch?v=novid'
+    );
+  });
+
+  it('tries the next innertube client impersonation when an earlier one comes back with no caption tracks', async () => {
+    const watchHtmlWithApiKey = '<html><body><script>"INNERTUBE_API_KEY":"test-api-key"</script></body></html>';
+    const httpGet = async (url: string) => {
+      if (url.includes('/watch?v=')) return watchHtmlWithApiKey;
+      return SAMPLE_TIMEDTEXT_XML;
+    };
+    let callCount = 0;
+    const httpPostJson = async () => {
+      callCount += 1;
+      // First client impersonation comes back with no tracks (simulating a client-specific block);
+      // a later attempt succeeds.
+      if (callCount === 1) return JSON.stringify({ playabilityStatus: { status: 'OK' } });
+      return SAMPLE_INNERTUBE_PLAYER_RESPONSE;
+    };
+
+    const transcript = await fetchYouTubeTranscript('abc123', httpGet, httpPostJson);
+    expect(transcript).toBe('Hello there welcome to the show');
+    expect(callCount).toBeGreaterThan(1);
+  });
 });
 
 describe('YouTubeAdapter', () => {
