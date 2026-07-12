@@ -94,7 +94,7 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
       {runs.map((run) => {
         const elapsedMs = run.status === 'running' && run.startedAt ? now - new Date(run.startedAt).getTime() : null;
         return (
-        <Card key={run.id} size="small" style={{ width: '100%' }}>
+        <Card key={run.id} size="small" style={{ width: '100%', minWidth: 0 }}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <Tag color={STATUS_COLORS[run.status] ?? 'default'}>{STATUS_LABELS[run.status] ?? run.status}</Tag>
@@ -139,7 +139,7 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
             <Alert
               type="error"
               showIcon
-              style={{ marginTop: 8 }}
+              style={{ marginTop: 8, wordBreak: 'break-word', overflowWrap: 'anywhere' }}
               message={`Error: ${run.errorCode}`}
               description={run.errorMessage ? linkifyText(run.errorMessage) : 'No further details are available for this failure.'}
             />
@@ -147,7 +147,13 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
             // No error occurred, but a warning was collected while crawling (e.g. a manually
             // picked episode couldn't be located in the current feed fetch) - surface it instead
             // of leaving "no new content" unexplained.
-            <Alert type="warning" showIcon style={{ marginTop: 8 }} message="No content found" description={linkifyText(run.errorMessage)} />
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginTop: 8, wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+              message="No content found"
+              description={linkifyText(run.errorMessage)}
+            />
           ) : null}
 
           {run.artifacts.length > 0 ? (
@@ -156,10 +162,10 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
                 const isExpanded = expandedArtifactIds.has(artifact.id);
                 return (
                   <Card key={artifact.id} size="small" type="inner" title={
-                    <span className="flex items-center gap-1 text-xs font-normal">
+                    <span className="flex items-center gap-1 text-xs font-normal" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       <FileTextOutlined />{' '}
                       {isHttpUrl(artifact.sourceRef) ? (
-                        <a href={artifact.sourceRef} target="_blank" rel="noreferrer">
+                        <a href={artifact.sourceRef} target="_blank" rel="noreferrer" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {artifact.sourceRef}
                         </a>
                       ) : (
