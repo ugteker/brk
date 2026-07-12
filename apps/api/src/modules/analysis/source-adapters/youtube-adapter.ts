@@ -236,6 +236,13 @@ async function fetchCaptionTracks(
   httpPostJson: HttpPostJson
 ): Promise<YouTubeCaptionTrack[]> {
   const apiKey = extractInnertubeApiKey(watchPageHtml);
+  // Diagnostic logging: only fires on the failure path (caller already treats "no tracks" as
+  // exceptional), so this stays silent for the overwhelming majority of successful fetches while
+  // giving enough detail to tell apart the possible causes (bot-walled watch page vs. a
+  // client-specific innertube rejection vs. a network-level block) without needing server access.
+  if (!apiKey) {
+    console.warn(`[youtube-adapter] video ${videoId}: no INNERTUBE_API_KEY found in watch page HTML (len=${watchPageHtml.length}) - likely served a stripped-down/bot-walled page`);
+  }
   if (apiKey) {
     for (const attempt of INNERTUBE_CLIENT_ATTEMPTS) {
       try {
@@ -247,13 +254,22 @@ async function fetchCaptionTracks(
         const data = JSON.parse(responseText);
         const tracks: YouTubeCaptionTrack[] | undefined = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
         if (tracks && tracks.length > 0) return tracks;
-      } catch {
-        // try the next client impersonation
+        console.warn(
+          `[youtube-adapter] video ${videoId}: innertube client "${attempt.context.client.clientName}" returned 0 caption tracks ` +
+            `(playabilityStatus=${JSON.stringify(data?.playabilityStatus?.status)}, responseLen=${responseText.length})`
+        );
+      } catch (error) {
+        console.warn(
+          `[youtube-adapter] video ${videoId}: innertube client "${attempt.context.client.clientName}" request threw: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }
   }
 
   const fallbackBaseUrl = extractCaptionTrackBaseUrl(watchPageHtml);
+  if (!fallbackBaseUrl) {
+    console.warn(`[youtube-adapter] video ${videoId}: watch-page scrape fallback also found no captionTracks in the embedded player response`);
+  }
   return fallbackBaseUrl ? [{ baseUrl: fallbackBaseUrl }] : [];
 }
 
