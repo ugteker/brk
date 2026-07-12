@@ -23,6 +23,15 @@ cleanup() {
 }
 trap cleanup TERM INT
 
+# Sync the SQLite schema against the persisted /app/api/prisma volume before
+# starting the API. Uses `prisma db push` (schema sync, not migration
+# history) to match this repo's own dev-environment convention (see
+# docs/implementation/setup-and-run.md) — on a brand-new volume this creates
+# every table from scratch; on an existing volume it applies any schema
+# changes shipped since the last deploy. Safe to run on every boot.
+echo "[entrypoint] syncing database schema (prisma db push)..."
+(cd /app/api && node_modules/.bin/prisma db push --skip-generate --accept-data-loss)
+
 echo "[entrypoint] starting API (tsx /app/api/src/main.ts)..."
 (cd /app/api && node_modules/.bin/tsx src/main.ts) &
 PIDS+=($!)
