@@ -7,7 +7,7 @@
 # Nothing sensitive is baked into the image or written into this file.
 
 services:
-  ChatTrader:
+  chattrader:
     build:
       context: .
       dockerfile: Dockerfile

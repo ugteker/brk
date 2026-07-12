@@ -15,7 +15,7 @@ Internet ──(Cloudflare edge, Quick Tunnel)── cloudflared (same container
 ```
 
 - **A single all-in-one container** (`docker-compose.yml` service
-  `ChatTrader`, built from the root `Dockerfile`). `deploy/entrypoint.sh`
+  `chattrader`, built from the root `Dockerfile`). `deploy/entrypoint.sh`
   starts three sibling processes inside it: the Node API, nginx (serving the
   built SPA and reverse-proxying `/api/*` to the API on `127.0.0.1:3000`),
   and `cloudflared` in Quick Tunnel mode. If any one of the three exits, the
@@ -38,7 +38,7 @@ Internet ──(Cloudflare edge, Quick Tunnel)── cloudflared (same container
 - **This hostname is not stable.** It changes every time the container
   restarts (including on every deploy). Read the current URL with:
   ```
-  docker compose logs ChatTrader --tail 50 | grep trycloudflare.com
+  docker compose logs chattrader --tail 50 | grep trycloudflare.com
   ```
   `deploy/deploy.sh` prints it automatically at the end of each deploy.
 - **Database is SQLite**, stored in the `api-data` named Docker volume,
@@ -63,7 +63,7 @@ cp apps/api/.env.example .env
 # (see below) — update and redeploy after the first run if using Google OAuth.
 chmod 600 .env
 docker compose up -d --build
-docker compose logs ChatTrader --tail 50 | grep trycloudflare.com
+docker compose logs chattrader --tail 50 | grep trycloudflare.com
 ```
 
 Verify: `curl https://<the-tunnel-url>/api/agents` (should get a 401 without
@@ -126,7 +126,7 @@ beyond internal testing:
   `docker-compose.yml`, and update `DATABASE_URL` in `.env`. Out of scope for
   this pass per current decision to keep SQLite.
 - **Real traffic / need to scale API and web independently** → split the
-  single `ChatTrader` service back into separate `api`/`web`/`cloudflared`
+  single `chattrader` service back into separate `api`/`web`/`cloudflared`
   services (each already has its own build stage in the `Dockerfile`); this
   undoes the single-container simplification made for this initial,
   no-real-traffic deployment.

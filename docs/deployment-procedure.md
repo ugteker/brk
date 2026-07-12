@@ -102,7 +102,7 @@ docker compose up -d --build
 ## Step 5 — Get the public tunnel URL
 
 ```bash
-docker compose logs ChatTrader --tail 50 | grep trycloudflare.com
+docker compose logs chattrader --tail 50 | grep trycloudflare.com
 ```
 
 This prints a URL like `https://random-words-1234.trycloudflare.com`.
@@ -165,7 +165,7 @@ existed in developers' local `apps/api/.env` files:
 
 | Symptom | Check |
 | --- | --- |
-| Can't find the tunnel URL | `docker compose logs ChatTrader --tail 100` — cloudflared logs its assigned URL a few seconds after startup |
-| SPA loads but API calls fail | Confirm the API process is running inside the container: `docker compose exec ChatTrader sh -c "wget -qO- http://127.0.0.1:3000/api/agents"` (expect 401, not a connection error) |
-| Container keeps restarting | `docker compose logs ChatTrader` — the entrypoint shuts down all three processes (API/nginx/cloudflared) if any one exits, so check which one failed first |
+| Can't find the tunnel URL | `docker compose logs chattrader --tail 100` — cloudflared logs its assigned URL a few seconds after startup |
+| SPA loads but API calls fail | Confirm the API process is running inside the container: `docker compose exec chattrader sh -c "wget -qO- http://127.0.0.1:3000/api/agents"` (expect 401, not a connection error) |
+| Container keeps restarting | `docker compose logs chattrader` — the entrypoint shuts down all three processes (API/nginx/cloudflared) if any one exits, so check which one failed first |
 | Data lost after redeploy | Confirm the `api-data` volume exists: `docker volume ls | grep api-data` — SQLite's `dev.db` lives there, not in the container filesystem |

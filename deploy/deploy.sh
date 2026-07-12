@@ -25,5 +25,5 @@ docker compose up -d --remove-orphans
 
 echo "== current cloudflared tunnel URL (may take a few seconds to appear) =="
 sleep 5
-docker compose logs brokerino --tail 50 | grep -o 'https://[a-zA-Z0-9.-]*\.trycloudflare\.com' | tail -n 1 || \
-  echo "(tunnel URL not found yet in logs — run 'docker compose logs brokerino' manually)"
+docker compose logs chattrader --tail 50 | grep -o 'https://[a-zA-Z0-9.-]*\.trycloudflare\.com' | tail -n 1 || \
+  echo "(tunnel URL not found yet in logs — run 'docker compose logs chattrader' manually)"
