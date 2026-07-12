@@ -19,6 +19,18 @@ const YOUTUBE_FEED_ITEM_CAP = 15;
 /** POSTs a JSON body to `url` and returns the raw response text. */
 export type HttpPostJson = (url: string, body: unknown, headers?: Record<string, string>) => Promise<string>;
 
+/**
+ * Optional YouTube session cookie (raw `Cookie:` header value, e.g. exported from a signed-in
+ * browser session via an extension like "Get cookies.txt"), applied to every YouTube request when
+ * set. YouTube sometimes returns `playabilityStatus: "LOGIN_REQUIRED"` for caption/player requests
+ * from IPs it doesn't trust (e.g. Hetzner's datacenter range) even with realistic headers and
+ * multiple client impersonations - attaching a real authenticated session's cookies satisfies that
+ * check directly. Cheaper to try than an outbound proxy, but not permanent: exported cookies
+ * eventually get invalidated (Google may force a re-login on the source account once it notices
+ * automated traffic from an unfamiliar IP), so this may need periodic re-export/redeploy.
+ */
+const YOUTUBE_COOKIE_HEADER: Record<string, string> = process.env.YOUTUBE_COOKIE ? { Cookie: process.env.YOUTUBE_COOKIE } : {};
+
 // YouTube treats requests from known datacenter/VPS IP ranges (e.g. Hetzner) with much more
 // suspicion than residential IPs, and a header-less request (Node's plain `fetch(url)` sends no
 // User-Agent at all) is itself an easy bot signal on top of that - both the watch-page HTML fetch
@@ -26,7 +38,8 @@ export type HttpPostJson = (url: string, body: unknown, headers?: Record<string,
 // getting a stripped-down/bot-walled response.
 const YOUTUBE_WATCH_PAGE_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-  'Accept-Language': 'en-US,en;q=0.9'
+  'Accept-Language': 'en-US,en;q=0.9',
+  ...YOUTUBE_COOKIE_HEADER
 };
 
 /**
@@ -191,7 +204,8 @@ const INNERTUBE_CLIENT_ATTEMPTS: Array<{ context: { client: Record<string, unkno
     headers: {
       'User-Agent': 'com.google.android.youtube/19.30.36 (Linux; U; Android 14) gzip',
       'X-YouTube-Client-Name': '3',
-      'X-YouTube-Client-Version': '19.30.36'
+      'X-YouTube-Client-Version': '19.30.36',
+      ...YOUTUBE_COOKIE_HEADER
     }
   },
   {
@@ -199,7 +213,8 @@ const INNERTUBE_CLIENT_ATTEMPTS: Array<{ context: { client: Record<string, unkno
     headers: {
       'User-Agent': 'com.google.ios.youtube/19.30.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)',
       'X-YouTube-Client-Name': '5',
-      'X-YouTube-Client-Version': '19.30.4'
+      'X-YouTube-Client-Version': '19.30.4',
+      ...YOUTUBE_COOKIE_HEADER
     }
   },
   {
