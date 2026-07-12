@@ -120,6 +120,11 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
               message={`Error: ${run.errorCode}`}
               description={run.errorMessage ?? 'No further details are available for this failure.'}
             />
+          ) : run.status === 'succeeded_no_new_content' && run.errorMessage ? (
+            // No error occurred, but a warning was collected while crawling (e.g. a manually
+            // picked episode couldn't be located in the current feed fetch) - surface it instead
+            // of leaving "no new content" unexplained.
+            <Alert type="warning" showIcon style={{ marginTop: 8 }} message="No content found" description={run.errorMessage} />
           ) : null}
 
           {run.artifacts.length > 0 ? (
