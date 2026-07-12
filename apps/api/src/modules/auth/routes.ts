@@ -1,17 +1,27 @@
 import type { FastifyInstance } from 'fastify';
+import crypto from 'node:crypto';
 import { config, isGoogleOAuthConfigured } from '../../config';
 import type { UserRepositoryLike } from './repository';
 import { toAuthUser } from './types';
 import { hashPassword, verifyPassword } from './password';
 import { signSessionToken, verifySessionToken } from './jwt';
 import { buildGoogleAuthUrl, type GoogleOAuthClient } from './google-oauth';
+import type { MailerLike } from './mailer';
+import { sendEmailConfirmationLink, sendPasswordResetLink } from './emails';
 
 export interface AuthRoutesDeps {
   userRepository: UserRepositoryLike;
   googleOAuthClient: GoogleOAuthClient;
+  mailer?: MailerLike;
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1h
+
+function generateToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
 
 function setSessionCookie(reply: import('fastify').FastifyReply, userId: string) {
   const token = signSessionToken({ userId });
@@ -24,7 +34,7 @@ function setSessionCookie(reply: import('fastify').FastifyReply, userId: string)
 }
 
 export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps) {
-  const { userRepository, googleOAuthClient } = deps;
+  const { userRepository, googleOAuthClient, mailer } = deps;
 
   app.post('/api/auth/signup', async (req, reply) => {
     const { email, password } = (req.body ?? {}) as { email?: string; password?: string };
@@ -43,8 +53,102 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesD
 
     const passwordHash = await hashPassword(password);
     const user = await userRepository.createWithPassword(email, passwordHash);
-    setSessionCookie(reply, user.id);
-    return reply.status(201).send(toAuthUser(user));
+
+    // Two-step signup: the account is created but stays unverified/unusable for login until the
+    // user clicks the confirmation link we email them - no session cookie is set here.
+    const token = generateToken();
+    await userRepository.setEmailVerificationToken(user.id, token, new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS));
+    if (mailer) {
+      try {
+        await sendEmailConfirmationLink(mailer, user.email, token);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn(`[auth] Failed to send confirmation email to ${user.email}:`, error);
+      }
+    }
+
+    return reply.status(201).send({ status: 'confirmation_required', email: user.email });
+  });
+
+  app.get('/api/auth/confirm-email', async (req, reply) => {
+    const { token } = req.query as { token?: string };
+    if (!token) {
+      return reply.redirect(`${config.appBaseUrl}/?emailConfirmed=0`);
+    }
+
+    const user = await userRepository.verifyEmailByToken(token);
+    if (!user) {
+      return reply.redirect(`${config.appBaseUrl}/?emailConfirmed=0`);
+    }
+
+    return reply.redirect(`${config.appBaseUrl}/?emailConfirmed=1`);
+  });
+
+  app.post('/api/auth/resend-confirmation', async (req, reply) => {
+    const { email } = (req.body ?? {}) as { email?: string };
+    if (!email || !EMAIL_PATTERN.test(email)) {
+      return reply.status(400).send({ code: 'validation_error', message: 'A valid email is required' });
+    }
+
+    // Always respond 200 regardless of whether the account exists/is already verified, so this
+    // endpoint can't be used to enumerate registered email addresses.
+    const user = await userRepository.findByEmail(email);
+    if (user && !user.emailVerified) {
+      const token = generateToken();
+      await userRepository.setEmailVerificationToken(user.id, token, new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS));
+      if (mailer) {
+        try {
+          await sendEmailConfirmationLink(mailer, user.email, token);
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.warn(`[auth] Failed to resend confirmation email to ${user.email}:`, error);
+        }
+      }
+    }
+
+    return reply.status(200).send({ status: 'ok' });
+  });
+
+  app.post('/api/auth/forgot-password', async (req, reply) => {
+    const { email } = (req.body ?? {}) as { email?: string };
+    if (!email || !EMAIL_PATTERN.test(email)) {
+      return reply.status(400).send({ code: 'validation_error', message: 'A valid email is required' });
+    }
+
+    // Same anti-enumeration approach as resend-confirmation - always 200.
+    const user = await userRepository.findByEmail(email);
+    if (user && user.passwordHash) {
+      const token = generateToken();
+      await userRepository.setPasswordResetToken(user.id, token, new Date(Date.now() + PASSWORD_RESET_TTL_MS));
+      if (mailer) {
+        try {
+          await sendPasswordResetLink(mailer, user.email, token);
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.warn(`[auth] Failed to send password reset email to ${user.email}:`, error);
+        }
+      }
+    }
+
+    return reply.status(200).send({ status: 'ok' });
+  });
+
+  app.post('/api/auth/reset-password', async (req, reply) => {
+    const { token, password } = (req.body ?? {}) as { token?: string; password?: string };
+    if (!token) {
+      return reply.status(400).send({ code: 'validation_error', message: 'Missing reset token' });
+    }
+    if (!password || password.length < 8) {
+      return reply.status(400).send({ code: 'validation_error', message: 'Password must be at least 8 characters' });
+    }
+
+    const passwordHash = await hashPassword(password);
+    const user = await userRepository.resetPasswordByToken(token, passwordHash);
+    if (!user) {
+      return reply.status(400).send({ code: 'invalid_or_expired_token', message: 'This reset link is invalid or has expired' });
+    }
+
+    return reply.status(200).send({ status: 'ok' });
   });
 
   app.post('/api/auth/login', async (req, reply) => {
@@ -61,6 +165,16 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesD
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) {
       return reply.status(401).send({ code: 'invalid_credentials', message: 'Invalid email or password' });
+    }
+
+    if (user.locked) {
+      return reply.status(403).send({ code: 'account_locked', message: 'This account has been locked. Contact an administrator.' });
+    }
+
+    if (!user.emailVerified) {
+      return reply
+        .status(403)
+        .send({ code: 'email_not_verified', message: 'Please confirm your email address before logging in. Check your inbox for the confirmation link.' });
     }
 
     setSessionCookie(reply, user.id);
@@ -114,6 +228,10 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesD
         user = existingByEmail
           ? await userRepository.linkGoogleId(existingByEmail.id, profile.sub)
           : await userRepository.createWithGoogle(profile.email, profile.sub, profile.name ?? null);
+      }
+
+      if (user.locked) {
+        return reply.redirect(`${config.appBaseUrl}/?accountLocked=1`);
       }
 
       setSessionCookie(reply, user.id);

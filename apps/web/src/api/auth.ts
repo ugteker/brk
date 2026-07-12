@@ -7,6 +7,11 @@ export interface AuthUser {
   createdAt: string;
 }
 
+export interface SignupResult {
+  status: 'confirmation_required';
+  email: string;
+}
+
 async function parseErrorMessage(response: Response, fallback: string): Promise<string> {
   try {
     const body = await response.json();
@@ -23,7 +28,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   return response.json();
 }
 
-export async function signup(email: string, password: string): Promise<AuthUser> {
+export async function signup(email: string, password: string): Promise<SignupResult> {
   const response = await fetch('/api/auth/signup', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -51,6 +56,36 @@ export async function login(email: string, password: string): Promise<AuthUser> 
 
 export async function logout(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+}
+
+export async function resendConfirmation(email: string): Promise<void> {
+  await fetch('/api/auth/resend-confirmation', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ email })
+  });
+}
+
+export async function forgotPassword(email: string): Promise<void> {
+  await fetch('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ email })
+  });
+}
+
+export async function resetPassword(token: string, password: string): Promise<void> {
+  const response = await fetch('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ token, password })
+  });
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response, 'This reset link is invalid or has expired'));
+  }
 }
 
 // Full-page navigation (not fetch) — the browser must follow the redirect chain

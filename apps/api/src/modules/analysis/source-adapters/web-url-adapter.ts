@@ -1,37 +1,22 @@
-import type { EvidenceBlock, SourceAdapter, SourceConfig } from '../types';
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+import type { SourceAdapter, SourceConfig, SourceFetchResult } from '../types';
+import { crawlSource, type SmartCrawlerDeps } from './smart-crawler';
 
 export type HttpGet = (url: string) => Promise<string>;
 
-const defaultHttpGet: HttpGet = async (url) => {
+export const defaultHttpGet: HttpGet = async (url) => {
   const response = await fetch(url);
   return response.text();
 };
 
+/**
+ * Thin wrapper delegating to the shared smart-crawler orchestration, which auto-detects whether
+ * a source is feed-like (regardless of the wizard's configured type) and applies the appropriate
+ * deterministic or AI-assisted crawling strategy.
+ */
 export class WebUrlAdapter implements SourceAdapter {
-  constructor(private readonly httpGet: HttpGet = defaultHttpGet) {}
+  constructor(private readonly deps: SmartCrawlerDeps) {}
 
-  async fetch(source: SourceConfig): Promise<EvidenceBlock[]> {
-    const html = await this.httpGet(source.value);
-    const content = stripHtml(html);
-
-    const evidence: EvidenceBlock = {
-      sourceId: source.value,
-      sourceType: 'web_urls',
-      sourceRef: source.value,
-      content,
-      fidelity: 'high',
-      citations: [source.value]
-    };
-
-    return [evidence];
+  async fetch(agentId: string, source: SourceConfig): Promise<SourceFetchResult> {
+    return crawlSource(this.deps, agentId, source);
   }
 }

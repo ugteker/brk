@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { PodcastFeedAdapter } from './podcast-feed-adapter';
+import { InMemorySourceCursorRepository } from '../../crawler/source-cursor-repository';
+import { InMemorySourceCrawlConfigRepository } from '../../crawler/crawl-config-repository';
+import type { SmartCrawlerDeps } from './smart-crawler';
+
+function createDeps(httpGet: SmartCrawlerDeps['httpGet']): SmartCrawlerDeps {
+  return {
+    httpGet,
+    cursorRepository: new InMemorySourceCursorRepository(),
+    crawlConfigRepository: new InMemorySourceCrawlConfigRepository(),
+    siteInspector: { inspect: async () => null }
+  };
+}
 
 describe('PodcastFeedAdapter', () => {
   it('falls back to show notes when a podcast transcript is missing', async () => {
@@ -11,11 +23,12 @@ describe('PodcastFeedAdapter', () => {
       </item></channel></rss>`;
     };
 
-    const adapter = new PodcastFeedAdapter(httpGet);
-    const evidence = await adapter.fetch({ type: 'podcast_feeds', value: 'https://example.com/feed.xml' });
+    const adapter = new PodcastFeedAdapter(createDeps(httpGet));
+    const result = await adapter.fetch('agent-1', { type: 'podcast_feeds', value: 'https://example.com/feed.xml' });
 
-    expect(evidence[0]?.fidelity).toBe('low');
-    expect(evidence[0]?.content).toContain('AAPL guidance');
+    expect(result.evidence[0]?.fidelity).toBe('low');
+    expect(result.evidence[0]?.content).toContain('AAPL guidance');
+    expect(result.cursorUpdate?.seenItemIds).toHaveLength(1);
   });
 
   it('uses the transcript when a podcast:transcript tag is present', async () => {
@@ -30,10 +43,28 @@ describe('PodcastFeedAdapter', () => {
       return 'Full transcript mentions strong AAPL guidance at 12:44.';
     };
 
-    const adapter = new PodcastFeedAdapter(httpGet);
-    const evidence = await adapter.fetch({ type: 'podcast_feeds', value: 'https://example.com/feed.xml' });
+    const adapter = new PodcastFeedAdapter(createDeps(httpGet));
+    const result = await adapter.fetch('agent-1', { type: 'podcast_feeds', value: 'https://example.com/feed.xml' });
 
-    expect(evidence[0]?.fidelity).toBe('high');
-    expect(evidence[0]?.content).toContain('AAPL guidance');
+    expect(result.evidence[0]?.fidelity).toBe('high');
+    expect(result.evidence[0]?.content).toContain('AAPL guidance');
+  });
+
+  it('does not re-emit an already-seen episode on a subsequent run', async () => {
+    const feedXml = `<rss><channel><item>
+      <title>Episode 12: Markets Update</title>
+      <description>Discussion of AAPL guidance.</description>
+    </item></channel></rss>`;
+    const httpGet = async () => feedXml;
+    const deps = createDeps(httpGet);
+    const adapter = new PodcastFeedAdapter(deps);
+    const source = { type: 'podcast_feeds' as const, value: 'https://example.com/feed.xml' };
+
+    const first = await adapter.fetch('agent-1', source);
+    expect(first.evidence).toHaveLength(1);
+    if (first.cursorUpdate) await deps.cursorRepository.saveCursor(first.cursorUpdate);
+
+    const second = await adapter.fetch('agent-1', source);
+    expect(second.evidence).toHaveLength(0);
   });
 });

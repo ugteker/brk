@@ -22,6 +22,35 @@ const RESPONSE_FORMAT_INSTRUCTIONS = `Respond with ONLY a JSON object matching t
   "needsHumanReview": boolean
 }`;
 
+const FENCED_CODE_BLOCK_PATTERN = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
+
+/**
+ * Extracts a JSON payload from Claude's raw text response. Despite `RESPONSE_FORMAT_INSTRUCTIONS`
+ * asking for "ONLY a JSON object, no prose outside the JSON", Claude sometimes wraps its answer in
+ * a markdown code fence (` ```json ... ``` ` or plain ` ``` ... ``` `) anyway - this appears to
+ * happen more often with larger/richer evidence (e.g. a full video transcript) than with the small
+ * evidence blocks used in tests. Handles, in order: a fenced block (with or without a `json`
+ * language tag), and otherwise falls back to the trimmed text as-is (the original behavior) so
+ * already-bare JSON keeps working unchanged.
+ */
+export function extractJsonFromResponseText(text: string): string {
+  const trimmed = text.trim();
+  const fenceMatch = trimmed.match(FENCED_CODE_BLOCK_PATTERN);
+  if (fenceMatch) {
+    return fenceMatch[1].trim();
+  }
+
+  // Defensive fallback: Claude added prose outside the JSON despite instructions not to - extract
+  // the first balanced-looking `{...}` block rather than failing outright.
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+
+  return trimmed;
+}
+
 export class ClaudeClient {
   private readonly client: ClaudeMessagesClient;
 
@@ -44,7 +73,7 @@ export class ClaudeClient {
       throw new Error('Claude response did not contain a text block');
     }
 
-    const parsed = JSON.parse(textBlock.text) as Parameters<typeof parseClaudeResponse>[0];
+    const parsed = JSON.parse(extractJsonFromResponseText(textBlock.text)) as Parameters<typeof parseClaudeResponse>[0];
     return parseClaudeResponse(parsed);
   }
 }

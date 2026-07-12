@@ -116,17 +116,21 @@ describe('AgentRunner (integration with real repositories)', () => {
     });
 
     const webUrlAdapter: SourceAdapter = {
-      fetch: async (source) => [
-        {
-          sourceId: source.value,
-          sourceType: 'web_urls',
-          sourceRef: source.value,
-          content: 'Hosts discuss ACME earnings beat and raise guidance for next quarter.',
-          fidelity: 'high',
-          citations: [source.value]
-        }
-      ]
+      fetch: async (_agentId, source) => ({
+        evidence: [
+          {
+            sourceId: source.value,
+            sourceType: 'web_urls',
+            sourceRef: source.value,
+            content: 'Hosts discuss ACME earnings beat and raise guidance for next quarter.',
+            fidelity: 'high',
+            citations: [source.value]
+          }
+        ]
+      })
     };
+
+    const cursorRepository = { getCursor: async () => null, saveCursor: async () => undefined };
 
     const runner = new AgentRunner({
       agentRepository,
@@ -134,9 +138,11 @@ describe('AgentRunner (integration with real repositories)', () => {
       artifactRepository,
       reportRepository,
       claudeClient,
+      cursorRepository,
       sourceAdapters: {
         web_urls: webUrlAdapter,
-        podcast_feeds: { fetch: async () => [] }
+        podcast_feeds: { fetch: async () => ({ evidence: [] }) },
+        youtube_videos: { fetch: async () => ({ evidence: [] }) }
       }
     });
 

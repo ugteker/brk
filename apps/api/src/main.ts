@@ -4,17 +4,28 @@ import { AgentRepository } from './modules/agents/repository';
 import { RunQueueService } from './modules/runs/run-queue.service';
 import { PrismaRunStore } from './modules/runs/prisma-run-store';
 import { startSchedulerLoop } from './modules/schedules/scheduler-loop';
+import { ManualRunTrigger } from './modules/runs/manual-run-trigger';
 import { prisma } from './lib/db';
 import { PromptRepository } from './modules/prompts/repository';
 import { ArtifactRepository } from './modules/artifacts/repository';
 import { ReportRepository } from './modules/reports/repository';
+import { RunsRepository } from './modules/runs/repository';
 import { ClaudeClient } from './modules/analysis/claude-client';
 import { WebUrlAdapter } from './modules/analysis/source-adapters/web-url-adapter';
 import { PodcastFeedAdapter } from './modules/analysis/source-adapters/podcast-feed-adapter';
+import { YouTubeAdapter } from './modules/analysis/source-adapters/youtube-adapter';
+import { defaultHttpGet } from './modules/analysis/source-adapters/web-url-adapter';
+import { defaultHttpPostJson } from './modules/analysis/source-adapters/youtube-adapter';
+import { SiteInspectorClient } from './modules/analysis/site-inspector-client';
+import { SourceCursorRepository } from './modules/crawler/source-cursor-repository';
+import { SourceCrawlConfigRepository } from './modules/crawler/crawl-config-repository';
 import { AgentRunner } from './modules/analysis/agent-runner';
+import { probeSource } from './modules/analysis/source-adapters/smart-crawler';
+import { probeYouTubeSource } from './modules/analysis/source-adapters/youtube-adapter';
 import { UserRepository } from './modules/auth/repository';
 import { GoogleOAuthHttpClient } from './modules/auth/google-oauth';
 import { hashPassword } from './modules/auth/password';
+import { SmtpMailer } from './modules/auth/mailer';
 import { config } from './config';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
@@ -29,10 +40,25 @@ async function bootstrapAdminAccount(userRepository: UserRepository) {
   }
 
   const existing = await userRepository.findByEmail(email);
-  if (existing) return;
+  if (existing) {
+    // The account may have been created before email-confirmation/locking existed, or before this
+    // bootstrap fix landed - make sure the configured admin is always usable on every boot, not
+    // just at first creation, otherwise the admin can get silently locked out of their own app.
+    if (!existing.emailVerified) {
+      await userRepository.setEmailVerified(existing.id, true);
+    }
+    if (existing.locked) {
+      await userRepository.setLocked(existing.id, false);
+    }
+    return;
+  }
 
   const passwordHash = await hashPassword(password);
-  await userRepository.createWithPassword(email, passwordHash, 'Admin');
+  const admin = await userRepository.createWithPassword(email, passwordHash, 'Admin');
+  // The bootstrap admin is configured directly via trusted backend env vars, bypassing the
+  // normal signup/email-confirmation flow entirely - so it must be marked verified up front,
+  // otherwise the new email-verification login gate would lock the admin out of their own app.
+  await userRepository.setEmailVerified(admin.id, true);
   // eslint-disable-next-line no-console
   console.log(`[auth] Bootstrapped admin account for ${email} from backend config`);
 }
@@ -42,8 +68,19 @@ async function start() {
   const promptRepository = new PromptRepository(prisma);
   const artifactRepository = new ArtifactRepository(prisma);
   const reportRepository = new ReportRepository(prisma);
+  const runsRepository = new RunsRepository(prisma);
   const claudeClient = new ClaudeClient({ apiKey: process.env.ANTHROPIC_API_KEY });
   const userRepository = new UserRepository(prisma);
+  const cursorRepository = new SourceCursorRepository(prisma);
+  const crawlConfigRepository = new SourceCrawlConfigRepository(prisma);
+  const siteInspector = new SiteInspectorClient({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const mailer = new SmtpMailer();
+  const smartCrawlerDeps = {
+    httpGet: defaultHttpGet,
+    cursorRepository,
+    crawlConfigRepository,
+    siteInspector
+  };
 
   await bootstrapAdminAccount(userRepository);
 
@@ -53,22 +90,37 @@ async function start() {
     artifactRepository,
     reportRepository,
     claudeClient,
+    cursorRepository,
     sourceAdapters: {
-      web_urls: new WebUrlAdapter(),
-      podcast_feeds: new PodcastFeedAdapter((url) => fetch(url).then((r) => r.text()))
+      web_urls: new WebUrlAdapter(smartCrawlerDeps),
+      podcast_feeds: new PodcastFeedAdapter(smartCrawlerDeps),
+      youtube_videos: new YouTubeAdapter({ httpGet: defaultHttpGet, httpPostJson: defaultHttpPostJson, cursorRepository })
     }
-  });
-
-  const app = await buildServer({
-    agentRepository,
-    agents: { promptRepository, reportRepository },
-    auth: { userRepository, googleOAuthClient: new GoogleOAuthHttpClient() }
   });
 
   const runStore = new PrismaRunStore(prisma);
   const queue = new RunQueueService(runStore);
+  const manualRunTrigger = new ManualRunTrigger(queue, agentRunner);
+
+  const app = await buildServer({
+    agentRepository,
+    agents: { promptRepository, reportRepository, agentRepository, mailer },
+    runs: { runsRepository },
+    auth: { userRepository, googleOAuthClient: new GoogleOAuthHttpClient(), mailer },
+    sourceProbe: {
+      probeSource: (source) =>
+        source.type === 'youtube_videos'
+          ? probeYouTubeSource({ httpGet: defaultHttpGet, httpPostJson: defaultHttpPostJson }, source)
+          : probeSource({ httpGet: defaultHttpGet, siteInspector }, source)
+    },
+    runTrigger: manualRunTrigger
+  });
+
   startSchedulerLoop({ intervalMs: 60_000, queue, runner: agentRunner });
   await app.listen({ port: 3000, host: '0.0.0.0' });
 }
 
 start();
+
+
+

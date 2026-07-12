@@ -4,7 +4,7 @@ export type EvidenceFidelity = 'high' | 'medium' | 'low';
 
 export interface EvidenceBlock {
   sourceId: string;
-  sourceType: 'web_urls' | 'podcast_feeds';
+  sourceType: 'web_urls' | 'podcast_feeds' | 'youtube_videos';
   sourceRef: string;
   content: string;
   fidelity: EvidenceFidelity;
@@ -14,12 +14,19 @@ export interface EvidenceBlock {
 }
 
 export interface SourceConfig {
-  type: 'web_urls' | 'podcast_feeds';
+  type: 'web_urls' | 'podcast_feeds' | 'youtube_videos';
   value: string;
+  maxItems?: number;
+}
+
+export interface SourceFetchResult {
+  evidence: EvidenceBlock[];
+  cursorUpdate?: SourceCursorState;
+  warning?: string;
 }
 
 export interface SourceAdapter {
-  fetch(source: SourceConfig): Promise<EvidenceBlock[]>;
+  fetch(agentId: string, source: SourceConfig): Promise<SourceFetchResult>;
 }
 
 export interface ClaudeAnalysisRequest {

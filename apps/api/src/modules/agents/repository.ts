@@ -1,17 +1,18 @@
 import type { PrismaClient } from '@prisma/client';
 import { computeNextRun } from '../schedules/compute-next-run';
-import type { Agent, CreateAgentInput, RecentRun, ScheduleInput } from './types';
+import type { Agent, AgentListItem, CreateAgentInput, RecentRun, ScheduleInput } from './types';
 
 type AgentDb = Pick<
   PrismaClient,
   'agent' | 'agentSource' | 'agentSchedule' | 'agentRun' | 'agentPromptVersion' | 'agentRunArtifact' | 'agentRunReport' | 'agentSignal' | '$transaction'
 >;
-type SourceRow = { type: string; value: string; frequencyMinutes?: number };
+type SourceRow = { type: string; value: string; frequencyMinutes?: number; maxItems?: number };
 type ScheduleRow = {
   mode?: string;
   intervalMinutes?: number | null;
   dailyTime?: string | null;
   timezone?: string | null;
+  daysOfWeekJson?: string | null;
 };
 
 function parsePreferences(json: string | null | undefined): Record<string, string[]> {
@@ -32,8 +33,26 @@ function parseRecipients(json: string | null | undefined): string[] {
   }
 }
 
+function parseDaysOfWeek(json: string | null | undefined): number[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed.filter((n) => typeof n === 'number') : [];
+  } catch {
+    return [];
+  }
+}
+
 function scheduleFromRow(row: ScheduleRow | undefined | null): ScheduleInput | null {
   if (!row) return null;
+  if (row.mode === 'weekly') {
+    return {
+      mode: 'weekly',
+      daysOfWeek: parseDaysOfWeek(row.daysOfWeekJson),
+      dailyTime: row.dailyTime ?? '07:30',
+      timezone: row.timezone ?? 'UTC'
+    };
+  }
   if (row.mode === 'daily') {
     return { mode: 'daily', dailyTime: row.dailyTime ?? '07:30', timezone: row.timezone ?? 'UTC' };
   }
@@ -44,8 +63,9 @@ function scheduleCreateData(schedule: ScheduleInput, now: Date) {
   return {
     mode: schedule.mode,
     intervalMinutes: schedule.mode === 'interval' ? schedule.intervalMinutes : null,
-    dailyTime: schedule.mode === 'daily' ? schedule.dailyTime : null,
-    timezone: schedule.mode === 'daily' ? schedule.timezone : null,
+    dailyTime: schedule.mode === 'daily' || schedule.mode === 'weekly' ? schedule.dailyTime : null,
+    timezone: schedule.mode === 'daily' || schedule.mode === 'weekly' ? schedule.timezone : null,
+    daysOfWeekJson: schedule.mode === 'weekly' ? JSON.stringify(schedule.daysOfWeek) : null,
     nextRunAt: computeNextRun(schedule, now),
     enabled: true
   };
@@ -66,7 +86,8 @@ function mapAgent(row: any): Agent {
     sources: sourceRows.map((s) => ({
       type: s.type as Agent['sources'][number]['type'],
       value: s.value,
-      frequencyMinutes: s.frequencyMinutes ?? 60
+      frequencyMinutes: s.frequencyMinutes ?? 60,
+      maxItems: s.maxItems ?? 1
     })),
     preferences: parsePreferences(row.preferencesJson),
     recipients: parseRecipients(row.recipientsJson),
@@ -77,14 +98,24 @@ function mapAgent(row: any): Agent {
 export class AgentRepository {
   constructor(private readonly db: AgentDb) {}
 
-  async listAgents(ownerUserId: string): Promise<Agent[]> {
+  async listAgents(ownerUserId: string): Promise<AgentListItem[]> {
     const rows = await this.db.agent.findMany({
       where: { ownerUserId },
-      include: { sources: true, schedules: { orderBy: { createdAt: 'desc' }, take: 1 } },
+      include: {
+        sources: true,
+        schedules: { orderBy: { createdAt: 'desc' }, take: 1 },
+        _count: { select: { runs: true, runReports: true } },
+        runReports: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } }
+      },
       orderBy: { createdAt: 'desc' }
     });
 
-    return rows.map((agent: any) => mapAgent(agent));
+    return rows.map((agent: any) => ({
+      ...mapAgent(agent),
+      runCount: agent._count?.runs ?? 0,
+      reportCount: agent._count?.runReports ?? 0,
+      latestReportAt: agent.runReports?.[0]?.createdAt ?? null
+    }));
   }
 
   async getAgent(agentId: string): Promise<Agent | null> {
@@ -104,13 +135,15 @@ export class AgentRepository {
         ownerUserId,
         name: input.name,
         description: input.description ?? '',
+        status: input.active === false ? 'disabled' : 'active',
         preferencesJson: JSON.stringify(input.preferences ?? {}),
         recipientsJson: JSON.stringify(input.recipients ?? []),
         sources: {
           create: input.sources.map((s) => ({
             type: s.type,
             value: s.value,
-            frequencyMinutes: s.frequencyMinutes ?? 60
+            frequencyMinutes: s.frequencyMinutes ?? 60,
+            maxItems: s.maxItems ?? 1
           }))
         },
         schedules: {
@@ -165,7 +198,8 @@ export class AgentRepository {
             agentId,
             type: s.type,
             value: s.value,
-            frequencyMinutes: s.frequencyMinutes ?? 60
+            frequencyMinutes: s.frequencyMinutes ?? 60,
+            maxItems: s.maxItems ?? 1
           }))
         });
       }
@@ -182,6 +216,7 @@ export class AgentRepository {
         data: {
           ...(patch.name !== undefined ? { name: patch.name } : {}),
           ...(patch.description !== undefined ? { description: patch.description } : {}),
+          ...(patch.active !== undefined ? { status: patch.active ? 'active' : 'disabled' } : {}),
           ...(patch.preferences !== undefined ? { preferencesJson: JSON.stringify(patch.preferences) } : {}),
           ...(patch.recipients !== undefined ? { recipientsJson: JSON.stringify(patch.recipients) } : {})
         },

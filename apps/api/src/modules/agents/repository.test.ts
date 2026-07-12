@@ -33,6 +33,60 @@ describe('AgentRepository', () => {
     expect(agent.sources[0]?.type).toBe('podcast_feeds');
   });
 
+  it('creates an agent as active by default and as disabled when active is false', async () => {
+    const create = vi.fn(async ({ data }: { data: { status: string; sources: { create: unknown[] } } }) => ({
+      id: 'agent_1',
+      ownerUserId: 'admin-user-id',
+      name: 'Housing Agent',
+      status: data.status,
+      createdAt: new Date('2026-07-10T00:00:00.000Z'),
+      updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+      sources: data.sources.create
+    }));
+    const fakeDb = { agent: { create } };
+
+    const repo = new AgentRepository(fakeDb as never);
+    const baseInput: CreateAgentInput = {
+      name: 'Housing Agent',
+      sources: [{ type: 'web_urls', value: 'https://example.com' }],
+      preferences: {},
+      recipients: ['team@example.com'],
+      schedule: { mode: 'interval', intervalMinutes: 120 }
+    };
+
+    const activeByDefault = await repo.createAgent('admin-user-id', baseInput);
+    expect(activeByDefault.status).toBe('active');
+
+    const explicitlyActive = await repo.createAgent('admin-user-id', { ...baseInput, active: true });
+    expect(explicitlyActive.status).toBe('active');
+
+    const paused = await repo.createAgent('admin-user-id', { ...baseInput, active: false });
+    expect(paused.status).toBe('disabled');
+  });
+
+  it('updates agent status when active is included in the patch', async () => {
+    const update = vi.fn(async ({ data }: { data: { status?: string } }) => ({
+      id: 'agent_1',
+      ownerUserId: 'admin-user-id',
+      name: 'Housing Agent',
+      status: data.status ?? 'active',
+      createdAt: new Date('2026-07-10T00:00:00.000Z'),
+      updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+      sources: []
+    }));
+    const fakeDb = { agent: { update }, $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fakeDb) };
+
+    const repo = new AgentRepository(fakeDb as never);
+
+    const disabled = await repo.updateAgent('agent_1', { active: false });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'disabled' }) }));
+    expect(disabled.status).toBe('disabled');
+
+    const reenabled = await repo.updateAgent('agent_1', { active: true });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'active' }) }));
+    expect(reenabled.status).toBe('active');
+  });
+
   it('lists agents with their sources', async () => {
     const fakeDb = {
       agent: {
@@ -56,6 +110,37 @@ describe('AgentRepository', () => {
     expect(agents).toHaveLength(1);
     expect(agents[0]?.name).toBe('Housing Agent');
     expect(agents[0]?.sources[0]?.value).toBe('https://example.com');
+    expect(agents[0]?.runCount).toBe(0);
+    expect(agents[0]?.reportCount).toBe(0);
+    expect(agents[0]?.latestReportAt).toBeNull();
+  });
+
+  it('includes run/report counts and the latest report timestamp when listing agents', async () => {
+    const latestReportDate = new Date('2026-07-11T00:00:00.000Z');
+    const fakeDb = {
+      agent: {
+        findMany: async () => [
+          {
+            id: 'agent_1',
+            ownerUserId: 'admin-user-id',
+            name: 'Housing Agent',
+            status: 'active',
+            createdAt: new Date('2026-07-10T00:00:00.000Z'),
+            updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+            sources: [],
+            _count: { runs: 5, runReports: 2 },
+            runReports: [{ createdAt: latestReportDate }]
+          }
+        ]
+      }
+    };
+
+    const repo = new AgentRepository(fakeDb as never);
+    const agents = await repo.listAgents('admin-user-id');
+
+    expect(agents[0]?.runCount).toBe(5);
+    expect(agents[0]?.reportCount).toBe(2);
+    expect(agents[0]?.latestReportAt).toEqual(latestReportDate);
   });
 
   it('gets a single agent with its sources', async () => {

@@ -8,9 +8,14 @@ const ROTATE_INTERVAL_MS = 4000;
 
 const STATUS_COLORS: Record<string, string> = {
   succeeded: 'green',
+  succeeded_no_new_content: 'cyan',
   failed: 'red',
   running: 'blue',
   queued: 'default'
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  succeeded_no_new_content: 'no new content'
 };
 
 export function AgentStatusCard() {
@@ -54,7 +59,9 @@ export function AgentStatusCard() {
         <>
           <p className="text-sm">
             <Text strong>{activeRun.agentName}:</Text>{' '}
-            <Tag color={STATUS_COLORS[activeRun.status] ?? 'default'}>{activeRun.status}</Tag>{' '}
+            <Tag color={STATUS_COLORS[activeRun.status] ?? 'default'}>
+              {STATUS_LABELS[activeRun.status] ?? activeRun.status}
+            </Tag>{' '}
             {activeRun.finishedAt
               ? new Date(activeRun.finishedAt).toLocaleString()
               : new Date(activeRun.scheduledFor).toLocaleString()}

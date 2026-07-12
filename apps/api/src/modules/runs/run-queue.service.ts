@@ -1,4 +1,4 @@
-export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+export type RunStatus = 'queued' | 'running' | 'succeeded' | 'succeeded_no_new_content' | 'failed';
 
 export interface AgentScheduleRecord {
   agentId: string;
@@ -16,13 +16,19 @@ export interface AgentRunRecord {
   finishedAt?: Date;
   retryCount: number;
   errorCode?: string;
+  errorMessage?: string;
 }
 
 export interface RunStore {
   getDueSchedules(now: Date): Promise<AgentScheduleRecord[]>;
   upsertQueuedRun(agentId: string, scheduledFor: Date): Promise<void>;
   claimNextQueuedRun(workerId: string): Promise<AgentRunRecord | null>;
-  completeRun(runId: string, status: 'succeeded' | 'failed', errorCode?: string): Promise<void>;
+  completeRun(
+    runId: string,
+    status: 'succeeded' | 'succeeded_no_new_content' | 'failed',
+    errorCode?: string,
+    errorMessage?: string
+  ): Promise<void>;
 }
 
 export class InMemoryRunStore implements RunStore {
@@ -67,12 +73,18 @@ export class InMemoryRunStore implements RunStore {
     return queued;
   }
 
-  async completeRun(runId: string, status: 'succeeded' | 'failed', errorCode?: string): Promise<void> {
+  async completeRun(
+    runId: string,
+    status: 'succeeded' | 'succeeded_no_new_content' | 'failed',
+    errorCode?: string,
+    errorMessage?: string
+  ): Promise<void> {
     const run = this.runs.find((r) => r.id === runId);
     if (!run) return;
     run.status = status;
     run.finishedAt = new Date();
     run.errorCode = errorCode;
+    run.errorMessage = errorMessage;
   }
 }
 
@@ -87,11 +99,20 @@ export class RunQueueService {
     return due.length;
   }
 
+  async enqueueImmediateRun(agentId: string, now: Date = new Date()): Promise<void> {
+    await this.store.upsertQueuedRun(agentId, now);
+  }
+
   async claimNextRun(workerId: string): Promise<AgentRunRecord | null> {
     return this.store.claimNextQueuedRun(workerId);
   }
 
-  async completeRun(runId: string, status: 'succeeded' | 'failed', errorCode?: string): Promise<void> {
-    await this.store.completeRun(runId, status, errorCode);
+  async completeRun(
+    runId: string,
+    status: 'succeeded' | 'succeeded_no_new_content' | 'failed',
+    errorCode?: string,
+    errorMessage?: string
+  ): Promise<void> {
+    await this.store.completeRun(runId, status, errorCode, errorMessage);
   }
 }

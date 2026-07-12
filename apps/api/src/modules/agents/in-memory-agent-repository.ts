@@ -1,5 +1,5 @@
 import type { AgentRepositoryLike } from './routes';
-import type { Agent, CreateAgentInput, RecentRun } from './types';
+import type { Agent, AgentListItem, CreateAgentInput, RecentRun } from './types';
 
 export class InMemoryAgentRepository implements AgentRepositoryLike {
   private agents = new Map<string, Agent>();
@@ -12,10 +12,10 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
       ownerUserId,
       name: input.name,
       description: input.description ?? '',
-      status: 'active',
+      status: input.active === false ? 'disabled' : 'active',
       createdAt: new Date(),
       updatedAt: new Date(),
-      sources: input.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60 })),
+      sources: input.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60, maxItems: s.maxItems ?? 1 })),
       preferences: input.preferences ?? {},
       recipients: input.recipients ?? [],
       schedule: input.schedule
@@ -31,8 +31,9 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
       ...existing,
       name: patch.name ?? existing.name,
       description: patch.description ?? existing.description,
+      status: patch.active !== undefined ? (patch.active ? 'active' : 'disabled') : existing.status,
       sources: patch.sources
-        ? patch.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60 }))
+        ? patch.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60, maxItems: s.maxItems ?? 1 }))
         : existing.sources,
       preferences: patch.preferences ?? existing.preferences,
       recipients: patch.recipients ?? existing.recipients,
@@ -61,8 +62,10 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
     this.agents.delete(agentId);
   }
 
-  async listAgents(ownerUserId: string): Promise<Agent[]> {
-    return [...this.agents.values()].filter((agent) => agent.ownerUserId === ownerUserId);
+  async listAgents(ownerUserId: string): Promise<AgentListItem[]> {
+    return [...this.agents.values()]
+      .filter((agent) => agent.ownerUserId === ownerUserId)
+      .map((agent) => ({ ...agent, runCount: 0, reportCount: 0, latestReportAt: null }));
   }
 
   async getAgent(agentId: string): Promise<Agent | null> {

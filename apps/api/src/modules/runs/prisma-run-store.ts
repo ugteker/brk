@@ -41,17 +41,24 @@ export class PrismaRunStore implements RunStore {
       workerId: claimed.workerId ?? undefined,
       retryCount: claimed.retryCount,
       errorCode: claimed.errorCode ?? undefined,
+      errorMessage: claimed.errorMessage ?? undefined,
       startedAt: claimed.startedAt ?? undefined,
       finishedAt: claimed.finishedAt ?? undefined
     };
   }
 
-  async completeRun(runId: string, status: 'succeeded' | 'failed', errorCode?: string): Promise<void> {
+  async completeRun(
+    runId: string,
+    status: 'succeeded' | 'succeeded_no_new_content' | 'failed',
+    errorCode?: string,
+    errorMessage?: string
+  ): Promise<void> {
     await this.db.agentRun.update({
       where: { id: runId },
       data: {
         status,
         errorCode,
+        errorMessage,
         finishedAt: new Date()
       }
     });

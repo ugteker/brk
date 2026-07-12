@@ -55,10 +55,39 @@ export class ReportRepository {
     return latest ? this.toRecord(latest as unknown as ReportRow) : null;
   }
 
+  /**
+   * Looks up a single report by its own id (not scoped to an agent) - callers that need to
+   * confirm it belongs to a particular agent (e.g. the resend-notification endpoint) should
+   * compare `report.agentId` against the expected agent id themselves.
+   */
+  async getReportById(reportId: string): Promise<RunReportRecord | null> {
+    const found = await this.db.agentRunReport.findFirst({
+      where: { id: reportId },
+      include: { signals: true }
+    });
+
+    return found ? this.toRecord(found as unknown as ReportRow) : null;
+  }
+
   async listReportsForAgent(agentId: string): Promise<RunReportRecord[]> {
     const rows = await this.db.agentRunReport.findMany({
       where: { agentId },
       orderBy: { createdAt: 'desc' },
+      include: { signals: true }
+    });
+
+    return rows.map((row: unknown) => this.toRecord(row as ReportRow));
+  }
+
+  /**
+   * Lists all reports for the given agent that contain at least one signal for `symbol`,
+   * ordered oldest-first (chronological), for building a per-symbol signal history timeline.
+   * Symbol matching is exact/case-sensitive, matching how symbols are stored elsewhere.
+   */
+  async listSignalHistoryForSymbol(agentId: string, symbol: string): Promise<RunReportRecord[]> {
+    const rows = await this.db.agentRunReport.findMany({
+      where: { agentId, signals: { some: { symbol } } },
+      orderBy: { createdAt: 'asc' },
       include: { signals: true }
     });
 

@@ -307,4 +307,79 @@ describe('agent routes', () => {
     expect(updated.recipients).toEqual(['new@example.com']);
     expect(updated.schedule).toEqual({ mode: 'daily', dailyTime: '08:00', timezone: 'UTC' });
   });
+
+  it('returns 503 when source probing is not configured', async () => {
+    const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents/sources/probe',
+      headers: authCookieHeader(),
+      payload: { type: 'web_urls', value: 'https://example.com' }
+    });
+    expect(res.statusCode).toBe(503);
+  });
+
+  it('returns 400 when probing with a missing value', async () => {
+    const app = await buildServer({
+      agentRepository: createFakeRepo(),
+      agents: createFakeAgentsDeps(),
+      auth: createTestAuthDeps(),
+      sourceProbe: { probeSource: async () => ({ reachable: true, kind: 'feed' }) }
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents/sources/probe',
+      headers: authCookieHeader(),
+      payload: { type: 'web_urls', value: '' }
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('delegates to the configured source prober and returns its result', async () => {
+    const probeSource = async (source: { type: string; value: string }) => {
+      expect(source).toEqual({ type: 'web_urls', value: 'https://example.com/blog' });
+      return { reachable: true, kind: 'listing_page' as const, confidence: 0.9 };
+    };
+
+    const app = await buildServer({
+      agentRepository: createFakeRepo(),
+      agents: createFakeAgentsDeps(),
+      auth: createTestAuthDeps(),
+      sourceProbe: { probeSource }
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents/sources/probe',
+      headers: authCookieHeader(),
+      payload: { type: 'web_urls', value: 'https://example.com/blog' }
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ reachable: true, kind: 'listing_page', confidence: 0.9 });
+  });
+
+  it('passes the configured maxItems through to the source prober', async () => {
+    const probeSource = async (source: { type: string; value: string; maxItems?: number }) => {
+      expect(source).toEqual({ type: 'youtube_videos', value: 'https://www.youtube.com/playlist?list=PLxyz', maxItems: 5 });
+      return { reachable: true, kind: 'feed' as const, itemCount: 15, maxItemsPerRun: 5 };
+    };
+
+    const app = await buildServer({
+      agentRepository: createFakeRepo(),
+      agents: createFakeAgentsDeps(),
+      auth: createTestAuthDeps(),
+      sourceProbe: { probeSource }
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents/sources/probe',
+      headers: authCookieHeader(),
+      payload: { type: 'youtube_videos', value: 'https://www.youtube.com/playlist?list=PLxyz', maxItems: 5 }
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ reachable: true, kind: 'feed', itemCount: 15, maxItemsPerRun: 5 });
+  });
 });

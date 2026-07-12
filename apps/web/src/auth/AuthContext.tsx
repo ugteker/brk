@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { getCurrentUser, login as apiLogin, logout as apiLogout, signup as apiSignup, type AuthUser } from '../api/auth';
+import { getCurrentUser, login as apiLogin, logout as apiLogout, signup as apiSignup, type AuthUser, type SignupResult } from '../api/auth';
+import { listUsers } from '../api/admin';
 
 interface AuthContextValue {
   user: AuthUser | null;
   status: 'loading' | 'authenticated' | 'unauthenticated';
+  isAdmin: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string) => Promise<SignupResult>;
   logout: () => Promise<void>;
 }
 
@@ -14,6 +16,16 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  const checkIsAdmin = useCallback(async () => {
+    try {
+      await listUsers();
+      setIsAdmin(true);
+    } catch {
+      setIsAdmin(false);
+    }
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -23,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!alive) return;
         setUser(current);
         setStatus(current ? 'authenticated' : 'unauthenticated');
+        if (current) await checkIsAdmin();
       } catch {
         if (!alive) return;
         setUser(null);
@@ -33,27 +46,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [checkIsAdmin]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const loggedInUser = await apiLogin(email, password);
-    setUser(loggedInUser);
-    setStatus('authenticated');
-  }, []);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const loggedInUser = await apiLogin(email, password);
+      setUser(loggedInUser);
+      setStatus('authenticated');
+      await checkIsAdmin();
+    },
+    [checkIsAdmin]
+  );
 
-  const signup = useCallback(async (email: string, password: string) => {
-    const createdUser = await apiSignup(email, password);
-    setUser(createdUser);
-    setStatus('authenticated');
-  }, []);
+  // Signup no longer logs the user in directly - the account stays unverified until the user
+  // clicks the confirmation link emailed to them, so we just hand the caller the server's
+  // "check your email" response instead of setting a session here.
+  const signup = useCallback(async (email: string, password: string) => apiSignup(email, password), []);
 
   const logout = useCallback(async () => {
     await apiLogout();
     setUser(null);
     setStatus('unauthenticated');
+    setIsAdmin(false);
   }, []);
 
-  return <AuthContext.Provider value={{ user, status, login, signup, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, status, isAdmin, login, signup, logout }}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextValue {

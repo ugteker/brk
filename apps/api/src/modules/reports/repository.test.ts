@@ -45,12 +45,28 @@ function createFakeDb() {
         rows.push(row);
         return row;
       },
-      findFirst: async ({ where }: { where: { agentId: string } }) => {
+      findFirst: async ({ where }: { where: { agentId?: string; id?: string } }) => {
+        if (where.id) {
+          return rows.find((r) => r.id === where.id) ?? null;
+        }
         const matches = rows.filter((r) => r.agentId === where.agentId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         return matches[0] ?? null;
       },
-      findMany: async ({ where }: { where: { agentId: string } }) =>
-        rows.filter((r) => r.agentId === where.agentId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      findMany: async ({
+        where,
+        orderBy
+      }: {
+        where: { agentId: string; signals?: { some: { symbol: string } } };
+        orderBy?: { createdAt: 'asc' | 'desc' };
+      }) => {
+        let matches = rows.filter((r) => r.agentId === where.agentId);
+        if (where.signals) {
+          const symbol = where.signals.some.symbol;
+          matches = matches.filter((r) => r.signals.some((s) => s.symbol === symbol));
+        }
+        const direction = orderBy?.createdAt === 'asc' ? 1 : -1;
+        return matches.sort((a, b) => direction * (a.createdAt.getTime() - b.createdAt.getTime()));
+      }
     }
   };
 }
@@ -137,5 +153,96 @@ describe('ReportRepository', () => {
     const reports = await repo.listReportsForAgent('agent-1');
     expect(reports).toHaveLength(2);
     expect(reports.every((r) => r.agentId === 'agent-1')).toBe(true);
+  });
+
+  it('gets a report by its own id', async () => {
+    const repo = new ReportRepository(createFakeDb() as never);
+
+    const saved = await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-1',
+      promptVersionId: 'prompt-1',
+      summary: 'findable report',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: []
+    });
+
+    const found = await repo.getReportById(saved.id);
+    expect(found?.summary).toBe('findable report');
+  });
+
+  it('returns null when getReportById is given an unknown id', async () => {
+    const repo = new ReportRepository(createFakeDb() as never);
+    expect(await repo.getReportById('report-unknown')).toBeNull();
+  });
+
+  it('lists signal history for a symbol across multiple reports for the same agent', async () => {
+    const repo = new ReportRepository(createFakeDb() as never);
+
+    await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-1',
+      promptVersionId: 'prompt-1',
+      summary: 'first AAPL call',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: [{ symbol: 'AAPL', side: 'long', confidence: 70, rationale: 'r1', citations: [] }]
+    });
+    await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-2',
+      promptVersionId: 'prompt-1',
+      summary: 'no AAPL here',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: [{ symbol: 'TSLA', side: 'short', confidence: 60, rationale: 'r2', citations: [] }]
+    });
+    await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-3',
+      promptVersionId: 'prompt-1',
+      summary: 'second AAPL call',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: [{ symbol: 'AAPL', side: 'short', confidence: 55, rationale: 'r3', citations: [] }]
+    });
+
+    const history = await repo.listSignalHistoryForSymbol('agent-1', 'AAPL');
+    expect(history).toHaveLength(2);
+    expect(history.map((r) => r.summary)).toEqual(['first AAPL call', 'second AAPL call']);
+    expect(history.every((r) => r.signals.some((s) => s.symbol === 'AAPL'))).toBe(true);
+  });
+
+  it('returns an empty array when no reports have the requested symbol', async () => {
+    const repo = new ReportRepository(createFakeDb() as never);
+
+    await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-1',
+      promptVersionId: 'prompt-1',
+      summary: 'no match report',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: [{ symbol: 'MSFT', side: 'long', confidence: 40, rationale: 'r', citations: [] }]
+    });
+
+    expect(await repo.listSignalHistoryForSymbol('agent-1', 'AAPL')).toEqual([]);
+  });
+
+  it('does not include another agent\'s reports in the symbol history', async () => {
+    const repo = new ReportRepository(createFakeDb() as never);
+
+    await repo.saveRunReport({
+      agentId: 'agent-2',
+      agentRunId: 'run-1',
+      promptVersionId: 'prompt-1',
+      summary: 'other agent AAPL call',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: [{ symbol: 'AAPL', side: 'long', confidence: 40, rationale: 'r', citations: [] }]
+    });
+
+    expect(await repo.listSignalHistoryForSymbol('agent-1', 'AAPL')).toEqual([]);
   });
 });
