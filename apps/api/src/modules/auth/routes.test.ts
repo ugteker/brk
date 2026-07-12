@@ -27,19 +27,33 @@ function createFakeAgentRepo(): AgentRepositoryLike {
     },
     async getAgent(): Promise<Agent | null> {
       return null;
+    },
+    async listRecentRuns() {
+      return [];
     }
   };
 }
 
-function createApp(googleOAuthClient: GoogleOAuthClient = new FakeGoogleOAuthClient()) {
-  return buildServer({
+async function createApp(googleOAuthClient: GoogleOAuthClient = new FakeGoogleOAuthClient()) {
+  const userRepository = new InMemoryUserRepository();
+  const app = await buildServer({
     agentRepository: createFakeAgentRepo(),
     agents: {
       promptRepository: { savePromptVersion: async () => { throw new Error('unused'); }, getLatestPromptVersion: async () => null },
       reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [] }
     },
-    auth: { userRepository: new InMemoryUserRepository(), googleOAuthClient }
+    auth: { userRepository, googleOAuthClient }
   });
+  return { app, userRepository };
+}
+
+async function signUpAndConfirm(userRepository: InMemoryUserRepository, app: Awaited<ReturnType<typeof buildServer>>, email: string, password: string) {
+  await app.inject({ method: 'POST', url: '/api/auth/signup', payload: { email, password } });
+  const user = await userRepository.findByEmail(email);
+  const token = user?.emailVerificationToken;
+  if (!token) throw new Error('expected a verification token to have been issued');
+  const confirm = await app.inject({ method: 'GET', url: `/api/auth/confirm-email?token=${token}` });
+  return confirm;
 }
 
 describe('auth routes', () => {
@@ -47,8 +61,8 @@ describe('auth routes', () => {
     vi.unstubAllEnvs();
   });
 
-  it('signs up with email/password and returns a session cookie', async () => {
-    const app = await createApp();
+  it('signs up with email/password and requires email confirmation before login', async () => {
+    const { app } = await createApp();
 
     const res = await app.inject({
       method: 'POST',
@@ -57,12 +71,12 @@ describe('auth routes', () => {
     });
 
     expect(res.statusCode).toBe(201);
-    expect(res.json().email).toBe('trader@example.com');
-    expect(res.cookies.some((c) => c.name === 'brokerino_session')).toBe(true);
+    expect(res.json()).toEqual({ status: 'confirmation_required', email: 'trader@example.com' });
+    expect(res.cookies.some((c) => c.name === 'brokerino_session')).toBe(false);
   });
 
   it('rejects signup with a weak password', async () => {
-    const app = await createApp();
+    const { app } = await createApp();
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/signup',
@@ -72,7 +86,7 @@ describe('auth routes', () => {
   });
 
   it('rejects signup when the email is already registered', async () => {
-    const app = await createApp();
+    const { app } = await createApp();
     await app.inject({
       method: 'POST',
       url: '/api/auth/signup',
@@ -88,13 +102,40 @@ describe('auth routes', () => {
     expect(res.statusCode).toBe(409);
   });
 
-  it('logs in with correct credentials and rejects incorrect ones', async () => {
-    const app = await createApp();
+  it('confirms the email via the link and then allows login', async () => {
+    const { app, userRepository } = await createApp();
+    const confirm = await signUpAndConfirm(userRepository, app, 'trader@example.com', 'super-secret-1');
+    expect(confirm.statusCode).toBe(302);
+    expect(confirm.headers.location).toContain('emailConfirmed=1');
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'trader@example.com', password: 'super-secret-1' }
+    });
+    expect(login.statusCode).toBe(200);
+  });
+
+  it('rejects login before the email is confirmed', async () => {
+    const { app } = await createApp();
     await app.inject({
       method: 'POST',
       url: '/api/auth/signup',
       payload: { email: 'trader@example.com', password: 'super-secret-1' }
     });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'trader@example.com', password: 'super-secret-1' }
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('email_not_verified');
+  });
+
+  it('logs in with correct credentials and rejects incorrect ones', async () => {
+    const { app, userRepository } = await createApp();
+    await signUpAndConfirm(userRepository, app, 'trader@example.com', 'super-secret-1');
 
     const goodLogin = await app.inject({
       method: 'POST',
@@ -111,14 +152,30 @@ describe('auth routes', () => {
     expect(badLogin.statusCode).toBe(401);
   });
 
-  it('returns the current user from /api/auth/me using the session cookie', async () => {
-    const app = await createApp();
-    const signup = await app.inject({
+  it('rejects login for a locked account', async () => {
+    const { app, userRepository } = await createApp();
+    await signUpAndConfirm(userRepository, app, 'trader@example.com', 'super-secret-1');
+    const user = await userRepository.findByEmail('trader@example.com');
+    await userRepository.setLocked(user!.id, true);
+
+    const res = await app.inject({
       method: 'POST',
-      url: '/api/auth/signup',
+      url: '/api/auth/login',
       payload: { email: 'trader@example.com', password: 'super-secret-1' }
     });
-    const cookieHeader = signup.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('account_locked');
+  });
+
+  it('returns the current user from /api/auth/me using the session cookie', async () => {
+    const { app, userRepository } = await createApp();
+    await signUpAndConfirm(userRepository, app, 'trader@example.com', 'super-secret-1');
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'trader@example.com', password: 'super-secret-1' }
+    });
+    const cookieHeader = login.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
 
     const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: cookieHeader } });
     expect(me.statusCode).toBe(200);
@@ -126,13 +183,13 @@ describe('auth routes', () => {
   });
 
   it('returns 401 from /api/auth/me without a session cookie', async () => {
-    const app = await createApp();
+    const { app } = await createApp();
     const res = await app.inject({ method: 'GET', url: '/api/auth/me' });
     expect(res.statusCode).toBe(401);
   });
 
   it('logs out by clearing the session cookie', async () => {
-    const app = await createApp();
+    const { app } = await createApp();
     const res = await app.inject({ method: 'POST', url: '/api/auth/logout' });
     expect(res.statusCode).toBe(204);
   });
@@ -140,7 +197,7 @@ describe('auth routes', () => {
   it('signs up and logs in via Google, creating a new user on first sign-in', async () => {
     vi.stubEnv('GOOGLE_CLIENT_ID', 'test-client-id');
     vi.stubEnv('GOOGLE_CLIENT_SECRET', 'test-client-secret');
-    const app = await createApp();
+    const { app } = await createApp();
 
     const callback = await app.inject({ method: 'GET', url: '/api/auth/google/callback?code=fake-code' });
     expect(callback.statusCode).toBe(302);
@@ -155,7 +212,7 @@ describe('auth routes', () => {
   it('redirects to Google when Google sign-in is configured', async () => {
     vi.stubEnv('GOOGLE_CLIENT_ID', 'test-client-id');
     vi.stubEnv('GOOGLE_CLIENT_SECRET', 'test-client-secret');
-    const app = await createApp();
+    const { app } = await createApp();
 
     const res = await app.inject({ method: 'GET', url: '/api/auth/google' });
     expect(res.statusCode).toBe(302);
@@ -163,14 +220,77 @@ describe('auth routes', () => {
   });
 
   it('returns 503 for Google routes when Google sign-in is not configured', async () => {
-    const app = await createApp();
+    const { app } = await createApp();
     const res = await app.inject({ method: 'GET', url: '/api/auth/google' });
     expect(res.statusCode).toBe(503);
   });
 
   it('blocks unauthenticated access to protected agent routes', async () => {
-    const app = await createApp();
+    const { app } = await createApp();
     const res = await app.inject({ method: 'GET', url: '/api/agents' });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('resends a confirmation email without revealing whether the account exists', async () => {
+    const { app } = await createApp();
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/signup',
+      payload: { email: 'trader@example.com', password: 'super-secret-1' }
+    });
+
+    const known = await app.inject({
+      method: 'POST',
+      url: '/api/auth/resend-confirmation',
+      payload: { email: 'trader@example.com' }
+    });
+    const unknown = await app.inject({
+      method: 'POST',
+      url: '/api/auth/resend-confirmation',
+      payload: { email: 'nobody@example.com' }
+    });
+    expect(known.statusCode).toBe(200);
+    expect(unknown.statusCode).toBe(200);
+  });
+
+  it('handles the forgot-password/reset-password flow', async () => {
+    const { app, userRepository } = await createApp();
+    await signUpAndConfirm(userRepository, app, 'trader@example.com', 'super-secret-1');
+
+    const forgot = await app.inject({
+      method: 'POST',
+      url: '/api/auth/forgot-password',
+      payload: { email: 'trader@example.com' }
+    });
+    expect(forgot.statusCode).toBe(200);
+
+    const user = await userRepository.findByEmail('trader@example.com');
+    const resetToken = user?.passwordResetToken;
+    expect(resetToken).toBeTruthy();
+
+    const reset = await app.inject({
+      method: 'POST',
+      url: '/api/auth/reset-password',
+      payload: { token: resetToken, password: 'brand-new-secret' }
+    });
+    expect(reset.statusCode).toBe(200);
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'trader@example.com', password: 'brand-new-secret' }
+    });
+    expect(login.statusCode).toBe(200);
+  });
+
+  it('rejects reset-password with an invalid token', async () => {
+    const { app } = await createApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/reset-password',
+      payload: { token: 'not-a-real-token', password: 'brand-new-secret' }
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('invalid_or_expired_token');
   });
 });

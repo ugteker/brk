@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../../server';
 import type { Agent, CreateAgentInput } from '../agents/types';
 import { authCookieHeader, createTestAuthDeps } from '../../test-utils/auth';
@@ -68,7 +68,7 @@ describe('agent routes', () => {
             signals: [{ symbol: 'AAPL', side: 'long', confidence: 82, rationale: 'guidance', citations: ['ep1@10:12'] }],
             createdAt: new Date()
           }),
-          listReportsForAgent: async () => []
+          listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => []
         }
       }
     });
@@ -89,7 +89,7 @@ describe('agent routes', () => {
       auth: createTestAuthDeps(),
       agents: {
         promptRepository: { savePromptVersion: async () => { throw new Error('unused'); }, getLatestPromptVersion: async () => null },
-        reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [] }
+        reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [] }
       }
     });
 
@@ -128,7 +128,7 @@ describe('agent routes', () => {
       auth: createTestAuthDeps(),
       agents: {
         promptRepository: { savePromptVersion: async () => { throw new Error('unused'); }, getLatestPromptVersion: async () => null },
-        reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => reports }
+        reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => reports, listSignalHistoryForSymbol: async () => [] }
       }
     });
 
@@ -136,6 +136,59 @@ describe('agent routes', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toHaveLength(2);
     expect(res.json()[0].summary).toBe('Bullish on AAPL');
+  });
+
+  it('returns signal history for a symbol', async () => {
+    const history = [
+      {
+        id: 'report-1',
+        agentId: 'agent-1',
+        agentRunId: 'run-1',
+        promptVersionId: 'prompt-1',
+        summary: 'Bullish on AAPL',
+        sourceWarnings: [],
+        needsHumanReview: false,
+        signals: [{ symbol: 'AAPL', side: 'long', confidence: 82, rationale: 'guidance', citations: ['ep1@10:12'] }],
+        createdAt: new Date('2026-07-10T00:00:00.000Z')
+      }
+    ];
+
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      auth: createTestAuthDeps(),
+      agents: {
+        promptRepository: { savePromptVersion: async () => { throw new Error('unused'); }, getLatestPromptVersion: async () => null },
+        reportRepository: {
+          getLatestRunReport: async () => null,
+          listReportsForAgent: async () => [],
+          listSignalHistoryForSymbol: async (agentId: string, symbol: string) => (agentId === 'agent-1' && symbol === 'AAPL' ? history : [])
+        }
+      }
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/agents/agent-1/signals/AAPL', headers: authCookieHeader() });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toHaveLength(1);
+    expect(res.json()[0].summary).toBe('Bullish on AAPL');
+  });
+
+  it('returns an empty array when there is no signal history for a symbol', async () => {
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      auth: createTestAuthDeps(),
+      agents: {
+        promptRepository: { savePromptVersion: async () => { throw new Error('unused'); }, getLatestPromptVersion: async () => null },
+        reportRepository: {
+          getLatestRunReport: async () => null,
+          listReportsForAgent: async () => [],
+          listSignalHistoryForSymbol: async () => []
+        }
+      }
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/agents/agent-1/signals/MSFT', headers: authCookieHeader() });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
   });
 
   it('saves a new system prompt version', async () => {
@@ -155,7 +208,7 @@ describe('agent routes', () => {
           }),
           getLatestPromptVersion: async () => null
         },
-        reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [] }
+        reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [] }
       }
     });
 
@@ -168,5 +221,132 @@ describe('agent routes', () => {
 
     expect(res.statusCode).toBe(201);
     expect(res.json().version).toBe(2);
+  });
+
+  describe('POST /api/agents/:agentId/reports/:reportId/resend-notification', () => {
+    const sampleReport = {
+      id: 'report-1',
+      agentId: 'agent-1',
+      agentRunId: 'run-1',
+      promptVersionId: 'prompt-1',
+      summary: 'Bullish on AAPL',
+      sourceWarnings: [],
+      needsHumanReview: false,
+      signals: [{ symbol: 'AAPL', side: 'long' as const, confidence: 82, rationale: 'guidance', citations: ['ep1@10:12'] }],
+      createdAt: new Date('2026-07-10T00:00:00.000Z')
+    };
+
+    function unusedPromptRepo() {
+      return { savePromptVersion: async () => { throw new Error('unused'); }, getLatestPromptVersion: async () => null };
+    }
+
+    it('sends the notification and returns the recipient count', async () => {
+      const send = vi.fn().mockResolvedValue(undefined);
+      const app = await buildServer({
+        agentRepository: createFakeAgentRepo(),
+        auth: { ...createTestAuthDeps(), mailer: { send } },
+        agents: {
+          promptRepository: unusedPromptRepo(),
+          reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [], getReportById: async () => sampleReport },
+          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, recipients: ['a@example.com', 'b@example.com'], schedule: null }) },
+          mailer: { send }
+        }
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/reports/report-1/resend-notification',
+        headers: authCookieHeader()
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ status: 'sent', recipientCount: 2 });
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns 404 when the agent does not exist', async () => {
+      const app = await buildServer({
+        agentRepository: createFakeAgentRepo(),
+        auth: createTestAuthDeps(),
+        agents: {
+          promptRepository: unusedPromptRepo(),
+          reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [], getReportById: async () => sampleReport },
+          agentRepository: { getAgent: async () => null }
+        }
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-missing/reports/report-1/resend-notification',
+        headers: authCookieHeader()
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 404 when the report does not exist', async () => {
+      const app = await buildServer({
+        agentRepository: createFakeAgentRepo(),
+        auth: createTestAuthDeps(),
+        agents: {
+          promptRepository: unusedPromptRepo(),
+          reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [], getReportById: async () => null },
+          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, recipients: ['a@example.com'], schedule: null }) }
+        }
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/reports/report-missing/resend-notification',
+        headers: authCookieHeader()
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 404 when the report belongs to a different agent', async () => {
+      const app = await buildServer({
+        agentRepository: createFakeAgentRepo(),
+        auth: createTestAuthDeps(),
+        agents: {
+          promptRepository: unusedPromptRepo(),
+          reportRepository: {
+            getLatestRunReport: async () => null,
+            listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [],
+            getReportById: async () => ({ ...sampleReport, agentId: 'agent-2' })
+          },
+          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, recipients: ['a@example.com'], schedule: null }) }
+        }
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/reports/report-1/resend-notification',
+        headers: authCookieHeader()
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 400 when the agent has no recipients configured', async () => {
+      const app = await buildServer({
+        agentRepository: createFakeAgentRepo(),
+        auth: createTestAuthDeps(),
+        agents: {
+          promptRepository: unusedPromptRepo(),
+          reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [], getReportById: async () => sampleReport },
+          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, recipients: [], schedule: null }) }
+        }
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/reports/report-1/resend-notification',
+        headers: authCookieHeader()
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('no_recipients');
+    });
   });
 });

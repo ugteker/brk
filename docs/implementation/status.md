@@ -69,8 +69,8 @@ Current implementation scope is the first sub-project:
    - API server is running on `http://127.0.0.1:3000`
    - Web preview is running on `http://127.0.0.1:4173`
 
-11. **Brokerino UX/UI overhaul**
-   - App naming updated to **Brokerino**
+11. **ChatTrader UX/UI overhaul**
+   - App naming updated to **ChatTrader**
    - Default start view is now **Bot Dashboard**
    - Full-featured **7-step wizard-stepper** implemented for bot configuration
    - Added shadcn-style components for new controls:

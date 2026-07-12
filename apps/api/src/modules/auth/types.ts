@@ -4,6 +4,7 @@ export interface AuthUser {
   displayName: string | null;
   hasPassword: boolean;
   hasGoogleLinked: boolean;
+  emailVerified: boolean;
   createdAt: Date;
 }
 
@@ -13,6 +14,12 @@ export interface UserRecord {
   passwordHash: string | null;
   googleId: string | null;
   displayName: string | null;
+  emailVerified: boolean;
+  emailVerificationToken: string | null;
+  emailVerificationExpiresAt: Date | null;
+  locked: boolean;
+  passwordResetToken: string | null;
+  passwordResetExpiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +31,7 @@ export function toAuthUser(user: UserRecord): AuthUser {
     displayName: user.displayName,
     hasPassword: user.passwordHash !== null,
     hasGoogleLinked: user.googleId !== null,
+    emailVerified: user.emailVerified,
     createdAt: user.createdAt
   };
 }

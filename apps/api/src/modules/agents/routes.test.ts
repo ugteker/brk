@@ -307,4 +307,182 @@ describe('agent routes', () => {
     expect(updated.recipients).toEqual(['new@example.com']);
     expect(updated.schedule).toEqual({ mode: 'daily', dailyTime: '08:00', timezone: 'UTC' });
   });
+
+  it('returns 503 when source probing is not configured', async () => {
+    const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents/sources/probe',
+      headers: authCookieHeader(),
+      payload: { type: 'web_urls', value: 'https://example.com' }
+    });
+    expect(res.statusCode).toBe(503);
+  });
+
+  it('returns 400 when probing with a missing value', async () => {
+    const app = await buildServer({
+      agentRepository: createFakeRepo(),
+      agents: createFakeAgentsDeps(),
+      auth: createTestAuthDeps(),
+      sourceProbe: { probeSource: async () => ({ reachable: true, kind: 'feed' }) }
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents/sources/probe',
+      headers: authCookieHeader(),
+      payload: { type: 'web_urls', value: '' }
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('delegates to the configured source prober and returns its result', async () => {
+    const probeSource = async (source: { type: string; value: string }) => {
+      expect(source).toEqual({ type: 'web_urls', value: 'https://example.com/blog' });
+      return { reachable: true, kind: 'listing_page' as const, confidence: 0.9 };
+    };
+
+    const app = await buildServer({
+      agentRepository: createFakeRepo(),
+      agents: createFakeAgentsDeps(),
+      auth: createTestAuthDeps(),
+      sourceProbe: { probeSource }
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents/sources/probe',
+      headers: authCookieHeader(),
+      payload: { type: 'web_urls', value: 'https://example.com/blog' }
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ reachable: true, kind: 'listing_page', confidence: 0.9 });
+  });
+
+  it('passes the configured maxItems through to the source prober', async () => {
+    const probeSource = async (source: { type: string; value: string; maxItems?: number }) => {
+      expect(source).toEqual({ type: 'youtube_videos', value: 'https://www.youtube.com/playlist?list=PLxyz', maxItems: 5 });
+      return { reachable: true, kind: 'feed' as const, itemCount: 15, maxItemsPerRun: 5 };
+    };
+
+    const app = await buildServer({
+      agentRepository: createFakeRepo(),
+      agents: createFakeAgentsDeps(),
+      auth: createTestAuthDeps(),
+      sourceProbe: { probeSource }
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents/sources/probe',
+      headers: authCookieHeader(),
+      payload: { type: 'youtube_videos', value: 'https://www.youtube.com/playlist?list=PLxyz', maxItems: 5 }
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ reachable: true, kind: 'feed', itemCount: 15, maxItemsPerRun: 5 });
+  });
+
+  it('returns 503 for episode options when source probing is not configured', async () => {
+    const repo = createFakeRepo();
+    await repo.createAgent('admin-user-id', {
+      name: 'Podcast Agent',
+      sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
+    } as CreateAgentInput);
+
+    const app = await buildServer({ agentRepository: repo, agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    const res = await app.inject({ method: 'GET', url: '/api/agents/agent-1/episode-options', headers: authCookieHeader() });
+    expect(res.statusCode).toBe(503);
+  });
+
+  it('returns 404 for episode options on an unknown agent', async () => {
+    const app = await buildServer({
+      agentRepository: createFakeRepo(),
+      agents: createFakeAgentsDeps(),
+      auth: createTestAuthDeps(),
+      sourceProbe: { probeSource: async () => ({ reachable: true, kind: 'feed' }) }
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/agents/unknown-agent/episode-options', headers: authCookieHeader() });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('combines and sorts episode options across an agent\'s episodic sources by recency, capped to 10', async () => {
+    const repo = createFakeRepo();
+    await repo.createAgent('admin-user-id', {
+      name: 'Multi Agent',
+      sources: [
+        { type: 'podcast_feeds', value: 'https://example.com/feed.xml' },
+        { type: 'youtube_videos', value: 'https://www.youtube.com/playlist?list=PLxyz' },
+        { type: 'web_urls', value: 'https://example.com/blog' }
+      ]
+    } as CreateAgentInput);
+
+    const probeSource = async (source: { type: string; value: string }) => {
+      if (source.type === 'podcast_feeds') {
+        return {
+          reachable: true,
+          kind: 'feed' as const,
+          previewItems: [{ title: 'Podcast Ep 1', link: 'https://example.com/ep-1', pubDate: '2026-07-01T00:00:00.000Z' }]
+        };
+      }
+      if (source.type === 'youtube_videos') {
+        return {
+          reachable: true,
+          kind: 'feed' as const,
+          previewItems: [{ title: 'Video 1', link: 'https://www.youtube.com/watch?v=vid1', pubDate: '2026-07-05T00:00:00.000Z' }]
+        };
+      }
+      throw new Error('web_urls sources should not be probed for episode options');
+    };
+
+    const app = await buildServer({
+      agentRepository: repo,
+      agents: createFakeAgentsDeps(),
+      auth: createTestAuthDeps(),
+      sourceProbe: { probeSource }
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/agents/agent-1/episode-options', headers: authCookieHeader() });
+    expect(res.statusCode).toBe(200);
+    const options = res.json();
+    expect(options).toHaveLength(2);
+    // Most recent (YouTube, 2026-07-05) first.
+    expect(options[0]).toMatchObject({ sourceType: 'youtube_videos', title: 'Video 1', link: 'https://www.youtube.com/watch?v=vid1' });
+    expect(options[1]).toMatchObject({ sourceType: 'podcast_feeds', title: 'Podcast Ep 1', link: 'https://example.com/ep-1' });
+  });
+
+  it('passes a forcedEpisode selection from the run request body through to the run trigger', async () => {
+    const repo = createFakeRepo();
+    await repo.createAgent('admin-user-id', {
+      name: 'Podcast Agent',
+      sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
+    } as CreateAgentInput);
+
+    const triggerRun = async (agentId: string, options?: { forcedEpisode?: { sourceType: string; sourceValue: string; itemLink: string } }) => {
+      expect(agentId).toBe('agent-1');
+      expect(options?.forcedEpisode).toEqual({
+        sourceType: 'podcast_feeds',
+        sourceValue: 'https://example.com/feed.xml',
+        itemLink: 'https://example.com/ep-2'
+      });
+      return { status: 'succeeded' };
+    };
+
+    const app = await buildServer({
+      agentRepository: repo,
+      agents: createFakeAgentsDeps(),
+      auth: createTestAuthDeps(),
+      runTrigger: { triggerRun }
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/run',
+      headers: authCookieHeader(),
+      payload: { sourceType: 'podcast_feeds', sourceValue: 'https://example.com/feed.xml', itemLink: 'https://example.com/ep-2' }
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ status: 'succeeded' });
+  });
 });

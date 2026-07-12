@@ -13,6 +13,12 @@ model User {
   passwordHash String?
   googleId     String?  @unique
   displayName  String?
+  emailVerified               Boolean   @default(false)
+  emailVerificationToken      String?   @unique
+  emailVerificationExpiresAt  DateTime?
+  locked                      Boolean   @default(false)
+  passwordResetToken          String?   @unique
+  passwordResetExpiresAt      DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -43,6 +49,7 @@ model AgentSource {
   value   String
   enabled Boolean @default(true)
   frequencyMinutes Int @default(60)
+  maxItems Int @default(1)
   agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
 }
 
@@ -53,6 +60,7 @@ model AgentSchedule {
   intervalMinutes Int?
   dailyTime String?
   timezone  String?
+  daysOfWeekJson String?
   nextRunAt DateTime
   enabled   Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -65,9 +73,11 @@ model AgentRun {
   agentId        String
   scheduledFor DateTime
   status       String
+  phase        String?
   workerId     String?
   retryCount   Int      @default(0)
   errorCode    String?
+  errorMessage String?
   startedAt    DateTime?
   finishedAt   DateTime?
   createdAt    DateTime @default(now())
@@ -114,6 +124,11 @@ model AgentRunReport {
   summary            String
   sourceWarningsJson String
   needsHumanReview   Boolean
+  model              String?
+  promptVersionNumber Int?
+  inputTokens        Int?
+  outputTokens       Int?
+  estimatedCostUsd   Float?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   agent                Agent              @relation(fields: [agentId], references: [id], onDelete: Restrict)

@@ -4,7 +4,7 @@ test('admin can complete agent setup on mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.setContent(`
     <main>
-      <h1>Brokerino</h1>
+      <h1>ChatTrader</h1>
       <p>Agent Dashboard</p>
       <button id="create">Create Agent</button>
       <div id="wizard" style="display:none">

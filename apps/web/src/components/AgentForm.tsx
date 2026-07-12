@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
+  Alert,
   Button,
   Card,
+  Checkbox,
   Form,
   Input,
   InputNumber,
+  Progress,
   Select,
   Steps,
   Switch,
@@ -17,26 +20,24 @@ import {
   ClockCircleOutlined,
   LinkOutlined,
   MessageOutlined,
-  SafetyCertificateOutlined,
   UserOutlined
 } from '@ant-design/icons';
-import { createAgent, updateAgent, type AgentDetail } from '../api/agents';
+import { createAgent, updateAgent, probeSource, type AgentDetail, type SourceProbeResult } from '../api/agents';
 import { saveAgentPrompt } from '../api/agents';
 import { DEFAULT_PROMPT_PERSONA_ID, PROMPT_PERSONAS, getPromptPersona } from '../data/prompt-personas';
+import { useAuth } from '../auth/AuthContext';
 
 const { TextArea } = Input;
 const { Title, Paragraph, Text } = Typography;
 
-type SourceType = 'web_urls' | 'podcast_feeds';
-type RiskLevel = 'low' | 'medium' | 'high';
-type NotificationCadence = 'on_every_run' | 'daily_digest' | 'weekly_digest';
-type ReportDetailLevel = 'summary' | 'detailed';
+type SourceType = 'web_urls' | 'podcast_feeds' | 'youtube_videos';
 
 interface SourceConfig {
   id: string;
   type: SourceType;
   value: string;
   frequencyMinutes: number;
+  maxItems: number;
   enabled: boolean;
 }
 
@@ -51,21 +52,94 @@ const STEPS = [
   { title: 'Identity', icon: <UserOutlined /> },
   { title: 'Sources', icon: <LinkOutlined /> },
   { title: 'Prompt', icon: <MessageOutlined /> },
-  { title: 'Policy', icon: <SafetyCertificateOutlined /> },
   { title: 'Schedule', icon: <ClockCircleOutlined /> },
   { title: 'Review', icon: <CheckCircleOutlined /> }
 ] as const;
 
+// Matches JS Date#getUTCDay() (0=Sunday..6=Saturday), which is what compute-next-run.ts (backend)
+// uses to match weekly schedule days against the current day.
+const DAY_OF_WEEK_OPTIONS = [
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
+  { value: 0, label: 'Sun' }
+];
+
+// Mirrors the backend's DEFAULT_MAX_ITEMS_PER_RUN / ABSOLUTE_MAX_ITEMS_PER_RUN constants
+// (apps/api/.../smart-crawler.ts) - default 1, editable up to 10 per source.
+const DEFAULT_MAX_ITEMS = 1;
+const MAX_ITEMS_UPPER_BOUND = 10;
+
 const DEFAULT_SYSTEM_PROMPT = getPromptPersona(DEFAULT_PROMPT_PERSONA_ID)?.systemPrompt ?? '';
 
-function preference(agent: AgentDetail | undefined, key: string, fallback: string): string {
-  return agent?.preferences?.[key]?.[0] ?? fallback;
+const PROBE_KIND_LABELS: Record<SourceProbeResult['kind'], string> = {
+  feed: 'Feed',
+  listing_page: 'Listing page',
+  single_page: 'Single page',
+  unknown: 'Unknown'
+};
+
+function formatPreviewDate(pubDate: string | null): string | null {
+  if (!pubDate) return null;
+  const parsed = new Date(pubDate);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toLocaleDateString();
+}
+
+function SourceProbeSummary({ result }: { result: SourceProbeResult }) {
+  if (!result.reachable) {
+    return <Alert type="error" showIcon message="Source unreachable" description={result.warning} />;
+  }
+
+  const tagColor = result.warning ? 'orange' : 'green';
+  const details: string[] = [];
+  if (typeof result.itemCount === 'number') details.push(`${result.itemCount} item(s) detected`);
+  if (typeof result.confidence === 'number') details.push(`${Math.round(result.confidence * 100)}% confidence`);
+  if (typeof result.maxItemsPerRun === 'number') details.push(`up to ${result.maxItemsPerRun} processed per run`);
+
+  return (
+    <div className="space-y-1">
+      <div>
+        <Tag color={tagColor}>{PROBE_KIND_LABELS[result.kind]}</Tag>
+        {details.length > 0 && <Text type="secondary">{details.join(' · ')}</Text>}
+      </div>
+      {result.warning && <Alert type="warning" showIcon message={result.warning} />}
+      {result.previewItems && result.previewItems.length > 0 && (
+        <div className="mt-1">
+          <Text type="secondary" className="text-xs">
+            Sneak preview — last {result.previewItems.length} item(s) found (the source's "per run" setting still
+            controls how many are actually crawled each run):
+          </Text>
+          <ul className="list-disc pl-5 text-sm">
+            {result.previewItems.map((item, index) => {
+              const date = formatPreviewDate(item.pubDate);
+              return (
+                <li key={`${item.link ?? item.title}-${index}`}>
+                  {item.link ? (
+                    <a href={item.link} target="_blank" rel="noreferrer">
+                      {item.title}
+                    </a>
+                  ) : (
+                    item.title
+                  )}
+                  {date && <Text type="secondary"> — {date}</Text>}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentFormProps) {
+  const { user } = useAuth();
   const isEditing = Boolean(agent);
   const [currentStep, setCurrentStep] = useState(0);
-  const [name, setName] = useState(agent?.name ?? 'Brokerino Agent');
+  const [name, setName] = useState(agent?.name ?? 'ChatTrader Agent');
   const [description, setDescription] = useState(agent?.description ?? '');
   const [active, setActive] = useState(agent ? agent.status === 'active' : true);
 
@@ -76,48 +150,80 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
           type: s.type,
           value: s.value,
           frequencyMinutes: s.frequencyMinutes ?? 60,
+          maxItems: s.maxItems ?? DEFAULT_MAX_ITEMS,
           enabled: true
         }))
-      : [{ id: 'src-1', type: 'web_urls', value: 'https://example.com', frequencyMinutes: 60, enabled: true }]
+      : [
+          {
+            id: 'src-1',
+            type: 'youtube_videos',
+            value: 'https://www.youtube.com/playlist?list=PL6P5rY8mrhqrhVgc_pkSOlRLpuGW3CpJ3',
+            frequencyMinutes: 60,
+            maxItems: DEFAULT_MAX_ITEMS,
+            enabled: true
+          }
+        ]
   );
 
   const [model, setModel] = useState(initialPrompt?.model ?? 'claude-sonnet-4-5');
   const [personaId, setPersonaId] = useState(DEFAULT_PROMPT_PERSONA_ID);
   const [systemPrompt, setSystemPrompt] = useState(initialPrompt?.systemPrompt ?? DEFAULT_SYSTEM_PROMPT);
 
-  const [confidenceThreshold, setConfidenceThreshold] = useState(
-    Number.parseInt(preference(agent, 'confidence_threshold', '70'), 10) || 70
-  );
-  const [riskLevel, setRiskLevel] = useState<RiskLevel>(preference(agent, 'risk_level', 'medium') as RiskLevel);
-  const [notificationCadence, setNotificationCadence] = useState<NotificationCadence>(
-    preference(agent, 'notification_cadence', 'daily_digest') as NotificationCadence
-  );
-  const [reportDetailLevel, setReportDetailLevel] = useState<ReportDetailLevel>(
-    preference(agent, 'report_detail_level', 'summary') as ReportDetailLevel
-  );
-
-  const [mode, setMode] = useState<'interval' | 'daily'>(agent?.schedule?.mode ?? 'interval');
+  const [mode, setMode] = useState<'interval' | 'daily' | 'weekly'>(agent?.schedule?.mode ?? 'interval');
   const [intervalMinutes, setIntervalMinutes] = useState(
     agent?.schedule?.mode === 'interval' ? agent.schedule.intervalMinutes : 60
   );
-  const [dailyTime, setDailyTime] = useState(agent?.schedule?.mode === 'daily' ? agent.schedule.dailyTime : '07:30');
-  const [timezone, setTimezone] = useState(agent?.schedule?.mode === 'daily' ? agent.schedule.timezone : 'UTC');
-  const [recipientsInput, setRecipientsInput] = useState(agent?.recipients?.join(', ') ?? 'team@example.com');
+  const [dailyTime, setDailyTime] = useState(
+    agent?.schedule?.mode === 'daily' || agent?.schedule?.mode === 'weekly' ? agent.schedule.dailyTime : '07:30'
+  );
+  const [timezone, setTimezone] = useState(
+    agent?.schedule?.mode === 'daily' || agent?.schedule?.mode === 'weekly' ? agent.schedule.timezone : 'UTC'
+  );
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>(
+    agent?.schedule?.mode === 'weekly' ? agent.schedule.daysOfWeek : [1]
+  );
+  const [recipients, setRecipients] = useState<string[]>(
+    agent?.recipients ?? (user?.email ? [user.email] : ['team@example.com'])
+  );
 
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
+
+  const [probeResults, setProbeResults] = useState<Record<string, SourceProbeResult | undefined>>({});
+  const [probingSourceId, setProbingSourceId] = useState<string | null>(null);
 
   const enabledSourceCount = useMemo(() => sources.filter((s) => s.enabled).length, [sources]);
 
   function updateSource(sourceId: string, patch: Partial<SourceConfig>) {
     setSources((current) => current.map((s) => (s.id === sourceId ? { ...s, ...patch } : s)));
+    if (patch.value !== undefined || patch.type !== undefined || patch.maxItems !== undefined) {
+      setProbeResults((current) => ({ ...current, [sourceId]: undefined }));
+    }
+  }
+
+  async function testSource(sourceId: string) {
+    const source = sources.find((s) => s.id === sourceId);
+    if (!source || !source.value.trim()) return;
+
+    setProbingSourceId(sourceId);
+    try {
+      const result = await probeSource({ type: source.type, value: source.value, maxItems: source.maxItems });
+      setProbeResults((current) => ({ ...current, [sourceId]: result }));
+    } catch {
+      setProbeResults((current) => ({
+        ...current,
+        [sourceId]: { reachable: false, kind: 'unknown', warning: 'Could not reach the probe service. Please try again.' }
+      }));
+    } finally {
+      setProbingSourceId(null);
+    }
   }
 
   function addSource() {
     const nextIndex = sources.length + 1;
     setSources((current) => [
       ...current,
-      { id: `src-${nextIndex}`, type: 'web_urls', value: '', frequencyMinutes: 60, enabled: true }
+      { id: `src-${nextIndex}`, type: 'youtube_videos', value: '', frequencyMinutes: 60, maxItems: DEFAULT_MAX_ITEMS, enabled: true }
     ]);
   }
 
@@ -131,7 +237,6 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
     const persona = getPromptPersona(nextPersonaId);
     if (persona) {
       setSystemPrompt(persona.systemPrompt);
-      setRiskLevel(persona.riskLevel);
     }
   }
 
@@ -146,27 +251,26 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
   async function onSave() {
     try {
       setSaveState('saving');
-      const recipients = recipientsInput
-        .split(',')
-        .map((r) => r.trim())
-        .filter(Boolean);
+      const cleanRecipients = recipients.map((r) => r.trim()).filter(Boolean);
       const validSources = sources
         .filter((s) => s.enabled && s.value.trim())
-        .map((s) => ({ type: s.type, value: s.value.trim(), frequencyMinutes: s.frequencyMinutes }));
+        .map((s) => ({ type: s.type, value: s.value.trim(), frequencyMinutes: s.frequencyMinutes, maxItems: s.maxItems }));
+
+      const schedule =
+        mode === 'interval'
+          ? { mode: 'interval' as const, intervalMinutes }
+          : mode === 'weekly'
+            ? { mode: 'weekly' as const, daysOfWeek, dailyTime, timezone }
+            : { mode: 'daily' as const, dailyTime, timezone };
 
       const payload = {
         name,
         description,
+        active,
         sources: validSources,
-        preferences: {
-          active: [String(active)],
-          confidence_threshold: [String(confidenceThreshold)],
-          risk_level: [riskLevel],
-          notification_cadence: [notificationCadence],
-          report_detail_level: [reportDetailLevel]
-        },
-        recipients,
-        schedule: mode === 'interval' ? { mode: 'interval' as const, intervalMinutes } : { mode: 'daily' as const, dailyTime, timezone }
+        preferences: {},
+        recipients: cleanRecipients,
+        schedule
       };
 
       const savedAgent = isEditing && agent ? await updateAgent(agent.id, payload) : await createAgent(payload);
@@ -194,6 +298,15 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
               Step {currentStep + 1} of {STEPS.length}
             </Text>
           </div>
+          {/* Compact progress bar on mobile keeps the stepper from eating the whole screen;
+              the full icon+title Steps component is restored on sm+ where there's room. */}
+          <Progress
+            percent={((currentStep + 1) / STEPS.length) * 100}
+            showInfo={false}
+            size="small"
+            className="sm:hidden"
+            style={{ marginTop: 16 }}
+          />
           <Steps
             current={currentStep}
             size="small"
@@ -201,6 +314,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
             items={STEPS.map((step) => ({ title: step.title, icon: step.icon }))}
             onChange={setCurrentStep}
             style={{ marginTop: 16 }}
+            className="hidden sm:flex"
           />
         </Card>
 
@@ -235,7 +349,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
           >
             <div className="space-y-3">
               {sources.map((source, index) => (
-                <div key={source.id} className="grid gap-2 rounded-md border border-gray-200 p-3 md:grid-cols-4">
+                <div key={source.id} className="grid gap-2 rounded-md border border-gray-200 p-3 md:grid-cols-3">
                   <label className="space-y-1">
                     <span>Type</span>
                     <Select
@@ -244,7 +358,8 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                       onChange={(value) => updateSource(source.id, { type: value as SourceType })}
                       options={[
                         { value: 'web_urls', label: 'Web URL' },
-                        { value: 'podcast_feeds', label: 'Podcast feed' }
+                        { value: 'podcast_feeds', label: 'Podcast feed' },
+                        { value: 'youtube_videos', label: 'YouTube (video/playlist/channel)' }
                       ]}
                       style={{ width: '100%' }}
                     />
@@ -254,20 +369,26 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                     <Input
                       aria-label={`Source ${index + 1} value`}
                       value={source.value}
+                      placeholder={
+                        source.type === 'youtube_videos'
+                          ? 'YouTube video, playlist, or channel URL'
+                          : undefined
+                      }
                       onChange={(e) => updateSource(source.id, { value: e.currentTarget.value })}
                     />
                   </label>
                   <label className="space-y-1">
-                    <span>Frequency (min)</span>
+                    <span>{source.type === 'youtube_videos' ? 'Videos per run' : 'Episodes/items per run'}</span>
                     <InputNumber
-                      aria-label={`Source ${index + 1} frequency`}
-                      min={60}
-                      value={source.frequencyMinutes}
-                      onChange={(value) => updateSource(source.id, { frequencyMinutes: value ?? 60 })}
+                      aria-label={`Source ${index + 1} episode count`}
+                      min={1}
+                      max={MAX_ITEMS_UPPER_BOUND}
+                      value={source.maxItems}
+                      onChange={(value) => updateSource(source.id, { maxItems: value ?? DEFAULT_MAX_ITEMS })}
                       style={{ width: '100%' }}
                     />
                   </label>
-                  <div className="flex items-center justify-between md:col-span-4">
+                  <div className="flex items-center justify-between md:col-span-2">
                     <div className="flex items-center gap-2">
                       <Switch
                         aria-label={`Source ${index + 1} enabled`}
@@ -276,10 +397,24 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                       />
                       <span>Enabled</span>
                     </div>
-                    <Button danger type="text" onClick={() => removeSource(source.id)}>
-                      Remove
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => testSource(source.id)}
+                        loading={probingSourceId === source.id}
+                        disabled={!source.value.trim()}
+                      >
+                        Test source
+                      </Button>
+                      <Button danger type="text" onClick={() => removeSource(source.id)}>
+                        Remove
+                      </Button>
+                    </div>
                   </div>
+                  {probeResults[source.id] && (
+                    <div className="md:col-span-3">
+                      <SourceProbeSummary result={probeResults[source.id]!} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -328,68 +463,17 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
         )}
 
         {currentStep === 3 && (
-          <Card title="Signal policy & publish rules">
-            <Form layout="vertical">
-              <Form.Item label="Minimum confidence to publish a signal (%)">
-                <InputNumber
-                  aria-label="Confidence threshold"
-                  min={0}
-                  max={100}
-                  value={confidenceThreshold}
-                  onChange={(value) => setConfidenceThreshold(value ?? 70)}
-                  style={{ width: '100%' }}
-                />
-              </Form.Item>
-              <Form.Item label="Risk level">
-                <Select
-                  aria-label="Risk level"
-                  value={riskLevel}
-                  onChange={(value) => setRiskLevel(value as RiskLevel)}
-                  options={[
-                    { value: 'low', label: 'Low' },
-                    { value: 'medium', label: 'Medium' },
-                    { value: 'high', label: 'High' }
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item label="Notification cadence">
-                <Select
-                  aria-label="Notification cadence"
-                  value={notificationCadence}
-                  onChange={(value) => setNotificationCadence(value as NotificationCadence)}
-                  options={[
-                    { value: 'on_every_run', label: 'On every run' },
-                    { value: 'daily_digest', label: 'Daily digest' },
-                    { value: 'weekly_digest', label: 'Weekly digest' }
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item label="Report detail level">
-                <Select
-                  aria-label="Report detail level"
-                  value={reportDetailLevel}
-                  onChange={(value) => setReportDetailLevel(value as ReportDetailLevel)}
-                  options={[
-                    { value: 'summary', label: 'Summary' },
-                    { value: 'detailed', label: 'Detailed' }
-                  ]}
-                />
-              </Form.Item>
-            </Form>
-          </Card>
-        )}
-
-        {currentStep === 4 && (
           <Card title="Schedule & recipients">
             <Form layout="vertical">
               <Form.Item label="Schedule mode">
                 <Select
                   aria-label="Schedule mode"
                   value={mode}
-                  onChange={(value) => setMode(value as 'interval' | 'daily')}
+                  onChange={(value) => setMode(value as 'interval' | 'daily' | 'weekly')}
                   options={[
                     { value: 'interval', label: 'Interval' },
-                    { value: 'daily', label: 'Daily' }
+                    { value: 'daily', label: 'Daily' },
+                    { value: 'weekly', label: 'Weekly' }
                   ]}
                 />
               </Form.Item>
@@ -404,41 +488,64 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                   />
                 </Form.Item>
               ) : (
-                <div className="grid gap-2 md:grid-cols-2">
-                  <Form.Item label="Daily time">
-                    <Input aria-label="Daily time" value={dailyTime} onChange={(e) => setDailyTime(e.currentTarget.value)} />
-                  </Form.Item>
-                  <Form.Item label="Timezone">
-                    <Input aria-label="Timezone" value={timezone} onChange={(e) => setTimezone(e.currentTarget.value)} />
-                  </Form.Item>
-                </div>
+                <>
+                  {mode === 'weekly' ? (
+                    <Form.Item label="Days of week">
+                      <Checkbox.Group
+                        aria-label="Days of week"
+                        value={daysOfWeek}
+                        onChange={(values) => setDaysOfWeek(values as number[])}
+                        options={DAY_OF_WEEK_OPTIONS}
+                      />
+                    </Form.Item>
+                  ) : null}
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <Form.Item label="Daily time">
+                      <Input aria-label="Daily time" value={dailyTime} onChange={(e) => setDailyTime(e.currentTarget.value)} />
+                    </Form.Item>
+                    <Form.Item label="Timezone">
+                      <Input aria-label="Timezone" value={timezone} onChange={(e) => setTimezone(e.currentTarget.value)} />
+                    </Form.Item>
+                  </div>
+                </>
               )}
               <Form.Item label="Recipient emails">
-                <Input
+                <Select
                   aria-label="Recipient emails"
-                  value={recipientsInput}
-                  onChange={(e) => setRecipientsInput(e.currentTarget.value)}
+                  mode="tags"
+                  value={recipients}
+                  onChange={(values) => setRecipients(values as string[])}
+                  tokenSeparators={[',', ' ']}
+                  placeholder="Add one or more recipient emails"
+                  style={{ width: '100%' }}
                 />
               </Form.Item>
             </Form>
           </Card>
         )}
 
-        {currentStep === 5 && (
+        {currentStep === 4 && (
           <Card title="Review & run">
             <Paragraph>
               Sources: {sources.length} · Enabled: {enabledSourceCount} · Mode: {mode}
             </Paragraph>
             <Paragraph>
-              Persona: <Tag>{getPromptPersona(personaId)?.name ?? personaId}</Tag> Model: <Tag>{model}</Tag>{' '}
-              Confidence threshold: <Tag>{confidenceThreshold}%</Tag>
+              Persona: <Tag>{getPromptPersona(personaId)?.name ?? personaId}</Tag> Model: <Tag>{model}</Tag>
             </Paragraph>
-            {saveState === 'saved' ? <p className="text-sm text-green-700">Agent saved successfully.</p> : null}
-            {saveState === 'error' ? <p className="text-sm text-red-700">Save failed. Please check inputs.</p> : null}
+            {saveState === 'saved' ? (
+              <p data-testid="agent-save-state" className="text-sm text-green-700">
+                Agent saved successfully.
+              </p>
+            ) : null}
+            {saveState === 'error' ? (
+              <p data-testid="agent-save-state" className="text-sm text-red-700">
+                Save failed. Please check inputs.
+              </p>
+            ) : null}
           </Card>
         )}
 
-        <div className="flex justify-between">
+        <div className="sticky bottom-0 z-10 -mx-4 flex justify-between border-t border-gray-200 bg-background px-4 py-3 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
           <div className="flex gap-2">
             <Button onClick={backStep}>Back</Button>
             <Button onClick={onCancel}>Cancel</Button>
@@ -453,7 +560,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
         </div>
       </div>
 
-      <Card className="lg:sticky lg:top-4 lg:h-fit" title="Live summary">
+      <Card className="hidden lg:sticky lg:top-4 lg:block lg:h-fit" title="Live summary">
         <p className="text-sm">Agent: {name}</p>
         <p className="text-sm">Active: {active ? 'Yes' : 'No'}</p>
         <p className="text-sm">Sources: {sources.length}</p>
@@ -462,8 +569,6 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
           Schedule: {mode === 'interval' ? `Every ${intervalMinutes} min` : `${dailyTime} (${timezone})`}
         </p>
         <p className="text-sm">Persona: {getPromptPersona(personaId)?.name ?? personaId}</p>
-        <p className="text-sm">Risk: {riskLevel}</p>
-        <p className="text-sm">Cadence: {notificationCadence}</p>
       </Card>
     </div>
   );

@@ -14,6 +14,11 @@ export interface CreateRunReportInput {
   sourceWarnings: string[];
   needsHumanReview: boolean;
   signals: SignalRecord[];
+  model?: string | null;
+  promptVersionNumber?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  estimatedCostUsd?: number | null;
 }
 
 export interface RunReportRecord {
@@ -26,4 +31,9 @@ export interface RunReportRecord {
   needsHumanReview: boolean;
   signals: SignalRecord[];
   createdAt: Date;
+  model: string | null;
+  promptVersionNumber: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostUsd: number | null;
 }

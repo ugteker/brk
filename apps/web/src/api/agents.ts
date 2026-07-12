@@ -3,10 +3,14 @@ export type SignalSide = 'long' | 'short';
 export interface CreateAgentPayload {
   name: string;
   description?: string;
-  sources: Array<{ type: 'web_urls' | 'podcast_feeds'; value: string; frequencyMinutes?: number }>;
+  active?: boolean;
+  sources: Array<{ type: 'web_urls' | 'podcast_feeds' | 'youtube_videos'; value: string; frequencyMinutes?: number; maxItems?: number }>;
   preferences: Record<string, string[]>;
   recipients: string[];
-  schedule: { mode: 'interval'; intervalMinutes: number } | { mode: 'daily'; dailyTime: string; timezone: string };
+  schedule:
+    | { mode: 'interval'; intervalMinutes: number }
+    | { mode: 'daily'; dailyTime: string; timezone: string }
+    | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string };
 }
 
 export async function createAgent(payload: CreateAgentPayload) {
@@ -33,21 +37,68 @@ export async function updateAgent(agentId: string, payload: Partial<CreateAgentP
   return response.json();
 }
 
+export interface SourceProbePreviewItem {
+  title: string;
+  link: string | null;
+  pubDate: string | null;
+}
+
+export interface SourceProbeResult {
+  reachable: boolean;
+  kind: 'feed' | 'listing_page' | 'single_page' | 'unknown';
+  itemCount?: number;
+  confidence?: number;
+  warning?: string;
+  maxItemsPerRun?: number;
+  previewItems?: SourceProbePreviewItem[];
+}
+
+/**
+ * Fail-fast wizard check: probes a source URL/feed immediately (before the agent is saved) so
+ * the user can see right away whether it looks crawlable, without waiting for the first
+ * scheduled run.
+ */
+export async function probeSource(source: {
+  type: 'web_urls' | 'podcast_feeds' | 'youtube_videos';
+  value: string;
+  maxItems?: number;
+}): Promise<SourceProbeResult> {
+  const response = await fetch('/api/agents/sources/probe', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(source)
+  });
+  if (!response.ok) {
+    throw new Error('Failed to probe source');
+  }
+  return response.json();
+}
+
 export interface AgentSummary {
   id: string;
   name: string;
   status: string;
-  sources: Array<{ type: 'web_urls' | 'podcast_feeds'; value: string }>;
+  sources: Array<{ type: 'web_urls' | 'podcast_feeds' | 'youtube_videos'; value: string }>;
+  recipients: string[];
+  schedule:
+    | { mode: 'interval'; intervalMinutes: number }
+    | { mode: 'daily'; dailyTime: string; timezone: string }
+    | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string }
+    | null;
+  runCount: number;
+  reportCount: number;
+  latestReportAt: string | null;
 }
 
 export interface AgentDetail extends AgentSummary {
   description: string;
-  sources: Array<{ type: 'web_urls' | 'podcast_feeds'; value: string; frequencyMinutes: number }>;
+  sources: Array<{ type: 'web_urls' | 'podcast_feeds' | 'youtube_videos'; value: string; frequencyMinutes: number; maxItems: number }>;
   preferences: Record<string, string[]>;
   recipients: string[];
   schedule:
     | { mode: 'interval'; intervalMinutes: number }
     | { mode: 'daily'; dailyTime: string; timezone: string }
+    | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string }
     | null;
 }
 
@@ -80,6 +131,50 @@ export async function enableAgent(agentId: string): Promise<void> {
   if (!response.ok) {
     throw new Error('Failed to resume agent');
   }
+}
+
+export interface RunAgentNowResult {
+  status: string;
+  errorCode?: string;
+}
+
+export interface EpisodeOptionDto {
+  sourceType: 'podcast_feeds' | 'youtube_videos';
+  sourceValue: string;
+  title: string;
+  link: string;
+  pubDate: string | null;
+}
+
+/**
+ * Sneak preview (last 10, combined across an agent's episodic sources) shown by the manual-run
+ * episode picker, letting the user pick a specific episode to run against instead of always
+ * crawling for "new content since last run".
+ */
+export async function listAgentEpisodeOptions(agentId: string): Promise<EpisodeOptionDto[]> {
+  const response = await fetch(`/api/agents/${agentId}/episode-options`);
+  if (!response.ok) {
+    throw new Error(response.status === 503 ? 'Episode preview is not available right now' : 'Failed to load episode options');
+  }
+  return response.json();
+}
+
+export interface ForcedEpisodeSelection {
+  sourceType: 'podcast_feeds' | 'youtube_videos';
+  sourceValue: string;
+  itemLink: string;
+}
+
+export async function runAgentNow(agentId: string, forcedEpisode?: ForcedEpisodeSelection): Promise<RunAgentNowResult> {
+  const response = await fetch(`/api/agents/${agentId}/run`, {
+    method: 'POST',
+    headers: forcedEpisode ? { 'content-type': 'application/json' } : undefined,
+    body: forcedEpisode ? JSON.stringify(forcedEpisode) : undefined
+  });
+  if (!response.ok) {
+    throw new Error(response.status === 503 ? 'Manual runs are not available right now' : 'Failed to run agent');
+  }
+  return response.json();
 }
 
 export async function deleteAgent(agentId: string): Promise<void> {
@@ -124,6 +219,11 @@ export interface RunReportDto {
   needsHumanReview: boolean;
   signals: SignalDto[];
   createdAt: string;
+  model: string | null;
+  promptVersionNumber: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostUsd: number | null;
 }
 
 export interface PromptVersionDto {
@@ -154,10 +254,77 @@ export async function getLatestAgentReport(agentId: string): Promise<RunReportDt
   return parseJsonOrThrow(response, 'Failed to load latest agent report');
 }
 
+export interface ResendReportNotificationResult {
+  status: string;
+  recipientCount: number;
+}
+
+export async function resendReportNotification(agentId: string, reportId: string): Promise<ResendReportNotificationResult> {
+  const response = await fetch(`/api/agents/${agentId}/reports/${reportId}/resend-notification`, { method: 'POST' });
+  if (!response.ok) {
+    if (response.status === 400) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.message ?? 'This agent has no notification recipients configured');
+    }
+    throw new Error('Failed to send report notification');
+  }
+  return response.json();
+}
+
 export async function getLatestAgentPrompt(agentId: string): Promise<PromptVersionDto | null> {
   const response = await fetch(`/api/agents/${agentId}/prompt/latest`);
   if (response.status === 404) return null;
   return parseJsonOrThrow(response, 'Failed to load latest agent prompt');
+}
+
+// Chronological (oldest-first) history of this agent's own reports that contain at least one
+// signal for `symbol` - used by the symbol performance view alongside the TradingView chart.
+export async function listSymbolSignalHistory(agentId: string, symbol: string): Promise<RunReportDto[]> {
+  const response = await fetch(`/api/agents/${agentId}/signals/${encodeURIComponent(symbol)}`);
+  return parseJsonOrThrow(response, 'Failed to load signal history for this symbol');
+}
+
+export interface RunArtifactPreviewDto {
+  id: string;
+  sourceRef: string;
+  fidelity: string;
+  contentPreview: string;
+  contentLength: number;
+}
+
+export interface RunReportSummaryDto {
+  id: string;
+  summary: string;
+  needsHumanReview: boolean;
+  signalCount: number;
+}
+
+export interface RunDetailDto {
+  id: string;
+  agentId: string;
+  status: string;
+  phase: string | null;
+  scheduledFor: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  retryCount: number;
+  report: RunReportSummaryDto | null;
+  artifacts: RunArtifactPreviewDto[];
+}
+
+export async function listAgentRuns(agentId: string): Promise<RunDetailDto[]> {
+  const response = await fetch(`/api/agents/${agentId}/runs`);
+  return parseJsonOrThrow(response, 'Failed to load agent runs');
+}
+
+// Plain URL (not a fetch wrapper) - meant to be used directly as an <a href> so the browser
+// handles the download/Content-Disposition itself, with same-origin session cookies applied
+// automatically.
+export function artifactDownloadUrl(agentId: string, runId: string, artifactId: string): string {
+  return `/api/agents/${agentId}/runs/${runId}/artifacts/${artifactId}/download`;
 }
 
 export async function saveAgentPrompt(

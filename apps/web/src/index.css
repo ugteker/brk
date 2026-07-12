@@ -40,3 +40,18 @@
     background-image: radial-gradient(circle at top left, rgba(17, 24, 39, 0.08), transparent 35%);
   }
 }
+
+/* Prevent iOS/mobile browsers from auto-zooming the viewport when a form control gains focus.
+   Mobile Safari zooms in whenever a focused input's computed font-size is below 16px; AntD's
+   default control font-size (and Tailwind's text-sm utility used across the app) sits at 14px,
+   which triggers this. Raising it to 16px on small viewports only keeps desktop styling intact. */
+@media (max-width: 767px) {
+  .ant-input,
+  .ant-input-affix-wrapper,
+  .ant-select-selector,
+  .ant-input-number,
+  .ant-input-number-input,
+  textarea.ant-input {
+    font-size: 16px !important;
+  }
+}

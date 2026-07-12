@@ -1,5 +1,6 @@
 import { Progress, Tag, Typography } from 'antd';
 import type { SignalDto } from '../api/agents';
+import { isHttpUrl } from '../utils/links';
 
 const { Paragraph } = Typography;
 
@@ -36,7 +37,21 @@ export function AgentSignalReport({ signals }: AgentSignalReportProps) {
           <div className="flex-1">
             <p className="text-sm">{signal.rationale}</p>
             {signal.citations.length > 0 ? (
-              <p className="text-xs text-gray-500">Sources: {signal.citations.join(', ')}</p>
+              <p className="text-xs text-gray-500">
+                Sources:{' '}
+                {signal.citations.map((citation, index) => (
+                  <span key={citation}>
+                    {index > 0 ? ', ' : ''}
+                    {isHttpUrl(citation) ? (
+                      <a href={citation} target="_blank" rel="noreferrer">
+                        {citation}
+                      </a>
+                    ) : (
+                      citation
+                    )}
+                  </span>
+                ))}
+              </p>
             ) : null}
           </div>
         </div>

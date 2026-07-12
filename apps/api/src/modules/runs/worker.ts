@@ -11,8 +11,8 @@ export async function processNextRun(
 
   try {
     const result = await runner.run(run.agentId, run.id);
-    await queue.completeRun(run.id, result.status, result.errorCode);
-  } catch {
-    await queue.completeRun(run.id, 'failed', 'unexpected');
+    await queue.completeRun(run.id, result.status, result.errorCode, result.errorMessage);
+  } catch (error) {
+    await queue.completeRun(run.id, 'failed', 'unexpected', error instanceof Error ? error.message : String(error));
   }
 }

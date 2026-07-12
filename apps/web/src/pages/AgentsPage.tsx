@@ -1,27 +1,45 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, Empty, Layout, Popconfirm, Tabs, Tooltip, Typography } from 'antd';
+import { Badge, Button, Card, Empty, Layout, message, Popconfirm, Tabs, Tag, Typography } from 'antd';
 import {
   ArrowLeftOutlined,
+  CaretRightOutlined,
+  ClockCircleOutlined,
   DeleteOutlined,
   EditOutlined,
+  FileTextOutlined,
+  HistoryOutlined,
+  LinkOutlined,
   LogoutOutlined,
+  MailOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
-  PlusOutlined
+  PlusOutlined,
+  TeamOutlined
 } from '@ant-design/icons';
 import { AgentForm } from '../components/AgentForm';
 import { AgentStatusCard } from '../components/AgentStatusCard';
 import { ThemePicker } from '../components/ThemePicker';
 import { AgentReportsBrowser } from '../components/AgentReportsBrowser';
+import { AgentRunsBrowser } from '../components/AgentRunsBrowser';
 import { AgentPromptEditor } from '../components/AgentPromptEditor';
+import { EpisodePickerModal } from '../components/EpisodePickerModal';
+import { TouchSafeTooltip } from '../components/TouchSafeTooltip';
+import { AdminUsersPage } from './AdminUsersPage';
+import { SymbolPerformancePage } from './SymbolPerformancePage';
 import {
   deleteAgent,
   disableAgent,
   enableAgent,
   getAgent,
   listAgents,
+  listAgentRuns,
+  listAgentEpisodeOptions,
+  runAgentNow,
   type AgentDetail,
-  type AgentSummary
+  type AgentSummary,
+  type EpisodeOptionDto,
+  type ForcedEpisodeSelection,
+  type RunDetailDto
 } from '../api/agents';
 import { getLatestAgentPrompt, listAgentReports, type PromptVersionDto, type RunReportDto } from '../api/agents';
 import { useAuth } from '../auth/AuthContext';
@@ -29,8 +47,31 @@ import { useAuth } from '../auth/AuthContext';
 const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 
+// How often to poll for run/report updates while an agent's detail view is open - frequent
+// enough that pending/running runs (from the scheduler or a manual trigger) and newly-completed
+// reports show up promptly without a manual page refresh, without hammering the API.
+const RUNS_POLL_INTERVAL_MS = 4000;
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function formatAgentSchedule(schedule: AgentSummary['schedule']): string {
+  if (!schedule) return 'No schedule';
+  if (schedule.mode === 'interval') return `Every ${schedule.intervalMinutes} min`;
+  if (schedule.mode === 'daily') return `Daily ${schedule.dailyTime} (${schedule.timezone})`;
+  const days = schedule.daysOfWeek.map((d) => WEEKDAY_LABELS[d] ?? d).join(', ');
+  return `Weekly ${schedule.dailyTime} on ${days} (${schedule.timezone})`;
+}
+
+/** Only podcast/YouTube sources have "episodes" to pick from - web_urls sources (single/listing
+ * pages) keep the old "run now = crawl immediately" behavior with no picker. */
+function hasEpisodicSource(agent: AgentSummary): boolean {
+  return agent.sources.some((source) => source.type === 'podcast_feeds' || source.type === 'youtube_videos');
+}
+
 export function AgentsPage() {
-  const { user, logout } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
+  const [showAdminUsers, setShowAdminUsers] = useState(false);
+  const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
   const [editingAgent, setEditingAgent] = useState<{ detail: AgentDetail; prompt: PromptVersionDto | null } | null>(
     null
@@ -40,9 +81,17 @@ export function AgentsPage() {
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [reports, setReports] = useState<RunReportDto[]>([]);
+  const [runs, setRuns] = useState<RunDetailDto[]>([]);
   const [prompt, setPrompt] = useState<PromptVersionDto | null>(null);
   const [togglingAgentId, setTogglingAgentId] = useState<string | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
+  const [runningAgentId, setRunningAgentId] = useState<string | null>(null);
+  const [episodePickerAgent, setEpisodePickerAgent] = useState<AgentSummary | null>(null);
+  const [episodeOptions, setEpisodeOptions] = useState<EpisodeOptionDto[]>([]);
+  const [loadingEpisodeOptions, setLoadingEpisodeOptions] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState('reports');
+  const [highlightedReportId, setHighlightedReportId] = useState<string | null>(null);
+  const [hasAppliedSymbolDeepLink, setHasAppliedSymbolDeepLink] = useState(false);
 
 
   async function refreshAgents() {
@@ -77,23 +126,61 @@ export function AgentsPage() {
     };
   }, []);
 
+  // Applies a symbol deep link from a report notification email (?agentId=&symbol=), which opens
+  // straight into that agent's SymbolPerformancePage. Runs once agents have loaded (so we can
+  // confirm the linked agent actually exists) and only once, then strips the query params from
+  // the URL so refreshing/navigating afterwards doesn't repeatedly re-trigger it.
+  useEffect(() => {
+    if (hasAppliedSymbolDeepLink) return;
+    if (agents.length === 0) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const linkedAgentId = params.get('agentId');
+    const linkedSymbol = params.get('symbol');
+    if (linkedAgentId && linkedSymbol && agents.some((agent) => agent.id === linkedAgentId)) {
+      setSelectedAgentId(linkedAgentId);
+      setViewingSymbol(linkedSymbol);
+    }
+    setHasAppliedSymbolDeepLink(true);
+    window.history.replaceState({}, '', window.location.pathname);
+  }, [agents, hasAppliedSymbolDeepLink]);
+
   useEffect(() => {
     if (!selectedAgentId) return;
     let alive = true;
-    async function loadAgentDetail() {
-      const [agentReports, agentPrompt] = await Promise.all([
+
+    async function refreshAgentDetail() {
+      const [agentReports, agentRuns] = await Promise.all([
         listAgentReports(selectedAgentId as string),
-        getLatestAgentPrompt(selectedAgentId as string)
+        listAgentRuns(selectedAgentId as string)
       ]);
       if (!alive) return;
       setReports(agentReports);
-      setPrompt(agentPrompt);
+      setRuns(agentRuns);
     }
+
+    async function loadAgentDetail() {
+      const agentPrompt = await getLatestAgentPrompt(selectedAgentId as string);
+      if (!alive) return;
+      setPrompt(agentPrompt);
+      await refreshAgentDetail();
+    }
+
     loadAgentDetail();
+    // Poll runs/reports while this agent's detail view is open, so a scheduler-triggered run
+    // (or a manual run triggered from elsewhere) and any newly-completed report show up live,
+    // without requiring the user to reselect the agent or refresh the page.
+    const intervalId = setInterval(refreshAgentDetail, RUNS_POLL_INTERVAL_MS);
     return () => {
       alive = false;
+      clearInterval(intervalId);
     };
   }, [selectedAgentId]);
+
+  function onViewReport(reportId: string) {
+    setHighlightedReportId(reportId);
+    setActiveDetailTab('reports');
+  }
 
   async function onTogglePause(agent: AgentSummary, event: React.MouseEvent) {
     event.stopPropagation();
@@ -107,6 +194,68 @@ export function AgentsPage() {
       await refreshAgents();
     } finally {
       setTogglingAgentId(null);
+    }
+  }
+
+  async function executeRun(agent: AgentSummary, forcedEpisode?: ForcedEpisodeSelection) {
+    setRunningAgentId(agent.id);
+    try {
+      const result = await runAgentNow(agent.id, forcedEpisode);
+      if (result.status === 'failed') {
+        message.error(`Run failed${result.errorCode ? `: ${result.errorCode}` : ''}`);
+      } else if (result.status === 'no_run_claimed') {
+        message.info('Another run is already in progress');
+      } else {
+        message.success('Agent run completed');
+      }
+      if (selectedAgentId === agent.id) {
+        const [agentReports] = await Promise.all([listAgentReports(agent.id)]);
+        setReports(agentReports);
+      }
+      await refreshAgents();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to run agent');
+    } finally {
+      setRunningAgentId(null);
+    }
+  }
+
+  async function onRunNow(agent: AgentSummary, event?: React.MouseEvent) {
+    event?.stopPropagation();
+    if (!hasEpisodicSource(agent)) {
+      await executeRun(agent);
+      return;
+    }
+
+    setEpisodePickerAgent(agent);
+    setEpisodeOptions([]);
+    setLoadingEpisodeOptions(true);
+    try {
+      const options = await listAgentEpisodeOptions(agent.id);
+      setEpisodeOptions(options);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to load episode options');
+    } finally {
+      setLoadingEpisodeOptions(false);
+    }
+  }
+
+  function closeEpisodePicker() {
+    setEpisodePickerAgent(null);
+    setEpisodeOptions([]);
+  }
+
+  async function onRunNormallyFromPicker() {
+    const agent = episodePickerAgent;
+    closeEpisodePicker();
+    if (agent) await executeRun(agent);
+  }
+
+  async function onSelectEpisodeFromPicker(episode: EpisodeOptionDto) {
+    const agent = episodePickerAgent;
+    closeEpisodePicker();
+    if (agent) {
+      await executeRun(agent, { sourceType: episode.sourceType, sourceValue: episode.sourceValue, itemLink: episode.link });
     }
   }
 
@@ -138,13 +287,39 @@ export function AgentsPage() {
 
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? null;
 
+  // Resets every overlay/detail view back to the plain agent-list dashboard - used by the
+  // clickable app-name header so it works as a "home" link from anywhere (agent detail, wizard,
+  // symbol performance page, admin users page).
+  function goToDashboard() {
+    setSelectedAgentId(null);
+    setViewingSymbol(null);
+    setIsCreatingAgent(false);
+    setEditingAgent(null);
+    setShowAdminUsers(false);
+  }
+
   return (
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
       <Header style={{ background: 'transparent', height: 'auto', padding: '24px 24px 0' }}>
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div style={{ minWidth: 0 }}>
-            <Title level={2} style={{ margin: 0, whiteSpace: 'nowrap' }}>
-              Brokerino
+            <Title
+              level={2}
+              onClick={goToDashboard}
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') goToDashboard();
+              }}
+              style={{
+                margin: 0,
+                whiteSpace: 'nowrap',
+                wordBreak: 'keep-all',
+                overflowWrap: 'normal',
+                fontSize: 'clamp(1.25rem, 5vw, 1.875rem)',
+                cursor: 'pointer'
+              }}
+            >
+              ChatTrader
             </Title>
             <Text type="secondary">Agent Dashboard</Text>
           </div>
@@ -154,14 +329,28 @@ export function AgentsPage() {
                 {user.displayName ?? user.email}
               </Text>
             ) : null}
+            {isAdmin ? (
+              <TouchSafeTooltip title="Manage users">
+                <Button
+                  icon={<TeamOutlined />}
+                  onClick={() => setShowAdminUsers(true)}
+                  aria-label="Manage users"
+                />
+              </TouchSafeTooltip>
+            ) : null}
             <ThemePicker />
-            <Tooltip title="Log out">
+            <TouchSafeTooltip title="Log out">
               <Button icon={<LogoutOutlined />} onClick={() => logout()} aria-label="Log out" />
-            </Tooltip>
+            </TouchSafeTooltip>
           </div>
         </div>
       </Header>
       <Content style={{ padding: 24 }}>
+        {showAdminUsers ? (
+          <AdminUsersPage onBack={() => setShowAdminUsers(false)} />
+        ) : viewingSymbol && selectedAgent ? (
+          <SymbolPerformancePage agentId={selectedAgent.id} symbol={viewingSymbol} onBack={() => setViewingSymbol(null)} />
+        ) : (
         <div className="mx-auto max-w-6xl space-y-4">
           <Paragraph type="secondary">
             Create and manage AI agents that crawl sources and produce long/short stock signal reports.
@@ -202,15 +391,15 @@ export function AgentsPage() {
                 }
                 extra={
                   <div className="flex items-center gap-2">
-                    <Tooltip title="Back to dashboard">
+                    <TouchSafeTooltip title="Back to dashboard">
                       <Button
                         aria-label="Back to dashboard"
                         shape="circle"
                         icon={<ArrowLeftOutlined />}
                         onClick={() => setSelectedAgentId(null)}
                       />
-                    </Tooltip>
-                    <Tooltip title="Edit agent">
+                    </TouchSafeTooltip>
+                    <TouchSafeTooltip title="Edit agent">
                       <Button
                         aria-label="Edit agent"
                         shape="circle"
@@ -218,8 +407,18 @@ export function AgentsPage() {
                         icon={<EditOutlined />}
                         onClick={(event) => onEditAgent(selectedAgent, event)}
                       />
-                    </Tooltip>
-                    <Tooltip title={selectedAgent.status === 'disabled' ? 'Resume agent' : 'Pause agent'}>
+                    </TouchSafeTooltip>
+                    <TouchSafeTooltip title="Run agent now">
+                      <Button
+                        aria-label="Run agent now"
+                        shape="circle"
+                        loading={runningAgentId === selectedAgent.id}
+                        disabled={selectedAgent.status === 'disabled'}
+                        icon={<CaretRightOutlined />}
+                        onClick={(event) => onRunNow(selectedAgent, event)}
+                      />
+                    </TouchSafeTooltip>
+                    <TouchSafeTooltip title={selectedAgent.status === 'disabled' ? 'Resume agent' : 'Pause agent'}>
                       <Button
                         aria-label={selectedAgent.status === 'disabled' ? 'Resume agent' : 'Pause agent'}
                         shape="circle"
@@ -233,7 +432,7 @@ export function AgentsPage() {
                         }
                         onClick={(event) => onTogglePause(selectedAgent, event)}
                       />
-                    </Tooltip>
+                    </TouchSafeTooltip>
                     <Popconfirm
                       title="Remove this agent?"
                       description="This permanently deletes the agent, its schedule, prompts, and reports."
@@ -241,7 +440,7 @@ export function AgentsPage() {
                       okButtonProps={{ danger: true }}
                       onConfirm={() => onDeleteAgent(selectedAgent)}
                     >
-                      <Tooltip title="Remove agent">
+                      <TouchSafeTooltip title="Remove agent">
                         <Button
                           aria-label="Remove agent"
                           shape="circle"
@@ -250,17 +449,33 @@ export function AgentsPage() {
                           icon={<DeleteOutlined />}
                           onClick={(event) => event.stopPropagation()}
                         />
-                      </Tooltip>
+                      </TouchSafeTooltip>
                     </Popconfirm>
                   </div>
                 }
               >
                 <Tabs
+                  activeKey={activeDetailTab}
+                  onChange={setActiveDetailTab}
                   items={[
                     {
                       key: 'reports',
                       label: 'Reports',
-                      children: <AgentReportsBrowser reports={reports} />
+                      children: (
+                        <AgentReportsBrowser
+                          agentId={selectedAgent.id}
+                          reports={reports}
+                          highlightedReportId={highlightedReportId}
+                          onSelectSymbol={setViewingSymbol}
+                        />
+                      )
+                    },
+                    {
+                      key: 'runs',
+                      label: 'Runs',
+                      children: (
+                        <AgentRunsBrowser agentId={selectedAgent.id} runs={runs} onViewReport={onViewReport} />
+                      )
                     },
                     {
                       key: 'prompt',
@@ -281,7 +496,7 @@ export function AgentsPage() {
               <Card
                 title={<Title level={4} style={{ margin: 0 }}>Agent dashboard</Title>}
                 extra={
-                  <Tooltip title="Create agent">
+                  <TouchSafeTooltip title="Create agent">
                     <Button
                       type="primary"
                       shape="circle"
@@ -293,7 +508,7 @@ export function AgentsPage() {
                         setSelectedAgentId(null);
                       }}
                     />
-                  </Tooltip>
+                  </TouchSafeTooltip>
                 }
               >
                 {loadState === 'loading' ? <p className="text-sm text-gray-700">Loading agents...</p> : null}
@@ -317,11 +532,46 @@ export function AgentsPage() {
                               status={agent.status === 'disabled' ? 'default' : 'success'}
                               text={agent.name}
                             />
+                            {agent.status === 'disabled' ? (
+                              <Tag color="default" style={{ marginLeft: 8 }}>Paused</Tag>
+                            ) : (
+                              <Tag color="success" style={{ marginLeft: 8 }}>Active</Tag>
+                            )}
                           </h3>
-                          <p className="text-sm text-gray-700">Sources: {agent.sources.length}</p>
+                          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700">
+                            <span className="inline-flex items-center gap-1">
+                              <LinkOutlined /> Sources: {agent.sources.length}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <HistoryOutlined /> Runs: {agent.runCount ?? 0}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <FileTextOutlined /> Reports: {agent.reportCount ?? 0}
+                              {agent.latestReportAt ? ` (latest ${new Date(agent.latestReportAt).toLocaleDateString()})` : ''}
+                            </span>
+                          </p>
+                          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                            <span className="inline-flex items-center gap-1">
+                              <ClockCircleOutlined /> Schedule: {formatAgentSchedule(agent.schedule)}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <MailOutlined />{' '}
+                              Emails: {agent.recipients && agent.recipients.length > 0 ? agent.recipients.join(', ') : 'none'}
+                            </span>
+                          </p>
                         </div>
                         <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
-                          <Tooltip title={agent.status === 'disabled' ? 'Resume agent' : 'Pause agent'}>
+                          <TouchSafeTooltip title="Run agent now">
+                            <Button
+                              aria-label="Run agent now"
+                              shape="circle"
+                              loading={runningAgentId === agent.id}
+                              disabled={agent.status === 'disabled'}
+                              icon={<CaretRightOutlined />}
+                              onClick={(event) => onRunNow(agent, event)}
+                            />
+                          </TouchSafeTooltip>
+                          <TouchSafeTooltip title={agent.status === 'disabled' ? 'Resume agent' : 'Pause agent'}>
                             <Button
                               aria-label={agent.status === 'disabled' ? 'Resume agent' : 'Pause agent'}
                               shape="circle"
@@ -329,7 +579,7 @@ export function AgentsPage() {
                               icon={agent.status === 'disabled' ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
                               onClick={(event) => onTogglePause(agent, event)}
                             />
-                          </Tooltip>
+                          </TouchSafeTooltip>
                           <Popconfirm
                             title="Remove this agent?"
                             description="This permanently deletes the agent, its schedule, prompts, and reports."
@@ -337,7 +587,7 @@ export function AgentsPage() {
                             okButtonProps={{ danger: true }}
                             onConfirm={() => onDeleteAgent(agent)}
                           >
-                            <Tooltip title="Remove agent">
+                            <TouchSafeTooltip title="Remove agent">
                               <Button
                                 aria-label="Remove agent"
                                 shape="circle"
@@ -345,7 +595,7 @@ export function AgentsPage() {
                                 loading={deletingAgentId === agent.id}
                                 icon={<DeleteOutlined />}
                               />
-                            </Tooltip>
+                            </TouchSafeTooltip>
                           </Popconfirm>
                         </div>
                       </div>
@@ -357,7 +607,16 @@ export function AgentsPage() {
             <AgentStatusCard />
           </div>
         </div>
+        )}
       </Content>
+      <EpisodePickerModal
+        open={Boolean(episodePickerAgent)}
+        loading={loadingEpisodeOptions}
+        episodes={episodeOptions}
+        onRunNormally={onRunNormallyFromPicker}
+        onSelectEpisode={onSelectEpisodeFromPicker}
+        onCancel={closeEpisodePicker}
+      />
     </Layout>
   );
 }

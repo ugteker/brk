@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import type { AgentRunRecord, RunStore } from './run-queue.service';
+import type { AgentRunRecord, RunPhase, RunStore } from './run-queue.service';
 
 type RunDb = Pick<PrismaClient, 'agentSchedule' | 'agentRun'>;
 
@@ -38,20 +38,36 @@ export class PrismaRunStore implements RunStore {
       agentId: claimed.agentId,
       scheduledFor: claimed.scheduledFor,
       status: claimed.status as AgentRunRecord['status'],
+      phase: (claimed as { phase?: string | null }).phase as RunPhase | null | undefined,
       workerId: claimed.workerId ?? undefined,
       retryCount: claimed.retryCount,
       errorCode: claimed.errorCode ?? undefined,
+      errorMessage: claimed.errorMessage ?? undefined,
       startedAt: claimed.startedAt ?? undefined,
       finishedAt: claimed.finishedAt ?? undefined
     };
   }
 
-  async completeRun(runId: string, status: 'succeeded' | 'failed', errorCode?: string): Promise<void> {
+  async setPhase(runId: string, phase: RunPhase): Promise<void> {
+    await this.db.agentRun.update({
+      where: { id: runId },
+      data: { phase }
+    });
+  }
+
+  async completeRun(
+    runId: string,
+    status: 'succeeded' | 'succeeded_no_new_content' | 'failed',
+    errorCode?: string,
+    errorMessage?: string
+  ): Promise<void> {
     await this.db.agentRun.update({
       where: { id: runId },
       data: {
         status,
+        phase: null,
         errorCode,
+        errorMessage,
         finishedAt: new Date()
       }
     });

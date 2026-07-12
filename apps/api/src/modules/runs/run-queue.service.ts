@@ -1,4 +1,9 @@
-export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+export type RunStatus = 'queued' | 'running' | 'succeeded' | 'succeeded_no_new_content' | 'failed';
+
+// Sub-stage of a currently-`running` run, surfaced in the Runs view so users can see what the
+// agent is actually doing right now rather than just an opaque spinner. `null`/undefined means no
+// phase has been recorded yet (e.g. a run that hasn't started, or predates this feature).
+export type RunPhase = 'crawling' | 'analyzing' | 'notifying';
 
 export interface AgentScheduleRecord {
   agentId: string;
@@ -11,18 +16,26 @@ export interface AgentRunRecord {
   agentId: string;
   scheduledFor: Date;
   status: RunStatus;
+  phase?: RunPhase | null;
   workerId?: string;
   startedAt?: Date;
   finishedAt?: Date;
   retryCount: number;
   errorCode?: string;
+  errorMessage?: string;
 }
 
 export interface RunStore {
   getDueSchedules(now: Date): Promise<AgentScheduleRecord[]>;
   upsertQueuedRun(agentId: string, scheduledFor: Date): Promise<void>;
   claimNextQueuedRun(workerId: string): Promise<AgentRunRecord | null>;
-  completeRun(runId: string, status: 'succeeded' | 'failed', errorCode?: string): Promise<void>;
+  setPhase(runId: string, phase: RunPhase): Promise<void>;
+  completeRun(
+    runId: string,
+    status: 'succeeded' | 'succeeded_no_new_content' | 'failed',
+    errorCode?: string,
+    errorMessage?: string
+  ): Promise<void>;
 }
 
 export class InMemoryRunStore implements RunStore {
@@ -50,6 +63,7 @@ export class InMemoryRunStore implements RunStore {
       agentId,
       scheduledFor,
       status: 'queued',
+      phase: null,
       retryCount: 0
     });
   }
@@ -67,12 +81,25 @@ export class InMemoryRunStore implements RunStore {
     return queued;
   }
 
-  async completeRun(runId: string, status: 'succeeded' | 'failed', errorCode?: string): Promise<void> {
+  async setPhase(runId: string, phase: RunPhase): Promise<void> {
+    const run = this.runs.find((r) => r.id === runId);
+    if (!run) return;
+    run.phase = phase;
+  }
+
+  async completeRun(
+    runId: string,
+    status: 'succeeded' | 'succeeded_no_new_content' | 'failed',
+    errorCode?: string,
+    errorMessage?: string
+  ): Promise<void> {
     const run = this.runs.find((r) => r.id === runId);
     if (!run) return;
     run.status = status;
+    run.phase = null;
     run.finishedAt = new Date();
     run.errorCode = errorCode;
+    run.errorMessage = errorMessage;
   }
 }
 
@@ -87,11 +114,24 @@ export class RunQueueService {
     return due.length;
   }
 
+  async enqueueImmediateRun(agentId: string, now: Date = new Date()): Promise<void> {
+    await this.store.upsertQueuedRun(agentId, now);
+  }
+
   async claimNextRun(workerId: string): Promise<AgentRunRecord | null> {
     return this.store.claimNextQueuedRun(workerId);
   }
 
-  async completeRun(runId: string, status: 'succeeded' | 'failed', errorCode?: string): Promise<void> {
-    await this.store.completeRun(runId, status, errorCode);
+  async setPhase(runId: string, phase: RunPhase): Promise<void> {
+    await this.store.setPhase(runId, phase);
+  }
+
+  async completeRun(
+    runId: string,
+    status: 'succeeded' | 'succeeded_no_new_content' | 'failed',
+    errorCode?: string,
+    errorMessage?: string
+  ): Promise<void> {
+    await this.store.completeRun(runId, status, errorCode, errorMessage);
   }
 }

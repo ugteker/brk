@@ -1,0 +1,181 @@
+import type { MailerLike } from '../auth/mailer';
+import type { Agent } from './types';
+import type { RunReportRecord } from '../reports/types';
+import { config } from '../../config';
+
+export type AgentChangeAction = 'created' | 'updated';
+
+function formatSourcesList(agent: Agent): string {
+  if (agent.sources.length === 0) return '  (no sources configured)';
+  return agent.sources
+    .map((source) => `  - [${source.type}] ${source.value} (every ${source.frequencyMinutes} min)`)
+    .join('\n');
+}
+
+function buildAgentConfirmationEmail(agent: Agent, action: AgentChangeAction): { subject: string; text: string; html: string } {
+  const verb = action === 'created' ? 'created' : 'updated';
+  const subject = `Agent "${agent.name}" ${verb}`;
+  const text = [
+    `The agent "${agent.name}" has been ${verb}.`,
+    '',
+    `Status: ${agent.status}`,
+    `Sources:`,
+    formatSourcesList(agent),
+    '',
+    `You're receiving this because you're listed as a recipient for this agent's notifications.`
+  ].join('\n');
+  const html = `
+    <p>The agent <strong>${agent.name}</strong> has been <strong>${verb}</strong>.</p>
+    <p><strong>Status:</strong> ${agent.status}</p>
+    <p><strong>Sources:</strong></p>
+    <ul>${agent.sources.map((source) => `<li>[${source.type}] ${source.value} (every ${source.frequencyMinutes} min)</li>`).join('')}</ul>
+    <p style="color:#666;font-size:12px;">You're receiving this because you're listed as a recipient for this agent's notifications.</p>
+  `;
+  return { subject, text, html };
+}
+
+/**
+ * Sends a best-effort confirmation email to every configured recipient whenever an agent is
+ * created or updated. Failures are logged but never thrown - a flaky SMTP server or a missing
+ * mailer configuration must not break the agent create/update request itself.
+ */
+export async function sendAgentChangeConfirmation(
+  mailer: MailerLike | undefined,
+  agent: Agent,
+  action: AgentChangeAction
+): Promise<void> {
+  if (!mailer) return;
+  if (agent.recipients.length === 0) return;
+
+  const { subject, text, html } = buildAgentConfirmationEmail(agent, action);
+  await Promise.all(
+    agent.recipients.map(async (to) => {
+      try {
+        await mailer.send({ to, subject, text, html });
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn(`[agents] Failed to send ${action} confirmation email to ${to}:`, error);
+      }
+    })
+  );
+}
+
+function formatSignalsList(report: RunReportRecord, agentId: string): string {
+  if (report.signals.length === 0) return '  (no signals in this report)';
+  return report.signals
+    .map(
+      (signal) =>
+        `  - ${signalArrow(signal.side)} ${signal.symbol} · ${signal.side.toUpperCase()} (confidence ${signal.confidence}%): ${signal.rationale} (${buildSymbolLink(agentId, signal.symbol)})`
+    )
+    .join('\n');
+}
+
+// Plain-text/email-safe arrow used as a long/short indicator (renders reliably across mail
+// clients, unlike some emoji glyphs) - up for long, down for short.
+function signalArrow(side: string): string {
+  return side === 'long' ? '\u25B2' : '\u25BC';
+}
+
+function signalColor(side: string): string {
+  return side === 'long' ? '#389e0d' : '#cf1322';
+}
+
+// Deep link back into the app for a given symbol, read by AgentsPage on load (?agentId=&symbol=)
+// to select the agent and jump straight into its SymbolPerformancePage - lets recipients click a
+// symbol in the email and land directly on that symbol's chart/signal history.
+function buildSymbolLink(agentId: string, symbol: string): string {
+  return `${config.appBaseUrl}/?agentId=${encodeURIComponent(agentId)}&symbol=${encodeURIComponent(symbol)}`;
+}
+
+// Compact "SYMBOL ▲/▼" pill summarizing every signal in the report, shown at the top of the
+// email so recipients can see the overall long/short picture at a glance before reading details.
+function buildSignalSummaryHtml(report: RunReportRecord, agentId: string): string {
+  if (report.signals.length === 0) return '';
+  const pills = report.signals
+    .map(
+      (signal) => `
+      <a href="${buildSymbolLink(agentId, signal.symbol)}" style="display:inline-block;margin:2px 6px 2px 0;padding:4px 10px;border-radius:12px;background:${signalColor(
+        signal.side
+      )}1a;color:${signalColor(signal.side)};font-weight:600;font-size:13px;text-decoration:none;">
+        ${signalArrow(signal.side)} ${signal.symbol} · ${signal.side.toUpperCase()}
+      </a>`
+    )
+    .join('');
+  return `<p><strong>Signal summary:</strong></p><div>${pills}</div>`;
+}
+
+function buildSignalSummaryText(report: RunReportRecord, agentId: string): string {
+  if (report.signals.length === 0) return '';
+  return report.signals
+    .map((signal) => `${signalArrow(signal.side)} ${signal.symbol} (${signal.side.toUpperCase()}) ${buildSymbolLink(agentId, signal.symbol)}`)
+    .join('  ');
+}
+
+function buildReportNotificationEmail(agent: Agent, report: RunReportRecord): { subject: string; text: string; html: string } {
+  const subject = `Report for "${agent.name}"`;
+  const summaryLine = buildSignalSummaryText(report, agent.id);
+  const text = [
+    `A report is available for the agent "${agent.name}".`,
+    '',
+    summaryLine ? `Signal summary: ${summaryLine}` : '',
+    '',
+    `Summary: ${report.summary}`,
+    '',
+    `Signals:`,
+    formatSignalsList(report, agent.id),
+    '',
+    report.needsHumanReview ? 'This report is flagged as needing human review.' : '',
+    report.sourceWarnings.length > 0 ? `Source warnings:\n${report.sourceWarnings.map((w) => `  - ${w}`).join('\n')}` : '',
+    '',
+    `You're receiving this because you're listed as a recipient for this agent's notifications.`
+  ]
+    .filter((line) => line !== '')
+    .join('\n');
+  const html = `
+    <p>A report is available for the agent <strong>${agent.name}</strong>.</p>
+    ${buildSignalSummaryHtml(report, agent.id)}
+    <p><strong>Summary:</strong> ${report.summary}</p>
+    <p><strong>Signals:</strong></p>
+    <ul>${report.signals
+      .map(
+        (signal) =>
+          `<li><span style="color:${signalColor(signal.side)};font-weight:700;">${signalArrow(signal.side)}</span> <a href="${buildSymbolLink(agent.id, signal.symbol)}" style="color:#1677ff;font-weight:600;text-decoration:none;">${signal.symbol}</a> · ${signal.side.toUpperCase()} (confidence ${signal.confidence}%): ${signal.rationale}</li>`
+      )
+      .join('')}</ul>
+    ${report.needsHumanReview ? '<p><strong>This report is flagged as needing human review.</strong></p>' : ''}
+    ${
+      report.sourceWarnings.length > 0
+        ? `<p><strong>Source warnings:</strong></p><ul>${report.sourceWarnings.map((w) => `<li>${w}</li>`).join('')}</ul>`
+        : ''
+    }
+    <p style="color:#666;font-size:12px;">You're receiving this because you're listed as a recipient for this agent's notifications.</p>
+  `;
+  return { subject, text, html };
+}
+
+/**
+ * Sends a best-effort email about a specific report to every configured recipient - used both by
+ * a future automatic post-run notification and by the manual "re-send" action in the Reports view.
+ * Like `sendAgentChangeConfirmation`, failures are logged per-recipient but never thrown, so a
+ * flaky SMTP server can't break the calling request.
+ */
+export async function sendReportNotification(
+  mailer: MailerLike | undefined,
+  agent: Agent,
+  report: RunReportRecord
+): Promise<void> {
+  if (!mailer) return;
+  if (agent.recipients.length === 0) return;
+
+  const { subject, text, html } = buildReportNotificationEmail(agent, report);
+  await Promise.all(
+    agent.recipients.map(async (to) => {
+      try {
+        await mailer.send({ to, subject, text, html });
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn(`[agents] Failed to send report notification email to ${to}:`, error);
+      }
+    })
+  );
+}
