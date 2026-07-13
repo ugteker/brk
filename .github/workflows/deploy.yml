@@ -2,9 +2,11 @@ name: Deploy
 
 on:
   push:
-    # Release policy: deployments happen from main only.
-    # Changes from alpha must be promoted via PR merge into main.
-    branches: [main]
+    # Release policy: deployments happen from master only.
+    # Changes from alpha must be promoted via PR merge into master.
+    branches: [master]
+  pull_request:
+    branches: [master]
 
 jobs:
   test:
@@ -29,6 +31,7 @@ jobs:
 
   deploy:
     needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: production
     concurrency:
