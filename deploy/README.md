@@ -53,9 +53,9 @@ already installed).
 
 ```bash
 ssh <user>@<hetzner-host>
-sudo mkdir -p /opt/ChatTrader && sudo chown $USER:$USER /opt/ChatTrader
-git clone https://github.com/ugteker/brk.git /opt/ChatTrader
-cd /opt/ChatTrader
+sudo mkdir -p /opt/brokerino && sudo chown $USER:$USER /opt/brokerino
+git clone https://github.com/ugteker/brk.git /opt/brokerino
+cd /opt/brokerino
 cp apps/api/.env.example .env
 # edit .env with real values: JWT_SECRET (generate: openssl rand -base64 48),
 # ANTHROPIC_API_KEY, SMTP_*, ADMIN_EMAIL/ADMIN_PASSWORD, AUTH_COOKIE_SECURE=true.
@@ -76,9 +76,14 @@ automatically by CI (below).
 
 ## GitHub Actions (`.github/workflows/deploy.yml`)
 
+Release/deploy policy:
+- Deployment is triggered by pushes to `main` only.
+- `alpha` does **not** deploy directly.
+- Promotion flow is: `alpha` -> Pull Request -> merge into `main` -> auto deploy.
+
 On every push to `main`: runs `apps/api` and `apps/web` test suites, then (if
-they pass) SSHes into the Hetzner server, rewrites `/opt/ChatTrader/.env` from
-a GitHub secret, and runs `deploy/deploy.sh` (which does `git pull` +
+they pass) SSHes into the Hetzner server, rewrites `/opt/brokerino/.env` from
+a GitHub secret, and runs `deploy/deploy.sh` (which does `git pull --ff-only origin main` +
 `docker compose build` + `docker compose up -d`).
 
 ### Required repository secrets
@@ -90,9 +95,23 @@ approval gate):
 | Secret | Value |
 | --- | --- |
 | `HETZNER_HOST` | Server IP or hostname |
-| `HETZNER_USER` | SSH user with access to `/opt/ChatTrader` and Docker |
+| `HETZNER_USER` | SSH user with access to `/opt/brokerino` and Docker |
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
 | `HETZNER_APP_ENV` | The **entire contents** of the production `.env` file (same keys as `apps/api/.env.example`, with real values) |
+
+### Recommended branch protection
+
+To enforce the release flow above, configure branch protection for `main`:
+- Require a pull request before merging.
+- Require status checks to pass before merging (at minimum the deploy workflow's `test` job).
+- Restrict direct pushes to `main` where possible.
+
+Suggested GitHub UI path:
+1. Go to **Settings -> Branches -> Branch protection rules** (or **Rulesets**).
+2. Target branch: `main`.
+3. Enable **Require a pull request before merging**.
+4. Enable **Require status checks to pass before merging** and select check **`test`** from workflow **Deploy**.
+5. Enable **Restrict who can push to matching branches** (optional but recommended).
 
 `HETZNER_APP_ENV` is written to the server via an SSH heredoc, never passed
 as a CLI argument or echoed — it won't appear in workflow logs. Whenever a

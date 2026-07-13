@@ -65,9 +65,9 @@ SSH into the Hetzner server and clone the repo to a stable path:
 
 ```bash
 ssh <user>@<hetzner-host>
-sudo mkdir -p /opt/ChatTrader && sudo chown $USER:$USER /opt/ChatTrader
-git clone https://github.com/ugteker/brk.git /opt/ChatTrader
-cd /opt/ChatTrader
+sudo mkdir -p /opt/brokerino && sudo chown $USER:$USER /opt/brokerino
+git clone https://github.com/ugteker/brk.git /opt/brokerino
+cd /opt/brokerino
 ```
 
 ## Step 3 — Create the production `.env`
@@ -133,9 +133,26 @@ for an approval gate):
 | Secret | Value |
 | --- | --- |
 | `HETZNER_HOST` | Server IP or hostname |
-| `HETZNER_USER` | SSH user with access to `/opt/ChatTrader` and Docker |
+| `HETZNER_USER` | SSH user with access to `/opt/brokerino` and Docker |
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
 | `HETZNER_APP_ENV` | The entire contents of the production `.env` file from Step 3 |
+
+Release/deploy policy:
+- Deployment is triggered by pushes to `main` only.
+- `alpha` does **not** deploy directly.
+- Promotion flow is: `alpha` -> Pull Request -> merge into `main` -> auto deploy.
+
+Recommended repository protection for `main`:
+- Require a pull request before merge.
+- Require status checks before merge (at minimum the deploy workflow `test` job).
+- Restrict direct pushes to `main` where possible.
+
+Suggested GitHub UI path:
+1. Go to **Settings -> Branches -> Branch protection rules** (or **Rulesets**).
+2. Target branch: `main`.
+3. Enable **Require a pull request before merging**.
+4. Enable **Require status checks to pass before merging** and select check **`test`** from workflow **Deploy**.
+5. Enable **Restrict who can push to matching branches** (optional but recommended).
 
 Once set, every push to `main` will: run the `apps/api`/`apps/web` test
 suites, then (if green) SSH into the server, rewrite `.env` from
@@ -143,13 +160,13 @@ suites, then (if green) SSH into the server, rewrite `.env` from
 
 ## Ongoing deploys
 
-- **Automatic**: push to `main` — GitHub Actions handles it (Step 7).
+- **Automatic**: merge PRs from `alpha` to `main` (or push directly to `main`) — GitHub Actions handles it (Step 7).
 - **Manual**: SSH to the server and run:
   ```bash
-  cd /opt/ChatTrader
+  cd /opt/brokerino
   ./deploy/deploy.sh
   ```
-  This does `git pull` + `docker compose build` + `docker compose up -d`,
+  This does `git pull --ff-only origin main` + `docker compose build` + `docker compose up -d`,
   then prints the current tunnel URL.
 
 ## Rotating secrets

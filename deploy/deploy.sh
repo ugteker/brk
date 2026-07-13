@@ -14,8 +14,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-echo "== git pull =="
-git pull --ff-only
+current_branch="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$current_branch" != "main" ]; then
+  echo "ERROR: deploy script must run on branch 'main' (found '$current_branch')."
+  exit 1
+fi
+
+echo "== git pull origin main =="
+git pull --ff-only origin main
 
 echo "== docker compose build =="
 docker compose build
