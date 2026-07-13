@@ -14,6 +14,11 @@ interface AgentReportsBrowserProps {
 }
 
 const HEADLINE_MAX_LENGTH = 80;
+const TOKEN_FORMATTER = new Intl.NumberFormat('de-DE');
+
+function formatTokenCount(value: number): string {
+  return TOKEN_FORMATTER.format(value);
+}
 
 export function deriveReportHeadline(summary: string): string {
   const trimmed = summary.trim();
@@ -37,8 +42,8 @@ function confidenceColor(confidence: number): string {
 export function formatReportAiStats(report: RunReportDto): string {
   const modelPart = report.model ? `Claude ${report.model}` : 'Claude n/a';
   const versionPart = report.promptVersionNumber != null ? `v${report.promptVersionNumber}` : 'v n/a';
-  const inPart = report.inputTokens != null ? report.inputTokens.toLocaleString() : 'n/a';
-  const outPart = report.outputTokens != null ? report.outputTokens.toLocaleString() : 'n/a';
+  const inPart = report.inputTokens != null ? formatTokenCount(report.inputTokens) : 'n/a';
+  const outPart = report.outputTokens != null ? formatTokenCount(report.outputTokens) : 'n/a';
   const costPart = report.estimatedCostUsd != null ? `~$${report.estimatedCostUsd.toFixed(4)} (est.)` : 'n/a';
   return `${modelPart} · ${versionPart} · ${inPart} in / ${outPart} out · ${costPart}`;
 }
@@ -118,7 +123,7 @@ export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelect
       {aiTotals.reportCountWithUsage > 0 || aiTotals.hasAnyCost ? (
         <p className="text-xs text-gray-500" data-testid="ai-totals">
           Total AI usage across {reports.length} report{reports.length === 1 ? '' : 's'}:{' '}
-          {aiTotals.totalInputTokens.toLocaleString()} in / {aiTotals.totalOutputTokens.toLocaleString()} out tokens
+          {formatTokenCount(aiTotals.totalInputTokens)} in / {formatTokenCount(aiTotals.totalOutputTokens)} out tokens
           {aiTotals.hasAnyCost ? ` · ~$${aiTotals.totalEstimatedCostUsd.toFixed(4)} (est.)` : ''}
         </p>
       ) : null}
