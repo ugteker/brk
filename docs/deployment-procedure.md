@@ -65,9 +65,9 @@ SSH into the Hetzner server and clone the repo to a stable path:
 
 ```bash
 ssh <user>@<hetzner-host>
-sudo mkdir -p /opt/brokerino && sudo chown $USER:$USER /opt/brokerino
-git clone https://github.com/ugteker/brk.git /opt/brokerino
-cd /opt/brokerino
+sudo mkdir -p /opt/ChatTrader && sudo chown $USER:$USER /opt/ChatTrader
+git clone https://github.com/ugteker/brk.git /opt/ChatTrader
+cd /opt/ChatTrader
 ```
 
 ## Step 3 — Create the production `.env`
@@ -133,7 +133,7 @@ for an approval gate):
 | Secret | Value |
 | --- | --- |
 | `HETZNER_HOST` | Server IP or hostname |
-| `HETZNER_USER` | SSH user with access to `/opt/brokerino` and Docker |
+| `HETZNER_USER` | SSH user with access to `/opt/ChatTrader` and Docker |
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
 | `HETZNER_APP_ENV` | The entire contents of the production `.env` file from Step 3 |
 
@@ -163,7 +163,7 @@ suites, then (if green) SSH into the server, rewrite `.env` from
 - **Automatic**: merge PRs from `alpha` to `master` (or push directly to `master`) — GitHub Actions handles it (Step 7).
 - **Manual**: SSH to the server and run:
   ```bash
-  cd /opt/brokerino
+  cd /opt/ChatTrader
   ./deploy/deploy.sh
   ```
   This does `git pull --ff-only origin master` + `docker compose build` + `docker compose up -d`,

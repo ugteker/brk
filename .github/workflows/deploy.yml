@@ -1,4 +1,4 @@
-name: Deploy
+name: ChatTrader Deploy
 
 on:
   push:
@@ -40,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The server keeps its own git clone at /opt/brokerino (set up once
+      # The server keeps its own git clone at /opt/ChatTrader (set up once
       # during the manual first run — see deploy/README.md). We only need to
       # (1) refresh the .env from the current secret value, since it can
       # change independently of code, and (2) trigger deploy/deploy.sh, which
@@ -56,10 +56,15 @@ jobs:
           envs: HETZNER_APP_ENV
           script: |
             umask 077
-            cat > /opt/brokerino/.env <<'BROKERINO_ENV_EOF'
+            cat > /opt/ChatTrader/.env <<'CHATTRADER_ENV_EOF'
             ${HETZNER_APP_ENV}
-            BROKERINO_ENV_EOF
-            chmod 600 /opt/brokerino/.env
-            /opt/brokerino/deploy/deploy.sh
+            CHATTRADER_ENV_EOF
+            chmod 600 /opt/ChatTrader/.env
+            cd /opt/ChatTrader
+            git pull --ff-only origin master
+            docker compose build
+            docker compose up -d --remove-orphans
+            sleep 5
+            docker compose logs chattrader --tail 50 | grep -o 'https://[a-zA-Z0-9.-]*\.trycloudflare\.com' | tail -n 1 || true
         env:
           HETZNER_APP_ENV: ${{ secrets.HETZNER_APP_ENV }}

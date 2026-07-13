@@ -53,9 +53,9 @@ already installed).
 
 ```bash
 ssh <user>@<hetzner-host>
-sudo mkdir -p /opt/brokerino && sudo chown $USER:$USER /opt/brokerino
-git clone https://github.com/ugteker/brk.git /opt/brokerino
-cd /opt/brokerino
+sudo mkdir -p /opt/ChatTrader && sudo chown $USER:$USER /opt/ChatTrader
+git clone https://github.com/ugteker/brk.git /opt/ChatTrader
+cd /opt/ChatTrader
 cp apps/api/.env.example .env
 # edit .env with real values: JWT_SECRET (generate: openssl rand -base64 48),
 # ANTHROPIC_API_KEY, SMTP_*, ADMIN_EMAIL/ADMIN_PASSWORD, AUTH_COOKIE_SECURE=true.
@@ -82,7 +82,7 @@ Release/deploy policy:
 - Promotion flow is: `alpha` -> Pull Request -> merge into `master` -> auto deploy.
 
 On every push to `master`: runs `apps/api` and `apps/web` test suites, then (if
-they pass) SSHes into the Hetzner server, rewrites `/opt/brokerino/.env` from
+they pass) SSHes into the Hetzner server, rewrites `/opt/ChatTrader/.env` from
 a GitHub secret, and runs `deploy/deploy.sh` (which does `git pull --ff-only origin master` +
 `docker compose build` + `docker compose up -d`).
 
@@ -95,7 +95,7 @@ approval gate):
 | Secret | Value |
 | --- | --- |
 | `HETZNER_HOST` | Server IP or hostname |
-| `HETZNER_USER` | SSH user with access to `/opt/brokerino` and Docker |
+| `HETZNER_USER` | SSH user with access to `/opt/ChatTrader` and Docker |
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
 | `HETZNER_APP_ENV` | The **entire contents** of the production `.env` file (same keys as `apps/api/.env.example`, with real values) |
 
