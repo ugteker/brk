@@ -88,9 +88,9 @@ a GitHub secret, and runs `deploy/deploy.sh` (which does `git pull --ff-only ori
 
 ### Required repository secrets
 
-Set these under **Settings → Secrets and variables → Actions** in
-`ugteker/brk` (ideally scoped to a `production` environment for an extra
-approval gate):
+Set these under **Settings → Environments → `production` → Environment secrets** in
+`ugteker/brk` (this deploy workflow uses `environment: production`, so these
+must be present there for resolution):
 
 | Secret | Value |
 | --- | --- |
@@ -118,6 +118,10 @@ as a CLI argument or echoed — it won't appear in workflow logs. Whenever a
 value in it changes (e.g. rotating `JWT_SECRET`, updating `APP_BASE_URL` to a
 new tunnel hostname), update the secret and re-run the workflow (or push any
 commit to `master`).
+
+If these are missing in the `production` environment, the SSH deploy step fails
+early with `Error: missing server host` because `HETZNER_HOST`/`HETZNER_USER`/
+`HETZNER_SSH_KEY` resolve as empty.
 
 ### Rotating secrets
 
