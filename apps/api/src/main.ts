@@ -15,7 +15,7 @@ import { WebUrlAdapter } from './modules/analysis/source-adapters/web-url-adapte
 import { PodcastFeedAdapter } from './modules/analysis/source-adapters/podcast-feed-adapter';
 import { YouTubeAdapter } from './modules/analysis/source-adapters/youtube-adapter';
 import { defaultHttpGet } from './modules/analysis/source-adapters/web-url-adapter';
-import { defaultHttpPostJson } from './modules/analysis/source-adapters/youtube-adapter';
+import { defaultHttpPostJson, youtubeHttpGet } from './modules/analysis/source-adapters/youtube-adapter';
 import { SiteInspectorClient } from './modules/analysis/site-inspector-client';
 import { SourceCursorRepository } from './modules/crawler/source-cursor-repository';
 import { SourceCrawlConfigRepository } from './modules/crawler/crawl-config-repository';
@@ -99,7 +99,7 @@ async function start() {
     sourceAdapters: {
       web_urls: new WebUrlAdapter(smartCrawlerDeps),
       podcast_feeds: new PodcastFeedAdapter(smartCrawlerDeps),
-      youtube_videos: new YouTubeAdapter({ httpGet: defaultHttpGet, httpPostJson: defaultHttpPostJson, cursorRepository })
+      youtube_videos: new YouTubeAdapter({ httpGet: youtubeHttpGet, httpPostJson: defaultHttpPostJson, cursorRepository })
     }
   });
 
@@ -113,7 +113,7 @@ async function start() {
     sourceProbe: {
       probeSource: (source, previewLimit) =>
         source.type === 'youtube_videos'
-          ? probeYouTubeSource({ httpGet: defaultHttpGet, httpPostJson: defaultHttpPostJson }, source, previewLimit)
+          ? probeYouTubeSource({ httpGet: youtubeHttpGet, httpPostJson: defaultHttpPostJson }, source, previewLimit)
           : probeSource({ httpGet: defaultHttpGet, siteInspector }, source, previewLimit)
     },
     runTrigger: manualRunTrigger

@@ -15,7 +15,7 @@ Internet ──(Cloudflare edge, Quick Tunnel)── cloudflared (same container
 ```
 
 - **A single all-in-one container** (`docker-compose.yml` service
-  `ChatTrader`, built from the root `Dockerfile`). `deploy/entrypoint.sh`
+  `chattrader`, built from the root `Dockerfile`). `deploy/entrypoint.sh`
   starts three sibling processes inside it: the Node API, nginx (serving the
   built SPA and reverse-proxying `/api/*` to the API on `127.0.0.1:3000`),
   and `cloudflared` in Quick Tunnel mode. If any one of the three exits, the
@@ -38,7 +38,7 @@ Internet ──(Cloudflare edge, Quick Tunnel)── cloudflared (same container
 - **This hostname is not stable.** It changes every time the container
   restarts (including on every deploy). Read the current URL with:
   ```
-  docker compose logs ChatTrader --tail 50 | grep trycloudflare.com
+  docker compose logs chattrader --tail 50 | grep trycloudflare.com
   ```
   `deploy/deploy.sh` prints it automatically at the end of each deploy.
 - **Database is SQLite**, stored in the `api-data` named Docker volume,
@@ -63,7 +63,7 @@ cp apps/api/.env.example .env
 # (see below) — update and redeploy after the first run if using Google OAuth.
 chmod 600 .env
 docker compose up -d --build
-docker compose logs ChatTrader --tail 50 | grep trycloudflare.com
+docker compose logs chattrader --tail 50 | grep trycloudflare.com
 ```
 
 Verify: `curl https://<the-tunnel-url>/api/agents` (should get a 401 without
@@ -126,18 +126,26 @@ beyond internal testing:
   `docker-compose.yml`, and update `DATABASE_URL` in `.env`. Out of scope for
   this pass per current decision to keep SQLite.
 - **Real traffic / need to scale API and web independently** → split the
-  single `ChatTrader` service back into separate `api`/`web`/`cloudflared`
+  single `chattrader` service back into separate `api`/`web`/`cloudflared`
   services (each already has its own build stage in the `Dockerfile`); this
   undoes the single-container simplification made for this initial,
   no-real-traffic deployment.
 
-## Known gaps / not yet verified
+## Known gaps / build verification history
 
-- **The all-in-one image has not been build-tested** in this environment
-  (no Docker daemon available in the sandbox this was authored in — only
-  `docker compose config` was validated, which checks YAML/env wiring but
-  not the actual image build). **Before the first real deploy**, run
-  `docker compose build` (or `docker build .`) on a machine with Docker
-  running and fix anything that comes up (Alpine's `nginx` package config
-  paths, `cloudflared` binary compatibility, etc. were written from
-  documentation, not a verified build).
+- **The all-in-one image has been build-tested locally** (build + run +
+  curl-verified SPA and `/api/*` proxy routing). Two real bugs were found
+  and fixed along the way:
+  1. `deploy/entrypoint.sh` had CRLF line endings from a Windows checkout,
+     breaking its bash shebang inside the Linux container — fixed, and a
+     `.gitattributes` (`*.sh text eol=lf`) added so this can't recur.
+  2. The API's compiled `dist/main.js` failed under Node's ESM loader
+     (`apps/api` is `"type": "module"` but its source imports omit `.js`
+     extensions, which compiled ESM output requires) — fixed by running the
+     API from source via `tsx` at runtime, matching
+     `apps/api/package.json`'s existing `start`/`dev` scripts. `tsc` still
+     runs during the build as a type-check gate; its output just isn't what
+     ships/runs.
+- Not yet verified: a real deploy against the actual Hetzner server (this
+  was only tested on a local machine). Follow
+  `docs/deployment-procedure.md` for that.

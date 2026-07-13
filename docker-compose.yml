@@ -7,7 +7,7 @@
 # Nothing sensitive is baked into the image or written into this file.
 
 services:
-  ChatTrader:
+  chattrader:
     build:
       context: .
       dockerfile: Dockerfile
@@ -18,11 +18,12 @@ services:
       NODE_ENV: production
     volumes:
       - api-data:/app/api/prisma
-    # No published ports needed in production — cloudflared dials out to
-    # Cloudflare's edge, nothing needs to reach this container from the
-    # host. Uncomment for local testing without a tunnel:
-    # ports:
-    #   - "127.0.0.1:8080:80"
+    # Published on the host so the server's public IP works directly
+    # (temporary, until a real domain + named Cloudflare tunnel replaces
+    # this — see deploy/README.md). cloudflared's Quick Tunnel keeps
+    # running alongside this regardless; both access paths work.
+    ports:
+      - "80:80"
 
 volumes:
   api-data:

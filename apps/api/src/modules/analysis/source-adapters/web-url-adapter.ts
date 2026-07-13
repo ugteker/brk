@@ -1,10 +1,10 @@
 import type { SourceAdapter, SourceConfig, SourceFetchOptions, SourceFetchResult } from '../types';
 import { crawlSource, type SmartCrawlerDeps } from './smart-crawler';
 
-export type HttpGet = (url: string) => Promise<string>;
+export type HttpGet = (url: string, headers?: Record<string, string>) => Promise<string>;
 
-export const defaultHttpGet: HttpGet = async (url) => {
-  const response = await fetch(url);
+export const defaultHttpGet: HttpGet = async (url, headers) => {
+  const response = await fetch(url, headers ? { headers } : undefined);
   return response.text();
 };
 

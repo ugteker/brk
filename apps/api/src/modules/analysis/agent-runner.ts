@@ -109,6 +109,8 @@ export class AgentRunner {
             });
           }
         } catch (error) {
+          // eslint-disable-next-line no-console
+          console.warn(`[agent-runner] Failed to fetch source ${source.value}:`, error);
           sourceWarnings.push(
             `Failed to fetch source ${source.value}: ${error instanceof Error ? error.message : 'unknown error'}`
           );
@@ -118,7 +120,13 @@ export class AgentRunner {
       if (evidence.length === 0) {
         // Nothing new was found across any source this run: skip the Claude call/report entirely
         // and leave cursors untouched (a failed/skipped source's items remain unseen for retry).
-        return { status: 'succeeded_no_new_content' };
+        // Surface any collected warnings (e.g. a forced episode-picker selection that couldn't be
+        // found in the current feed fetch) via errorMessage so they're visible in the Runs view,
+        // instead of silently looking identical to "nothing new to report".
+        return {
+          status: 'succeeded_no_new_content',
+          errorMessage: sourceWarnings.length > 0 ? sourceWarnings.join(' | ') : undefined
+        };
       }
 
       await this.setPhase(agentRunId, 'analyzing');

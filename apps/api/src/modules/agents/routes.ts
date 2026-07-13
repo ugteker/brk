@@ -52,7 +52,11 @@ export async function registerAgentRoutes(app: FastifyInstance, repo: AgentRepos
     }
 
     const agent = await repo.createAgent('admin-user-id', input);
-    await sendAgentChangeConfirmation(mailer, agent, 'created');
+    // Don't block the response on sending the confirmation email - it never
+    // throws (errors are caught/logged internally), but without a connection
+    // timeout on a misbehaving/unreachable SMTP host this could otherwise
+    // hang the request well past nginx's own proxy timeout.
+    void sendAgentChangeConfirmation(mailer, agent, 'created');
     return reply.status(201).send(agent);
   });
 
@@ -97,7 +101,7 @@ export async function registerAgentRoutes(app: FastifyInstance, repo: AgentRepos
     const patch = req.body as Partial<CreateAgentInput>;
     try {
       const agent = await repo.updateAgent(agentId, patch);
-      await sendAgentChangeConfirmation(mailer, agent, 'updated');
+      void sendAgentChangeConfirmation(mailer, agent, 'updated');
       return reply.status(200).send(agent);
     } catch {
       return reply.status(404).send({ code: 'not_found', message: 'Agent not found' });

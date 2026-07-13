@@ -61,6 +61,29 @@ it('shows the error reason (errorMessage) for failed runs, not just the opaque e
   expect(screen.getByText(/Claude API request timed out after 30000ms/i)).toBeInTheDocument();
 });
 
+it('shows a warning with the episode URL as a clickable link when a no-new-content run collected a warning', () => {
+  render(
+    <AgentRunsBrowser
+      agentId="agent-1"
+      runs={[
+        createRun({
+          status: 'succeeded_no_new_content',
+          errorMessage: 'No transcript/captions available for YouTube video https://www.youtube.com/watch?v=Sx5Gy5YqImY'
+        })
+      ]}
+    />
+  );
+  expect(screen.getByText(/No content found/i)).toBeInTheDocument();
+  const link = screen.getByRole('link', { name: 'https://www.youtube.com/watch?v=Sx5Gy5YqImY' });
+  expect(link).toHaveAttribute('href', 'https://www.youtube.com/watch?v=Sx5Gy5YqImY');
+  expect(link).toHaveAttribute('target', '_blank');
+});
+
+it('does not show a warning alert for a plain no-new-content run with no collected warning', () => {
+  render(<AgentRunsBrowser agentId="agent-1" runs={[createRun({ status: 'succeeded_no_new_content', errorMessage: null })]} />);
+  expect(screen.queryByText(/No content found/i)).not.toBeInTheDocument();
+});
+
 it('shows an artifact preview with a download button', () => {
   render(
     <AgentRunsBrowser

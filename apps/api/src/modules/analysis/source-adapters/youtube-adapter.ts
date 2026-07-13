@@ -4,6 +4,7 @@ import type { SourceCursorRepositoryLike } from '../../crawler/source-cursor-rep
 import { parseFeedItems } from './feed-items';
 import type { SourceProbeResult } from './smart-crawler';
 import { toPreviewItems } from './smart-crawler';
+import { ProxyAgent } from 'undici';
 
 const DEFAULT_MAX_ITEMS_PER_RUN = 1;
 const ABSOLUTE_MAX_ITEMS_PER_RUN = 10;
@@ -16,14 +17,55 @@ const MAX_SEEN_ITEM_IDS = 200;
 const YOUTUBE_FEED_ITEM_CAP = 15;
 
 /** POSTs a JSON body to `url` and returns the raw response text. */
-export type HttpPostJson = (url: string, body: unknown) => Promise<string>;
+export type HttpPostJson = (url: string, body: unknown, headers?: Record<string, string>) => Promise<string>;
 
-export const defaultHttpPostJson: HttpPostJson = async (url, body) => {
+/**
+ * Optional YouTube session cookie (raw `Cookie:` header value, e.g. exported from a signed-in
+ * browser session via an extension like "Get cookies.txt"), applied to every YouTube request when
+ * set. YouTube sometimes returns `playabilityStatus: "LOGIN_REQUIRED"` for caption/player requests
+ * from IPs it doesn't trust (e.g. Hetzner's datacenter range) even with realistic headers and
+ * multiple client impersonations - attaching a real authenticated session's cookies satisfies that
+ * check directly. Cheaper to try than an outbound proxy, but not permanent: exported cookies
+ * eventually get invalidated (Google may force a re-login on the source account once it notices
+ * automated traffic from an unfamiliar IP), so this may need periodic re-export/redeploy.
+ */
+const YOUTUBE_COOKIE_HEADER: Record<string, string> = process.env.YOUTUBE_COOKIE ? { Cookie: process.env.YOUTUBE_COOKIE } : {};
+
+// YouTube treats requests from known datacenter/VPS IP ranges (e.g. Hetzner) with much more
+// suspicion than residential IPs, and a header-less request (Node's plain `fetch(url)` sends no
+// User-Agent at all) is itself an easy bot signal on top of that - both the watch-page HTML fetch
+// and the innertube API call below impersonate a real client's headers to reduce the chance of
+// getting a stripped-down/bot-walled response.
+const YOUTUBE_WATCH_PAGE_HEADERS: Record<string, string> = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Accept-Language': 'en-US,en;q=0.9',
+  ...YOUTUBE_COOKIE_HEADER
+};
+
+/**
+ * Optional outbound proxy for YouTube requests only (watch-page fetch + innertube API calls),
+ * configured via `YOUTUBE_PROXY_URL` (e.g. a residential/mobile proxy service's URL). This is the
+ * guaranteed fallback lever if YouTube's IP-based blocking of datacenter/VPS ranges (like
+ * Hetzner's) persists despite the header/client impersonation below: routing just these requests
+ * through a non-datacenter IP reliably bypasses it. Left undefined (direct requests) if unset.
+ */
+const youtubeProxyDispatcher = process.env.YOUTUBE_PROXY_URL ? new ProxyAgent(process.env.YOUTUBE_PROXY_URL) : undefined;
+
+/** `httpGet`/`httpPostJson` wrappers that route through `YOUTUBE_PROXY_URL` when configured -
+ * use these (instead of the generic `defaultHttpGet`/`defaultHttpPostJson`) for any YouTube
+ * request so the proxy config stays scoped to YouTube and doesn't affect other adapters. */
+export const youtubeHttpGet: HttpGet = async (url, headers) => {
+  const response = await fetch(url, { headers, dispatcher: youtubeProxyDispatcher } as RequestInit);
+  return response.text();
+};
+
+export const defaultHttpPostJson: HttpPostJson = async (url, body, headers) => {
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+    dispatcher: youtubeProxyDispatcher
+  } as RequestInit);
   return response.text();
 };
 
@@ -98,7 +140,7 @@ async function resolveHandleFeedUrl(url: string, httpGet: HttpGet): Promise<stri
     if (!parsed.hostname.includes('youtube.com')) return null;
     if (!/^\/(@|c\/|user\/)/.test(parsed.pathname)) return null;
 
-    const html = await httpGet(url);
+    const html = await httpGet(url, YOUTUBE_WATCH_PAGE_HEADERS);
     const match = html.match(/"channelId":"(UC[\w-]{10,})"/);
     return match ? `https://www.youtube.com/feeds/videos.xml?channel_id=${match[1]}` : null;
   } catch {
@@ -149,6 +191,44 @@ interface YouTubeCaptionTrack {
   kind?: string;
 }
 
+/**
+ * innertube client impersonations to try, in order, when fetching a video's caption track list.
+ * YouTube's blocking of unauthenticated/datacenter-IP caption requests is often client-specific
+ * (e.g. it may reject ANDROID but still serve WEB, or vice versa), so trying several before giving
+ * up meaningfully improves success odds beyond a single hardcoded client - this mirrors what tools
+ * like yt-dlp do for the same reason.
+ */
+const INNERTUBE_CLIENT_ATTEMPTS: Array<{ context: { client: Record<string, unknown> }; headers: Record<string, string> }> = [
+  {
+    context: YOUTUBE_INNERTUBE_ANDROID_CONTEXT,
+    headers: {
+      'User-Agent': 'com.google.android.youtube/19.30.36 (Linux; U; Android 14) gzip',
+      'X-YouTube-Client-Name': '3',
+      'X-YouTube-Client-Version': '19.30.36',
+      ...YOUTUBE_COOKIE_HEADER
+    }
+  },
+  {
+    context: { client: { clientName: 'IOS', clientVersion: '19.30.4', deviceModel: 'iPhone16,2' } },
+    headers: {
+      'User-Agent': 'com.google.ios.youtube/19.30.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)',
+      'X-YouTube-Client-Name': '5',
+      'X-YouTube-Client-Version': '19.30.4',
+      ...YOUTUBE_COOKIE_HEADER
+    }
+  },
+  {
+    context: { client: { clientName: 'WEB', clientVersion: '2.20240726.00.00' } },
+    headers: {
+      ...YOUTUBE_WATCH_PAGE_HEADERS,
+      'X-YouTube-Client-Name': '1',
+      'X-YouTube-Client-Version': '2.20240726.00.00',
+      Origin: 'https://www.youtube.com',
+      Referer: 'https://www.youtube.com/'
+    }
+  }
+];
+
 function extractInnertubeApiKey(watchPageHtml: string): string | null {
   const match = watchPageHtml.match(/"INNERTUBE_API_KEY":\s*"([a-zA-Z0-9_-]+)"/);
   return match ? match[1] : null;
@@ -156,12 +236,14 @@ function extractInnertubeApiKey(watchPageHtml: string): string | null {
 
 /**
  * Fetches the caption track list for a video via YouTube's internal "innertube" player API,
- * impersonating the Android client. This is necessary because caption URLs scraped directly from
- * the public watch page are signed with a PO-Token requirement (see `extractCaptionTrackBaseUrl`)
- * and silently return empty bodies; the Android client's caption URLs have no such restriction and
- * can be downloaded directly. Falls back to scraping the watch page directly (as a single-item
- * "track list") if the innertube call can't be made or comes back empty, e.g. because the API key
- * couldn't be found or the endpoint itself is unreachable.
+ * trying several client impersonations in turn (see `INNERTUBE_CLIENT_ATTEMPTS`) since YouTube's
+ * blocking of unauthenticated caption requests (particularly from datacenter/VPS IPs) is often
+ * client-specific. This is necessary because caption URLs scraped directly from the public watch
+ * page are signed with a PO-Token requirement (see `extractCaptionTrackBaseUrl`) and silently
+ * return empty bodies; the innertube clients' caption URLs have no such restriction and can be
+ * downloaded directly. Falls back to scraping the watch page directly (as a single-item "track
+ * list") if no innertube attempt succeeds, e.g. because the API key couldn't be found or every
+ * client impersonation was rejected.
  */
 async function fetchCaptionTracks(
   videoId: string,
@@ -169,21 +251,40 @@ async function fetchCaptionTracks(
   httpPostJson: HttpPostJson
 ): Promise<YouTubeCaptionTrack[]> {
   const apiKey = extractInnertubeApiKey(watchPageHtml);
+  // Diagnostic logging: only fires on the failure path (caller already treats "no tracks" as
+  // exceptional), so this stays silent for the overwhelming majority of successful fetches while
+  // giving enough detail to tell apart the possible causes (bot-walled watch page vs. a
+  // client-specific innertube rejection vs. a network-level block) without needing server access.
+  if (!apiKey) {
+    console.warn(`[youtube-adapter] video ${videoId}: no INNERTUBE_API_KEY found in watch page HTML (len=${watchPageHtml.length}) - likely served a stripped-down/bot-walled page`);
+  }
   if (apiKey) {
-    try {
-      const responseText = await httpPostJson(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}`, {
-        context: YOUTUBE_INNERTUBE_ANDROID_CONTEXT,
-        videoId
-      });
-      const data = JSON.parse(responseText);
-      const tracks: YouTubeCaptionTrack[] | undefined = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-      if (tracks && tracks.length > 0) return tracks;
-    } catch {
-      // fall through to the watch-page scrape fallback below
+    for (const attempt of INNERTUBE_CLIENT_ATTEMPTS) {
+      try {
+        const responseText = await httpPostJson(
+          `https://www.youtube.com/youtubei/v1/player?key=${apiKey}`,
+          { context: attempt.context, videoId },
+          attempt.headers
+        );
+        const data = JSON.parse(responseText);
+        const tracks: YouTubeCaptionTrack[] | undefined = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+        if (tracks && tracks.length > 0) return tracks;
+        console.warn(
+          `[youtube-adapter] video ${videoId}: innertube client "${attempt.context.client.clientName}" returned 0 caption tracks ` +
+            `(playabilityStatus=${JSON.stringify(data?.playabilityStatus?.status)}, responseLen=${responseText.length})`
+        );
+      } catch (error) {
+        console.warn(
+          `[youtube-adapter] video ${videoId}: innertube client "${attempt.context.client.clientName}" request threw: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
   }
 
   const fallbackBaseUrl = extractCaptionTrackBaseUrl(watchPageHtml);
+  if (!fallbackBaseUrl) {
+    console.warn(`[youtube-adapter] video ${videoId}: watch-page scrape fallback also found no captionTracks in the embedded player response`);
+  }
   return fallbackBaseUrl ? [{ baseUrl: fallbackBaseUrl }] : [];
 }
 
@@ -223,11 +324,11 @@ export async function fetchYouTubeTranscript(
   preloadedWatchPageHtml?: string
 ): Promise<string> {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const html = preloadedWatchPageHtml ?? (await httpGet(watchUrl));
+  const html = preloadedWatchPageHtml ?? (await httpGet(watchUrl, YOUTUBE_WATCH_PAGE_HEADERS));
 
   const tracks = await fetchCaptionTracks(videoId, html, httpPostJson);
   if (tracks.length === 0) {
-    throw new Error(`No transcript/captions available for YouTube video ${videoId}`);
+    throw new Error(`No transcript/captions available for YouTube video ${watchUrl}`);
   }
 
   const manual = tracks.find((track) => track.kind !== 'asr');
@@ -237,7 +338,7 @@ export async function fetchYouTubeTranscript(
   const timedText = await httpGet(chosen.baseUrl);
   const transcript = stripTimedTextXml(timedText);
   if (!transcript) {
-    throw new Error(`Transcript for YouTube video ${videoId} was empty`);
+    throw new Error(`Transcript for YouTube video ${watchUrl} was empty`);
   }
   return transcript;
 }
@@ -315,7 +416,7 @@ export class YouTubeAdapter implements SourceAdapter {
     feedUrl: string,
     options?: SourceFetchOptions
   ): Promise<SourceFetchResult> {
-    const feedXml = await this.deps.httpGet(feedUrl);
+    const feedXml = await this.deps.httpGet(feedUrl, YOUTUBE_WATCH_PAGE_HEADERS);
     const items = parseFeedItems(feedXml);
     const cursor = await this.deps.cursorRepository.getCursor(agentId, source.value);
     const seenIds = new Set(cursor?.seenItemIds ?? []);
@@ -333,7 +434,17 @@ export class YouTubeAdapter implements SourceAdapter {
           .slice(0, resolveMaxItems(source));
 
     if (candidates.length === 0) {
-      return { evidence: [] };
+      // If a specific episode was requested (episode picker) but isn't found in the current feed
+      // fetch, surface a clear warning instead of silently reporting "no content" - the feed may
+      // only expose a limited recent window (e.g. YouTube's public playlist/channel feeds cap at
+      // 15 items) and no longer include the requested video, or the stored link may not match
+      // exactly.
+      return {
+        evidence: [],
+        warning: options?.forcedItemLink
+          ? `Could not find the requested episode (${options.forcedItemLink}) in the current feed fetch — it may have been removed, or no longer appear in YouTube's recent-items feed.`
+          : undefined
+      };
     }
 
     const evidence: EvidenceBlock[] = [];
@@ -395,7 +506,7 @@ export async function probeYouTubeSource(
     let watchPageHtml: string | null = null;
     let title: string | null = null;
     try {
-      watchPageHtml = await deps.httpGet(watchUrl);
+      watchPageHtml = await deps.httpGet(watchUrl, YOUTUBE_WATCH_PAGE_HEADERS);
       title = extractVideoTitle(watchPageHtml);
     } catch {
       // best-effort only - the transcript fetch below still determines reachability/warning
@@ -428,7 +539,7 @@ export async function probeYouTubeSource(
   }
 
   try {
-    const feedXml = await deps.httpGet(feedUrl);
+    const feedXml = await deps.httpGet(feedUrl, YOUTUBE_WATCH_PAGE_HEADERS);
     const items = parseFeedItems(feedXml);
     const maxItemsPerRun = resolveMaxItems(source);
     return {
