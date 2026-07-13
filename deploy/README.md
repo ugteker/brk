@@ -40,7 +40,7 @@ Internet ──(Cloudflare edge, Quick Tunnel)── cloudflared (same container
   ```
   docker compose logs chattrader --tail 50 | grep trycloudflare.com
   ```
-  `deploy/deploy.sh` prints it automatically at the end of each deploy.
+  Read the current URL by running `docker compose logs chattrader --tail 50 | grep trycloudflare.com` on the server.
 - **Database is SQLite**, stored in the `api-data` named Docker volume,
   mounted at `/app/api/prisma` in the container — survives
   `docker compose up`/rebuilds, but has no separate backup mechanism yet.
@@ -70,9 +70,7 @@ Verify: `curl https://<the-tunnel-url>/api/agents` (should get a 401 without
 a session cookie — confirms the proxy chain works end to end) and open the
 tunnel URL in a browser to confirm the SPA loads.
 
-After this, all future deploys are handled by
-[`deploy/deploy.sh`](./deploy.sh), either run manually over SSH or
-automatically by CI (below).
+After this, all future deploys are handled automatically by CI (see GitHub Actions below), or can be triggered manually — see the "Ongoing deploys" section.
 
 ## GitHub Actions (`.github/workflows/deploy.yml`)
 
@@ -83,8 +81,8 @@ Release/deploy policy:
 
 On every push to `master`: runs `apps/api` and `apps/web` test suites, then (if
 they pass) SSHes into the Hetzner server, rewrites `/opt/ChatTrader/.env` from
-a GitHub secret, and runs `deploy/deploy.sh` (which does `git pull --ff-only origin master` +
-`docker compose build` + `docker compose up -d`).
+a GitHub secret, and SSHes in to run `git pull --ff-only origin master` +
+`docker compose build` + `docker compose up -d`.
 
 ### Required repository secrets
 

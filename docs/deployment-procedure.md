@@ -168,10 +168,12 @@ suites, then (if green) SSH into the server, rewrite `.env` from
 - **Manual**: SSH to the server and run:
   ```bash
   cd /opt/ChatTrader
-  ./deploy/deploy.sh
+  git pull --ff-only origin master
+  docker compose build
+  docker compose up -d --remove-orphans
+  docker compose logs chattrader --tail 50 | grep trycloudflare.com
   ```
-  This does `git pull --ff-only origin master` + `docker compose build` + `docker compose up -d`,
-  then prints the current tunnel URL.
+  This pulls the latest code, rebuilds the image, and restarts the container.
 
 ## Rotating secrets
 
