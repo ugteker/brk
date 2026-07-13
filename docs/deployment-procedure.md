@@ -126,9 +126,9 @@ confirm the ChatTrader SPA loads and you can sign up/log in.
 
 ## Step 7 — Set up GitHub Actions for future deploys
 
-Add these repository secrets under **Settings → Secrets and variables →
-Actions** in `ugteker/brk` (ideally scoped to a `production` environment
-for an approval gate):
+Add these under **Settings → Environments → `production` → Environment secrets**
+in `ugteker/brk` (the deploy job runs with `environment: production`, so this
+is the required scope):
 
 | Secret | Value |
 | --- | --- |
@@ -136,6 +136,10 @@ for an approval gate):
 | `HETZNER_USER` | SSH user with access to `/opt/ChatTrader` and Docker |
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
 | `HETZNER_APP_ENV` | The entire contents of the production `.env` file from Step 3 |
+
+If these are not present in the `production` environment, deployment fails in
+`appleboy/ssh-action` with `Error: missing server host` because host/user/key
+inputs resolve empty.
 
 Release/deploy policy:
 - Deployment is triggered by pushes to `master` only.

@@ -55,10 +55,9 @@ jobs:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           envs: HETZNER_APP_ENV
           script: |
+            set -e
             umask 077
-            cat > /opt/ChatTrader/.env <<'CHATTRADER_ENV_EOF'
-            ${HETZNER_APP_ENV}
-            CHATTRADER_ENV_EOF
+            printf '%s\n' "$HETZNER_APP_ENV" > /opt/ChatTrader/.env
             chmod 600 /opt/ChatTrader/.env
             cd /opt/ChatTrader
             git pull --ff-only origin master
