@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Button, Empty, Popconfirm, Spin, Table, Tag, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { ArrowLeftOutlined, DeleteOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
-import { deleteUser, lockUser, listUsers, unlockUser, type AdminUserView } from '../api/admin';
+import { deleteUser, demoteUser, lockUser, listUsers, promoteUser, unlockUser, type AdminUserView } from '../api/admin';
+import { getBuildStampLabel } from '../lib/build-info';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -14,6 +15,7 @@ export function AdminUsersPage({ onBack }: AdminUsersPageProps) {
   const [users, setUsers] = useState<AdminUserView[]>([]);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const buildStampLabel = getBuildStampLabel();
 
   async function refresh() {
     try {
@@ -40,6 +42,32 @@ export function AdminUsersPage({ onBack }: AdminUsersPageProps) {
       message.error(error instanceof Error ? error.message : 'Action failed');
     } finally {
       setBusyUserId(null);
+    }
+  }
+
+  async function onToggleRole(target: AdminUserView) {
+    setBusyUserId(target.id);
+    try {
+      const updated = target.role === 'admin' ? await demoteUser(target.id) : await promoteUser(target.id);
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+      message.success(target.role === 'admin' ? 'User demoted' : 'User promoted');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Action failed');
+    } finally {
+      setBusyUserId(null);
+    }
+
+    async function onToggleRole(target: AdminUserView) {
+      setBusyUserId(target.id);
+      try {
+        const updated = target.role === 'admin' ? await demoteUser(target.id) : await promoteUser(target.id);
+        setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+        message.success(target.role === 'admin' ? 'User demoted' : 'User promoted');
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : 'Action failed');
+      } finally {
+        setBusyUserId(null);
+      }
     }
   }
 
@@ -91,6 +119,12 @@ export function AdminUsersPage({ onBack }: AdminUsersPageProps) {
       render: (locked: boolean) => (locked ? <Tag color="red">Locked</Tag> : <Tag color="green">Active</Tag>)
     },
     {
+      title: 'Role',
+      dataIndex: 'role',
+      key: 'role',
+      render: (role: AdminUserView['role']) => (role === 'admin' ? <Tag color="gold">Admin</Tag> : <Tag>User</Tag>)
+    },
+    {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
@@ -102,6 +136,13 @@ export function AdminUsersPage({ onBack }: AdminUsersPageProps) {
             aria-label={record.locked ? `Unlock ${record.email}` : `Lock ${record.email}`}
           >
             {record.locked ? 'Unlock' : 'Lock'}
+          </Button>
+          <Button
+            onClick={() => onToggleRole(record)}
+            loading={busyUserId === record.id}
+            aria-label={`${record.role === 'admin' ? 'Make user' : 'Make admin'} ${record.email}`}
+          >
+            {record.role === 'admin' ? 'Make user' : 'Make admin'}
           </Button>
           <Popconfirm
             title="Remove this user?"
@@ -133,6 +174,11 @@ export function AdminUsersPage({ onBack }: AdminUsersPageProps) {
           <Paragraph type="secondary" style={{ margin: 0 }}>
             Lock, unlock, or permanently remove user accounts.
           </Paragraph>
+          {buildStampLabel ? (
+            <Paragraph type="secondary" style={{ margin: 0 }} data-testid="admin-build-stamp">
+              {buildStampLabel}
+            </Paragraph>
+          ) : null}
         </div>
       </div>
       {loadState === 'loading' && users.length === 0 ? (

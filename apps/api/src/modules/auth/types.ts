@@ -2,6 +2,7 @@ export interface AuthUser {
   id: string;
   email: string;
   displayName: string | null;
+  role: 'user' | 'admin';
   hasPassword: boolean;
   hasGoogleLinked: boolean;
   emailVerified: boolean;
@@ -14,6 +15,7 @@ export interface UserRecord {
   passwordHash: string | null;
   googleId: string | null;
   displayName: string | null;
+  role: 'user' | 'admin';
   emailVerified: boolean;
   emailVerificationToken: string | null;
   emailVerificationExpiresAt: Date | null;
@@ -29,6 +31,7 @@ export function toAuthUser(user: UserRecord): AuthUser {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
+    role: user.role,
     hasPassword: user.passwordHash !== null,
     hasGoogleLinked: user.googleId !== null,
     emailVerified: user.emailVerified,

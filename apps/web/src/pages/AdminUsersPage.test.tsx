@@ -2,11 +2,13 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AdminUsersPage } from './AdminUsersPage';
-import { deleteUser, lockUser, listUsers, unlockUser } from '../api/admin';
+import { deleteUser, lockUser, listUsers, promoteUser, demoteUser, unlockUser } from '../api/admin';
 
 vi.mock('../api/admin', () => ({
   listUsers: vi.fn(),
   lockUser: vi.fn(),
+  promoteUser: vi.fn(),
+  demoteUser: vi.fn(),
   unlockUser: vi.fn(),
   deleteUser: vi.fn()
 }));
@@ -15,6 +17,7 @@ const baseUser = {
   id: 'user-1',
   email: 'trader@example.com',
   displayName: 'Trader',
+  role: 'user',
   hasPassword: true,
   hasGoogleLinked: false,
   createdAt: new Date('2024-01-01').toISOString(),
@@ -24,6 +27,7 @@ const baseUser = {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
 });
 
 it('lists users and locks an active user', async () => {
@@ -75,4 +79,28 @@ it('calls onBack when the back button is clicked', async () => {
 
   fireEvent.click(await screen.findByRole('button', { name: /back to dashboard/i }));
   expect(onBack).toHaveBeenCalled();
+});
+
+it('shows the current build stamp in the admin header', async () => {
+  vi.mocked(listUsers).mockResolvedValue([]);
+  vi.stubEnv('VITE_BUILD_TIMESTAMP', '2026-07-13T12:34:00Z');
+  vi.stubEnv('VITE_BUILD_COMMIT_SHA', 'abc1234');
+
+  render(<AdminUsersPage onBack={vi.fn()} />);
+
+  expect(await screen.findByText(/Build: 2026-07-13 12:34 UTC · abc1234/i)).toBeInTheDocument();
+});
+
+it('can promote and demote users from the admin table', async () => {
+  vi.mocked(listUsers).mockResolvedValue([{ ...baseUser, role: 'user' }, { ...baseUser, id: 'user-2', role: 'admin', email: 'admin@example.com' }]);
+  vi.mocked(promoteUser).mockResolvedValue({ ...baseUser, role: 'admin' });
+  vi.mocked(demoteUser).mockResolvedValue({ ...baseUser, id: 'user-2', email: 'admin@example.com', role: 'user' });
+
+  render(<AdminUsersPage onBack={vi.fn()} />);
+
+  fireEvent.click(await screen.findByRole('button', { name: /make admin trader@example.com/i }));
+  await waitFor(() => expect(promoteUser).toHaveBeenCalledWith('user-1'));
+
+  fireEvent.click(await screen.findByRole('button', { name: /make user admin@example.com/i }));
+  await waitFor(() => expect(demoteUser).toHaveBeenCalledWith('user-2'));
 });

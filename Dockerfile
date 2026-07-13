@@ -27,6 +27,10 @@ RUN npm run build
 
 FROM node:20-alpine AS web-build
 WORKDIR /app/web
+ARG VITE_BUILD_TIMESTAMP
+ARG VITE_BUILD_COMMIT_SHA
+ENV VITE_BUILD_TIMESTAMP=$VITE_BUILD_TIMESTAMP
+ENV VITE_BUILD_COMMIT_SHA=$VITE_BUILD_COMMIT_SHA
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci
 COPY apps/web/ .
@@ -45,6 +49,13 @@ COPY --from=api-build /app/api/prisma ./api/prisma
 COPY apps/api/src ./api/src
 COPY apps/api/tsconfig.json apps/api/tsconfig.build.json ./api/
 COPY apps/api/package.json apps/api/package-lock.json ./api/
+# Keep a copy of schema.prisma outside the volume path so the entrypoint
+# can always restore the image's version before running `prisma db push`.
+# The Docker volume is mounted at /app/api/prisma, which shadows that whole
+# directory (including schema.prisma itself); without this copy, db push
+# would use the *old* schema from the volume instead of the new one.
+RUN cp /app/api/prisma/schema.prisma /app/api/schema.prisma
+
 # SQLite db file lives here at runtime; mount a volume at this path in
 # compose so data survives container recreation.
 VOLUME ["/app/api/prisma"]

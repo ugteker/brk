@@ -13,6 +13,7 @@ model User {
   passwordHash String?
   googleId     String?  @unique
   displayName  String?
+  role                        String   @default("user")
   emailVerified               Boolean   @default(false)
   emailVerificationToken      String?   @unique
   emailVerificationExpiresAt  DateTime?

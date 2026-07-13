@@ -61,6 +61,8 @@ jobs:
             chmod 600 /opt/ChatTrader/.env
             cd /opt/ChatTrader
             git pull --ff-only origin master
+            export VITE_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            export VITE_BUILD_COMMIT_SHA="$(git rev-parse --short HEAD)"
             docker compose build
             docker compose up -d --remove-orphans
             sleep 5

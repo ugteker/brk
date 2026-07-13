@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import { isAdminEmail } from '../../config';
 import type { UserRepositoryLike } from '../auth/repository';
 import type { AuthUser, UserRecord } from '../auth/types';
 import { toAuthUser } from '../auth/types';
@@ -18,8 +17,7 @@ function toAdminUserView(user: UserRecord): AdminUserView {
 
 /**
  * Registers admin-only user management routes (list/lock/unlock/delete). Access is restricted to
- * the single account whose email matches ADMIN_EMAIL (see config.isAdminEmail) - there is no
- * separate roles/permissions system, this mirrors the existing bootstrap-admin-from-env pattern.
+ * users; access is granted to accounts with the persisted admin role.
  */
 export async function registerAdminRoutes(app: FastifyInstance, deps: AdminRoutesDeps) {
   const { userRepository } = deps;
@@ -30,8 +28,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: AdminRoute
     if (!req.userId) {
       return reply.status(401).send({ code: 'unauthenticated', message: 'Sign in required' });
     }
-    const requester = await userRepository.findById(req.userId);
-    if (!requester || !isAdminEmail(requester.email)) {
+    if (req.userRole !== 'admin') {
       return reply.status(403).send({ code: 'forbidden', message: 'Admin access required' });
     }
   });
@@ -58,6 +55,29 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: AdminRoute
     const { userId } = req.params as { userId: string };
     try {
       const user = await userRepository.setLocked(userId, false);
+      return reply.status(200).send(toAdminUserView(user));
+    } catch {
+      return reply.status(404).send({ code: 'not_found', message: 'User not found' });
+    }
+  });
+
+  app.post('/api/admin/users/:userId/promote', async (req, reply) => {
+    const { userId } = req.params as { userId: string };
+    try {
+      const user = await userRepository.setRole(userId, 'admin');
+      return reply.status(200).send(toAdminUserView(user));
+    } catch {
+      return reply.status(404).send({ code: 'not_found', message: 'User not found' });
+    }
+  });
+
+  app.post('/api/admin/users/:userId/demote', async (req, reply) => {
+    const { userId } = req.params as { userId: string };
+    if (userId === req.userId) {
+      return reply.status(400).send({ code: 'cannot_demote_self', message: 'You cannot demote your own account' });
+    }
+    try {
+      const user = await userRepository.setRole(userId, 'user');
       return reply.status(200).send(toAdminUserView(user));
     } catch {
       return reply.status(404).send({ code: 'not_found', message: 'User not found' });

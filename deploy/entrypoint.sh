@@ -32,6 +32,12 @@ cleanup() {
 }
 trap cleanup TERM INT
 
+# Restore the current image's schema.prisma before syncing. The Docker
+# volume is mounted at /app/api/prisma, which shadows the entire directory
+# (including schema.prisma), so without this step `prisma db push` would
+# run with the *old* schema from the volume — the Prisma client was compiled
+# from the new schema, causing column-not-found errors at runtime.
+cp /app/api/schema.prisma /app/api/prisma/schema.prisma
 # Sync the SQLite schema against the persisted /app/api/prisma volume before
 # starting the API. Uses `prisma db push` (schema sync, not migration
 # history) to match this repo's own dev-environment convention (see

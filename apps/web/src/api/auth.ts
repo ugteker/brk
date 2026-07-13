@@ -2,6 +2,7 @@ export interface AuthUser {
   id: string;
   email: string;
   displayName: string | null;
+  role: 'user' | 'admin';
   hasPassword: boolean;
   hasGoogleLinked: boolean;
   createdAt: string;

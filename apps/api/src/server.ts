@@ -11,6 +11,7 @@ import { verifySessionToken } from './modules/auth/jwt';
 declare module 'fastify' {
   interface FastifyRequest {
     userId?: string;
+    userRole?: 'user' | 'admin';
   }
 }
 
@@ -42,7 +43,14 @@ export async function buildServer(deps: ServerDeps) {
       reply.status(401).send({ code: 'unauthenticated', message: 'Sign in required' });
       return;
     }
-    req.userId = payload.userId;
+    const user = await deps.auth.userRepository.findById(payload.userId);
+    if (!user) {
+      req.userId = payload.userId;
+      req.userRole = 'user';
+      return;
+    }
+    req.userId = user.id;
+    req.userRole = user.role;
   });
 
   await registerAuthRoutes(app, deps.auth);

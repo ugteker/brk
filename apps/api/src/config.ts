@@ -78,10 +78,3 @@ export function isSmtpConfigured(): boolean {
 export function isGoogleOAuthConfigured(): boolean {
   return config.auth.google.clientId.length > 0 && config.auth.google.clientSecret.length > 0;
 }
-
-// The only account allowed to reach admin-only routes (user management) - configured purely via
-// backend env (ADMIN_EMAIL), matching the same account bootstrapped by bootstrapAdminAccount().
-export function isAdminEmail(email: string): boolean {
-  const adminEmail = config.auth.bootstrapAdmin.email;
-  return !!adminEmail && adminEmail.toLowerCase() === email.toLowerCase();
-}

@@ -44,6 +44,9 @@ async function bootstrapAdminAccount(userRepository: UserRepository) {
     // The account may have been created before email-confirmation/locking existed, or before this
     // bootstrap fix landed - make sure the configured admin is always usable on every boot, not
     // just at first creation, otherwise the admin can get silently locked out of their own app.
+    if (existing.role !== 'admin') {
+      await userRepository.setRole(existing.id, 'admin');
+    }
     if (!existing.emailVerified) {
       await userRepository.setEmailVerified(existing.id, true);
     }
@@ -54,7 +57,7 @@ async function bootstrapAdminAccount(userRepository: UserRepository) {
   }
 
   const passwordHash = await hashPassword(password);
-  const admin = await userRepository.createWithPassword(email, passwordHash, 'Admin');
+  const admin = await userRepository.createWithPassword(email, passwordHash, 'Admin', 'admin');
   // The bootstrap admin is configured directly via trusted backend env vars, bypassing the
   // normal signup/email-confirmation flow entirely - so it must be marked verified up front,
   // otherwise the new email-verification login gate would lock the admin out of their own app.
@@ -124,6 +127,4 @@ async function start() {
 }
 
 start();
-
-
 

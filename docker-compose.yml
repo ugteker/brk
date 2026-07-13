@@ -11,6 +11,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_BUILD_TIMESTAMP: ${VITE_BUILD_TIMESTAMP:-}
+        VITE_BUILD_COMMIT_SHA: ${VITE_BUILD_COMMIT_SHA:-}
     restart: unless-stopped
     env_file:
       - .env

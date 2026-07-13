@@ -98,9 +98,9 @@ function mapAgent(row: any): Agent {
 export class AgentRepository {
   constructor(private readonly db: AgentDb) {}
 
-  async listAgents(ownerUserId: string): Promise<AgentListItem[]> {
+  async listAgents(ownerUserId?: string): Promise<AgentListItem[]> {
     const rows = await this.db.agent.findMany({
-      where: { ownerUserId },
+      where: ownerUserId ? { ownerUserId } : {},
       include: {
         sources: true,
         schedules: { orderBy: { createdAt: 'desc' }, take: 1 },

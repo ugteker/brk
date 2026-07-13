@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { buildServer } from '../../server';
 import type { Agent, CreateAgentInput } from './types';
 import { authCookieHeader, createTestAuthDeps } from '../../test-utils/auth';
+import { InMemoryUserRepository } from '../auth/in-memory-user-repository';
 
 function createFakeRepo() {
   const agents = new Map<string, Agent>();
+  let nextId = 1;
   return {
     async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
       const agent: Agent = {
-        id: 'agent-1',
+        id: `agent-${nextId++}`,
         ownerUserId,
         name: input.name,
         description: input.description ?? '',
@@ -55,8 +57,8 @@ function createFakeRepo() {
       if (!agents.has(agentId)) throw new Error('not_found');
       agents.delete(agentId);
     },
-    async listAgents(ownerUserId: string): Promise<Agent[]> {
-      return [...agents.values()].filter((agent) => agent.ownerUserId === ownerUserId);
+    async listAgents(ownerUserId?: string): Promise<Agent[]> {
+      return ownerUserId ? [...agents.values()].filter((agent) => agent.ownerUserId === ownerUserId) : [...agents.values()];
     },
     async getAgent(agentId: string): Promise<Agent | null> {
       return agents.get(agentId) ?? null;
@@ -185,6 +187,66 @@ describe('agent routes', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toHaveLength(1);
+  });
+
+  it('creates agents for the signed-in user', async () => {
+    const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader('user-42'),
+      payload: {
+        name: 'Owned Agent',
+        sources: [{ type: 'web_urls', value: 'https://example.com' }],
+        schedule: { mode: 'interval', intervalMinutes: 120 },
+        preferences: { sector: ['tech'] },
+        recipients: ['team@example.com']
+      }
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().ownerUserId).toBe('user-42');
+  });
+
+  it('lets admins list all agents', async () => {
+    const userRepository = new InMemoryUserRepository();
+    const admin = await userRepository.createWithPassword('admin@example.com', 'hash', 'Admin', 'admin');
+    await userRepository.setEmailVerified(admin.id, true);
+    const app = await buildServer({
+      agentRepository: createFakeRepo(),
+      agents: createFakeAgentsDeps(),
+      auth: { ...createTestAuthDeps(), userRepository }
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader('user-1'),
+      payload: {
+        name: 'User One Agent',
+        sources: [{ type: 'web_urls', value: 'https://example.com/one' }],
+        schedule: { mode: 'interval', intervalMinutes: 120 },
+        preferences: { sector: ['tech'] },
+        recipients: ['team@example.com']
+      }
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader('user-2'),
+      payload: {
+        name: 'User Two Agent',
+        sources: [{ type: 'web_urls', value: 'https://example.com/two' }],
+        schedule: { mode: 'interval', intervalMinutes: 120 },
+        preferences: { sector: ['tech'] },
+        recipients: ['team@example.com']
+      }
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/agents', headers: authCookieHeader(admin.id) });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toHaveLength(2);
   });
 
   it('deletes a agent', async () => {

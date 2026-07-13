@@ -12,7 +12,7 @@ export interface AgentRepositoryLike {
   disableAgent(agentId: string): Promise<void>;
   enableAgent(agentId: string): Promise<void>;
   deleteAgent(agentId: string): Promise<void>;
-  listAgents(ownerUserId: string): Promise<AgentListItem[]>;
+  listAgents(ownerUserId?: string): Promise<AgentListItem[]>;
   getAgent(agentId: string): Promise<Agent | null>;
   listRecentRuns(ownerUserId: string, limit: number): Promise<RecentRun[]>;
 }
@@ -51,7 +51,7 @@ export async function registerAgentRoutes(app: FastifyInstance, repo: AgentRepos
       });
     }
 
-    const agent = await repo.createAgent('admin-user-id', input);
+    const agent = await repo.createAgent(req.userId!, input);
     // Don't block the response on sending the confirmation email - it never
     // throws (errors are caught/logged internally), but without a connection
     // timeout on a misbehaving/unreachable SMTP host this could otherwise
@@ -79,12 +79,12 @@ export async function registerAgentRoutes(app: FastifyInstance, repo: AgentRepos
     return reply.status(200).send(result);
   });
 
-  app.get('/api/agents', async () => repo.listAgents('admin-user-id'));
+  app.get('/api/agents', async (req) => repo.listAgents(req.userRole === 'admin' ? undefined : req.userId!));
 
   app.get('/api/agents/runs/recent', async (req) => {
     const { limit } = req.query as { limit?: string };
     const parsedLimit = limit ? Number.parseInt(limit, 10) : 3;
-    return repo.listRecentRuns('admin-user-id', Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 3);
+    return repo.listRecentRuns(req.userId!, Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 3);
   });
 
   app.get('/api/agents/:agentId', async (req, reply) => {

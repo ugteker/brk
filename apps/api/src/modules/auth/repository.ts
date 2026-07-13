@@ -5,12 +5,23 @@ export interface UserRepositoryLike {
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(id: string): Promise<UserRecord | null>;
   findByGoogleId(googleId: string): Promise<UserRecord | null>;
-  createWithPassword(email: string, passwordHash: string, displayName?: string | null): Promise<UserRecord>;
-  createWithGoogle(email: string, googleId: string, displayName?: string | null): Promise<UserRecord>;
+  createWithPassword(
+    email: string,
+    passwordHash: string,
+    displayName?: string | null,
+    role?: UserRecord['role']
+  ): Promise<UserRecord>;
+  createWithGoogle(
+    email: string,
+    googleId: string,
+    displayName?: string | null,
+    role?: UserRecord['role']
+  ): Promise<UserRecord>;
   linkGoogleId(userId: string, googleId: string): Promise<UserRecord>;
   setEmailVerificationToken(userId: string, token: string, expiresAt: Date): Promise<void>;
   verifyEmailByToken(token: string): Promise<UserRecord | null>;
   setEmailVerified(userId: string, verified: boolean): Promise<void>;
+  setRole(userId: string, role: UserRecord['role']): Promise<UserRecord>;
   setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void>;
   resetPasswordByToken(token: string, newPasswordHash: string): Promise<UserRecord | null>;
   listUsers(): Promise<UserRecord[]>;
@@ -35,14 +46,24 @@ export class UserRepository implements UserRepositoryLike {
     return this.db.user.findUnique({ where: { googleId } });
   }
 
-  async createWithPassword(email: string, passwordHash: string, displayName: string | null = null): Promise<UserRecord> {
+  async createWithPassword(
+    email: string,
+    passwordHash: string,
+    displayName: string | null = null,
+    role: UserRecord['role'] = 'user'
+  ): Promise<UserRecord> {
     // emailVerified defaults to false in the schema - password signups must confirm via email.
-    return this.db.user.create({ data: { email, passwordHash, displayName } });
+    return this.db.user.create({ data: { email, passwordHash, displayName, role } });
   }
 
-  async createWithGoogle(email: string, googleId: string, displayName: string | null = null): Promise<UserRecord> {
+  async createWithGoogle(
+    email: string,
+    googleId: string,
+    displayName: string | null = null,
+    role: UserRecord['role'] = 'user'
+  ): Promise<UserRecord> {
     // Google already verified this address on our behalf, so skip the confirmation step.
-    return this.db.user.create({ data: { email, googleId, displayName, emailVerified: true } });
+    return this.db.user.create({ data: { email, googleId, displayName, emailVerified: true, role } });
   }
 
   async linkGoogleId(userId: string, googleId: string): Promise<UserRecord> {
@@ -69,6 +90,10 @@ export class UserRepository implements UserRepositoryLike {
 
   async setEmailVerified(userId: string, verified: boolean): Promise<void> {
     await this.db.user.update({ where: { id: userId }, data: { emailVerified: verified } });
+  }
+
+  async setRole(userId: string, role: UserRecord['role']): Promise<UserRecord> {
+    return this.db.user.update({ where: { id: userId }, data: { role } });
   }
 
   async setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
