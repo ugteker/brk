@@ -355,7 +355,7 @@ export function AgentsPage() {
           <Paragraph type="secondary">
             Create and manage AI agents that crawl sources and produce long/short stock signal reports.
           </Paragraph>
-          <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[2fr_1fr]">
             {isCreatingAgent ? (
               <AgentForm
                 onCancel={() => setIsCreatingAgent(false)}
@@ -381,6 +381,7 @@ export function AgentsPage() {
               />
             ) : selectedAgent ? (
               <Card
+                className="min-w-0"
                 title={
                   <span className="flex items-center gap-2">
                     <Badge
@@ -390,7 +391,7 @@ export function AgentsPage() {
                   </span>
                 }
                 extra={
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <TouchSafeTooltip title="Back to dashboard">
                       <Button
                         aria-label="Back to dashboard"
@@ -494,6 +495,7 @@ export function AgentsPage() {
               </Card>
             ) : (
               <Card
+                className="min-w-0"
                 title={<Title level={4} style={{ margin: 0 }}>Agent dashboard</Title>}
                 extra={
                   <TouchSafeTooltip title="Create agent">
@@ -525,8 +527,8 @@ export function AgentsPage() {
                       onClick={() => setSelectedAgentId(agent.id)}
                       style={{ cursor: 'pointer' }}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0">
                           <h3 className="text-base font-semibold">
                             <Badge
                               status={agent.status === 'disabled' ? 'default' : 'success'}
@@ -554,13 +556,13 @@ export function AgentsPage() {
                             <span className="inline-flex items-center gap-1">
                               <ClockCircleOutlined /> Schedule: {formatAgentSchedule(agent.schedule)}
                             </span>
-                            <span className="inline-flex items-center gap-1">
+                            <span className="inline-flex items-center gap-1 break-all">
                               <MailOutlined />{' '}
                               Emails: {agent.recipients && agent.recipients.length > 0 ? agent.recipients.join(', ') : 'none'}
                             </span>
                           </p>
                         </div>
-                        <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+                        <div className="flex flex-wrap items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
                           <TouchSafeTooltip title="Run agent now">
                             <Button
                               aria-label="Run agent now"

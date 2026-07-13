@@ -130,7 +130,7 @@ describe('AgentRunner (integration with real repositories)', () => {
       })
     };
 
-    const cursorRepository = { getCursor: async () => null, saveCursor: async () => undefined };
+    const cursorRepository = { getCursor: async () => null, saveCursor: async () => undefined, touchCrawlAttempt: async () => undefined };
 
     const runner = new AgentRunner({
       agentRepository,

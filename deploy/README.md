@@ -76,9 +76,14 @@ automatically by CI (below).
 
 ## GitHub Actions (`.github/workflows/deploy.yml`)
 
-On every push to `main`: runs `apps/api` and `apps/web` test suites, then (if
+Release/deploy policy:
+- Deployment is triggered by pushes to `master` only.
+- `alpha` does **not** deploy directly.
+- Promotion flow is: `alpha` -> Pull Request -> merge into `master` -> auto deploy.
+
+On every push to `master`: runs `apps/api` and `apps/web` test suites, then (if
 they pass) SSHes into the Hetzner server, rewrites `/opt/ChatTrader/.env` from
-a GitHub secret, and runs `deploy/deploy.sh` (which does `git pull` +
+a GitHub secret, and runs `deploy/deploy.sh` (which does `git pull --ff-only origin master` +
 `docker compose build` + `docker compose up -d`).
 
 ### Required repository secrets
@@ -94,11 +99,25 @@ approval gate):
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
 | `HETZNER_APP_ENV` | The **entire contents** of the production `.env` file (same keys as `apps/api/.env.example`, with real values) |
 
+### Recommended branch protection
+
+To enforce the release flow above, configure branch protection for `master`:
+- Require a pull request before merging.
+- Require status checks to pass before merging (at minimum the deploy workflow's `test` job).
+- Restrict direct pushes to `master` where possible.
+
+Suggested GitHub UI path:
+1. Go to **Settings -> Branches -> Branch protection rules** (or **Rulesets**).
+2. Target branch: `master`.
+3. Enable **Require a pull request before merging**.
+4. Enable **Require status checks to pass before merging** and select check **`test`** from workflow **Deploy**.
+5. Enable **Restrict who can push to matching branches** (optional but recommended).
+
 `HETZNER_APP_ENV` is written to the server via an SSH heredoc, never passed
 as a CLI argument or echoed — it won't appear in workflow logs. Whenever a
 value in it changes (e.g. rotating `JWT_SECRET`, updating `APP_BASE_URL` to a
 new tunnel hostname), update the secret and re-run the workflow (or push any
-commit to `main`).
+commit to `master`).
 
 ### Rotating secrets
 

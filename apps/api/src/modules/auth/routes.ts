@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword } from './password';
 import { signSessionToken, verifySessionToken } from './jwt';
 import { buildGoogleAuthUrl, type GoogleOAuthClient } from './google-oauth';
 import type { MailerLike } from './mailer';
-import { sendEmailConfirmationLink, sendPasswordResetLink } from './emails';
+import { sendEmailConfirmationLink, sendPasswordResetLink, sendAdminNewUserNotification } from './emails';
 
 export interface AuthRoutesDeps {
   userRepository: UserRepositoryLike;
@@ -33,6 +33,25 @@ function setSessionCookie(reply: import('fastify').FastifyReply, userId: string)
   });
 }
 
+/** Best-effort admin notification for every newly created user account, regardless of signup
+ * method - failures are logged but never thrown, so a broken/misconfigured mailer can't block
+ * signup. Skipped entirely if no mailer or no ADMIN_EMAIL is configured, or if the new account
+ * itself *is* the admin (bootstrap admin account, not a "real" signup to be notified about). */
+async function notifyAdminOfNewUser(
+  mailer: MailerLike | undefined,
+  newUserEmail: string,
+  signupMethod: 'password' | 'google'
+): Promise<void> {
+  const adminEmail = config.auth.bootstrapAdmin.email;
+  if (!mailer || !adminEmail || adminEmail.toLowerCase() === newUserEmail.toLowerCase()) return;
+  try {
+    await sendAdminNewUserNotification(mailer, adminEmail, newUserEmail, signupMethod);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(`[auth] Failed to send admin new-user notification for ${newUserEmail}:`, error);
+  }
+}
+
 export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps) {
   const { userRepository, googleOAuthClient, mailer } = deps;
 
@@ -53,6 +72,7 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesD
 
     const passwordHash = await hashPassword(password);
     const user = await userRepository.createWithPassword(email, passwordHash);
+    void notifyAdminOfNewUser(mailer, user.email, 'password');
 
     // Two-step signup: the account is created but stays unverified/unusable for login until the
     // user clicks the confirmation link we email them - no session cookie is set here.
@@ -228,6 +248,7 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesD
         user = existingByEmail
           ? await userRepository.linkGoogleId(existingByEmail.id, profile.sub)
           : await userRepository.createWithGoogle(profile.email, profile.sub, profile.name ?? null);
+        if (!existingByEmail) void notifyAdminOfNewUser(mailer, user.email, 'google');
       }
 
       if (user.locked) {

@@ -137,19 +137,36 @@ for an approval gate):
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
 | `HETZNER_APP_ENV` | The entire contents of the production `.env` file from Step 3 |
 
-Once set, every push to `main` will: run the `apps/api`/`apps/web` test
+Release/deploy policy:
+- Deployment is triggered by pushes to `master` only.
+- `alpha` does **not** deploy directly.
+- Promotion flow is: `alpha` -> Pull Request -> merge into `master` -> auto deploy.
+
+Recommended repository protection for `master`:
+- Require a pull request before merge.
+- Require status checks before merge (at minimum the deploy workflow `test` job).
+- Restrict direct pushes to `master` where possible.
+
+Suggested GitHub UI path:
+1. Go to **Settings -> Branches -> Branch protection rules** (or **Rulesets**).
+2. Target branch: `master`.
+3. Enable **Require a pull request before merging**.
+4. Enable **Require status checks to pass before merging** and select check **`test`** from workflow **Deploy**.
+5. Enable **Restrict who can push to matching branches** (optional but recommended).
+
+Once set, every push to `master` will: run the `apps/api`/`apps/web` test
 suites, then (if green) SSH into the server, rewrite `.env` from
 `HETZNER_APP_ENV`, and redeploy automatically.
 
 ## Ongoing deploys
 
-- **Automatic**: push to `main` — GitHub Actions handles it (Step 7).
+- **Automatic**: merge PRs from `alpha` to `master` (or push directly to `master`) — GitHub Actions handles it (Step 7).
 - **Manual**: SSH to the server and run:
   ```bash
   cd /opt/ChatTrader
   ./deploy/deploy.sh
   ```
-  This does `git pull` + `docker compose build` + `docker compose up -d`,
+  This does `git pull --ff-only origin master` + `docker compose build` + `docker compose up -d`,
   then prints the current tunnel URL.
 
 ## Rotating secrets

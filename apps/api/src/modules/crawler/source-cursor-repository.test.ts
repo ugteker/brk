@@ -73,6 +73,26 @@ describe('SourceCursorRepository', () => {
     expect(result?.lastContentHash).toBe('abc123');
     expect(result?.strategy).toBe('content_hash');
   });
+
+  it('records a crawl attempt timestamp without an existing cursor row', async () => {
+    const repo = new SourceCursorRepository(createFakeDb() as never);
+    await repo.touchCrawlAttempt('agent-1', 'https://example.com/feed', '2026-07-12T10:00:00.000Z');
+
+    const result = await repo.getCursor('agent-1', 'https://example.com/feed');
+    expect(result?.lastCrawledAt).toBe('2026-07-12T10:00:00.000Z');
+    expect(result?.seenItemIds).toEqual([]);
+  });
+
+  it('updates the crawl attempt timestamp without disturbing the existing cursor', async () => {
+    const repo = new SourceCursorRepository(createFakeDb() as never);
+    await repo.saveCursor(baseState);
+
+    await repo.touchCrawlAttempt('agent-1', 'https://example.com/feed', '2026-07-12T10:00:00.000Z');
+    const result = await repo.getCursor('agent-1', 'https://example.com/feed');
+
+    expect(result?.lastCrawledAt).toBe('2026-07-12T10:00:00.000Z');
+    expect(result?.seenItemIds).toEqual(['item-1', 'item-2']);
+  });
 });
 
 describe('InMemorySourceCursorRepository', () => {
@@ -82,5 +102,23 @@ describe('InMemorySourceCursorRepository', () => {
 
     expect(await repo.getCursor('agent-1', 'https://example.com/feed')).toEqual(baseState);
     expect(await repo.getCursor('agent-2', 'https://example.com/feed')).toBeNull();
+  });
+
+  it('records a crawl attempt timestamp, creating a placeholder cursor if needed', async () => {
+    const repo = new InMemorySourceCursorRepository();
+    await repo.touchCrawlAttempt('agent-1', 'https://example.com/feed', '2026-07-12T10:00:00.000Z');
+
+    const result = await repo.getCursor('agent-1', 'https://example.com/feed');
+    expect(result?.lastCrawledAt).toBe('2026-07-12T10:00:00.000Z');
+  });
+
+  it('updates the crawl attempt timestamp without disturbing an existing cursor', async () => {
+    const repo = new InMemorySourceCursorRepository();
+    await repo.saveCursor(baseState);
+    await repo.touchCrawlAttempt('agent-1', 'https://example.com/feed', '2026-07-12T10:00:00.000Z');
+
+    const result = await repo.getCursor('agent-1', 'https://example.com/feed');
+    expect(result?.lastCrawledAt).toBe('2026-07-12T10:00:00.000Z');
+    expect(result?.seenItemIds).toEqual(['item-1', 'item-2']);
   });
 });

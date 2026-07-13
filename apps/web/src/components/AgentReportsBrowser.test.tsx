@@ -51,6 +51,23 @@ it('shows a per-report AI stats row with model, version, tokens, and estimated c
   );
 });
 
+it('keeps AI token separators in German style even if runtime locale would use commas', () => {
+  const toLocaleSpy = vi.spyOn(Number.prototype, 'toLocaleString').mockImplementation(function () {
+    return String(Number(this)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  });
+
+  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} />);
+
+  expect(screen.getByTestId('ai-stats-report-1').textContent).toBe(
+    'Claude claude-sonnet-4-5 · v1 · 1.000 in / 200 out · ~$0.0060 (est.)'
+  );
+  expect(screen.getByTestId('ai-totals').textContent).toBe(
+    'Total AI usage across 1 report: 1.000 in / 200 out tokens · ~$0.0060 (est.)'
+  );
+
+  toLocaleSpy.mockRestore();
+});
+
 it('falls back to "n/a" in the AI stats row for reports saved before this feature shipped', () => {
   const legacyReport = createReport({
     model: null,

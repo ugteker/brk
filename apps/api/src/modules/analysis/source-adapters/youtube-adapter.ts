@@ -383,7 +383,8 @@ export class YouTubeAdapter implements SourceAdapter {
     }
 
     try {
-      const transcript = await fetchYouTubeTranscript(videoId, this.deps.httpGet, this.deps.httpPostJson);
+      const html = await this.deps.httpGet(videoUrl, YOUTUBE_WATCH_PAGE_HEADERS);
+      const transcript = await fetchYouTubeTranscript(videoId, this.deps.httpGet, this.deps.httpPostJson, html);
       const evidence: EvidenceBlock = {
         sourceId: source.value,
         sourceType: source.type,
@@ -391,7 +392,8 @@ export class YouTubeAdapter implements SourceAdapter {
         content: transcript,
         fidelity: 'high',
         citations: [videoUrl],
-        itemId: videoId
+        itemId: videoId,
+        title: extractVideoTitle(html) ?? undefined
       };
       const cursorUpdate: SourceCursorState = {
         agentId,
@@ -463,7 +465,8 @@ export class YouTubeAdapter implements SourceAdapter {
           fidelity: 'high',
           citations: [videoUrl],
           itemId: videoId,
-          publishedAt: item.pubDate ?? undefined
+          publishedAt: item.pubDate ?? undefined,
+          title: item.title || undefined
         });
       } catch (error) {
         warnings.push(error instanceof Error ? error.message : `Failed to fetch transcript for ${videoUrl}`);

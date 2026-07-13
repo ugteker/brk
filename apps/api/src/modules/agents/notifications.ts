@@ -111,11 +111,22 @@ function buildSignalSummaryText(report: RunReportRecord, agentId: string): strin
     .join('  ');
 }
 
-function buildReportNotificationEmail(agent: Agent, report: RunReportRecord): { subject: string; text: string; html: string } {
+function formatItemTitlesList(itemTitles: string[]): string {
+  if (itemTitles.length === 0) return '  (item titles unavailable for this run)';
+  return itemTitles.map((title) => `  - ${title}`).join('\n');
+}
+
+function buildReportNotificationEmail(
+  agent: Agent,
+  report: RunReportRecord,
+  itemTitles: string[]
+): { subject: string; text: string; html: string } {
   const subject = `Report for "${agent.name}"`;
   const summaryLine = buildSignalSummaryText(report, agent.id);
   const text = [
     `A report is available for the agent "${agent.name}".`,
+    '',
+    itemTitles.length > 0 ? `Crawled item(s):\n${formatItemTitlesList(itemTitles)}` : '',
     '',
     summaryLine ? `Signal summary: ${summaryLine}` : '',
     '',
@@ -133,6 +144,11 @@ function buildReportNotificationEmail(agent: Agent, report: RunReportRecord): { 
     .join('\n');
   const html = `
     <p>A report is available for the agent <strong>${agent.name}</strong>.</p>
+    ${
+      itemTitles.length > 0
+        ? `<p><strong>Crawled item(s):</strong></p><ul>${itemTitles.map((title) => `<li>${title}</li>`).join('')}</ul>`
+        : ''
+    }
     ${buildSignalSummaryHtml(report, agent.id)}
     <p><strong>Summary:</strong> ${report.summary}</p>
     <p><strong>Signals:</strong></p>
@@ -156,18 +172,23 @@ function buildReportNotificationEmail(agent: Agent, report: RunReportRecord): { 
 /**
  * Sends a best-effort email about a specific report to every configured recipient - used both by
  * a future automatic post-run notification and by the manual "re-send" action in the Reports view.
+ * `itemTitles` lists the human-readable title of each episode/article/video crawled and fed into
+ * this report (falls back to the raw source URL when a title wasn't available), so recipients can
+ * see at a glance exactly which content generated the report - defaults to an empty list for
+ * callers (e.g. the manual re-send action) that don't have this information handy.
  * Like `sendAgentChangeConfirmation`, failures are logged per-recipient but never thrown, so a
  * flaky SMTP server can't break the calling request.
  */
 export async function sendReportNotification(
   mailer: MailerLike | undefined,
   agent: Agent,
-  report: RunReportRecord
+  report: RunReportRecord,
+  itemTitles: string[] = []
 ): Promise<void> {
   if (!mailer) return;
   if (agent.recipients.length === 0) return;
 
-  const { subject, text, html } = buildReportNotificationEmail(agent, report);
+  const { subject, text, html } = buildReportNotificationEmail(agent, report, itemTitles);
   await Promise.all(
     agent.recipients.map(async (to) => {
       try {
