@@ -3,17 +3,20 @@ import { Badge, Button, Card, Dropdown, Empty, Input, Layout, Modal, Popconfirm,
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
+  AudioMutedOutlined,
   CheckCircleOutlined,
   BulbOutlined,
   CaretRightOutlined,
   ClockCircleOutlined,
   CompassOutlined,
+  CustomerServiceOutlined,
   DatabaseOutlined,
   DeleteOutlined,
   EditOutlined,
   FileTextOutlined,
   LineChartOutlined,
   LogoutOutlined,
+  NotificationOutlined,
   PlusCircleOutlined,
   PlusOutlined,
   PauseCircleOutlined,
@@ -22,6 +25,7 @@ import {
   RocketOutlined,
   SearchOutlined,
   TeamOutlined,
+  ThunderboltOutlined,
   ToolOutlined,
   UserOutlined
 } from '@ant-design/icons';
@@ -253,6 +257,50 @@ function getAgentPersonalityLabel(agent: AgentSummary): string {
   }
   const defaultCharacter = getPromptCharactersForPersona(personaId)[0];
   return defaultCharacter?.name ?? 'Default Personality';
+}
+
+const AGENT_CHARACTER_INTRO: Record<string, string> = {
+  'conservative-analyst':       "I keep my powder dry. Hard numbers first — if the evidence isn't concrete, I stay quiet.",
+  'balanced-analyst':           "I weigh both sides before picking a direction. Solid analysis, no drama, always cite the source.",
+  'aggressive-momentum-trader': "I move fast and chase conviction. Sentiment counts — first in wins.",
+  'contrarian-value-investor':  "Everyone's wrong sometimes. I look for the names the crowd gave up on too early.",
+  'quant-data-driven-analyst':  "No numbers, no signal. I only speak when there's something measurable to say.",
+  'short-seller-skeptic':       "Show me the red flags. I find trouble before you stumble into it.",
+  'macro-thematic-strategist':  "I tie individual names to the big picture — rates, AI cycles, sector rotations.",
+  'teacher-mentor':             "I guide you step by step — think of me as your personal learning companion.",
+  'teacher-classroom-instructor': "Clear structure, steady checkpoints. I make complex ideas easy to follow.",
+  'teacher-practical-coach':    "Skip the theory. I give you hands-on examples you can use right away.",
+  'influencer-trend-scout':     "I sniff out what's trending before the crowd notices. Hooks first, always.",
+  'influencer-storyteller':     "Every data point has a story. I craft the narrative that makes people listen.",
+  'influencer-campaign-strategist': "I turn insights into messaging plans your audience will actually act on.",
+  'trainer-drill-sergeant':     "Repetition is key. I push you until the right habits stick — no excuses.",
+  'trainer-supportive-coach':   "Progress over perfection. I keep you moving forward with encouragement.",
+  'trainer-exam-prep':          "Focused recall drills on the topics that matter most. Let's get you ready.",
+  'philosopher-socratic-guide': "I answer your questions with better questions. Assumptions deserve scrutiny.",
+  'philosopher-critical-thinker': "I stress-test every argument. If the logic doesn't hold, I'll find the crack.",
+  'philosopher-ethics-analyst': "Decisions have consequences beyond the obvious. I keep the bigger picture honest.",
+  'summarizer-executive-briefer': "Top-line only. I give you the signal without the noise — fast.",
+  'summarizer-research-digestor': "Dense inputs, focused output. I turn chaos into a clean research note.",
+  'summarizer-action-planner':  "Insights are useless unless they drive action. I turn findings into next steps.",
+};
+
+const PERSONA_ICON_MAP: Record<string, ReactNode> = {
+  finance_expert: <LineChartOutlined />,
+  teacher:        <ReadOutlined />,
+  influencer:     <NotificationOutlined />,
+  trainer:        <ThunderboltOutlined />,
+  philosopher:    <CompassOutlined />,
+  summarizer:     <FileTextOutlined />,
+};
+
+function getAgentCardDisplay(agent: AgentSummary): { intro: string; icon: ReactNode } {
+  const characterId = agent.promptConfig?.personality_id ?? '';
+  const personaId = agent.characterType ?? 'summarizer';
+  const intro =
+    AGENT_CHARACTER_INTRO[characterId] ??
+    `I'm a ${getAgentPersonalityLabel(agent)} in the ${getAgentCharacterLabel(agent)} family. Give me a source and I'll get to work.`;
+  const icon = PERSONA_ICON_MAP[personaId] ?? <FileTextOutlined />;
+  return { intro, icon };
 }
 
 /** Only podcast/YouTube sources have "episodes" to pick from - web_urls sources (single/listing
@@ -845,7 +893,7 @@ export function AgentsPage() {
     setEditingPlaybookId(null);
     // Start at step 1 (Pick agent) because source is already known from the card
     setPlaybookCreateStep(1);
-    setPlaybookAgentIdDraft(agents[0]?.id ?? null);
+    setPlaybookAgentIdDraft(null);
     setPlaybookSourceIdsDraft([source.id]);
     setPlaybookScheduleModeDraft('daily');
     setPlaybookIntervalMinutesDraft(60);
@@ -854,6 +902,9 @@ export function AgentsPage() {
     setPlaybookDaysOfWeekDraft([1]);
     setPlaybookRecipientsDraft([]);
     setIsPlaybookCreateOpen(true);
+    if (agents.length === 0) {
+      openInlineAgentCreate();
+    }
   }
 
   function onCancelPlaybookCreate() {
@@ -1641,27 +1692,27 @@ export function AgentsPage() {
                          className="min-h-[170px] transition-shadow"
                          extra={
                            <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-                             {/* Follow/Following toggle — primary action on the card */}
+                             {/* Listen/Listening toggle — primary action on the card */}
                              {followedSourceIds.has(source.id) ? (
                                <Button
                                  type="default"
-                                 aria-label="Following this source"
+                                 aria-label="Listening to this source"
                                  size="small"
-                                 icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
-                                 style={{ borderColor: '#52c41a', color: '#52c41a' }}
+                                 icon={<CustomerServiceOutlined style={{ color: '#fff' }} />}
+                                 style={{ backgroundColor: '#52c41a', borderColor: '#52c41a', color: '#fff' }}
                                  onClick={(event) => onFollowSource(source, event)}
                                >
-                                 Following
+                                 Listening
                                </Button>
                              ) : (
                                <Button
-                                 type="primary"
-                                 aria-label="Follow this source"
+                                 type="default"
+                                 aria-label="Listen to this source"
                                  size="small"
-                                 icon={<PlusCircleOutlined />}
+                                 icon={<CustomerServiceOutlined />}
                                  onClick={(event) => onFollowSource(source, event)}
                                >
-                                 Follow
+                                 Listen
                                </Button>
                              )}
                              {/* Edit + Share/Publish — Delete moved into Edit view */}
@@ -2258,7 +2309,16 @@ export function AgentsPage() {
         )}
       </Content>
       <Modal
-        title={editingPlaybookId ? 'Update playbook' : (followWizardSourcePreselected ? 'Follow this source' : 'Create playbook')}
+        title={(() => {
+          if (followWizardSourcePreselected) {
+            const src = sources.find((s) => s.id === playbookSourceIdsDraft[0]);
+            const srcTitle = src ? getSourceDisplayTitle(src) : null;
+            return editingPlaybookId
+              ? `Listening to: ${srcTitle ?? 'this source'}`
+              : `Listen to: ${srcTitle ?? 'this source'}`;
+          }
+          return editingPlaybookId ? 'Update listener' : 'Set up a listener';
+        })()}
         open={isPlaybookCreateOpen}
         onCancel={onCancelPlaybookCreate}
         footer={null}
@@ -2283,11 +2343,18 @@ export function AgentsPage() {
               current={followWizardSourcePreselected ? playbookCreateStep - 1 : playbookCreateStep}
               items={[
                 ...(followWizardSourcePreselected ? [] : [{ title: 'Pick source' }]),
-                { title: 'Pick agent' },
+                { title: 'Choose agent' },
                 { title: 'Set schedule' }
               ]}
             />
           )}
+          {/* Step 1 subtitle — shown when picking an agent (not inside sub-wizard) */}
+          {playbookCreateStep === 1 && !showInlineAgentCreate ? (
+            <p className="text-sm text-gray-500">
+              Choose an AI agent that will read this source and generate reports for you.
+              {agents.length === 0 ? null : ' No match? Create a new one below.'}
+            </p>
+          ) : null}
           {playbookCreateStep === 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {sources.map((source) => {
@@ -2358,10 +2425,15 @@ export function AgentsPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {agents.map((agent) => {
                   const selected = playbookAgentIdDraft === agent.id;
+                  const anySelected = playbookAgentIdDraft !== null;
+                  const { intro, icon } = getAgentCardDisplay(agent);
 
                   return (
-                    <WizardSelectableCard
+                    <div
                       key={agent.id}
+                      className={`transition-opacity ${anySelected && !selected ? 'opacity-40' : 'opacity-100'}`}
+                    >
+                    <WizardSelectableCard
                       ariaLabel={`Select agent ${agent.name}`}
                       selected={selected}
                       onClick={() => {
@@ -2369,49 +2441,47 @@ export function AgentsPage() {
                         setShowInlineAgentCreate(false);
                       }}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold">
-                            <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={agent.name} />
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                            <Tag icon={getCharacterIcon(agent.characterType)}>Character: {getAgentCharacterLabel(agent)}</Tag>
-                            <Tag>Personality: {getAgentPersonalityLabel(agent)}</Tag>
-                          </div>
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 shrink-0 text-xl text-gray-500">
+                          {icon}
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {selected ? <Tag color="blue">Selected</Tag> : null}
-                          <Popconfirm
-                            title="Delete this agent?"
-                            description="This removes the agent from all library cards that use it. Those cards will return to an 'Unfollowed' state."
-                            okText="Delete"
-                            okButtonProps={{ danger: true }}
-                            onConfirm={async (e) => {
-                              e?.stopPropagation();
-                              await deleteAgent(agent.id);
-                              if (playbookAgentIdDraft === agent.id) setPlaybookAgentIdDraft(null);
-                              const refreshed = await listAgents();
-                              setAgents(refreshed);
-                            }}
-                            onPopupClick={(e) => e.stopPropagation()}
-                          >
-                            <Button
-                              size="small"
-                              type="text"
-                              danger
-                              icon={<DeleteOutlined />}
-                              aria-label={`Delete agent ${agent.name}`}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </Popconfirm>
-                        </div>
-                      </div>
-                      <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
-                        <div className="inline-flex items-center gap-1">
-                          <FileTextOutlined /> Persona + prompt ready
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="text-sm font-semibold">
+                              <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={agent.name} />
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {selected ? <Tag color="blue">Selected</Tag> : null}
+                              <Popconfirm
+                                title="Delete this agent?"
+                                description="This removes the agent from all library cards that use it. Those cards will return to an 'Unlistened' state."
+                                okText="Delete"
+                                okButtonProps={{ danger: true }}
+                                onConfirm={async (e) => {
+                                  e?.stopPropagation();
+                                  await deleteAgent(agent.id);
+                                  if (playbookAgentIdDraft === agent.id) setPlaybookAgentIdDraft(null);
+                                  const refreshed = await listAgents();
+                                  setAgents(refreshed);
+                                }}
+                                onPopupClick={(e) => e.stopPropagation()}
+                              >
+                                <Button
+                                  size="small"
+                                  type="text"
+                                  danger
+                                  icon={<DeleteOutlined />}
+                                  aria-label={`Delete agent ${agent.name}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </Popconfirm>
+                            </div>
+                          </div>
+                          <p className="mt-1 text-xs text-gray-500 italic">{intro}</p>
                         </div>
                       </div>
                     </WizardSelectableCard>
+                    </div>
                   );
                 })}
                 {/* "Create new agent" ghost card — shown only when not in sub-wizard */}
@@ -2703,18 +2773,18 @@ export function AgentsPage() {
             >
               {showInlineAgentCreate && inlineAgentStep === 0 ? '← Agent selection' : 'Back'}
             </Button>
-            {/* Unfollow only shown when editing a playbook and NOT inside the agent sub-wizard */}
+            {/* Stop listening — only shown when editing a playbook and NOT inside the agent sub-wizard */}
             {editingPlaybookId && !showInlineAgentCreate ? (
               confirmingUnfollow ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-red-600">Remove follow?</span>
+                  <span className="text-sm text-red-600">Stop listening?</span>
                   <Button
                     danger
                     size="small"
                     loading={false}
                     onClick={() => void onUnfollowFromWizard()}
                   >
-                    Yes, unfollow
+                    Yes, stop
                   </Button>
                   <Button size="small" onClick={() => setConfirmingUnfollow(false)}>
                     Cancel
@@ -2723,10 +2793,10 @@ export function AgentsPage() {
               ) : (
                 <Button
                   danger
-                  icon={<DeleteOutlined />}
+                  icon={<AudioMutedOutlined />}
                   onClick={() => setConfirmingUnfollow(true)}
                 >
-                  Unfollow
+                  Stop listening
                 </Button>
               )
             ) : null}

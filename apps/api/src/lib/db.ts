@@ -19,10 +19,18 @@ export async function ensureSqliteSchemaCompatibility(): Promise<void> {
   }
 
   const playbookColumns = await prisma.$queryRawUnsafe<SqliteTableInfoRow[]>("PRAGMA table_info('Playbook')");
-  const hasRecipientsJsonColumn = playbookColumns.some((column) => column.name === 'recipientsJson');
-  if (hasRecipientsJsonColumn) {
-    return;
-  }
+  const columnNames = new Set(playbookColumns.map((col) => col.name));
 
-  await prisma.$executeRawUnsafe("ALTER TABLE \"Playbook\" ADD COLUMN \"recipientsJson\" TEXT NOT NULL DEFAULT '[]'");
+  if (!columnNames.has('recipientsJson')) {
+    await prisma.$executeRawUnsafe("ALTER TABLE \"Playbook\" ADD COLUMN \"recipientsJson\" TEXT NOT NULL DEFAULT '[]'");
+  }
+  if (!columnNames.has('followTargetType')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Playbook" ADD COLUMN "followTargetType" TEXT');
+  }
+  if (!columnNames.has('followTargetKey')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Playbook" ADD COLUMN "followTargetKey" TEXT');
+  }
+  if (!columnNames.has('followTargetTitle')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Playbook" ADD COLUMN "followTargetTitle" TEXT');
+  }
 }

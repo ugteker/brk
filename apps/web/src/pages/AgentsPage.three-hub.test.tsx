@@ -144,8 +144,8 @@ describe('AgentsPage three hub shell', () => {
     ]);
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /follow this source/i }));
-    expect(await screen.findByRole('dialog', { name: /follow this source/i })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /listen to this source/i }));
+    expect(await screen.findByRole('dialog', { name: /listen to/i })).toBeInTheDocument();
     // Following a source must never navigate away from the Library/Dashboard tab.
     expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
   });
@@ -175,8 +175,8 @@ describe('AgentsPage three hub shell', () => {
     ]);
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /follow this source/i }));
-    expect(await screen.findByRole('dialog', { name: /follow this source/i })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /listen to this source/i }));
+    expect(await screen.findByRole('dialog', { name: /listen to/i })).toBeInTheDocument();
     // A non-admin user must never gain access to the admin-only Agents/Playbooks tabs
     // just by following a source.
     expect(screen.queryByRole('tab', { name: /(agents|followers)/i })).not.toBeInTheDocument();
@@ -222,9 +222,9 @@ describe('AgentsPage three hub shell', () => {
     ]);
     renderPage();
 
-    // When a source is already followed, the button shows "Following" state
-    fireEvent.click(await screen.findByRole('button', { name: /following this source/i }));
-    expect(await screen.findByRole('dialog', { name: /update playbook/i })).toBeInTheDocument();
+    // When a source is already listened to, the button shows "Listening" state
+    fireEvent.click(await screen.findByRole('button', { name: /listening to this source/i }));
+    expect(await screen.findByRole('dialog', { name: /listening to/i })).toBeInTheDocument();
     // Following a source must never navigate away from the Library/Dashboard tab.
     expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
   });
@@ -804,7 +804,7 @@ describe('AgentsPage three hub shell', () => {
     await openAdminArea();
     fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
     fireEvent.click(await screen.findByRole('button', { name: /create new playbook/i }));
-    expect(await screen.findByRole('dialog', { name: /create playbook/i })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /set up a listener/i })).toBeInTheDocument();
 
     expect(screen.queryByLabelText(/playbook name/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/playbook description/i)).not.toBeInTheDocument();
