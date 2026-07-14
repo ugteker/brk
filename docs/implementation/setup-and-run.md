@@ -23,8 +23,8 @@ npm install
 
 ## Anthropic Claude API Setup
 
-ChatTrader agents crawl their configured sources (web URLs / podcast feeds), then send the
-gathered evidence plus the agent's system prompt to the Anthropic Claude API, which returns
+ChatTrader runs execute via Playbooks (which select sources + schedule), then send gathered
+evidence plus the selected agent's system prompt to the Anthropic Claude API, which returns
 structured long/short stock signals with confidence scores and citations.
 
 1. Create or retrieve an API key from the Anthropic Console: https://console.anthropic.com/
@@ -78,17 +78,48 @@ manually exporting `$env:...` variables is only needed to override a value from 
 Self-service signup/login is always available via `POST /api/auth/signup` /
 `POST /api/auth/login` (or the web login screen) regardless of whether Google/SMTP are configured.
 
-## Run the Web App
+## Run the Web App (development with HMR)
+
+```powershell
+Set-Location G:\brk\apps\web
+npm run dev
+```
+
+Opens the Ant Design-based ChatTrader dashboard on `http://localhost:4173`. From there you can:
+- Use the three-hub layout (**Sources**, **Agents**, **Playbooks**)
+- Create/edit agents (character/persona/prompt) from **Agents**
+- Create/edit source library entries from **Sources**
+- Run and review **Runs/Reports** from **Playbooks** (Playbooks own execution outputs)
+
+### Startup order
+
+Start the API first, then the web app:
+
+```powershell
+Set-Location G:\brk\apps\api
+npm run start
+```
+
+```powershell
+Set-Location G:\brk\apps\web
+npm run dev
+```
+
+If the Sources hub fails with a 500 right after a schema change or a Prisma client regeneration, stop the stale Node process that is still holding the client open and restart the API:
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | Select-Object ProcessId, CommandLine
+Stop-Process -Id <pid>
+```
+
+## Run the Web App (preview/production-style)
 
 ```powershell
 Set-Location G:\brk\apps\web
 npm run start
 ```
 
-Opens the Ant Design-based ChatTrader dashboard on `http://localhost:4173`. From there you can:
-- Create a new agent via the 6-step wizard (**Create Agent**)
-- Select an existing agent to browse its **Reports** (symbol badges, date, headline, confidence)
-  or edit its **System prompt**
+This serves the built app in preview mode (no HMR). Use it to smoke-test production-like output, not for day-to-day UI editing.
 
 ## Run Targeted Tests
 
@@ -149,3 +180,8 @@ Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | Select-Object Proces
 Stop-Process -Id <pid>
 ```
 
+- `npm run start` and `npm run dev` in `apps/api` now run `prisma generate` first, so the client
+  stays in sync with `prisma/schema.prisma` after schema changes.
+- That generate step is now wrapped with a Windows-safe fallback: if Prisma hits the known
+  `query_engine-windows.dll.node` lock while another API process is already running, startup
+  continues with the currently generated client instead of hard-failing.

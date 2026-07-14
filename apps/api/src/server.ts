@@ -5,6 +5,9 @@ import { registerAgentPromptRoutes, type AgentPromptRoutesDeps } from './modules
 import { registerRunsRoutes, type RunsRoutesDeps } from './modules/runs/routes';
 import { registerAuthRoutes, type AuthRoutesDeps } from './modules/auth/routes';
 import { registerAdminRoutes } from './modules/admin/routes';
+import { registerSourceRoutes, type SourceRoutesDeps } from './modules/source/routes';
+import { registerPlaybookRoutes, type PlaybookRoutesDeps } from './modules/playbook/routes';
+import type { DomainAccessResolver } from './modules/access/permissions';
 import { config } from './config';
 import { verifySessionToken } from './modules/auth/jwt';
 
@@ -20,6 +23,9 @@ export interface ServerDeps {
   agents: AgentPromptRoutesDeps;
   runs?: RunsRoutesDeps;
   auth: AuthRoutesDeps;
+  source?: SourceRoutesDeps;
+  playbook?: PlaybookRoutesDeps;
+  accessResolver?: DomainAccessResolver;
   sourceProbe?: SourceProbeLike;
   runTrigger?: RunTriggerLike;
 }
@@ -57,11 +63,18 @@ export async function buildServer(deps: ServerDeps) {
   await registerAgentRoutes(app, deps.agentRepository, {
     sourceProbe: deps.sourceProbe,
     mailer: deps.auth.mailer,
-    runTrigger: deps.runTrigger
+    runTrigger: deps.runTrigger,
+    accessResolver: deps.accessResolver
   });
-  await registerAgentPromptRoutes(app, deps.agents);
+  await registerAgentPromptRoutes(app, { ...deps.agents, accessResolver: deps.agents.accessResolver ?? deps.accessResolver });
   if (deps.runs) {
-    await registerRunsRoutes(app, deps.runs);
+    await registerRunsRoutes(app, { ...deps.runs, accessResolver: deps.runs.accessResolver ?? deps.accessResolver });
+  }
+  if (deps.source) {
+    await registerSourceRoutes(app, deps.source);
+  }
+  if (deps.playbook) {
+    await registerPlaybookRoutes(app, deps.playbook);
   }
   // Admin user-management routes reuse the same userRepository as auth - there's no separate
   // "admin service", just extra ADMIN_EMAIL-gated endpoints on top of the existing user store.

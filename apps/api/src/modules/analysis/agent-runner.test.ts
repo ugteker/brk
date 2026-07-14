@@ -2,18 +2,29 @@ import { describe, expect, it, vi } from 'vitest';
 import { AgentRunner } from './agent-runner';
 import type { Agent } from '../agents/types';
 
+function summarizerReport(summary = 'Bullish on AAPL') {
+  return {
+    common: { summary, key_takeaways: [], sources_used: [], citations: [] },
+    section: {
+      character_type: 'summarizer' as const,
+      bullet_digest: []
+    }
+  };
+}
+
 function createDeps(overrides: Partial<Parameters<typeof AgentRunner>[0]> = {}) {
   const agent: Agent = {
     id: 'agent-1',
     ownerUserId: 'admin-user-id',
     name: 'Housing Agent',
     description: '',
+    characterType: 'summarizer',
+    promptConfig: {},
     status: 'active',
     createdAt: new Date(),
     updatedAt: new Date(),
     sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
     preferences: {},
-    recipients: [],
     schedule: null
   };
 
@@ -45,7 +56,8 @@ function createDeps(overrides: Partial<Parameters<typeof AgentRunner>[0]> = {}) 
     claudeClient: {
       analyze: vi.fn(async () => ({
         summary: 'Bullish on AAPL',
-        signals: [{ symbol: 'AAPL', side: 'long' as const, confidence: 82, rationale: 'guidance', citations: ['https://example.com/article'] }],
+        signals: [],
+        report: summarizerReport(),
         sourceWarnings: [],
         needsHumanReview: false
       }))
@@ -73,6 +85,50 @@ describe('AgentRunner', () => {
     expect(result.status).toBe('succeeded');
     expect(deps.reportRepository.saveRunReport).toHaveBeenCalledTimes(1);
     expect(deps.artifactRepository.saveArtifact).toHaveBeenCalledTimes(1);
+  });
+
+  it('builds the effective staged system prompt before calling Claude analyze', async () => {
+    const deps = createDeps({
+      agentRepository: {
+        getAgent: vi.fn(async () => ({
+          id: 'agent-1',
+          ownerUserId: 'admin-user-id',
+          name: 'Housing Agent',
+          description: '',
+          characterType: 'teacher',
+          promptConfig: {
+            tone: 'encouraging',
+            custom_instructions: 'Use mini examples first, then definitions.'
+          },
+          status: 'active',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
+          preferences: {},
+          schedule: null
+        }))
+      },
+      promptRepository: {
+        getLatestPromptVersion: vi.fn(async () => ({
+          id: 'prompt-1',
+          agentId: 'agent-1',
+          version: 1,
+          model: 'claude-sonnet-4-5',
+          systemPrompt: 'Explain signal confidence assumptions clearly.',
+          enabled: true,
+          createdAt: new Date()
+        }))
+      }
+    });
+    const runner = new AgentRunner(deps as never);
+
+    await runner.run('agent-1', 'run-1');
+
+    const analyzeInput = deps.claudeClient.analyze.mock.calls[0][0];
+    expect(analyzeInput.systemPrompt).toContain('clear and patient teacher');
+    expect(analyzeInput.systemPrompt).toContain('- tone: encouraging');
+    expect(analyzeInput.systemPrompt).toContain('Explain signal confidence assumptions clearly.');
+    expect(analyzeInput.systemPrompt).toContain('Use mini examples first, then definitions.');
   });
 
   it('skips fetching a source whose frequencyMinutes has not elapsed since its last crawl', async () => {
@@ -141,6 +197,8 @@ describe('AgentRunner', () => {
           ownerUserId: 'admin-user-id',
           name: 'Housing Agent',
           description: '',
+          characterType: 'summarizer',
+          promptConfig: {},
           status: 'active',
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -149,7 +207,6 @@ describe('AgentRunner', () => {
             { type: 'podcast_feeds', value: 'https://example.com/feed.xml', frequencyMinutes: 60, maxItems: 1 }
           ],
           preferences: {},
-          recipients: [],
           schedule: null
         }))
       },
@@ -188,6 +245,9 @@ describe('AgentRunner', () => {
       id: 'agent-1',
       ownerUserId: 'admin-user-id',
       name: 'Housing Agent',
+      description: '',
+      characterType: 'summarizer',
+      promptConfig: {},
       status: 'active',
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -227,7 +287,8 @@ describe('AgentRunner', () => {
     const deps = createDeps();
     deps.claudeClient.analyze = vi.fn(async () => ({
       summary: 'Bullish on AAPL',
-      signals: [{ symbol: 'AAPL', side: 'long' as const, confidence: 82, rationale: 'guidance', citations: ['https://example.com/article'] }],
+      signals: [],
+      report: summarizerReport(),
       sourceWarnings: [],
       needsHumanReview: false,
       usage: { inputTokens: 1000, outputTokens: 200 }
@@ -329,17 +390,18 @@ describe('AgentRunner', () => {
       ownerUserId: 'admin-user-id',
       name: 'Housing Agent',
       description: '',
+      characterType: 'summarizer',
+      promptConfig: {},
       status: 'active',
       createdAt: new Date(),
       updatedAt: new Date(),
       sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
       preferences: {},
-      recipients: ['alerts@example.com'],
       schedule: null
     }));
     const runner = new AgentRunner({ ...deps, mailer: { send } } as never);
 
-    await runner.run('agent-1', 'run-1');
+    await runner.run('agent-1', 'run-1', { playbookRecipients: ['alerts@example.com'] });
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0][0].to).toBe('alerts@example.com');
@@ -353,12 +415,13 @@ describe('AgentRunner', () => {
       ownerUserId: 'admin-user-id',
       name: 'Housing Agent',
       description: '',
+      characterType: 'summarizer',
+      promptConfig: {},
       status: 'active',
       createdAt: new Date(),
       updatedAt: new Date(),
       sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
       preferences: {},
-      recipients: ['alerts@example.com'],
       schedule: null
     }));
     const runner = new AgentRunner({ ...deps, mailer: { send } } as never);

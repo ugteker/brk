@@ -35,8 +35,10 @@ Last updated: 2026-07-12 (Renamed app "PodTrader" to "ChatTrader")
 - Primary UI library: **Ant Design** (chosen as "most popular" per user request for
   something "fancy"), replacing the shadcn-style component set for the redesigned
   screens.
-- 6-step agent setup flow: identity → sources/ingestion rules → system prompt →
-  signal policy/publish rules → schedule/recipients → review and run.
+- Agent creation/editing is split by domain ownership:
+  - **Agents** hub: character/persona/prompt identity
+  - **Sources** hub: source library and source-level config
+  - **Playbooks** hub: source selection + schedule/recipients + execution policy
 - **Reports browsing view**: once a bot/agent produces a report, users must be able
   to navigate through all related reports for that agent. Each report list item
   must show:
@@ -59,12 +61,9 @@ Last updated: 2026-07-12 (Renamed app "PodTrader" to "ChatTrader")
   offer multiple full, ready-to-use system prompts ("personas") with
   different trading characters/risk profiles that the user can pick from,
   each of which also sets a sensible default risk level.
-- **Full-field agent editing**: the wizard must support editing every setting
-  of an existing agent (name, description, sources, preferences, recipients,
-  schedule), not just name/sources — this required persisting previously
-  ignored fields end-to-end (description, preferences JSON, recipients JSON,
-  and a real `AgentSchedule` row) so the scheduler actually has something to
-  pick up.
+- **Full-field editing across hubs**: editing must keep ownership boundaries:
+  agent identity/persona in Agents, source details in Sources, and
+  schedule/recipients/execution in Playbooks.
 - **Smart, AI-assisted crawling**: agents must not reprocess the same content
   every run. Feed-like sources (RSS/Atom, podcast feeds) use a deterministic
   cursor (seen-item-ID tracking); non-feed sources (blogs/listing pages) get
@@ -81,8 +80,8 @@ Last updated: 2026-07-12 (Renamed app "PodTrader" to "ChatTrader")
   "episodes/items per run" cap (`maxItems`, default 1, range 1-10) instead of
   a hardcoded constant, surfaced directly in the wizard next to the source
   URL.
-- **Manual "run agent now"**: users must be able to trigger an immediate
-  agent run from the dashboard, not just wait for the next scheduled tick.
+- **Manual run-now**: users must be able to trigger an immediate run from the
+  **Playbooks** hub, not just wait for the next scheduled tick.
 - **Agent change confirmation emails**: recipients must get an email whenever
   an agent they're subscribed to is created or updated.
 - **Authentication**: username/password signup+login with two-step email
@@ -90,12 +89,11 @@ Last updated: 2026-07-12 (Renamed app "PodTrader" to "ChatTrader")
   admin-only user management view (lock/unlock/delete users) restricted to
   the `ADMIN_EMAIL` configured in env. All `/api/agents`/`/api/admin` routes
   must be gated behind a valid session.
-- **Runs history view**: the agent detail view must show a "Runs" tab with
-  execution history (status, scheduled/started/finished time, duration,
-  retry count), the real failure reason for failed runs (not just an opaque
-  error code), a preview of crawled content per source with a full-content
-  download button, and a link that jumps to/highlights the corresponding
-  report in the Reports tab.
+- **Runs/Reports ownership**: Runs and Reports belong to the **Playbooks**
+  hub (not Agents). The Playbooks view must show run history (status,
+  scheduled/started/finished time, duration, retry count), real failure
+  reasons, crawled-content previews with download, and links to related
+  reports.
 - **Weekly schedule mode**: in addition to interval and daily-time modes, the
   wizard must support a weekly mode where the user picks specific days of
   the week plus a daily time.
@@ -108,9 +106,9 @@ Last updated: 2026-07-12 (Renamed app "PodTrader" to "ChatTrader")
   not be purely cosmetic — while the per-source "Enabled" toggle and the
   "Active" toggle are both intentionally kept (user explicitly reversed
   earlier removal decisions for both).
-- **Live-updating Reports/Runs views**: the dashboard's Reports and Runs
-  views should reflect new reports / run-status changes without requiring a
-  manual page reload.
+- **Live-updating Playbooks outputs**: Playbooks-owned Runs/Reports views
+  should reflect new reports / run-status changes without requiring a manual
+  page reload.
 - **Robust JSON parsing of Claude responses**: the analysis pipeline must
   tolerate Claude wrapping its JSON response in markdown code fences
   (` ```json ... ``` `) instead of crashing with a raw `JSON.parse` error.
@@ -136,6 +134,7 @@ Last updated: 2026-07-12 (Renamed app "PodTrader" to "ChatTrader")
 
 Plan reference: `docs/superpowers/plans/2026-07-10-brokerino-agent-ai-redesign.md`
 Spec reference: `docs/superpowers/specs/2026-07-10-brokerino-ai-agent-redesign-design.md`
+Note: older ledger entries may describe pre-split contracts; current ownership is Sources/Agents/Playbooks with Runs+Reports under Playbooks.
 
 | Task | Status | Notes |
 |---|---|---|

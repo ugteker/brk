@@ -1,13 +1,19 @@
 import type { ClaudeAnalysisRequest, EvidenceBlock } from './types';
+import type { CharacterType } from '../agents/types';
 
 export interface PromptVersionInput {
   model: string;
   systemPrompt: string;
 }
 
-export function buildAnalysisRequest(promptVersion: PromptVersionInput, evidence: EvidenceBlock[]): ClaudeAnalysisRequest {
+export function buildAnalysisRequest(
+  promptVersion: PromptVersionInput,
+  evidence: EvidenceBlock[],
+  characterType: CharacterType = 'finance_expert'
+): ClaudeAnalysisRequest {
   return {
     model: promptVersion.model,
+    characterType,
     systemPrompt: promptVersion.systemPrompt,
     evidence
   };

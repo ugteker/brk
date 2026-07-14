@@ -1,4 +1,5 @@
-import type { SignalRecord } from '../reports/types';
+import type { SignalRecord, UnifiedCharacterReport } from '../reports/types';
+import type { CharacterType } from '../agents/types';
 
 export type EvidenceFidelity = 'high' | 'medium' | 'low';
 
@@ -42,6 +43,7 @@ export interface SourceAdapter {
 
 export interface ClaudeAnalysisRequest {
   model: string;
+  characterType: CharacterType;
   systemPrompt: string;
   evidence: EvidenceBlock[];
 }
@@ -49,6 +51,7 @@ export interface ClaudeAnalysisRequest {
 export interface ClaudeAnalysisResult {
   summary: string;
   signals: SignalRecord[];
+  report: UnifiedCharacterReport;
   sourceWarnings: string[];
   needsHumanReview: boolean;
   // Token usage reported by the Claude API for this call, when available - used to show AI
@@ -94,4 +97,3 @@ export interface SourceCrawlConfigState {
   lastReinspectionAt: string | null;
   reinspectionCount24h: number;
 }
-

@@ -1,7 +1,7 @@
 import type { EvidenceBlock, SourceAdapter, SourceConfig, SourceCursorState, SourceFetchOptions, SourceFetchResult } from '../types';
 import type { HttpGet } from './web-url-adapter';
 import type { SourceCursorRepositoryLike } from '../../crawler/source-cursor-repository';
-import { parseFeedItems } from './feed-items';
+import { parseFeedItems, parseFeedMetadata } from './feed-items';
 import type { SourceProbeResult } from './smart-crawler';
 import { toPreviewItems } from './smart-crawler';
 import { ProxyAgent } from 'undici';
@@ -544,10 +544,13 @@ export async function probeYouTubeSource(
   try {
     const feedXml = await deps.httpGet(feedUrl, YOUTUBE_WATCH_PAGE_HEADERS);
     const items = parseFeedItems(feedXml);
+    const metadata = parseFeedMetadata(feedXml);
     const maxItemsPerRun = resolveMaxItems(source);
     return {
       reachable: true,
       kind: 'feed',
+      title: metadata.title,
+      coverImageUrl: metadata.coverImageUrl,
       itemCount: items.length,
       maxItemsPerRun,
       previewItems: toPreviewItems(items, previewLimit),

@@ -30,7 +30,12 @@ function createFakeAgentRepo(): AgentRepositoryLike {
     },
     async listRecentRuns() {
       return [];
-    }
+    },
+    async shareAgent(): Promise<void> {},
+    async listAgentShares() {
+      return [];
+    },
+    async revokeAgentShare(): Promise<void> {}
   };
 }
 

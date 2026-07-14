@@ -35,6 +35,22 @@ function createReport(overrides: Partial<RunReportDto> = {}): RunReportDto {
   };
 }
 
+function withCharacterReport(
+  base: RunReportDto,
+  payload: {
+    common: { summary: string; key_takeaways: string[]; sources_used: string[]; citations: string[] };
+    section:
+      | { character_type: 'finance_expert'; market_summary: string; signals: RunReportDto['signals'] }
+      | { character_type: 'teacher'; lesson_explanation: string }
+      | { character_type: 'trainer'; qa_drill: Array<{ question: string; answer: string }> }
+      | { character_type: 'philosopher'; argument_reflection: string }
+      | { character_type: 'influencer'; content_angles: string[]; hooks: string[] }
+      | { character_type: 'summarizer'; bullet_digest: string[] };
+  }
+): RunReportDto {
+  return { ...base, report: payload } as RunReportDto;
+}
+
 it('renders each report with symbol badges, a date, a headline, and a confidence indicator', () => {
   render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} />);
 
@@ -233,4 +249,113 @@ it('does not show a "View full performance" link when onSelectSymbol is not prov
   fireEvent.click(screen.getByText(/AAPL · Long/i));
 
   expect(screen.queryByRole('button', { name: /view full performance/i })).not.toBeInTheDocument();
+});
+
+it('renders common report fields for every character template', () => {
+  const base = createReport();
+  const common = {
+    summary: 'Common summary text',
+    key_takeaways: ['Takeaway one', 'Takeaway two'],
+    sources_used: ['https://example.com/source-1'],
+    citations: ['https://example.com/citation-1']
+  };
+  const reports = [
+    withCharacterReport(base, { common, section: { character_type: 'finance_expert', market_summary: 'Market uptrend', signals: base.signals } }),
+    withCharacterReport(createReport({ id: 'r2' }), { common, section: { character_type: 'teacher', lesson_explanation: 'Teacher lesson' } }),
+    withCharacterReport(createReport({ id: 'r3' }), {
+      common,
+      section: { character_type: 'trainer', qa_drill: [{ question: 'What is EPS?', answer: 'Earnings per share' }] }
+    }),
+    withCharacterReport(createReport({ id: 'r4' }), { common, section: { character_type: 'philosopher', argument_reflection: 'Meaning of risk' } }),
+    withCharacterReport(createReport({ id: 'r5' }), {
+      common,
+      section: { character_type: 'influencer', content_angles: ['Angle A'], hooks: ['Hook A'] }
+    }),
+    withCharacterReport(createReport({ id: 'r6' }), { common, section: { character_type: 'summarizer', bullet_digest: ['Digest line'] } })
+  ];
+
+  render(<AgentReportsBrowser agentId="agent-1" reports={reports} />);
+
+  expect(screen.getAllByText('Summary')).toHaveLength(6);
+  expect(screen.getAllByText('Key takeaways')).toHaveLength(6);
+  expect(screen.getAllByText('Sources used')).toHaveLength(6);
+  expect(screen.getAllByText('Citations')).toHaveLength(6);
+  expect(screen.getAllByText('Common summary text')).toHaveLength(6);
+});
+
+it('switches character template sections based on report.report.section.character_type', () => {
+  const base = createReport();
+  const common = {
+    summary: 'Summary',
+    key_takeaways: ['Takeaway'],
+    sources_used: ['https://example.com/source'],
+    citations: ['https://example.com/citation']
+  };
+  const { rerender } = render(
+    <AgentReportsBrowser
+      agentId="agent-1"
+      reports={[withCharacterReport(base, { common, section: { character_type: 'finance_expert', market_summary: 'Bullish week', signals: base.signals } })]}
+    />
+  );
+  expect(screen.getByText('Market summary')).toBeInTheDocument();
+  expect(screen.getByText('Bullish week')).toBeInTheDocument();
+  expect(screen.getByText('Signals')).toBeInTheDocument();
+
+  rerender(
+    <AgentReportsBrowser
+      agentId="agent-1"
+      reports={[withCharacterReport(base, { common, section: { character_type: 'teacher', lesson_explanation: 'Supply vs demand explained' } })]}
+    />
+  );
+  expect(screen.getByText('Lesson explanation')).toBeInTheDocument();
+  expect(screen.getByText('Supply vs demand explained')).toBeInTheDocument();
+
+  rerender(
+    <AgentReportsBrowser
+      agentId="agent-1"
+      reports={[
+        withCharacterReport(base, {
+          common,
+          section: { character_type: 'trainer', qa_drill: [{ question: 'Q1', answer: 'A1' }] }
+        })
+      ]}
+    />
+  );
+  expect(screen.getByText('Q&A drill')).toBeInTheDocument();
+  expect(screen.getByText('Q1')).toBeInTheDocument();
+  expect(screen.getByText('A1')).toBeInTheDocument();
+
+  rerender(
+    <AgentReportsBrowser
+      agentId="agent-1"
+      reports={[withCharacterReport(base, { common, section: { character_type: 'philosopher', argument_reflection: 'Conviction under uncertainty' } })]}
+    />
+  );
+  expect(screen.getByText('Argument & reflection')).toBeInTheDocument();
+  expect(screen.getByText('Conviction under uncertainty')).toBeInTheDocument();
+
+  rerender(
+    <AgentReportsBrowser
+      agentId="agent-1"
+      reports={[
+        withCharacterReport(base, {
+          common,
+          section: { character_type: 'influencer', content_angles: ['Thread angle'], hooks: ['Hook text'] }
+        })
+      ]}
+    />
+  );
+  expect(screen.getByText('Content angles')).toBeInTheDocument();
+  expect(screen.getByText('Hooks')).toBeInTheDocument();
+  expect(screen.getByText('Thread angle')).toBeInTheDocument();
+  expect(screen.getByText('Hook text')).toBeInTheDocument();
+
+  rerender(
+    <AgentReportsBrowser
+      agentId="agent-1"
+      reports={[withCharacterReport(base, { common, section: { character_type: 'summarizer', bullet_digest: ['Digest bullet'] } })]}
+    />
+  );
+  expect(screen.getByText('Bullet digest')).toBeInTheDocument();
+  expect(screen.getByText('Digest bullet')).toBeInTheDocument();
 });

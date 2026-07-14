@@ -1,12 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../../server';
 import type { Agent, CreateAgentInput } from './types';
+import { DEFAULT_CHARACTER_TYPE } from './types';
 import { authCookieHeader, createTestAuthDeps } from '../../test-utils/auth';
 import { InMemoryUserRepository } from '../auth/in-memory-user-repository';
+import { DomainAccessResolver } from '../access/permissions';
 
 function createFakeRepo() {
   const agents = new Map<string, Agent>();
+  const grants = new Map<string, { id: string; grantedByUserId: string; granteeUserId: string; permission: string; expiresAt: Date | null }[]>();
+  const publications = new Map<
+    string,
+    {
+      publicationId: string;
+      agentId: string;
+      publisherUserId: string;
+      title: string;
+      summary: string;
+      visibility: 'public' | 'private';
+      publishedAt: Date;
+      retiredAt: Date | null;
+    }
+  >();
   let nextId = 1;
+  let nextGrantId = 1;
+  let nextPublicationId = 1;
   return {
     async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
       const agent: Agent = {
@@ -14,13 +32,14 @@ function createFakeRepo() {
         ownerUserId,
         name: input.name,
         description: input.description ?? '',
+        characterType: input.characterType ?? DEFAULT_CHARACTER_TYPE,
+        promptConfig: input.promptConfig ?? {},
         status: 'active',
         createdAt: new Date('2026-07-10T00:00:00.000Z'),
         updatedAt: new Date('2026-07-10T00:00:00.000Z'),
-        sources: input.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60 })),
+        sources: (input.sources ?? []).map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60 })),
         preferences: input.preferences ?? {},
-        recipients: input.recipients ?? [],
-        schedule: input.schedule
+        schedule: input.schedule ?? null
       };
       agents.set(agent.id, agent);
       return agent;
@@ -32,11 +51,12 @@ function createFakeRepo() {
         ...existing,
         name: patch.name ?? existing.name,
         description: patch.description ?? existing.description,
+        characterType: patch.characterType ?? existing.characterType,
+        promptConfig: patch.promptConfig ?? existing.promptConfig,
         sources: patch.sources
           ? patch.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60 }))
           : existing.sources,
         preferences: patch.preferences ?? existing.preferences,
-        recipients: patch.recipients ?? existing.recipients,
         schedule: patch.schedule ?? existing.schedule,
         updatedAt: new Date('2026-07-10T01:00:00.000Z')
       };
@@ -75,6 +95,109 @@ function createFakeRepo() {
           finishedAt: new Date(Date.now() - index * 60000 + 1000)
         }))
         .slice(0, limit);
+    },
+    async shareAgent(agentId: string, grantedByUserId: string, input: { granteeUserId: string; permission: 'read' | 'edit' | 'delete'; expiresAt?: string }) {
+      if (!agents.has(agentId)) throw new Error('not_found');
+      const existing = grants.get(agentId) ?? [];
+      existing.push({
+        id: `grant-${nextGrantId++}`,
+        grantedByUserId,
+        granteeUserId: input.granteeUserId,
+        permission: input.permission,
+        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+      });
+      grants.set(agentId, existing);
+    },
+    async listAgentShares(agentId: string) {
+      return (grants.get(agentId) ?? []).map((g) => ({ ...g, createdAt: new Date('2026-07-10T00:00:00.000Z') }));
+    },
+    async revokeAgentShare(agentId: string, grantId: string) {
+      const existing = grants.get(agentId) ?? [];
+      const next = existing.filter((g) => g.id !== grantId);
+      if (next.length === existing.length) throw new Error('not_found');
+      grants.set(agentId, next);
+    },
+    async publishAgent(agentId: string, publisherUserId: string, input: { title: string; summary?: string; visibility?: 'public' | 'private' }) {
+      const existingAgent = agents.get(agentId);
+      if (!existingAgent) throw new Error('not_found');
+      const existingPublication = [...publications.values()].find((publication) => publication.agentId === agentId);
+      const publication = {
+        publicationId: existingPublication?.publicationId ?? `publication-${nextPublicationId++}`,
+        agentId,
+        publisherUserId,
+        title: input.title,
+        summary: input.summary ?? '',
+        visibility: input.visibility ?? 'public',
+        publishedAt: new Date('2026-07-10T02:00:00.000Z'),
+        retiredAt: null
+      };
+      publications.set(publication.publicationId, publication);
+      return {
+        publicationId: publication.publicationId,
+        agentId,
+        publisherUserId: publication.publisherUserId,
+        title: publication.title,
+        summary: publication.summary,
+        visibility: publication.visibility,
+        publishedAt: publication.publishedAt,
+        agent: existingAgent
+      };
+    },
+    async listMarketplaceAgents() {
+      return [...publications.values()]
+        .filter((publication) => publication.visibility === 'public' && publication.retiredAt === null)
+        .map((publication) => ({
+          publicationId: publication.publicationId,
+          agentId: publication.agentId,
+          publisherUserId: publication.publisherUserId,
+          title: publication.title,
+          summary: publication.summary,
+          visibility: publication.visibility,
+          publishedAt: publication.publishedAt,
+          agent: agents.get(publication.agentId)!
+        }));
+    },
+    async unpublishAgent(agentId: string): Promise<void> {
+      const publication = [...publications.values()].find((row) => row.agentId === agentId && row.retiredAt === null);
+      if (!publication) throw new Error('not_found');
+      publications.set(publication.publicationId, {
+        ...publication,
+        retiredAt: new Date('2026-07-10T03:00:00.000Z')
+      });
+    },
+    async cloneFromMarketplace(publicationId: string, targetOwnerUserId: string) {
+      const publication = publications.get(publicationId);
+      if (!publication || publication.retiredAt || publication.visibility !== 'public') throw new Error('not_found');
+      const source = agents.get(publication.agentId);
+      if (!source) throw new Error('not_found');
+      const existing = [...agents.values()].find((agent) => agent.ownerUserId === targetOwnerUserId && agent.name === source.name);
+      if (existing) return { agent: existing, cloned: false };
+      const cloned = await this.createAgent(targetOwnerUserId, {
+        name: source.name,
+        description: source.description,
+        characterType: source.characterType,
+        promptConfig: source.promptConfig,
+        active: source.status !== 'disabled',
+        sources: source.sources,
+        preferences: source.preferences,
+        schedule: source.schedule ?? undefined
+      });
+      return { agent: cloned, cloned: true };
+    },
+    async findOwnerUserId(_resourceType: 'agent' | 'source' | 'playbook', resourceId: string): Promise<string | null> {
+      return agents.get(resourceId)?.ownerUserId ?? null;
+    },
+    async hasGrant(input: { granteeUserId: string; resourceType: 'agent' | 'source' | 'playbook'; resourceId: string; permission: string }): Promise<boolean> {
+      if (input.resourceType !== 'agent') return false;
+      return (grants.get(input.resourceId) ?? []).some(
+        (grant) =>
+          grant.granteeUserId === input.granteeUserId &&
+          (grant.permission === input.permission || grant.permission === '*') &&
+          (!grant.expiresAt || grant.expiresAt.getTime() > Date.now())
+      );
+    },
+    async isPubliclyPublished(_resourceType: 'agent' | 'source' | 'playbook', resourceId: string): Promise<boolean> {
+      return [...publications.values()].some((publication) => publication.agentId === resourceId && publication.retiredAt === null && publication.visibility === 'public');
     }
   };
 }
@@ -111,8 +234,45 @@ describe('agent routes', () => {
         name: 'Bad Agent',
         sources: [{ type: 'web_urls', value: 'https://example.com' }],
         schedule: { mode: 'interval', intervalMinutes: 30 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
+      }
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns 400 for unsupported character type on create', async () => {
+    const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader(),
+      payload: {
+        name: 'Bad Character Agent',
+        characterType: 'comedian',
+        promptConfig: {},
+        sources: [{ type: 'web_urls', value: 'https://example.com' }],
+        schedule: { mode: 'interval', intervalMinutes: 120 },
+        preferences: { sector: ['tech'] }
+      }
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns 400 for finance_expert create payload without risk_level', async () => {
+    const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader(),
+      payload: {
+        name: 'Finance Agent',
+        characterType: 'finance_expert',
+        promptConfig: { tone: 'formal' },
+        sources: [{ type: 'web_urls', value: 'https://example.com' }],
+        schedule: { mode: 'interval', intervalMinutes: 120 },
+        preferences: { sector: ['finance'] }
       }
     });
 
@@ -129,8 +289,7 @@ describe('agent routes', () => {
         name: 'Good Agent',
         sources: [{ type: 'web_urls', value: 'https://example.com' }],
         schedule: { mode: 'interval', intervalMinutes: 120 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
       }
     });
 
@@ -153,8 +312,7 @@ describe('agent routes', () => {
         name: 'Good Agent',
         sources: [{ type: 'web_urls', value: 'https://example.com' }],
         schedule: { mode: 'interval', intervalMinutes: 120 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
       }
     });
 
@@ -174,8 +332,7 @@ describe('agent routes', () => {
         name: 'Good Agent',
         sources: [{ type: 'web_urls', value: 'https://example.com' }],
         schedule: { mode: 'interval', intervalMinutes: 120 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
       }
     });
 
@@ -199,8 +356,7 @@ describe('agent routes', () => {
         name: 'Owned Agent',
         sources: [{ type: 'web_urls', value: 'https://example.com' }],
         schedule: { mode: 'interval', intervalMinutes: 120 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
       }
     });
 
@@ -226,8 +382,7 @@ describe('agent routes', () => {
         name: 'User One Agent',
         sources: [{ type: 'web_urls', value: 'https://example.com/one' }],
         schedule: { mode: 'interval', intervalMinutes: 120 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
       }
     });
     await app.inject({
@@ -238,8 +393,7 @@ describe('agent routes', () => {
         name: 'User Two Agent',
         sources: [{ type: 'web_urls', value: 'https://example.com/two' }],
         schedule: { mode: 'interval', intervalMinutes: 120 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
       }
     });
 
@@ -259,8 +413,7 @@ describe('agent routes', () => {
         name: 'Good Agent',
         sources: [{ type: 'web_urls', value: 'https://example.com' }],
         schedule: { mode: 'interval', intervalMinutes: 120 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
       }
     });
 
@@ -287,8 +440,7 @@ describe('agent routes', () => {
         name: 'Runner Agent',
         sources: [{ type: 'web_urls', value: 'https://example.com' }],
         schedule: { mode: 'interval', intervalMinutes: 120 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
       }
     });
 
@@ -304,7 +456,7 @@ describe('agent routes', () => {
     expect(runs[0].agentName).toBe('Runner Agent');
   });
 
-  it('returns full agent detail including preferences, recipients, and schedule', async () => {
+  it('returns full agent detail including preferences and schedule', async () => {
     const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
     await app.inject({
       method: 'POST',
@@ -315,8 +467,7 @@ describe('agent routes', () => {
         description: 'Watches tech news podcasts',
         sources: [{ type: 'web_urls', value: 'https://example.com', frequencyMinutes: 90 }],
         schedule: { mode: 'interval', intervalMinutes: 120 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
       }
     });
 
@@ -326,7 +477,6 @@ describe('agent routes', () => {
     const detail = res.json();
     expect(detail.description).toBe('Watches tech news podcasts');
     expect(detail.preferences).toEqual({ sector: ['tech'] });
-    expect(detail.recipients).toEqual(['team@example.com']);
     expect(detail.schedule).toEqual({ mode: 'interval', intervalMinutes: 120 });
     expect(detail.sources[0]).toMatchObject({ frequencyMinutes: 90 });
   });
@@ -337,7 +487,7 @@ describe('agent routes', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('updates preferences, recipients, and schedule via PATCH', async () => {
+  it('updates preferences and schedule via PATCH', async () => {
     const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
     await app.inject({
       method: 'POST',
@@ -347,8 +497,7 @@ describe('agent routes', () => {
         name: 'Editable Agent',
         sources: [{ type: 'web_urls', value: 'https://example.com' }],
         schedule: { mode: 'interval', intervalMinutes: 120 },
-        preferences: { sector: ['tech'] },
-        recipients: ['team@example.com']
+        preferences: { sector: ['tech'] }
       }
     });
 
@@ -358,7 +507,6 @@ describe('agent routes', () => {
       headers: authCookieHeader(),
       payload: {
         description: 'Updated description',
-        recipients: ['new@example.com'],
         schedule: { mode: 'daily', dailyTime: '08:00', timezone: 'UTC' }
       }
     });
@@ -366,8 +514,36 @@ describe('agent routes', () => {
     expect(patchRes.statusCode).toBe(200);
     const updated = patchRes.json();
     expect(updated.description).toBe('Updated description');
-    expect(updated.recipients).toEqual(['new@example.com']);
     expect(updated.schedule).toEqual({ mode: 'daily', dailyTime: '08:00', timezone: 'UTC' });
+  });
+
+  it('returns 400 when PATCH sets non-finance character with risk_level', async () => {
+    const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader(),
+      payload: {
+        name: 'Editable Agent',
+        characterType: 'finance_expert',
+        promptConfig: { risk_level: 'moderate', tone: 'formal' },
+        sources: [{ type: 'web_urls', value: 'https://example.com' }],
+        schedule: { mode: 'interval', intervalMinutes: 120 },
+        preferences: { sector: ['finance'] }
+      }
+    });
+
+    const patchRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/agents/agent-1',
+      headers: authCookieHeader(),
+      payload: {
+        characterType: 'teacher',
+        promptConfig: { risk_level: 'low' }
+      }
+    });
+
+    expect(patchRes.statusCode).toBe(400);
   });
 
   it('returns 503 when source probing is not configured', async () => {
@@ -400,7 +576,14 @@ describe('agent routes', () => {
   it('delegates to the configured source prober and returns its result', async () => {
     const probeSource = async (source: { type: string; value: string }) => {
       expect(source).toEqual({ type: 'web_urls', value: 'https://example.com/blog' });
-      return { reachable: true, kind: 'listing_page' as const, confidence: 0.9 };
+      return {
+        reachable: true,
+        kind: 'listing_page' as const,
+        confidence: 0.9,
+        title: 'Example Blog',
+        coverImageUrl: 'https://example.com/blog-cover.jpg',
+        previewItems: [{ title: 'Post 1', link: 'https://example.com/blog/post-1', pubDate: null }]
+      };
     };
 
     const app = await buildServer({
@@ -418,7 +601,14 @@ describe('agent routes', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ reachable: true, kind: 'listing_page', confidence: 0.9 });
+    expect(res.json()).toEqual({
+      reachable: true,
+      kind: 'listing_page',
+      confidence: 0.9,
+      title: 'Example Blog',
+      coverImageUrl: 'https://example.com/blog-cover.jpg',
+      previewItems: [{ title: 'Post 1', link: 'https://example.com/blog/post-1', pubDate: null }]
+    });
   });
 
   it('passes the configured maxItems through to the source prober', async () => {
@@ -447,7 +637,7 @@ describe('agent routes', () => {
 
   it('returns 503 for episode options when source probing is not configured', async () => {
     const repo = createFakeRepo();
-    await repo.createAgent('admin-user-id', {
+    await repo.createAgent('user-1', {
       name: 'Podcast Agent',
       sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
     } as CreateAgentInput);
@@ -515,7 +705,7 @@ describe('agent routes', () => {
 
   it('passes a forcedEpisode selection from the run request body through to the run trigger', async () => {
     const repo = createFakeRepo();
-    await repo.createAgent('admin-user-id', {
+    await repo.createAgent('user-1', {
       name: 'Podcast Agent',
       sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
     } as CreateAgentInput);
@@ -540,11 +730,235 @@ describe('agent routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/agents/agent-1/run',
-      headers: authCookieHeader(),
+      headers: authCookieHeader('user-1'),
       payload: { sourceType: 'podcast_feeds', sourceValue: 'https://example.com/feed.xml', itemLink: 'https://example.com/ep-2' }
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ status: 'succeeded' });
+  });
+
+  it('creates persona-focused agents without requiring sources/schedule/recipients', async () => {
+    const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader(),
+      payload: { name: 'Persona Agent', characterType: 'teacher', promptConfig: { tone: 'concise' } }
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({
+      name: 'Persona Agent',
+      characterType: 'teacher',
+      sources: [],
+      schedule: null
+    });
+  });
+
+  it('authorizes agent read/edit/delete by centralized grants and denies non-granted users', async () => {
+    const agentRepository = createFakeRepo();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner@example.com', 'hash', 'Owner', 'user');
+    const shared = await userRepository.createWithPassword('shared@example.com', 'hash', 'Shared', 'user');
+    const blocked = await userRepository.createWithPassword('blocked@example.com', 'hash', 'Blocked', 'user');
+    await userRepository.setEmailVerified(owner.id, true);
+    await userRepository.setEmailVerified(shared.id, true);
+    await userRepository.setEmailVerified(blocked.id, true);
+
+    const app = await buildServer({
+      agentRepository,
+      agents: createFakeAgentsDeps(),
+      auth: { ...createTestAuthDeps(), userRepository },
+      accessResolver: new DomainAccessResolver(agentRepository)
+    });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader(owner.id),
+      payload: { name: 'ACL Agent' }
+    });
+    const agentId = createRes.json().id as string;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/shares`,
+      headers: authCookieHeader(owner.id),
+      payload: { granteeUserId: shared.id, permission: 'read' }
+    });
+
+    const sharedRead = await app.inject({ method: 'GET', url: `/api/agents/${agentId}`, headers: authCookieHeader(shared.id) });
+    const sharedEditDenied = await app.inject({
+      method: 'PATCH',
+      url: `/api/agents/${agentId}`,
+      headers: authCookieHeader(shared.id),
+      payload: { description: 'nope' }
+    });
+    const blockedRead = await app.inject({ method: 'GET', url: `/api/agents/${agentId}`, headers: authCookieHeader(blocked.id) });
+
+    expect(sharedRead.statusCode).toBe(200);
+    expect(sharedEditDenied.statusCode).toBe(403);
+    expect(blockedRead.statusCode).toBe(403);
+  });
+
+  it('enforces owner/admin-only share management endpoints', async () => {
+    const agentRepository = createFakeRepo();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner2@example.com', 'hash', 'Owner2', 'user');
+    const shared = await userRepository.createWithPassword('shared2@example.com', 'hash', 'Shared2', 'user');
+    const target = await userRepository.createWithPassword('target2@example.com', 'hash', 'Target2', 'user');
+    const admin = await userRepository.createWithPassword('admin2@example.com', 'hash', 'Admin2', 'admin');
+    await userRepository.setEmailVerified(owner.id, true);
+    await userRepository.setEmailVerified(shared.id, true);
+    await userRepository.setEmailVerified(target.id, true);
+    await userRepository.setEmailVerified(admin.id, true);
+
+    const app = await buildServer({
+      agentRepository,
+      agents: createFakeAgentsDeps(),
+      auth: { ...createTestAuthDeps(), userRepository },
+      accessResolver: new DomainAccessResolver(agentRepository)
+    });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader(owner.id),
+      payload: { name: 'Share Agent' }
+    });
+    const agentId = createRes.json().id as string;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/shares`,
+      headers: authCookieHeader(owner.id),
+      payload: { granteeUserId: shared.id, permission: 'edit' }
+    });
+
+    const sharedCannotManage = await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/shares`,
+      headers: authCookieHeader(shared.id),
+      payload: { granteeUserId: target.id, permission: 'read' }
+    });
+    const adminCanManage = await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/shares`,
+      headers: authCookieHeader(admin.id),
+      payload: { granteeUserId: target.id, permission: 'delete' }
+    });
+    const sharedCannotList = await app.inject({
+      method: 'GET',
+      url: `/api/agents/${agentId}/shares`,
+      headers: authCookieHeader(shared.id)
+    });
+    const adminCanList = await app.inject({
+      method: 'GET',
+      url: `/api/agents/${agentId}/shares`,
+      headers: authCookieHeader(admin.id)
+    });
+
+    expect(sharedCannotManage.statusCode).toBe(403);
+    expect(adminCanManage.statusCode).toBe(204);
+    expect(sharedCannotList.statusCode).toBe(403);
+    expect(adminCanList.statusCode).toBe(200);
+    expect(adminCanList.json()).toHaveLength(2);
+  });
+
+  it('supports agent marketplace publish, unpublish, listing and clone', async () => {
+    const agentRepository = createFakeRepo();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner3@example.com', 'hash', 'Owner3', 'user');
+    const teammate = await userRepository.createWithPassword('teammate3@example.com', 'hash', 'Teammate3', 'user');
+    await userRepository.setEmailVerified(owner.id, true);
+    await userRepository.setEmailVerified(teammate.id, true);
+
+    const app = await buildServer({
+      agentRepository,
+      agents: createFakeAgentsDeps(),
+      auth: { ...createTestAuthDeps(), userRepository },
+      accessResolver: new DomainAccessResolver(agentRepository)
+    });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader(owner.id),
+      payload: { name: 'Marketplace Agent' }
+    });
+    const agentId = createRes.json().id as string;
+
+    const publishRes = await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/publish`,
+      headers: authCookieHeader(owner.id),
+      payload: { title: 'Marketplace Agent Pack', summary: 'Sample', visibility: 'public' }
+    });
+    expect(publishRes.statusCode).toBe(201);
+    const publicationId = publishRes.json().publicationId as string;
+
+    const listRes = await app.inject({ method: 'GET', url: '/api/agents/marketplace', headers: authCookieHeader(teammate.id) });
+    expect(listRes.statusCode).toBe(200);
+    expect(listRes.json()).toHaveLength(1);
+
+    const cloneRes = await app.inject({
+      method: 'POST',
+      url: `/api/agents/marketplace/${publicationId}/clone`,
+      headers: authCookieHeader(teammate.id)
+    });
+    expect(cloneRes.statusCode).toBe(201);
+    expect(cloneRes.json().cloned).toBe(true);
+    expect(cloneRes.json().agent.ownerUserId).toBe(teammate.id);
+
+    const unpublishRes = await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/unpublish`,
+      headers: authCookieHeader(owner.id)
+    });
+    expect(unpublishRes.statusCode).toBe(204);
+
+    const postUnpublishListRes = await app.inject({ method: 'GET', url: '/api/agents/marketplace', headers: authCookieHeader(teammate.id) });
+    expect(postUnpublishListRes.statusCode).toBe(200);
+    expect(postUnpublishListRes.json()).toHaveLength(0);
+  });
+
+  it('restricts agent publish/unpublish to owner or admin', async () => {
+    const agentRepository = createFakeRepo();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner4@example.com', 'hash', 'Owner4', 'user');
+    const editor = await userRepository.createWithPassword('editor4@example.com', 'hash', 'Editor4', 'user');
+    await userRepository.setEmailVerified(owner.id, true);
+    await userRepository.setEmailVerified(editor.id, true);
+
+    const app = await buildServer({
+      agentRepository,
+      agents: createFakeAgentsDeps(),
+      auth: { ...createTestAuthDeps(), userRepository },
+      accessResolver: new DomainAccessResolver(agentRepository)
+    });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader(owner.id),
+      payload: { name: 'Owner Agent' }
+    });
+    const agentId = createRes.json().id as string;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/shares`,
+      headers: authCookieHeader(owner.id),
+      payload: { granteeUserId: editor.id, permission: 'edit' }
+    });
+
+    const publishDenied = await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/publish`,
+      headers: authCookieHeader(editor.id),
+      payload: { title: 'Denied' }
+    });
+    expect(publishDenied.statusCode).toBe(403);
   });
 });

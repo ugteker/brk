@@ -2,11 +2,12 @@ name: ChatTrader Deploy
 
 on:
   push:
-    # Release policy: deployments happen from master only.
-    # Changes from alpha must be promoted via PR merge into master.
-    branches: [master]
+    # Branch-conditioned rollout topology on shared host:
+    # - alpha  -> alpha environment at /opt/ChatTrader-alpha
+    # - master -> production environment at /opt/ChatTrader
+    branches: [master, alpha]
   pull_request:
-    branches: [master]
+    branches: [master, alpha]
 
 jobs:
   test:
@@ -29,24 +30,65 @@ jobs:
         run: npm run test
         working-directory: apps/web
 
-  deploy:
+  deploy-alpha:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/alpha'
+    runs-on: ubuntu-latest
+    environment: alpha
+    env:
+      DEPLOY_PATH: /opt/ChatTrader-alpha
+      DEPLOY_BRANCH: alpha
+    concurrency:
+      group: alpha-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      # Alpha is isolated from production by:
+      # - dedicated environment: alpha
+      # - dedicated server path: /opt/ChatTrader-alpha
+      # - dedicated branch rollout: alpha only
+      - name: Write alpha server .env and deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          envs: HETZNER_APP_ENV
+          script: |
+            set -e
+            umask 077
+            printf '%s\n' "$HETZNER_APP_ENV" > "$DEPLOY_PATH/.env"
+            chmod 600 "$DEPLOY_PATH/.env"
+            cd "$DEPLOY_PATH"
+            git pull --ff-only origin "$DEPLOY_BRANCH"
+            export VITE_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            export VITE_BUILD_COMMIT_SHA="$(git rev-parse --short HEAD)"
+            docker compose build
+            docker compose up -d --remove-orphans
+            sleep 5
+            docker compose logs chattrader --tail 50 | grep -o 'https://[a-zA-Z0-9.-]*\.trycloudflare\.com' | tail -n 1 || true
+        env:
+          HETZNER_APP_ENV: ${{ secrets.HETZNER_APP_ENV }}
+
+  deploy-production:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: production
+    env:
+      DEPLOY_PATH: /opt/ChatTrader
+      DEPLOY_BRANCH: master
     concurrency:
       group: production-deploy
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
-      # The server keeps its own git clone at /opt/ChatTrader (set up once
-      # during the manual first run — see deploy/README.md). We only need to
-      # (1) refresh the .env from the current secret value, since it can
-      # change independently of code, and (2) trigger deploy/deploy.sh, which
-      # does the git pull + docker compose build/up itself. The .env content
-      # is written via a heredoc over the SSH connection so it never appears
-      # as a command-line argument or in this workflow's own logs.
+      # Production isolation boundary on shared host:
+      # - dedicated environment: production
+      # - dedicated server path: /opt/ChatTrader
+      # - dedicated branch rollout: master only
       - name: Write server .env and deploy
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -57,10 +99,10 @@ jobs:
           script: |
             set -e
             umask 077
-            printf '%s\n' "$HETZNER_APP_ENV" > /opt/ChatTrader/.env
-            chmod 600 /opt/ChatTrader/.env
-            cd /opt/ChatTrader
-            git pull --ff-only origin master
+            printf '%s\n' "$HETZNER_APP_ENV" > "$DEPLOY_PATH/.env"
+            chmod 600 "$DEPLOY_PATH/.env"
+            cd "$DEPLOY_PATH"
+            git pull --ff-only origin "$DEPLOY_BRANCH"
             export VITE_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             export VITE_BUILD_COMMIT_SHA="$(git rev-parse --short HEAD)"
             docker compose build

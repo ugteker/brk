@@ -1,4 +1,12 @@
-export interface PromptPersona {
+export type PersonaId =
+  | 'finance_expert'
+  | 'teacher'
+  | 'influencer'
+  | 'trainer'
+  | 'philosopher'
+  | 'summarizer';
+
+export interface PromptCharacter {
   id: string;
   name: string;
   riskLevel: 'low' | 'medium' | 'high';
@@ -6,13 +14,14 @@ export interface PromptPersona {
   systemPrompt: string;
 }
 
-/**
- * Preset system-prompt "characters" the wizard's System prompt step lets the user pick from.
- * Each persona pairs a distinct trading philosophy/risk profile with a full, ready-to-use
- * Claude system prompt. Selecting one overwrites the editable prompt textarea and suggests a
- * matching risk level for the Signal policy step; the user can still freely edit afterwards.
- */
-export const PROMPT_PERSONAS: PromptPersona[] = [
+export interface PromptPersona {
+  id: PersonaId;
+  name: string;
+  tagline: string;
+  characters: PromptCharacter[];
+}
+
+const FINANCE_CHARACTERS: PromptCharacter[] = [
   {
     id: 'conservative-analyst',
     name: 'Conservative Analyst',
@@ -142,8 +151,86 @@ export const PROMPT_PERSONAS: PromptPersona[] = [
   }
 ];
 
-export const DEFAULT_PROMPT_PERSONA_ID = 'balanced-analyst';
+function nonFinancePrompt(personaName: string, characterName: string): string {
+  return (
+    `You are a ${characterName} operating as a ${personaName}.\n\n` +
+    'Use the provided source evidence to generate a clear, practical response in the requested JSON shape.\n' +
+    'Be explicit about evidence quality, list uncertainties, and cite source details for every claim.\n' +
+    'Do not invent facts and avoid unsupported conclusions.'
+  );
+}
 
-export function getPromptPersona(id: string): PromptPersona | undefined {
+export const PROMPT_PERSONAS: PromptPersona[] = [
+  {
+    id: 'finance_expert',
+    name: 'Finance Expert',
+    tagline: 'Signals-focused equity analysis and risk-aware market interpretation.',
+    characters: FINANCE_CHARACTERS
+  },
+  {
+    id: 'teacher',
+    name: 'Teacher',
+    tagline: 'Explains ideas step-by-step for learning and retention.',
+    characters: [
+      { id: 'teacher-mentor', name: 'Mentor', riskLevel: 'medium', tagline: 'Guides learners with coaching-style explanations.', systemPrompt: nonFinancePrompt('Teacher', 'Mentor') },
+      { id: 'teacher-classroom-instructor', name: 'Classroom Instructor', riskLevel: 'medium', tagline: 'Structured lessons with clear checkpoints.', systemPrompt: nonFinancePrompt('Teacher', 'Classroom Instructor') },
+      { id: 'teacher-practical-coach', name: 'Practical Coach', riskLevel: 'medium', tagline: 'Actionable guidance with hands-on examples.', systemPrompt: nonFinancePrompt('Teacher', 'Practical Coach') }
+    ]
+  },
+  {
+    id: 'influencer',
+    name: 'Influencer',
+    tagline: 'Creates audience-ready narratives and content angles.',
+    characters: [
+      { id: 'influencer-trend-scout', name: 'Trend Scout', riskLevel: 'medium', tagline: 'Finds timely themes and attention hooks.', systemPrompt: nonFinancePrompt('Influencer', 'Trend Scout') },
+      { id: 'influencer-storyteller', name: 'Storyteller', riskLevel: 'medium', tagline: 'Crafts compelling narratives from evidence.', systemPrompt: nonFinancePrompt('Influencer', 'Storyteller') },
+      { id: 'influencer-campaign-strategist', name: 'Campaign Strategist', riskLevel: 'medium', tagline: 'Builds clear campaign messaging plans.', systemPrompt: nonFinancePrompt('Influencer', 'Campaign Strategist') }
+    ]
+  },
+  {
+    id: 'trainer',
+    name: 'Trainer',
+    tagline: 'Builds repeatable practice routines and performance drills.',
+    characters: [
+      { id: 'trainer-drill-sergeant', name: 'Drill Sergeant', riskLevel: 'medium', tagline: 'Direct training with disciplined repetition.', systemPrompt: nonFinancePrompt('Trainer', 'Drill Sergeant') },
+      { id: 'trainer-supportive-coach', name: 'Supportive Coach', riskLevel: 'medium', tagline: 'Encouraging feedback with progressive goals.', systemPrompt: nonFinancePrompt('Trainer', 'Supportive Coach') },
+      { id: 'trainer-exam-prep', name: 'Exam Prep Trainer', riskLevel: 'medium', tagline: 'Targets likely test points and recall drills.', systemPrompt: nonFinancePrompt('Trainer', 'Exam Prep Trainer') }
+    ]
+  },
+  {
+    id: 'philosopher',
+    name: 'Philosopher',
+    tagline: 'Interprets ideas through reasoning, assumptions, and ethics.',
+    characters: [
+      { id: 'philosopher-socratic-guide', name: 'Socratic Guide', riskLevel: 'medium', tagline: 'Uses questions to reveal assumptions.', systemPrompt: nonFinancePrompt('Philosopher', 'Socratic Guide') },
+      { id: 'philosopher-critical-thinker', name: 'Critical Thinker', riskLevel: 'medium', tagline: 'Stress-tests logic and evidence quality.', systemPrompt: nonFinancePrompt('Philosopher', 'Critical Thinker') },
+      { id: 'philosopher-ethics-analyst', name: 'Ethics Analyst', riskLevel: 'medium', tagline: 'Balances decisions with ethical consequences.', systemPrompt: nonFinancePrompt('Philosopher', 'Ethics Analyst') }
+    ]
+  },
+  {
+    id: 'summarizer',
+    name: 'Summarizer',
+    tagline: 'Distills complex inputs into concise decision-ready takeaways.',
+    characters: [
+      { id: 'summarizer-executive-briefer', name: 'Executive Briefer', riskLevel: 'medium', tagline: 'Top-line brief for fast executive decisions.', systemPrompt: nonFinancePrompt('Summarizer', 'Executive Briefer') },
+      { id: 'summarizer-research-digestor', name: 'Research Digestor', riskLevel: 'medium', tagline: 'Turns noisy inputs into focused research notes.', systemPrompt: nonFinancePrompt('Summarizer', 'Research Digestor') },
+      { id: 'summarizer-action-planner', name: 'Action Planner', riskLevel: 'medium', tagline: 'Converts insights into prioritized action items.', systemPrompt: nonFinancePrompt('Summarizer', 'Action Planner') }
+    ]
+  }
+];
+
+export const DEFAULT_PROMPT_PERSONA_ID: PersonaId = 'finance_expert';
+export const DEFAULT_PROMPT_CHARACTER_ID = 'balanced-analyst';
+
+export function getPromptPersona(id: PersonaId | string): PromptPersona | undefined {
   return PROMPT_PERSONAS.find((persona) => persona.id === id);
+}
+
+export function getPromptCharacter(personaId: PersonaId | string, characterId: string): PromptCharacter | undefined {
+  const persona = getPromptPersona(personaId);
+  return persona?.characters.find((character) => character.id === characterId);
+}
+
+export function getPromptCharactersForPersona(personaId: PersonaId | string): PromptCharacter[] {
+  return getPromptPersona(personaId)?.characters ?? [];
 }

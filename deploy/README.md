@@ -4,6 +4,18 @@ This documents how the stack in `docker-compose.yml` gets from a fresh
 Hetzner server to a running, internet-reachable app, and how it's kept
 up to date via GitHub Actions.
 
+## Deployment topology
+
+Shared host with branch-conditioned rollout and explicit isolation boundaries:
+
+| Branch | GitHub environment | Server path | Concurrency group |
+| --- | --- | --- | --- |
+| `alpha` | `alpha` | `/opt/ChatTrader-alpha` | `alpha-deploy` |
+| `master` | `production` | `/opt/ChatTrader` | `production-deploy` |
+
+Isolation is enforced by branch trigger + environment-scoped secrets + separate
+server working directories + separate deploy concurrency groups.
+
 ## Architecture
 
 ```
@@ -53,8 +65,14 @@ already installed).
 
 ```bash
 ssh <user>@<hetzner-host>
+# Production checkout
 sudo mkdir -p /opt/ChatTrader && sudo chown $USER:$USER /opt/ChatTrader
 git clone https://github.com/ugteker/brk.git /opt/ChatTrader
+
+# Alpha checkout (isolated path, same host)
+sudo mkdir -p /opt/ChatTrader-alpha && sudo chown $USER:$USER /opt/ChatTrader-alpha
+git clone https://github.com/ugteker/brk.git /opt/ChatTrader-alpha
+
 cd /opt/ChatTrader
 cp apps/api/.env.example .env
 # edit .env with real values: JWT_SECRET (generate: openssl rand -base64 48),
@@ -75,20 +93,29 @@ After this, all future deploys are handled automatically by CI (see GitHub Actio
 ## GitHub Actions (`.github/workflows/deploy.yml`)
 
 Release/deploy policy:
-- Deployment is triggered by pushes to `master` only.
-- `alpha` does **not** deploy directly.
-- Promotion flow is: `alpha` -> Pull Request -> merge into `master` -> auto deploy.
+- Push to `alpha` deploys to the **alpha** environment/path (`/opt/ChatTrader-alpha`).
+- Push to `master` deploys to the **production** environment/path (`/opt/ChatTrader`).
+- Promotion flow remains: `alpha` -> Pull Request -> merge into `master`.
 
-On every push to `master`: runs `apps/api` and `apps/web` test suites, then (if
-they pass) SSHes into the Hetzner server, rewrites `/opt/ChatTrader/.env` from
-a GitHub secret, and SSHes in to run `git pull --ff-only origin master` +
-`docker compose build` + `docker compose up -d`.
+Routing/isolation implementation status:
+- `alpha-workflow-routing`: implemented in `.github/workflows/deploy.yml` with
+  branch-conditioned jobs, environment-scoped secrets (`alpha` vs `production`),
+  isolated server paths, and separate deploy concurrency groups.
+- `alpha-script-parameterization`: **N/A**. `deploy/deploy.sh` is no longer in
+  the active deployment path (workflow deploys over SSH with inline script), so
+  there is no script surface left to parameterize for alpha/prod routing.
+
+On every push to `alpha` or `master`: runs `apps/api` and `apps/web` test
+suites, then (if they pass) SSHes into the Hetzner server, rewrites the
+branch-mapped checkout's `.env` from a GitHub secret, and redeploys that branch.
 
 ### Required repository secrets
 
-Set these under **Settings → Environments → `production` → Environment secrets** in
-`ugteker/brk` (this deploy workflow uses `environment: production`, so these
-must be present there for resolution):
+Set these under **Settings → Environments** in `ugteker/brk`:
+- Environment `alpha` (for branch `alpha`)
+- Environment `production` (for branch `master`)
+
+Use the same key names in both environments:
 
 | Secret | Value |
 | --- | --- |
@@ -99,14 +126,14 @@ must be present there for resolution):
 
 ### Recommended branch protection
 
-To enforce the release flow above, configure branch protection for `master`:
+To enforce the release flow above, configure branch protection for both `alpha` and `master`:
 - Require a pull request before merging.
 - Require status checks to pass before merging (at minimum the deploy workflow's `test` job).
-- Restrict direct pushes to `master` where possible.
+- Restrict direct pushes where possible.
 
 Suggested GitHub UI path:
 1. Go to **Settings -> Branches -> Branch protection rules** (or **Rulesets**).
-2. Target branch: `master`.
+2. Target branch: `alpha` (repeat for `master`).
 3. Enable **Require a pull request before merging**.
 4. Enable **Require status checks to pass before merging** and select check **`test`** from workflow **Deploy**.
 5. Enable **Restrict who can push to matching branches** (optional but recommended).
@@ -115,9 +142,9 @@ Suggested GitHub UI path:
 as a CLI argument or echoed — it won't appear in workflow logs. Whenever a
 value in it changes (e.g. rotating `JWT_SECRET`, updating `APP_BASE_URL` to a
 new tunnel hostname), update the secret and re-run the workflow (or push any
-commit to `master`).
+commit to the target branch: `alpha` or `master`).
 
-If these are missing in the `production` environment, the SSH deploy step fails
+If these are missing in the target environment (`alpha` or `production`), the SSH deploy step fails
 early with `Error: missing server host` because `HETZNER_HOST`/`HETZNER_USER`/
 `HETZNER_SSH_KEY` resolve as empty.
 
@@ -142,6 +169,7 @@ beyond internal testing:
   point — each of the three processes already has an isolated build stage
   in the root `Dockerfile`, so that split is a compose-file change only, no
   application code changes needed).
+- This deployment stack is production-oriented (built SPA served by nginx). For local frontend iteration with instant UI updates, run `npm run dev` in `apps/web` (Vite HMR) instead of the container/preview path.
 - **Postgres instead of SQLite** → swap `apps/api/prisma/schema.prisma`
   `datasource db.provider`, add a `postgres` service to
   `docker-compose.yml`, and update `DATABASE_URL` in `.env`. Out of scope for

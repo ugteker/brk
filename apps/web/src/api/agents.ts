@@ -1,13 +1,29 @@
 export type SignalSide = 'long' | 'short';
+export type CharacterType = 'finance_expert' | 'teacher' | 'trainer' | 'philosopher' | 'influencer' | 'summarizer';
+export { probeSource } from './sources';
+export type { SourceProbePreviewItem, SourceProbeResult } from './sources';
+
+export interface PromptConfig {
+  tone?: string;
+  depth?: string;
+  format_style?: string;
+  audience?: string;
+  output_length?: string;
+  custom_instructions?: string;
+  risk_level?: string;
+  personality_id?: string;
+  personality_label?: string;
+}
 
 export interface CreateAgentPayload {
   name: string;
   description?: string;
   active?: boolean;
-  sources: Array<{ type: 'web_urls' | 'podcast_feeds' | 'youtube_videos'; value: string; frequencyMinutes?: number; maxItems?: number }>;
+  characterType?: CharacterType;
+  promptConfig?: PromptConfig;
+  sources?: Array<{ type: 'web_urls' | 'podcast_feeds' | 'youtube_videos'; value: string; frequencyMinutes?: number; maxItems?: number }>;
   preferences: Record<string, string[]>;
-  recipients: string[];
-  schedule:
+  schedule?:
     | { mode: 'interval'; intervalMinutes: number }
     | { mode: 'daily'; dailyTime: string; timezone: string }
     | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string };
@@ -37,49 +53,14 @@ export async function updateAgent(agentId: string, payload: Partial<CreateAgentP
   return response.json();
 }
 
-export interface SourceProbePreviewItem {
-  title: string;
-  link: string | null;
-  pubDate: string | null;
-}
-
-export interface SourceProbeResult {
-  reachable: boolean;
-  kind: 'feed' | 'listing_page' | 'single_page' | 'unknown';
-  itemCount?: number;
-  confidence?: number;
-  warning?: string;
-  maxItemsPerRun?: number;
-  previewItems?: SourceProbePreviewItem[];
-}
-
-/**
- * Fail-fast wizard check: probes a source URL/feed immediately (before the agent is saved) so
- * the user can see right away whether it looks crawlable, without waiting for the first
- * scheduled run.
- */
-export async function probeSource(source: {
-  type: 'web_urls' | 'podcast_feeds' | 'youtube_videos';
-  value: string;
-  maxItems?: number;
-}): Promise<SourceProbeResult> {
-  const response = await fetch('/api/agents/sources/probe', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(source)
-  });
-  if (!response.ok) {
-    throw new Error('Failed to probe source');
-  }
-  return response.json();
-}
-
 export interface AgentSummary {
   id: string;
+  ownerUserId: string;
   name: string;
+  characterType?: CharacterType;
+  promptConfig?: PromptConfig;
   status: string;
   sources: Array<{ type: 'web_urls' | 'podcast_feeds' | 'youtube_videos'; value: string }>;
-  recipients: string[];
   schedule:
     | { mode: 'interval'; intervalMinutes: number }
     | { mode: 'daily'; dailyTime: string; timezone: string }
@@ -94,7 +75,6 @@ export interface AgentDetail extends AgentSummary {
   description: string;
   sources: Array<{ type: 'web_urls' | 'podcast_feeds' | 'youtube_videos'; value: string; frequencyMinutes: number; maxItems: number }>;
   preferences: Record<string, string[]>;
-  recipients: string[];
   schedule:
     | { mode: 'interval'; intervalMinutes: number }
     | { mode: 'daily'; dailyTime: string; timezone: string }
@@ -102,10 +82,19 @@ export interface AgentDetail extends AgentSummary {
     | null;
 }
 
+async function parseErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = await response.json();
+    return typeof body?.message === 'string' ? body.message : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function listAgents(): Promise<AgentSummary[]> {
   const response = await fetch('/api/agents');
   if (!response.ok) {
-    throw new Error('Failed to load agents');
+    throw new Error(await parseErrorMessage(response, 'Failed to load agents'));
   }
   return response.json();
 }
@@ -113,7 +102,7 @@ export async function listAgents(): Promise<AgentSummary[]> {
 export async function getAgent(agentId: string): Promise<AgentDetail> {
   const response = await fetch(`/api/agents/${agentId}`);
   if (!response.ok) {
-    throw new Error('Failed to load agent');
+    throw new Error(await parseErrorMessage(response, 'Failed to load agent'));
   }
   return response.json();
 }
@@ -122,14 +111,14 @@ export async function getAgent(agentId: string): Promise<AgentDetail> {
 export async function disableAgent(agentId: string): Promise<void> {
   const response = await fetch(`/api/agents/${agentId}/disable`, { method: 'POST' });
   if (!response.ok) {
-    throw new Error('Failed to pause agent');
+    throw new Error(await parseErrorMessage(response, 'Failed to pause agent'));
   }
 }
 
 export async function enableAgent(agentId: string): Promise<void> {
   const response = await fetch(`/api/agents/${agentId}/enable`, { method: 'POST' });
   if (!response.ok) {
-    throw new Error('Failed to resume agent');
+    throw new Error(await parseErrorMessage(response, 'Failed to resume agent'));
   }
 }
 
@@ -172,7 +161,7 @@ export async function runAgentNow(agentId: string, forcedEpisode?: ForcedEpisode
     body: forcedEpisode ? JSON.stringify(forcedEpisode) : undefined
   });
   if (!response.ok) {
-    throw new Error(response.status === 503 ? 'Manual runs are not available right now' : 'Failed to run agent');
+    throw new Error(response.status === 503 ? 'Manual runs are not available right now' : await parseErrorMessage(response, 'Failed to run agent'));
   }
   return response.json();
 }
@@ -180,8 +169,26 @@ export async function runAgentNow(agentId: string, forcedEpisode?: ForcedEpisode
 export async function deleteAgent(agentId: string): Promise<void> {
   const response = await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
   if (!response.ok) {
-    throw new Error('Failed to remove agent');
+    throw new Error(await parseErrorMessage(response, 'Failed to remove agent'));
   }
+}
+
+export interface PublishAgentPayload {
+  title: string;
+  summary?: string;
+  visibility?: 'public' | 'private';
+}
+
+export async function publishAgent(agentId: string, payload: PublishAgentPayload): Promise<{ publicationId: string }> {
+  const response = await fetch(`/api/agents/${agentId}/publish`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response, 'Failed to publish agent'));
+  }
+  return response.json();
 }
 
 export interface RecentRunDto {
@@ -196,7 +203,7 @@ export interface RecentRunDto {
 export async function listRecentRuns(limit = 3): Promise<RecentRunDto[]> {
   const response = await fetch(`/api/agents/runs/recent?limit=${limit}`);
   if (!response.ok) {
-    throw new Error('Failed to load recent runs');
+    throw new Error(await parseErrorMessage(response, 'Failed to load recent runs'));
   }
   return response.json();
 }
@@ -207,6 +214,26 @@ export interface SignalDto {
   confidence: number;
   rationale: string;
   citations: string[];
+}
+
+export interface UnifiedReportCommonFieldsDto {
+  summary: string;
+  key_takeaways: string[];
+  sources_used: string[];
+  citations: string[];
+}
+
+export type UnifiedCharacterSectionDto =
+  | { character_type: 'finance_expert'; market_summary: string; signals: SignalDto[] }
+  | { character_type: 'teacher'; lesson_explanation: string }
+  | { character_type: 'trainer'; qa_drill: Array<{ question: string; answer: string }> }
+  | { character_type: 'philosopher'; argument_reflection: string }
+  | { character_type: 'influencer'; content_angles: string[]; hooks: string[] }
+  | { character_type: 'summarizer'; bullet_digest: string[] };
+
+export interface UnifiedCharacterReportDto {
+  common: UnifiedReportCommonFieldsDto;
+  section: UnifiedCharacterSectionDto;
 }
 
 export interface RunReportDto {
@@ -224,6 +251,7 @@ export interface RunReportDto {
   inputTokens: number | null;
   outputTokens: number | null;
   estimatedCostUsd: number | null;
+  report?: UnifiedCharacterReportDto;
 }
 
 export interface PromptVersionDto {
@@ -259,12 +287,20 @@ export interface ResendReportNotificationResult {
   recipientCount: number;
 }
 
-export async function resendReportNotification(agentId: string, reportId: string): Promise<ResendReportNotificationResult> {
-  const response = await fetch(`/api/agents/${agentId}/reports/${reportId}/resend-notification`, { method: 'POST' });
+export async function resendReportNotification(
+  agentId: string,
+  reportId: string,
+  recipients: string[]
+): Promise<ResendReportNotificationResult> {
+  const response = await fetch(`/api/agents/${agentId}/reports/${reportId}/resend-notification`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ recipients })
+  });
   if (!response.ok) {
     if (response.status === 400) {
       const body = await response.json().catch(() => null);
-      throw new Error(body?.message ?? 'This agent has no notification recipients configured');
+      throw new Error(body?.message ?? 'Playbook recipients are required to send report notification');
     }
     throw new Error('Failed to send report notification');
   }

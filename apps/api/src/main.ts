@@ -5,7 +5,7 @@ import { RunQueueService } from './modules/runs/run-queue.service';
 import { PrismaRunStore } from './modules/runs/prisma-run-store';
 import { startSchedulerLoop } from './modules/schedules/scheduler-loop';
 import { ManualRunTrigger } from './modules/runs/manual-run-trigger';
-import { prisma } from './lib/db';
+import { ensureSqliteSchemaCompatibility, prisma } from './lib/db';
 import { PromptRepository } from './modules/prompts/repository';
 import { ArtifactRepository } from './modules/artifacts/repository';
 import { ReportRepository } from './modules/reports/repository';
@@ -27,6 +27,10 @@ import { GoogleOAuthHttpClient } from './modules/auth/google-oauth';
 import { hashPassword } from './modules/auth/password';
 import { SmtpMailer } from './modules/auth/mailer';
 import { config } from './config';
+import { AccessRepository } from './modules/access/repository';
+import { DomainAccessResolver } from './modules/access/permissions';
+import { SourceRepository } from './modules/source/repository';
+import { PlaybookRepository } from './modules/playbook/repository';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
   const { email, password } = config.auth.bootstrapAdmin;
@@ -67,6 +71,8 @@ async function bootstrapAdminAccount(userRepository: UserRepository) {
 }
 
 async function start() {
+  await ensureSqliteSchemaCompatibility();
+
   const agentRepository = new AgentRepository(prisma);
   const promptRepository = new PromptRepository(prisma);
   const artifactRepository = new ArtifactRepository(prisma);
@@ -74,6 +80,9 @@ async function start() {
   const runsRepository = new RunsRepository(prisma);
   const claudeClient = new ClaudeClient({ apiKey: process.env.ANTHROPIC_API_KEY });
   const userRepository = new UserRepository(prisma);
+  const sourceRepository = new SourceRepository(prisma);
+  const playbookRepository = new PlaybookRepository(prisma);
+  const accessResolver = new DomainAccessResolver(new AccessRepository(prisma));
   const cursorRepository = new SourceCursorRepository(prisma);
   const crawlConfigRepository = new SourceCrawlConfigRepository(prisma);
   const siteInspector = new SiteInspectorClient({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -111,8 +120,32 @@ async function start() {
   const app = await buildServer({
     agentRepository,
     agents: { promptRepository, reportRepository, agentRepository, mailer },
+    accessResolver,
     runs: { runsRepository },
     auth: { userRepository, googleOAuthClient: new GoogleOAuthHttpClient(), mailer },
+    source: {
+      sourceRepository,
+      accessResolver,
+      sourceProbe: {
+        probeSource: (source, previewLimit) =>
+          source.type === 'youtube_videos'
+            ? probeYouTubeSource({ httpGet: youtubeHttpGet, httpPostJson: defaultHttpPostJson }, source, previewLimit)
+            : probeSource({ httpGet: defaultHttpGet, siteInspector }, source, previewLimit)
+      }
+    },
+    playbook: {
+      playbookRepository,
+      accessResolver,
+      runTrigger: {
+        triggerRun: async (playbookId: string) => {
+          const playbook = await playbookRepository.getPlaybook(playbookId);
+          if (!playbook) {
+            return { status: 'failed', errorCode: 'not_found' };
+          }
+          return manualRunTrigger.triggerRun(playbook.agentId, { playbookRecipients: playbook.recipients });
+        }
+      }
+    },
     sourceProbe: {
       probeSource: (source, previewLimit) =>
         source.type === 'youtube_videos'
@@ -127,4 +160,3 @@ async function start() {
 }
 
 start();
-

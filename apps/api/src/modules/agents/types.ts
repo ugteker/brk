@@ -1,4 +1,26 @@
 export type SourceType = 'web_urls' | 'podcast_feeds' | 'youtube_videos';
+export type CharacterType = 'finance_expert' | 'teacher' | 'trainer' | 'philosopher' | 'influencer' | 'summarizer';
+
+export const CHARACTER_TYPES: CharacterType[] = [
+  'finance_expert',
+  'teacher',
+  'trainer',
+  'philosopher',
+  'influencer',
+  'summarizer'
+];
+
+export const DEFAULT_CHARACTER_TYPE: CharacterType = 'summarizer';
+
+export interface PromptConfig {
+  tone?: string;
+  depth?: string;
+  format_style?: string;
+  audience?: string;
+  output_length?: string;
+  custom_instructions?: string;
+  risk_level?: string;
+}
 
 export type ScheduleInput =
   | { mode: 'interval'; intervalMinutes: number }
@@ -9,10 +31,29 @@ export interface CreateAgentInput {
   name: string;
   description?: string;
   active?: boolean;
-  sources: Array<{ type: SourceType; value: string; frequencyMinutes?: number; maxItems?: number }>;
-  preferences: Record<string, string[]>;
-  recipients: string[];
-  schedule: ScheduleInput;
+  characterType?: CharacterType;
+  promptConfig?: PromptConfig;
+  sources?: Array<{ type: SourceType; value: string; frequencyMinutes?: number; maxItems?: number }>;
+  preferences?: Record<string, string[]>;
+  schedule?: ScheduleInput;
+}
+
+export type AgentSharePermission = 'read' | 'edit' | 'delete';
+export type PublicationVisibility = 'public' | 'private';
+
+export interface ShareAgentInput {
+  granteeUserId: string;
+  permission: AgentSharePermission;
+  expiresAt?: string;
+}
+
+export interface AgentShareRecord {
+  id: string;
+  grantedByUserId: string;
+  granteeUserId: string;
+  permission: AgentSharePermission;
+  expiresAt: Date | null;
+  createdAt: Date;
 }
 
 export interface ValidationResult {
@@ -25,12 +66,13 @@ export interface Agent {
   ownerUserId: string;
   name: string;
   description: string;
+  characterType: CharacterType;
+  promptConfig: PromptConfig;
   status: string;
   createdAt: Date;
   updatedAt: Date;
   sources: Array<{ type: SourceType; value: string; frequencyMinutes: number; maxItems: number }>;
   preferences: Record<string, string[]>;
-  recipients: string[];
   schedule: ScheduleInput | null;
 }
 
@@ -52,4 +94,26 @@ export interface RecentRun {
   status: string;
   scheduledFor: Date;
   finishedAt: Date | null;
+}
+
+export interface PublishAgentInput {
+  title: string;
+  summary?: string;
+  visibility?: PublicationVisibility;
+}
+
+export interface MarketplaceAgentListItem {
+  publicationId: string;
+  agentId: string;
+  publisherUserId: string;
+  title: string;
+  summary: string;
+  visibility: PublicationVisibility;
+  publishedAt: Date;
+  agent: Agent;
+}
+
+export interface CloneAgentResult {
+  agent: Agent;
+  cloned: boolean;
 }

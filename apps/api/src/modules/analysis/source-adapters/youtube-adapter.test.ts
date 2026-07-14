@@ -28,6 +28,8 @@ const SAMPLE_LEGACY_TIMEDTEXT_XML = `<?xml version="1.0" encoding="utf-8" ?><tra
 
 const SAMPLE_PLAYLIST_FEED = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Uploads from Market Channel</title>
+  <logo>https://yt3.ggpht.com/market-channel.png</logo>
   <entry>
     <id>yt:video:vid1</id>
     <title>Episode 1</title>
@@ -240,6 +242,8 @@ describe('probeYouTubeSource', () => {
     expect(result.reachable).toBe(true);
     expect(result.kind).toBe('feed');
     expect(result.itemCount).toBe(2);
+    expect(result.title).toBe('Uploads from Market Channel');
+    expect(result.coverImageUrl).toBe('https://yt3.ggpht.com/market-channel.png');
   });
 
   it('includes a sneak preview of the last 5 videos, independent of maxItems', async () => {

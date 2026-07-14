@@ -1,4 +1,5 @@
 import { buildAnalysisRequest } from './prompt-builder';
+import { buildEffectiveSystemPrompt } from './character-prompt-strategy';
 import type { ClaudeAnalysisResult, EvidenceBlock, SourceAdapter, SourceConfig, SourceCursorState } from './types';
 import type { ClaudeClient } from './claude-client';
 import type { Agent } from '../agents/types';
@@ -28,6 +29,7 @@ export interface ForcedEpisodeSelection {
 
 export interface AgentRunOptions {
   forcedEpisode?: ForcedEpisodeSelection;
+  playbookRecipients?: string[];
 }
 
 export interface AgentRunnerDeps {
@@ -147,7 +149,12 @@ export class AgentRunner {
 
       await this.setPhase(agentRunId, 'analyzing');
 
-      const request = buildAnalysisRequest(promptVersion, evidence);
+      const effectiveSystemPrompt = buildEffectiveSystemPrompt({
+        characterType: agent.characterType,
+        promptConfig: agent.promptConfig,
+        promptVersionSystemPrompt: promptVersion.systemPrompt
+      });
+      const request = buildAnalysisRequest({ ...promptVersion, systemPrompt: effectiveSystemPrompt }, evidence, agent.characterType);
       const analysis: ClaudeAnalysisResult = await this.deps.claudeClient.analyze(request);
 
       const combinedWarnings = [...sourceWarnings, ...analysis.sourceWarnings];
@@ -159,10 +166,12 @@ export class AgentRunner {
         agentId,
         agentRunId,
         promptVersionId: promptVersion.id,
+        characterType: agent.characterType,
         summary: analysis.summary,
         sourceWarnings: combinedWarnings,
         needsHumanReview: analysis.needsHumanReview || combinedWarnings.length > 0,
         signals: analysis.signals,
+        report: analysis.report,
         model: promptVersion.model,
         promptVersionNumber: promptVersion.version,
         inputTokens: usage?.inputTokens ?? null,
@@ -183,7 +192,7 @@ export class AgentRunner {
       // Falls back to the source URL for any evidence block without a resolved title (e.g. plain
       // web-page sources), and de-dupes in case the same item appears from more than one source.
       const itemTitles = [...new Set(evidence.map((block) => block.title || block.sourceRef))];
-      await sendReportNotification(this.deps.mailer, agent, report, itemTitles);
+      await sendReportNotification(this.deps.mailer, agent, report, itemTitles, options?.playbookRecipients ?? []);
 
       return { status: 'succeeded', reportId: report.id };
     } catch (error) {

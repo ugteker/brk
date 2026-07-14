@@ -30,20 +30,33 @@ export interface UserRepositoryLike {
 }
 
 type UserDb = Pick<PrismaClient, 'user'>;
+type DbUserRow = Awaited<ReturnType<UserDb['user']['findUnique']>>;
+
+function normalizeRole(role: string): UserRecord['role'] {
+  return role === 'admin' ? 'admin' : 'user';
+}
+
+function toUserRecord(row: DbUserRow): UserRecord | null {
+  if (!row) return null;
+  return {
+    ...row,
+    role: normalizeRole(row.role)
+  };
+}
 
 export class UserRepository implements UserRepositoryLike {
   constructor(private readonly db: UserDb) {}
 
   async findByEmail(email: string): Promise<UserRecord | null> {
-    return this.db.user.findUnique({ where: { email } });
+    return toUserRecord(await this.db.user.findUnique({ where: { email } }));
   }
 
   async findById(id: string): Promise<UserRecord | null> {
-    return this.db.user.findUnique({ where: { id } });
+    return toUserRecord(await this.db.user.findUnique({ where: { id } }));
   }
 
   async findByGoogleId(googleId: string): Promise<UserRecord | null> {
-    return this.db.user.findUnique({ where: { googleId } });
+    return toUserRecord(await this.db.user.findUnique({ where: { googleId } }));
   }
 
   async createWithPassword(
@@ -53,7 +66,8 @@ export class UserRepository implements UserRepositoryLike {
     role: UserRecord['role'] = 'user'
   ): Promise<UserRecord> {
     // emailVerified defaults to false in the schema - password signups must confirm via email.
-    return this.db.user.create({ data: { email, passwordHash, displayName, role } });
+    const created = await this.db.user.create({ data: { email, passwordHash, displayName, role } });
+    return toUserRecord(created)!;
   }
 
   async createWithGoogle(
@@ -63,11 +77,13 @@ export class UserRepository implements UserRepositoryLike {
     role: UserRecord['role'] = 'user'
   ): Promise<UserRecord> {
     // Google already verified this address on our behalf, so skip the confirmation step.
-    return this.db.user.create({ data: { email, googleId, displayName, emailVerified: true, role } });
+    const created = await this.db.user.create({ data: { email, googleId, displayName, emailVerified: true, role } });
+    return toUserRecord(created)!;
   }
 
   async linkGoogleId(userId: string, googleId: string): Promise<UserRecord> {
-    return this.db.user.update({ where: { id: userId }, data: { googleId } });
+    const updated = await this.db.user.update({ where: { id: userId }, data: { googleId } });
+    return toUserRecord(updated)!;
   }
 
   async setEmailVerificationToken(userId: string, token: string, expiresAt: Date): Promise<void> {
@@ -78,14 +94,14 @@ export class UserRepository implements UserRepositoryLike {
   }
 
   async verifyEmailByToken(token: string): Promise<UserRecord | null> {
-    const user = await this.db.user.findUnique({ where: { emailVerificationToken: token } });
+    const user = toUserRecord(await this.db.user.findUnique({ where: { emailVerificationToken: token } }));
     if (!user) return null;
     if (!user.emailVerificationExpiresAt || user.emailVerificationExpiresAt.getTime() < Date.now()) return null;
 
-    return this.db.user.update({
+    return toUserRecord(await this.db.user.update({
       where: { id: user.id },
       data: { emailVerified: true, emailVerificationToken: null, emailVerificationExpiresAt: null }
-    });
+    }))!;
   }
 
   async setEmailVerified(userId: string, verified: boolean): Promise<void> {
@@ -93,7 +109,8 @@ export class UserRepository implements UserRepositoryLike {
   }
 
   async setRole(userId: string, role: UserRecord['role']): Promise<UserRecord> {
-    return this.db.user.update({ where: { id: userId }, data: { role } });
+    const updated = await this.db.user.update({ where: { id: userId }, data: { role } });
+    return toUserRecord(updated)!;
   }
 
   async setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
@@ -104,22 +121,27 @@ export class UserRepository implements UserRepositoryLike {
   }
 
   async resetPasswordByToken(token: string, newPasswordHash: string): Promise<UserRecord | null> {
-    const user = await this.db.user.findUnique({ where: { passwordResetToken: token } });
+    const user = toUserRecord(await this.db.user.findUnique({ where: { passwordResetToken: token } }));
     if (!user) return null;
     if (!user.passwordResetExpiresAt || user.passwordResetExpiresAt.getTime() < Date.now()) return null;
 
-    return this.db.user.update({
+    return toUserRecord(await this.db.user.update({
       where: { id: user.id },
       data: { passwordHash: newPasswordHash, passwordResetToken: null, passwordResetExpiresAt: null }
-    });
+    }))!;
   }
 
   async listUsers(): Promise<UserRecord[]> {
-    return this.db.user.findMany({ orderBy: { createdAt: 'asc' } });
+    const rows = await this.db.user.findMany({ orderBy: { createdAt: 'asc' } });
+    return rows.map((row) => ({
+      ...row,
+      role: normalizeRole(row.role)
+    }));
   }
 
   async setLocked(userId: string, locked: boolean): Promise<UserRecord> {
-    return this.db.user.update({ where: { id: userId }, data: { locked } });
+    const updated = await this.db.user.update({ where: { id: userId }, data: { locked } });
+    return toUserRecord(updated)!;
   }
 
   async deleteUser(userId: string): Promise<void> {

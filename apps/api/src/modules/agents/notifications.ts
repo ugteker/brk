@@ -42,14 +42,15 @@ function buildAgentConfirmationEmail(agent: Agent, action: AgentChangeAction): {
 export async function sendAgentChangeConfirmation(
   mailer: MailerLike | undefined,
   agent: Agent,
-  action: AgentChangeAction
+  action: AgentChangeAction,
+  recipients: string[] = []
 ): Promise<void> {
   if (!mailer) return;
-  if (agent.recipients.length === 0) return;
+  if (recipients.length === 0) return;
 
   const { subject, text, html } = buildAgentConfirmationEmail(agent, action);
   await Promise.all(
-    agent.recipients.map(async (to) => {
+    recipients.map(async (to) => {
       try {
         await mailer.send({ to, subject, text, html });
       } catch (error) {
@@ -183,14 +184,15 @@ export async function sendReportNotification(
   mailer: MailerLike | undefined,
   agent: Agent,
   report: RunReportRecord,
-  itemTitles: string[] = []
+  itemTitles: string[] = [],
+  recipients: string[] = []
 ): Promise<void> {
   if (!mailer) return;
-  if (agent.recipients.length === 0) return;
+  if (recipients.length === 0) return;
 
   const { subject, text, html } = buildReportNotificationEmail(agent, report, itemTitles);
   await Promise.all(
-    agent.recipients.map(async (to) => {
+    recipients.map(async (to) => {
       try {
         await mailer.send({ to, subject, text, html });
       } catch (error) {

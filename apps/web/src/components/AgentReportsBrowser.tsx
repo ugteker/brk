@@ -4,6 +4,7 @@ import { MailOutlined } from '@ant-design/icons';
 import { resendReportNotification, type RunReportDto, type SignalDto } from '../api/agents';
 import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { TradingViewSymbolChart } from './TradingViewSymbolChart';
+import { CharacterReportRenderer } from './CharacterReportRenderer';
 
 interface AgentReportsBrowserProps {
   agentId: string;
@@ -105,7 +106,7 @@ export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelect
     event.stopPropagation();
     setSendingReportId(reportId);
     try {
-      const result = await resendReportNotification(agentId, reportId);
+      const result = await resendReportNotification(agentId, reportId, []);
       message.success(`Notification sent to ${result.recipientCount} recipient${result.recipientCount === 1 ? '' : 's'}`);
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to send notification');
@@ -190,6 +191,7 @@ export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelect
                 </div>
               </div>
             </div>
+            {report.report ? <CharacterReportRenderer report={report.report} /> : null}
             {report.signals.map((signal) => {
               const chartKey = `${report.id}:${signal.symbol}`;
               if (expandedChartKey !== chartKey) return null;

@@ -181,16 +181,26 @@ describe('AgentRepository', () => {
 
   it('deletes a agent and its related records inside a transaction', async () => {
     const findMany = vi.fn(async () => [{ id: 'report_1' }]);
-    const deleteMany = vi.fn(async () => ({ count: 0 }));
+    const deleteSignals = vi.fn(async () => ({ count: 0 }));
+    const deleteRunReports = vi.fn(async () => ({ count: 0 }));
+    const deleteRunArtifacts = vi.fn(async () => ({ count: 0 }));
+    const deleteRuns = vi.fn(async () => ({ count: 0 }));
+    const deletePromptVersions = vi.fn(async () => ({ count: 0 }));
+    const deleteSchedules = vi.fn(async () => ({ count: 0 }));
+    const deleteSources = vi.fn(async () => ({ count: 0 }));
+    const deleteAccessGrants = vi.fn(async () => ({ count: 0 }));
+    const deletePlaybooks = vi.fn(async () => ({ count: 0 }));
     const deleteAgent = vi.fn(async () => ({}));
     const tx = {
-      agentRunReport: { findMany, deleteMany },
-      agentSignal: { deleteMany },
-      agentRunArtifact: { deleteMany },
-      agentRun: { deleteMany },
-      agentPromptVersion: { deleteMany },
-      agentSchedule: { deleteMany },
-      agentSource: { deleteMany },
+      agentRunReport: { findMany, deleteMany: deleteRunReports },
+      agentSignal: { deleteMany: deleteSignals },
+      agentRunArtifact: { deleteMany: deleteRunArtifacts },
+      agentRun: { deleteMany: deleteRuns },
+      agentPromptVersion: { deleteMany: deletePromptVersions },
+      agentSchedule: { deleteMany: deleteSchedules },
+      agentSource: { deleteMany: deleteSources },
+      accessGrant: { deleteMany: deleteAccessGrants },
+      playbook: { deleteMany: deletePlaybooks },
       agent: { delete: deleteAgent }
     };
     const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<void>) => fn(tx));
@@ -201,7 +211,15 @@ describe('AgentRepository', () => {
 
     expect($transaction).toHaveBeenCalled();
     expect(findMany).toHaveBeenCalledWith({ where: { agentId: 'agent_1' }, select: { id: true } });
-    expect(deleteMany).toHaveBeenCalledWith({ where: { agentRunReportId: { in: ['report_1'] } } });
+    expect(deleteSignals).toHaveBeenCalledWith({ where: { agentRunReportId: { in: ['report_1'] } } });
+    expect(deleteRunReports).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
+    expect(deleteRunArtifacts).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
+    expect(deleteRuns).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
+    expect(deletePromptVersions).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
+    expect(deleteSchedules).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
+    expect(deleteSources).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
+    expect(deleteAccessGrants).toHaveBeenCalledWith({ where: { OR: [{ agentId: 'agent_1' }, { granteeAgentId: 'agent_1' }] } });
+    expect(deletePlaybooks).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
     expect(deleteAgent).toHaveBeenCalledWith({ where: { id: 'agent_1' } });
   });
 });
