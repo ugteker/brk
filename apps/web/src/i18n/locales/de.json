@@ -53,8 +53,8 @@
     "cloning": "Wird geklont…"
   },
   "listen": {
-    "listen": "Zusammenfassen",
-    "listening": "Fasst zusammen",
+    "listen": "Fasse zusammen!",
+    "listening": "Fasse zusammen!",
     "listenAriaLabel": "Diese Quelle zusammenfassen",
     "listeningAriaLabel": "Fasst diese Quelle zusammen",
     "stopListening": "Nicht mehr zusammenfassen",

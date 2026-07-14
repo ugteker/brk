@@ -1706,7 +1706,7 @@ export function AgentsPage() {
                                  aria-label={t('listen.listeningAriaLabel')}
                                  size="small"
                                  icon={<BrainIcon style={{ color: '#fff' }} />}
-                                 style={{ backgroundColor: '#52c41a', borderColor: '#52c41a', color: '#fff' }}
+                                 style={{ backgroundColor: '#389e0d', borderColor: '#389e0d', color: '#fff' }}
                                  onClick={(event) => onFollowSource(source, event)}
                                >
                                  {t('listen.listening')}
