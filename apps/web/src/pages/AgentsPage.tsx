@@ -314,6 +314,7 @@ export function AgentsPage() {
   const [followWizardSourcePreselected, setFollowWizardSourcePreselected] = useState(false);
   const [playbookCreateStep, setPlaybookCreateStep] = useState(0);
   const [isPlaybookSaving, setIsPlaybookSaving] = useState(false);
+  const [confirmingUnfollow, setConfirmingUnfollow] = useState(false);
   const [editingPlaybookId, setEditingPlaybookId] = useState<string | null>(null);
   const [playbookAgentIdDraft, setPlaybookAgentIdDraft] = useState<string | null>(null);
   const [playbookSourceIdsDraft, setPlaybookSourceIdsDraft] = useState<string[]>([]);
@@ -326,7 +327,7 @@ export function AgentsPage() {
   // Inline agent creation inside the follow wizard (step: pick agent) — full 4-step sub-wizard
   const [showInlineAgentCreate, setShowInlineAgentCreate] = useState(false);
   const [isInlineAgentSaving, setIsInlineAgentSaving] = useState(false);
-  const [inlineAgentStep, setInlineAgentStep] = useState(0); // 0=character, 1=personality, 2=schedule, 3=recipients
+  const [inlineAgentStep, setInlineAgentStep] = useState(0); // 0=character+personality, 1=model+prompt, 2=schedule+recipients
   const [inlineAgentName, setInlineAgentName] = useState('My Follower');
   const [inlineAgentDescription, setInlineAgentDescription] = useState('');
   const [inlineAgentPersonaId, setInlineAgentPersonaId] = useState(DEFAULT_PROMPT_PERSONA_ID);
@@ -393,16 +394,13 @@ export function AgentsPage() {
   }
 
   function createLibraryTab() {
-    const label = window.prompt('Library tab name');
-    if (label === null) return;
-    const trimmed = label.trim();
-    if (!trimmed) {
-      message.warning('Enter a tab name');
-      return;
-    }
+    const defaultName = `Library ${libraryTabs.length + 1}`;
     const newTabId = `library-${Date.now()}`;
-    setLibraryTabs((current) => [...current, { id: newTabId, name: trimmed }]);
+    setLibraryTabs((current) => [...current, { id: newTabId, name: defaultName }]);
     setActiveLibraryTabId(newTabId);
+    // Immediately enter inline edit mode so the user can rename without extra clicks
+    setEditingLibraryTabId(newTabId);
+    setEditingLibraryTabName(defaultName);
   }
 
   function startEditingLibraryTab(tab: LibraryTabRecord) {
@@ -866,6 +864,7 @@ export function AgentsPage() {
     setShowInlineAgentCreate(false);
     setInlineAgentStep(0);
     setInlineAgentValidationError(null);
+    setConfirmingUnfollow(false);
   }
 
   function openInlineAgentCreate() {
@@ -925,7 +924,7 @@ export function AgentsPage() {
 
   function onInlineAgentNext() {
     if (!validateInlineAgentStep(inlineAgentStep)) return;
-    setInlineAgentStep((prev) => Math.min(3, prev + 1));
+    setInlineAgentStep((prev) => Math.min(2, prev + 1));
   }
 
   function onInlineAgentBack() {
@@ -964,7 +963,7 @@ export function AgentsPage() {
       setAgents((prev) => [...prev, newAgent]);
       setPlaybookAgentIdDraft(newAgent.id);
       setShowInlineAgentCreate(false);
-      // Schedule + recipients were already set in steps 2 & 3; skip to wizard save
+      // Schedule + recipients were already set in step 2; skip to wizard save
       setPlaybookCreateStep(2);
       message.success(`Agent "${newAgent.name}" created — review schedule and save.`);
       void inlinePersona; // suppress unused warning
@@ -1458,314 +1457,367 @@ export function AgentsPage() {
                 label: 'Dashboard',
                 children: (
                   <Card
-                     className="min-w-0"
-                     title={
-                       showSourcesMarketplace ? (
-                         <div className="flex items-center gap-2">
-                           <Button
-                             icon={<ArrowLeftOutlined />}
-                             size="small"
-                             onClick={() => setShowSourcesMarketplace(false)}
-                             aria-label="Back to library"
-                           />
-                           <Title level={4} style={{ margin: 0 }}>Marketplace Sources</Title>
-                         </div>
-                       ) : (
-                         <Title level={4} style={{ margin: 0 }}>Dashboard</Title>
-                       )
-                     }
-                   >
-                   {showSourcesMarketplace ? (
-                     /* Marketplace view — same card grid layout, Clone button only */
-                     <div>
-                       {marketplaceSources.length === 0 ? <Empty description="No marketplace sources available." /> : null}
-                       <div className="grid gap-3 sm:grid-cols-2">
-                         {marketplaceSources.map((item) => (
-                           <Card key={item.publicationId} size="small" className="min-h-[100px]">
-                             <div className="flex items-start justify-between gap-2">
-                               <div className="min-w-0">
-                                 <div className="truncate text-sm font-semibold">{item.title}</div>
-                                 <div className="mt-1 truncate text-xs text-gray-600">{item.summary || item.value}</div>
-                               </div>
-                               <Button
-                                 type="primary"
-                                 size="small"
-                                 loading={cloningPublicationId === item.publicationId}
-                                 onClick={() => onCloneMarketplaceSource(item.publicationId)}
-                               >
-                                 Clone
-                               </Button>
-                             </div>
-                           </Card>
-                         ))}
-                       </div>
-                     </div>
-                   ) : (
-                     /* Library view */
-                     <>
+                    className="min-w-0"
+                    title={<Title level={4} style={{ margin: 0 }}>Dashboard</Title>}
+                  >
+                   {/* Unified inner tab bar: user library tabs + fixed Marketplace tab */}
                    <div
                      onDoubleClick={() => {
                        const tab = libraryTabs.find((candidate) => candidate.id === activeLibraryTabId);
                        if (tab) startEditingLibraryTab(tab);
                      }}
                    >
-                      <Tabs
-                        activeKey={activeLibraryTabId}
-                        onChange={setActiveLibraryTabId}
-                        onTabClick={onLibraryTabClick}
-                        tabBarExtraContent={
-                          <Button aria-label="Create library tab" size="small" onClick={createLibraryTab}>
-                            Add library tab
-                          </Button>
-                        }
-                        items={libraryTabs.map((tab) => ({
-                          key: tab.id,
-                          label:
-                            editingLibraryTabId === tab.id ? (
-                              <Input
-                                aria-label="Rename library tab"
-                                autoFocus
-                                size="small"
-                                value={editingLibraryTabName}
-                                onChange={(event) => setEditingLibraryTabName(event.currentTarget.value)}
-                                onPressEnter={() => commitEditingLibraryTab(tab.id)}
-                                onBlur={() => commitEditingLibraryTab(tab.id)}
-                                onClick={(event) => event.stopPropagation()}
-                                style={{ width: 160 }}
-                              />
-                            ) : (
-                              <span className="inline-flex items-center gap-1">
-                                {tab.name}
-                                {tab.id !== DEFAULT_LIBRARY_TAB_ID && tab.id === activeLibraryTabId ? (
-                                  <button
-                                    type="button"
-                                    aria-label="Rename active library tab"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      startEditingLibraryTab(tab);
-                                    }}
-                                    className="text-xs text-gray-500 hover:text-gray-700"
-                                  >
-                                    ✎
-                                  </button>
-                                ) : null}
-                              </span>
-                            )
-                        }))}
-                      />
-                    </div>
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                      <Input
-                        aria-label="Search sources"
-                        value={sourcesSearch}
-                        onChange={(event) => setSourcesSearch(event.currentTarget.value)}
-                        placeholder="Search title, URL, or preview episode"
-                        prefix={<SearchOutlined />}
-                        style={{ maxWidth: 420 }}
-                      />
-                      <Badge count={marketplaceSourceCount} size="small">
-                        <Button
-                          aria-label="Browse marketplace sources"
-                          icon={<CompassOutlined />}
-                          onClick={async () => {
-                            await refreshMarketplaceCounts();
-                            setShowSourcesMarketplace(true);
-                          }}
-                        >
-                          Browse marketplace
-                        </Button>
-                      </Badge>
-                    </div>
-                    {sourcesLoadState === 'loading' ? <p className="text-sm text-gray-700">Loading sources...</p> : null}
-                    {sourcesLoadState === 'error' ? <p className="text-sm text-red-700">Failed to load sources.</p> : null}
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {filteredSources.map((source) => (
-                        <Card
-                          key={source.id}
-                          size="small"
-                          hoverable
-                          onClick={() => setExpandedSourceId((current) => (current === source.id ? null : source.id))}
-                          style={{ cursor: 'pointer' }}
-                          className="min-h-[170px] transition-shadow"
-                          extra={
-                            <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-                              {/* Follow/Following toggle — primary action on the card */}
-                              {followedSourceIds.has(source.id) ? (
-                                <Button
-                                  type="default"
-                                  aria-label="Following this source"
-                                  size="small"
-                                  icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
-                                  style={{ borderColor: '#52c41a', color: '#52c41a' }}
-                                  onClick={(event) => onFollowSource(source, event)}
-                                >
-                                  Following
-                                </Button>
-                              ) : (
-                                <Button
-                                  type="primary"
-                                  aria-label="Follow this source"
-                                  size="small"
-                                  icon={<PlusCircleOutlined />}
-                                  onClick={(event) => onFollowSource(source, event)}
-                                >
-                                  Follow
-                                </Button>
-                              )}
-                              {/* Edit + Share/Publish — Delete moved into Edit view */}
-                              <EntityActions
-                                entityLabel="source"
-                                isOwner={source.ownerUserId === user?.id}
-                                onEdit={() => onEditSource(source)}
-                                onShare={(payload) =>
-                                  shareSource(source.id, {
-                                    granteeUserId: payload.granteeUserId,
-                                    permission: payload.permission as 'read' | 'update' | 'delete' | '*'
-                                  })
-                                }
-                                sharePermissions={['read', 'update', 'delete', '*']}
-                                onPublish={(payload) => publishSource(source.id, payload)}
-                                defaultPublishTitle={getSourceDisplayTitle(source)}
-                              />
-                            </div>
-                          }
-                        >
-                          <div className="grid grid-cols-[56px_1fr] gap-3">
-                            {getSourceCoverImageUrl(source) ? (
-                              <img
-                                src={getSourceCoverImageUrl(source)!}
-                                alt={`${getSourceDisplayTitle(source)} cover`}
-                                className="h-14 w-14 rounded-md object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
-                                Cover unavailable
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold">{getSourceDisplayTitle(source)}</div>
-                              <Text type="secondary" className="text-xs">{source.value}</Text>
-                              <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                                <Tag>{source.type === 'podcast_feeds' ? 'Podcast' : source.type === 'youtube_videos' ? 'YouTube' : 'Web'}</Tag>
-                                <Tag>{getSourceKindLabel(source)}</Tag>
-                                {(source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
-                                  <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
-                                ) : null}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="mt-3 text-xs text-gray-700">
-                            {source.metadata.previewItems.length > 0 ? (
-                              <>
-                                <div className="mb-1 font-medium">
-                                  {expandedSourceId === source.id ? 'Episodes preview' : 'Recent episodes preview'}
-                                </div>
-                                <ul className="list-inside list-disc space-y-1">
-                                  {(expandedSourceId === source.id
-                                    ? source.metadata.previewItems
-                                    : source.metadata.previewItems.slice(0, 3)
-                                  ).map((item) => (
-                                    <li key={`${source.id}:${item.link ?? item.title}`}>{item.title}</li>
-                                  ))}
-                                </ul>
-                              </>
-                            ) : (
-                              'No scanned episodes/items yet'
-                            )}
-                          </div>
+                     <Tabs
+                       activeKey={activeLibraryTabId}
+                       onChange={(key) => {
+                         setActiveLibraryTabId(key);
+                         setShowSourcesMarketplace(false);
+                       }}
+                       onTabClick={onLibraryTabClick}
+                       tabBarExtraContent={
+                         <TouchSafeTooltip title="New library tab">
+                           <Button
+                             aria-label="Create library tab"
+                             size="small"
+                             shape="circle"
+                             icon={<PlusOutlined />}
+                             onClick={createLibraryTab}
+                           />
+                         </TouchSafeTooltip>
+                       }
+                       items={libraryTabs.map((tab) => ({
+                         key: tab.id,
+                         label:
+                           editingLibraryTabId === tab.id ? (
+                             <Input
+                               aria-label="Rename library tab"
+                               autoFocus
+                               size="small"
+                               value={editingLibraryTabName}
+                               onChange={(event) => setEditingLibraryTabName(event.currentTarget.value)}
+                               onPressEnter={() => commitEditingLibraryTab(tab.id)}
+                               onBlur={() => commitEditingLibraryTab(tab.id)}
+                               onClick={(event) => event.stopPropagation()}
+                               style={{ width: 160 }}
+                             />
+                           ) : (
+                             <span className="inline-flex items-center gap-1">
+                               {tab.name}
+                               {tab.id !== DEFAULT_LIBRARY_TAB_ID && tab.id === activeLibraryTabId ? (
+                                 <button
+                                   type="button"
+                                   aria-label="Rename active library tab"
+                                   onClick={(event) => {
+                                     event.stopPropagation();
+                                     startEditingLibraryTab(tab);
+                                   }}
+                                   className="text-xs text-gray-500 hover:text-gray-700"
+                                 >
+                                   ✎
+                                 </button>
+                               ) : null}
+                             </span>
+                           )
+                       }))}
+                     />
+                   </div>
+
+                   {/* Search row — always visible */}
+                   <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                     <Input
+                       aria-label="Search sources"
+                       value={sourcesSearch}
+                       onChange={(event) => setSourcesSearch(event.currentTarget.value)}
+                       placeholder="Search title, URL, or preview episode"
+                       prefix={<SearchOutlined />}
+                       style={{ maxWidth: 420 }}
+                     />
+                     {showSourcesMarketplace ? (
+                       <Button
+                         aria-label="Back to library"
+                         icon={<ArrowLeftOutlined />}
+                         size="small"
+                         onClick={() => setShowSourcesMarketplace(false)}
+                       >
+                         Back to library
+                       </Button>
+                     ) : (
+                       <Badge count={marketplaceSourceCount} size="small">
+                         <Button
+                           aria-label="Browse marketplace sources"
+                           icon={<CompassOutlined />}
+                           onClick={async () => {
+                             await refreshMarketplaceCounts();
+                             setShowSourcesMarketplace(true);
+                           }}
+                         >
+                           Browse marketplace
+                         </Button>
+                       </Badge>
+                     )}
+                   </div>
+
+                   {/* Marketplace grid — same rich card layout as library, Clone button only */}
+                   {showSourcesMarketplace ? (
+                     <div>
+                       {marketplaceSources.length === 0 ? <Empty description="No marketplace sources available." /> : null}
+                       <div className="grid gap-3 sm:grid-cols-2">
+                         {marketplaceSources.map((item) => {
+                           const src = item as unknown as import('../api/sources').SourceRecord;
+                           return (
+                             <Card
+                               key={item.publicationId}
+                               size="small"
+                               className="min-h-[170px] transition-shadow"
+                               extra={
+                                 <Button
+                                   type="primary"
+                                   size="small"
+                                   icon={<CompassOutlined />}
+                                   loading={cloningPublicationId === item.publicationId}
+                                   onClick={() => onCloneMarketplaceSource(item.publicationId)}
+                                   aria-label={`Clone ${item.title}`}
+                                 >
+                                   Clone
+                                 </Button>
+                               }
+                             >
+                               <div className="grid grid-cols-[56px_1fr] gap-3">
+                                 {getSourceCoverImageUrl(src) ? (
+                                   <img
+                                     src={getSourceCoverImageUrl(src)!}
+                                     alt={`${getSourceDisplayTitle(src)} cover`}
+                                     className="h-14 w-14 rounded-md object-cover"
+                                   />
+                                 ) : (
+                                   <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
+                                     Cover unavailable
+                                   </div>
+                                 )}
+                                 <div className="min-w-0">
+                                   <div className="text-sm font-semibold">{getSourceDisplayTitle(src)}</div>
+                                   <Text type="secondary" className="text-xs">{item.value}</Text>
+                                   <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                                     <Tag>{item.type === 'podcast_feeds' ? 'Podcast' : item.type === 'youtube_videos' ? 'YouTube' : 'Web'}</Tag>
+                                     <Tag>{getSourceKindLabel(src)}</Tag>
+                                     {(item.type === 'podcast_feeds' || item.type === 'youtube_videos') ? (
+                                       <Tag color="blue">Episodes: {getSourceEpisodeCount(src)}</Tag>
+                                     ) : null}
+                                   </div>
+                                 </div>
+                               </div>
+                               <div className="mt-3 text-xs text-gray-700">
+                                 {item.metadata.previewItems.length > 0 ? (
+                                   <>
+                                     <div className="mb-1 font-medium">Recent episodes preview</div>
+                                     <ul className="list-inside list-disc space-y-1">
+                                       {item.metadata.previewItems.slice(0, 3).map((pi) => (
+                                         <li key={`${item.publicationId}:${pi.link ?? pi.title}`}>{pi.title}</li>
+                                       ))}
+                                     </ul>
+                                   </>
+                                 ) : (
+                                   'No scanned episodes/items yet'
+                                 )}
+                               </div>
+                             </Card>
+                           );
+                         })}
+                       </div>
+                     </div>
+                   ) : null}
+                   {!showSourcesMarketplace ? (
+                   <>
+                   {sourcesLoadState === 'loading' ? <p className="text-sm text-gray-700">Loading sources...</p> : null}
+                   {sourcesLoadState === 'error' ? <p className="text-sm text-red-700">Failed to load sources.</p> : null}
+                   <div className="grid gap-3 sm:grid-cols-2">
+                     {filteredSources.map((source) => (
+                       <Card
+                         key={source.id}
+                         size="small"
+                         hoverable
+                         onClick={() => setExpandedSourceId((current) => (current === source.id ? null : source.id))}
+                         style={{ cursor: 'pointer' }}
+                         className="min-h-[170px] transition-shadow"
+                         extra={
+                           <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                             {/* Follow/Following toggle — primary action on the card */}
+                             {followedSourceIds.has(source.id) ? (
+                               <Button
+                                 type="default"
+                                 aria-label="Following this source"
+                                 size="small"
+                                 icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                                 style={{ borderColor: '#52c41a', color: '#52c41a' }}
+                                 onClick={(event) => onFollowSource(source, event)}
+                               >
+                                 Following
+                               </Button>
+                             ) : (
+                               <Button
+                                 type="primary"
+                                 aria-label="Follow this source"
+                                 size="small"
+                                 icon={<PlusCircleOutlined />}
+                                 onClick={(event) => onFollowSource(source, event)}
+                               >
+                                 Follow
+                               </Button>
+                             )}
+                             {/* Edit + Share/Publish — Delete moved into Edit view */}
+                             <EntityActions
+                               entityLabel="source"
+                               isOwner={source.ownerUserId === user?.id}
+                               onEdit={() => onEditSource(source)}
+                               onShare={(payload) =>
+                                 shareSource(source.id, {
+                                   granteeUserId: payload.granteeUserId,
+                                   permission: payload.permission as 'read' | 'update' | 'delete' | '*'
+                                 })
+                               }
+                               sharePermissions={['read', 'update', 'delete', '*']}
+                               onPublish={(payload) => publishSource(source.id, payload)}
+                               defaultPublishTitle={getSourceDisplayTitle(source)}
+                             />
+                           </div>
+                         }
+                       >
+                         <div className="grid grid-cols-[56px_1fr] gap-3">
+                           {getSourceCoverImageUrl(source) ? (
+                             <img
+                               src={getSourceCoverImageUrl(source)!}
+                               alt={`${getSourceDisplayTitle(source)} cover`}
+                               className="h-14 w-14 rounded-md object-cover"
+                             />
+                           ) : (
+                             <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
+                               Cover unavailable
+                             </div>
+                           )}
+                           <div className="min-w-0">
+                             <div className="text-sm font-semibold">{getSourceDisplayTitle(source)}</div>
+                             <Text type="secondary" className="text-xs">{source.value}</Text>
+                             <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                               <Tag>{source.type === 'podcast_feeds' ? 'Podcast' : source.type === 'youtube_videos' ? 'YouTube' : 'Web'}</Tag>
+                               <Tag>{getSourceKindLabel(source)}</Tag>
+                               {(source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
+                                 <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
+                               ) : null}
+                             </div>
+                           </div>
+                         </div>
+                         <div className="mt-3 text-xs text-gray-700">
+                           {source.metadata.previewItems.length > 0 ? (
+                             <>
+                               <div className="mb-1 font-medium">
+                                 {expandedSourceId === source.id ? 'Episodes preview' : 'Recent episodes preview'}
+                               </div>
+                               <ul className="list-inside list-disc space-y-1">
+                                 {(expandedSourceId === source.id
+                                   ? source.metadata.previewItems
+                                   : source.metadata.previewItems.slice(0, 3)
+                                 ).map((item) => (
+                                   <li key={`${source.id}:${item.link ?? item.title}`}>{item.title}</li>
+                                 ))}
+                               </ul>
+                             </>
+                           ) : (
+                             'No scanned episodes/items yet'
+                           )}
+                         </div>
+                       </Card>
+                     ))}
+                     <button
+                       type="button"
+                       aria-label="Create new source"
+                       onClick={() => {
+                         setEditingSource(null);
+                         setIsSourceCreateOpen(true);
+                         setSourceUrlDraft('');
+                         setAutoDetectedSource(null);
+                       }}
+                       className={GHOST_CREATE_CARD_CLASS}
+                     >
+                       <DatabaseOutlined className="text-3xl text-sky-700" />
+                       <span className="mt-2 text-base font-semibold">Create new source</span>
+                       <span className="mt-1 text-xs font-normal text-sky-700">URL detect + metadata preview</span>
+                     </button>
+                   </div>
+                   </>
+                   ) : null}
+                   <Modal
+                     title={editingSource ? 'Edit source from URL' : 'Create source from URL'}
+                     open={isSourceCreateOpen}
+                     onCancel={closeSourceDialog}
+                     onOk={onCreateDetectedSource}
+                     okText={editingSource ? 'Save source' : 'Add source'}
+                     okButtonProps={{ disabled: !autoDetectedSource, loading: isSourceSaving }}
+                     footer={(_, { OkBtn, CancelBtn }) => (
+                       <div className="flex items-center justify-between gap-2">
+                         {editingSource && editingSource.ownerUserId === user?.id ? (
+                           <Button
+                             danger
+                             icon={<DeleteOutlined />}
+                             onClick={() => {
+                               void onDeleteSource(editingSource);
+                               closeSourceDialog();
+                             }}
+                           >
+                             Remove source
+                           </Button>
+                         ) : <span />}
+                         <div className="flex gap-2">
+                           <CancelBtn />
+                           <OkBtn />
+                         </div>
+                       </div>
+                     )}
+                     destroyOnHidden
+                   >
+                     <div className="space-y-3">
+                       <Input
+                         aria-label="Source URL"
+                         value={sourceUrlDraft}
+                         placeholder="https://..."
+                         onChange={(event) => setSourceUrlDraft(event.currentTarget.value)}
+                       />
+                       <Button onClick={onDetectSourceFromUrl} loading={isSourceDetecting}>
+                         Detect source
+                       </Button>
+                       {autoDetectedSource ? (
+                         <Card size="small" title={autoDetectedSource.title ?? autoDetectedSource.url}>
+                           <div className="mb-2 flex items-center gap-2">
+                             <Tag>
+                               {autoDetectedSource.type === 'podcast_feeds'
+                                 ? 'Podcast feed'
+                                 : autoDetectedSource.type === 'youtube_videos'
+                                   ? 'YouTube'
+                                   : 'Web'}
+                             </Tag>
+                             <Tag>{autoDetectedSource.kind}</Tag>
+                           </div>
+                           {autoDetectedSource.coverImageUrl ? (
+                             <img
+                               src={autoDetectedSource.coverImageUrl}
+                               alt="Detected cover"
+                               className="mb-2 h-20 w-20 rounded-md object-cover"
+                             />
+                           ) : (
+                             <div className="mb-2 inline-flex rounded border border-dashed px-2 py-1 text-xs text-gray-500">
+                               No cover detected
+                             </div>
+                           )}
+                           <div className="text-xs text-gray-700">
+                             {autoDetectedSource.previewItems.length > 0 ? (
+                               autoDetectedSource.previewItems.map((previewItem) => <div key={previewItem.link ?? previewItem.title}>{previewItem.title}</div>)
+                             ) : (
+                               <div>No episodes/items preview available</div>
+                             )}
+                           </div>
                         </Card>
-                      ))}
-                      <button
-                        type="button"
-                        aria-label="Create new source"
-                        onClick={() => {
-                          setEditingSource(null);
-                          setIsSourceCreateOpen(true);
-                          setSourceUrlDraft('');
-                          setAutoDetectedSource(null);
-                        }}
-                        className={GHOST_CREATE_CARD_CLASS}
-                      >
-                        <DatabaseOutlined className="text-3xl text-sky-700" />
-                        <span className="mt-2 text-base font-semibold">Create new source</span>
-                        <span className="mt-1 text-xs font-normal text-sky-700">URL detect + metadata preview</span>
-                      </button>
-                    </div>
-                    <Modal
-                      title={editingSource ? 'Edit source from URL' : 'Create source from URL'}
-                      open={isSourceCreateOpen}
-                      onCancel={closeSourceDialog}
-                      onOk={onCreateDetectedSource}
-                      okText={editingSource ? 'Save source' : 'Add source'}
-                      okButtonProps={{ disabled: !autoDetectedSource, loading: isSourceSaving }}
-                      footer={(_, { OkBtn, CancelBtn }) => (
-                        <div className="flex items-center justify-between gap-2">
-                          {editingSource && editingSource.ownerUserId === user?.id ? (
-                            <Button
-                              danger
-                              icon={<DeleteOutlined />}
-                              onClick={() => {
-                                void onDeleteSource(editingSource);
-                                closeSourceDialog();
-                              }}
-                            >
-                              Remove source
-                            </Button>
-                          ) : <span />}
-                          <div className="flex gap-2">
-                            <CancelBtn />
-                            <OkBtn />
-                          </div>
-                        </div>
-                      )}
-                      destroyOnHidden
-                    >
-                      <div className="space-y-3">
-                        <Input
-                          aria-label="Source URL"
-                          value={sourceUrlDraft}
-                          placeholder="https://..."
-                          onChange={(event) => setSourceUrlDraft(event.currentTarget.value)}
-                        />
-                        <Button onClick={onDetectSourceFromUrl} loading={isSourceDetecting}>
-                          Detect source
-                        </Button>
-                        {autoDetectedSource ? (
-                          <Card size="small" title={autoDetectedSource.title ?? autoDetectedSource.url}>
-                            <div className="mb-2 flex items-center gap-2">
-                              <Tag>
-                                {autoDetectedSource.type === 'podcast_feeds'
-                                  ? 'Podcast feed'
-                                  : autoDetectedSource.type === 'youtube_videos'
-                                    ? 'YouTube'
-                                    : 'Web'}
-                              </Tag>
-                              <Tag>{autoDetectedSource.kind}</Tag>
-                            </div>
-                            {autoDetectedSource.coverImageUrl ? (
-                              <img
-                                src={autoDetectedSource.coverImageUrl}
-                                alt="Detected cover"
-                                className="mb-2 h-20 w-20 rounded-md object-cover"
-                              />
-                            ) : (
-                              <div className="mb-2 inline-flex rounded border border-dashed px-2 py-1 text-xs text-gray-500">
-                                No cover detected
-                              </div>
-                            )}
-                            <div className="text-xs text-gray-700">
-                              {autoDetectedSource.previewItems.length > 0 ? (
-                                autoDetectedSource.previewItems.map((item) => <div key={item.link ?? item.title}>{item.title}</div>)
-                              ) : (
-                                <div>No episodes/items preview available</div>
-                              )}
-                            </div>
-                          </Card>
-                        ) : null}
-                      </div>
-                    </Modal>
-                      </>
-                    )}
+                       ) : null}
+                     </div>
+                   </Modal>
                   </Card>
                 )
               },
@@ -2217,15 +2269,14 @@ export function AgentsPage() {
           {/* Unified steps indicator — morphs between pick-agent path and create-agent path */}
           {showInlineAgentCreate ? (
             <Steps
-              size="small"
-              current={inlineAgentStep}
-              items={[
-                { title: 'Character' },
-                { title: 'Personality' },
-                { title: 'Schedule' },
-                { title: 'Recipients' }
-              ]}
-            />
+                size="small"
+                current={inlineAgentStep}
+                items={[
+                  { title: 'Character' },
+                  { title: 'Personality' },
+                  { title: 'Schedule & Recipients' }
+                ]}
+              />
           ) : (
             <Steps
               size="small"
@@ -2328,7 +2379,32 @@ export function AgentsPage() {
                             <Tag>Personality: {getAgentPersonalityLabel(agent)}</Tag>
                           </div>
                         </div>
-                        {selected ? <Tag color="blue">Selected</Tag> : null}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {selected ? <Tag color="blue">Selected</Tag> : null}
+                          <Popconfirm
+                            title="Delete this agent?"
+                            description="This removes the agent from all library cards that use it. Those cards will return to an 'Unfollowed' state."
+                            okText="Delete"
+                            okButtonProps={{ danger: true }}
+                            onConfirm={async (e) => {
+                              e?.stopPropagation();
+                              await deleteAgent(agent.id);
+                              if (playbookAgentIdDraft === agent.id) setPlaybookAgentIdDraft(null);
+                              const refreshed = await listAgents();
+                              setAgents(refreshed);
+                            }}
+                            onPopupClick={(e) => e.stopPropagation()}
+                          >
+                            <Button
+                              size="small"
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              aria-label={`Delete agent ${agent.name}`}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </Popconfirm>
+                        </div>
                       </div>
                       <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
                         <div className="inline-flex items-center gap-1">
@@ -2356,7 +2432,6 @@ export function AgentsPage() {
                 const inlineChars = getPromptCharactersForPersona(inlineAgentPersonaId);
                 const inlineCharData = getPromptCharacter(inlineAgentPersonaId, inlineAgentCharacterId) ?? inlineChars[0];
                 const inlinePersonaLabel = inlinePersonaData?.name ?? inlineAgentPersonaId;
-                const inlineCharLabel = inlineCharData?.name ?? inlineAgentCharacterId;
                 return (
                   <Card
                     size="small"
@@ -2366,9 +2441,21 @@ export function AgentsPage() {
                       <p className="mb-3 text-sm text-red-600">{inlineAgentValidationError}</p>
                     ) : null}
 
-                    {/* Step 0: Character */}
+                    {/* Step 0: Character + Personality (visually separated) */}
                     {inlineAgentStep === 0 ? (
                       <div className="space-y-3">
+                        {/* Name first */}
+                        <Input
+                          aria-label="New agent name"
+                          placeholder="Agent name"
+                          value={inlineAgentName}
+                          onChange={(e) => setInlineAgentName(e.currentTarget.value)}
+                        />
+                        {/* Character section */}
+                        <div className="flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+                          <BulbOutlined />
+                          Choose a character type
+                        </div>
                         <div className="grid gap-2 md:grid-cols-3">
                           {PROMPT_PERSONAS.map((persona) => (
                             <button
@@ -2379,52 +2466,39 @@ export function AgentsPage() {
                               aria-label={`Inline character ${persona.name}`}
                             >
                               <p className="font-medium text-sm">{persona.name}</p>
-                              <p className="text-xs text-gray-600">{persona.tagline}</p>
+                              <p className="text-xs text-gray-500">{persona.tagline}</p>
                             </button>
                           ))}
                         </div>
-                        <p className="text-xs text-gray-500">Personalities for {inlinePersonaLabel}</p>
+                        {/* Personality section */}
+                        <div className="flex items-center gap-2 rounded-md bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">
+                          <ToolOutlined />
+                          Choose a personality style
+                          <span className="ml-1 font-normal text-violet-500">for {inlinePersonaLabel}</span>
+                        </div>
                         <div className="grid gap-2 md:grid-cols-3">
                           {inlineChars.map((char) => (
                             <button
                               key={char.id}
                               type="button"
                               onClick={() => onInlineAgentCharacterChange(char.id)}
-                              className={`rounded-md border p-3 text-left transition ${inlineAgentCharacterId === char.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              className={`rounded-md border p-3 text-left transition ${inlineAgentCharacterId === char.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:border-gray-300'}`}
                               aria-label={`Inline personality ${char.name}`}
                             >
                               <p className="font-medium text-sm">{char.name}</p>
-                              <p className="text-xs text-gray-600">{char.tagline}</p>
+                              <p className="text-xs text-gray-500">{char.tagline}</p>
                             </button>
                           ))}
                         </div>
-                        <Input
-                          aria-label="New agent name"
-                          placeholder="Agent name"
-                          value={inlineAgentName}
-                          onChange={(e) => setInlineAgentName(e.currentTarget.value)}
-                        />
-                        <Input
-                          aria-label="New agent description"
-                          placeholder="Description (optional)"
-                          value={inlineAgentDescription}
-                          onChange={(e) => setInlineAgentDescription(e.currentTarget.value)}
-                        />
                       </div>
                     ) : null}
 
-                    {/* Step 1: Personality */}
+                    {/* Step 1: Personality tune — model + system prompt */}
                     {inlineAgentStep === 1 ? (
                       <div className="space-y-3">
-                        <div className="grid gap-2 md:grid-cols-2">
-                          <div>
-                            <p className="mb-1 text-xs text-gray-500">Character</p>
-                            <Input value={inlinePersonaLabel} disabled />
-                          </div>
-                          <div>
-                            <p className="mb-1 text-xs text-gray-500">Personality</p>
-                            <Input value={inlineCharLabel} disabled />
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Character:</span>
+                          <Tag color="blue">{inlinePersonaLabel}</Tag>
                         </div>
                         {inlineAgentPersonaId === 'finance_expert' ? (
                           <div>
@@ -2467,9 +2541,12 @@ export function AgentsPage() {
                       </div>
                     ) : null}
 
-                    {/* Step 2: Schedule */}
+                    {/* Step 2: Schedule + Recipients */}
                     {inlineAgentStep === 2 ? (
                       <div className="space-y-3">
+                        <p className="text-sm text-gray-600">
+                          Your agent will automatically scan this source and generate a report on the schedule below. Set how often it should run and who should receive the results by email.
+                        </p>
                         <Select
                           aria-label="Playbook schedule mode"
                           value={playbookScheduleModeDraft}
@@ -2524,39 +2601,22 @@ export function AgentsPage() {
                             ) : null}
                           </div>
                         )}
+                        <div className="border-t pt-3">
+                          <p className="mb-1 text-xs text-gray-500">Email recipients (optional)</p>
+                          <Select
+                            aria-label="Playbook recipient emails"
+                            mode="tags"
+                            value={playbookRecipientsDraft}
+                            onChange={(values) => setPlaybookRecipientsDraft(values as string[])}
+                            tokenSeparators={[',', ' ']}
+                            placeholder="Add one or more email addresses"
+                            className="w-full"
+                          />
+                          <p className="mt-1 text-xs text-gray-400">Leave empty to skip email delivery. You can add recipients later.</p>
+                        </div>
                       </div>
                     ) : null}
 
-                    {/* Step 3: Recipients */}
-                    {inlineAgentStep === 3 ? (
-                      <div className="space-y-3">
-                        <p className="text-sm text-gray-600">Who should receive reports when this agent runs?</p>
-                        <Select
-                          aria-label="Playbook recipient emails"
-                          mode="tags"
-                          value={playbookRecipientsDraft}
-                          onChange={(values) => setPlaybookRecipientsDraft(values as string[])}
-                          tokenSeparators={[',', ' ']}
-                          placeholder="Add one or more email addresses"
-                          className="w-full"
-                        />
-                        <p className="text-xs text-gray-500">Leave empty to skip email delivery. You can always add recipients later.</p>
-                      </div>
-                    ) : null}
-
-                    {/* Sub-wizard navigation — Back at step 0 returns to agent selection */}
-                    <div className="mt-4 flex justify-between">
-                      <Button onClick={onInlineAgentBack}>
-                        {inlineAgentStep === 0 ? '← Agent selection' : 'Back'}
-                      </Button>
-                      {inlineAgentStep < 3 ? (
-                        <Button type="primary" onClick={onInlineAgentNext}>Next</Button>
-                      ) : (
-                        <Button type="primary" loading={isInlineAgentSaving} onClick={() => void onSaveInlineAgent()}>
-                          Create agent
-                        </Button>
-                      )}
-                    </div>
                   </Card>
                 );
               })() : null}
@@ -2638,26 +2698,52 @@ export function AgentsPage() {
         <div className="mt-4 flex items-center justify-between gap-2 border-t pt-3">
           <div className="flex items-center gap-2">
             <Button
-              onClick={onBackPlaybookCreateStep}
-              disabled={followWizardSourcePreselected ? playbookCreateStep <= 1 : playbookCreateStep === 0}
+              onClick={showInlineAgentCreate ? onInlineAgentBack : onBackPlaybookCreateStep}
+              disabled={showInlineAgentCreate ? false : (followWizardSourcePreselected ? playbookCreateStep <= 1 : playbookCreateStep === 0)}
             >
-              Back
+              {showInlineAgentCreate && inlineAgentStep === 0 ? '← Agent selection' : 'Back'}
             </Button>
-            {editingPlaybookId ? (
-              <Popconfirm
-                title="Unfollow this source?"
-                description="This removes your follow subscription. You can follow again later."
-                okText="Unfollow"
-                okButtonProps={{ danger: true }}
-                onConfirm={() => void onUnfollowFromWizard()}
-              >
-                <Button danger icon={<DeleteOutlined />}>Unfollow</Button>
-              </Popconfirm>
+            {/* Unfollow only shown when editing a playbook and NOT inside the agent sub-wizard */}
+            {editingPlaybookId && !showInlineAgentCreate ? (
+              confirmingUnfollow ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-red-600">Remove follow?</span>
+                  <Button
+                    danger
+                    size="small"
+                    loading={false}
+                    onClick={() => void onUnfollowFromWizard()}
+                  >
+                    Yes, unfollow
+                  </Button>
+                  <Button size="small" onClick={() => setConfirmingUnfollow(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => setConfirmingUnfollow(true)}
+                >
+                  Unfollow
+                </Button>
+              )
             ) : null}
           </div>
           <div className="flex items-center gap-2">
             <Button onClick={onCancelPlaybookCreate}>Cancel</Button>
-            {playbookCreateStep < 2 ? (
+            {showInlineAgentCreate ? (
+              inlineAgentStep < 2 ? (
+                <Button type="primary" onClick={onInlineAgentNext}>
+                  Next
+                </Button>
+              ) : (
+                <Button type="primary" loading={isInlineAgentSaving} onClick={() => void onSaveInlineAgent()}>
+                  Create agent
+                </Button>
+              )
+            ) : playbookCreateStep < 2 ? (
               <Button type="primary" onClick={onNextPlaybookCreateStep}>
                 Next
               </Button>

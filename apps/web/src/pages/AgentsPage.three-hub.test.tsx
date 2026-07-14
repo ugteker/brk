@@ -706,21 +706,26 @@ describe('AgentsPage three hub shell', () => {
   });
 
   it('adds extra library tabs with custom names', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValueOnce('Research');
     renderPage();
     await screen.findByRole('heading', { name: /dashboard/i });
 
     fireEvent.click(screen.getByRole('button', { name: /create library tab/i }));
+    // Tab is created immediately in edit mode — type a name and commit
+    const renameInput = await screen.findByLabelText(/rename library tab/i);
+    fireEvent.change(renameInput, { target: { value: 'Research' } });
+    fireEvent.keyDown(renameInput, { key: 'Enter' });
     expect(await screen.findByRole('tab', { name: /research/i })).toBeInTheDocument();
   });
 
   it('shows rename control for the active custom library tab', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValueOnce('Research');
     renderPage();
     await screen.findByRole('heading', { name: /dashboard/i });
     fireEvent.click(screen.getByRole('button', { name: /create library tab/i }));
-    await screen.findByRole('tab', { name: /research/i });
-    expect(screen.getByRole('button', { name: /rename active library tab/i })).toBeInTheDocument();
+    // Commit the default name
+    const renameInput = await screen.findByLabelText(/rename library tab/i);
+    fireEvent.keyDown(renameInput, { key: 'Enter' });
+    // The rename pencil button should appear on the active custom tab
+    expect(await screen.findByRole('button', { name: /rename active library tab/i })).toBeInTheDocument();
   });
 
   it('deletes a Library source card via owner action', async () => {
