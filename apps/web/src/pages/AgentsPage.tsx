@@ -265,31 +265,6 @@ function getAgentPersonalityLabel(agent: AgentSummary): string {
   return defaultCharacter?.name ?? 'Default Personality';
 }
 
-const AGENT_CHARACTER_INTRO: Record<string, string> = {
-  'conservative-analyst':       "I keep my powder dry. Hard numbers first — if the evidence isn't concrete, I stay quiet.",
-  'balanced-analyst':           "I weigh both sides before picking a direction. Solid analysis, no drama, always cite the source.",
-  'aggressive-momentum-trader': "I move fast and chase conviction. Sentiment counts — first in wins.",
-  'contrarian-value-investor':  "Everyone's wrong sometimes. I look for the names the crowd gave up on too early.",
-  'quant-data-driven-analyst':  "No numbers, no signal. I only speak when there's something measurable to say.",
-  'short-seller-skeptic':       "Show me the red flags. I find trouble before you stumble into it.",
-  'macro-thematic-strategist':  "I tie individual names to the big picture — rates, AI cycles, sector rotations.",
-  'teacher-mentor':             "I guide you step by step — think of me as your personal learning companion.",
-  'teacher-classroom-instructor': "Clear structure, steady checkpoints. I make complex ideas easy to follow.",
-  'teacher-practical-coach':    "Skip the theory. I give you hands-on examples you can use right away.",
-  'influencer-trend-scout':     "I sniff out what's trending before the crowd notices. Hooks first, always.",
-  'influencer-storyteller':     "Every data point has a story. I craft the narrative that makes people listen.",
-  'influencer-campaign-strategist': "I turn insights into messaging plans your audience will actually act on.",
-  'trainer-drill-sergeant':     "Repetition is key. I push you until the right habits stick — no excuses.",
-  'trainer-supportive-coach':   "Progress over perfection. I keep you moving forward with encouragement.",
-  'trainer-exam-prep':          "Focused recall drills on the topics that matter most. Let's get you ready.",
-  'philosopher-socratic-guide': "I answer your questions with better questions. Assumptions deserve scrutiny.",
-  'philosopher-critical-thinker': "I stress-test every argument. If the logic doesn't hold, I'll find the crack.",
-  'philosopher-ethics-analyst': "Decisions have consequences beyond the obvious. I keep the bigger picture honest.",
-  'summarizer-executive-briefer': "Top-line only. I give you the signal without the noise — fast.",
-  'summarizer-research-digestor': "Dense inputs, focused output. I turn chaos into a clean research note.",
-  'summarizer-action-planner':  "Insights are useless unless they drive action. I turn findings into next steps.",
-};
-
 const PERSONA_ICON_MAP: Record<string, ReactNode> = {
   finance_expert: <LineChartOutlined />,
   teacher:        <ReadOutlined />,
@@ -299,12 +274,13 @@ const PERSONA_ICON_MAP: Record<string, ReactNode> = {
   summarizer:     <FileTextOutlined />,
 };
 
-function getAgentCardDisplay(agent: AgentSummary): { intro: string; icon: ReactNode } {
+function getAgentCardDisplay(agent: AgentSummary, t: (key: string) => string): { intro: string; icon: ReactNode } {
   const characterId = agent.promptConfig?.personality_id ?? '';
   const personaId = agent.characterType ?? 'summarizer';
-  const intro =
-    AGENT_CHARACTER_INTRO[characterId] ??
-    `I'm a ${getAgentPersonalityLabel(agent)} in the ${getAgentCharacterLabel(agent)} family. Give me a source and I'll get to work.`;
+  const introKey = `personas.${personaId}.characters.${characterId}.intro`;
+  const intro = t(introKey) !== introKey
+    ? t(introKey)
+    : `I'm a ${getAgentPersonalityLabel(agent)} in the ${getAgentCharacterLabel(agent)} family. Give me a source and I'll get to work.`;
   const icon = PERSONA_ICON_MAP[personaId] ?? <FileTextOutlined />;
   return { intro, icon };
 }
@@ -383,7 +359,7 @@ export function AgentsPage() {
   const [showInlineAgentCreate, setShowInlineAgentCreate] = useState(false);
   const [isInlineAgentSaving, setIsInlineAgentSaving] = useState(false);
   const [inlineAgentStep, setInlineAgentStep] = useState(0); // 0=character+personality, 1=model+prompt, 2=schedule+recipients
-  const [inlineAgentName, setInlineAgentName] = useState('My Follower');
+  const [inlineAgentName, setInlineAgentName] = useState('My Analyst');
   const [inlineAgentDescription, setInlineAgentDescription] = useState('');
   const [inlineAgentPersonaId, setInlineAgentPersonaId] = useState(DEFAULT_PROMPT_PERSONA_ID);
   const [inlineAgentCharacterId, setInlineAgentCharacterId] = useState(DEFAULT_PROMPT_CHARACTER_ID);
@@ -877,7 +853,7 @@ export function AgentsPage() {
     // of tab state. Source is already known so we skip step 0 (Pick source).
     setFollowWizardSourcePreselected(true);
     setShowInlineAgentCreate(false);
-    setInlineAgentName('My Follower');
+    setInlineAgentName('My Analyst');
     const existingFollowPlaybook = playbooks.find((playbook) => playbook.sourceIds.includes(source.id));
     if (existingFollowPlaybook) {
       setEditingPlaybookId(existingFollowPlaybook.id);
@@ -927,7 +903,7 @@ export function AgentsPage() {
 
   function openInlineAgentCreate() {
     setInlineAgentStep(0);
-    setInlineAgentName('My Follower');
+    setInlineAgentName('My Analyst');
     setInlineAgentDescription('');
     setInlineAgentPersonaId(DEFAULT_PROMPT_PERSONA_ID);
     setInlineAgentCharacterId(DEFAULT_PROMPT_CHARACTER_ID);
@@ -1020,11 +996,14 @@ export function AgentsPage() {
       await saveAgentPrompt(newAgent.id, { model: inlineAgentModel, systemPrompt: inlineAgentSystemPrompt, enabled: true });
       setAgents((prev) => [...prev, newAgent]);
       setPlaybookAgentIdDraft(newAgent.id);
-      setShowInlineAgentCreate(false);
-      // Schedule + recipients were already set in step 2; skip to wizard save
-      setPlaybookCreateStep(2);
-      message.success(`Agent "${newAgent.name}" created — review schedule and save.`);
-      void inlinePersona; // suppress unused warning
+      void inlinePersona;
+      // Auto-create playbook and close modal — schedule was already set in step 2
+      const created = await doCreatePlaybook(newAgent.id);
+      if (!created) {
+        // fallback: let user review schedule and try again
+        setShowInlineAgentCreate(false);
+        setPlaybookCreateStep(2);
+      }
     } catch {
       message.error('Failed to create agent');
     } finally {
@@ -1058,13 +1037,42 @@ export function AgentsPage() {
     setPlaybookCreateStep((current) => Math.max(current - 1, minStep));
   }
 
+  async function doCreatePlaybook(agentId: string): Promise<boolean> {
+    if (playbookSourceIdsDraft.length === 0) {
+      message.warning(t('playbook.pickSourceFirst'));
+      return false;
+    }
+    setIsPlaybookSaving(true);
+    try {
+      const schedule =
+        playbookScheduleModeDraft === 'interval'
+          ? { mode: 'interval' as const, intervalMinutes: playbookIntervalMinutesDraft }
+          : playbookScheduleModeDraft === 'weekly'
+            ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
+            : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
+      const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
+      await createPlaybook({ agentId, name: derivePlaybookName(agentId, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule, executionMode: 'latest_only' });
+      await refreshPlaybooks();
+      setIsPlaybookCreateOpen(false);
+      setPlaybookCreateStep(0);
+      setEditingPlaybookId(null);
+      setShowInlineAgentCreate(false);
+      return true;
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to create playbook');
+      return false;
+    } finally {
+      setIsPlaybookSaving(false);
+    }
+  }
+
   async function onCreatePlaybook() {
     if (!playbookAgentIdDraft) {
-      message.warning('Pick an agent first');
+      message.warning(t('playbook.pickAgentFirst'));
       return;
     }
     if (playbookSourceIdsDraft.length === 0) {
-      message.warning('Pick a source first');
+      message.warning(t('playbook.pickSourceFirst'));
       return;
     }
     setIsPlaybookSaving(true);
@@ -1073,33 +1081,16 @@ export function AgentsPage() {
         playbookScheduleModeDraft === 'interval'
           ? { mode: 'interval' as const, intervalMinutes: playbookIntervalMinutesDraft }
           : playbookScheduleModeDraft === 'weekly'
-            ? {
-                mode: 'weekly' as const,
-                daysOfWeek: playbookDaysOfWeekDraft,
-                dailyTime: playbookDailyTimeDraft,
-                timezone: playbookTimezoneDraft
-              }
+            ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
             : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
-      const cleanedRecipients = playbookRecipientsDraft.map((value) => value.trim()).filter(Boolean);
+      const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
       if (editingPlaybookId) {
-        await updatePlaybook(editingPlaybookId, {
-          name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft),
-          sourceIds: playbookSourceIdsDraft,
-          recipients: cleanedRecipients,
-          schedule
-        });
+        await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule });
       } else {
-        await createPlaybook({
-          agentId: playbookAgentIdDraft,
-          name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft),
-          sourceIds: playbookSourceIdsDraft,
-          recipients: cleanedRecipients,
-          schedule,
-          executionMode: 'latest_only'
-        });
+        await createPlaybook({ agentId: playbookAgentIdDraft, name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule, executionMode: 'latest_only' });
       }
       await refreshPlaybooks();
-      message.success(editingPlaybookId ? 'Playbook updated' : 'Playbook created');
+      message.success(editingPlaybookId ? t('playbook.updatePlaybook') : t('playbook.createPlaybook'));
       setIsPlaybookCreateOpen(false);
       setPlaybookCreateStep(0);
       setEditingPlaybookId(null);
@@ -1891,7 +1882,7 @@ export function AgentsPage() {
               ...(showAdminWorkspace
                 ? [{
                     key: 'agents',
-                    label: 'Followers (Agents)',
+                    label: t('nav.agents'),
                     children: (
                   <div
                     className={
@@ -2002,7 +1993,7 @@ export function AgentsPage() {
                     ) : (
                       <Card
                         className="min-w-0"
-                        title={<Title level={4} style={{ margin: 0 }}>Followers</Title>}
+                        title={<Title level={4} style={{ margin: 0 }}>{t('nav.agents')}</Title>}
                       >
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <Input
@@ -2441,7 +2432,7 @@ export function AgentsPage() {
                 {agents.map((agent) => {
                   const selected = playbookAgentIdDraft === agent.id;
                   const anySelected = playbookAgentIdDraft !== null;
-                  const { intro, icon } = getAgentCardDisplay(agent);
+                  const { intro, icon } = getAgentCardDisplay(agent, t);
 
                   return (
                     <div
@@ -2548,13 +2539,13 @@ export function AgentsPage() {
                               type="button"
                               onClick={() => onInlineAgentPersonaChange(persona.id)}
                               className={`relative rounded-md border p-3 text-left transition ${inlineAgentPersonaId === persona.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
-                              aria-label={`Inline character ${persona.name}`}
+                              aria-label={`Inline character ${t(`personas.${persona.id}.name`)}`}
                             >
                               {inlineAgentPersonaId === persona.id ? (
                                 <span className="absolute top-1 right-1 text-base leading-none"><BrainIcon /></span>
                               ) : null}
-                              <p className="font-medium text-sm">{persona.name}</p>
-                              <p className="text-xs text-gray-500">{persona.tagline}</p>
+                              <p className="font-medium text-sm">{t(`personas.${persona.id}.name`)}</p>
+                              <p className="text-xs text-gray-500">{t(`personas.${persona.id}.tagline`)}</p>
                             </button>
                           ))}
                         </div>
@@ -2581,13 +2572,13 @@ export function AgentsPage() {
                               type="button"
                               onClick={() => onInlineAgentCharacterChange(char.id)}
                               className={`relative rounded-md border p-3 text-left transition ${inlineAgentCharacterId === char.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:border-gray-300'}`}
-                              aria-label={`Inline personality ${char.name}`}
+                              aria-label={`Inline personality ${t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}`}
                             >
                               {inlineAgentCharacterId === char.id ? (
                                 <span className="absolute top-1 right-1 text-base leading-none"><BrainIcon /></span>
                               ) : null}
-                              <p className="font-medium text-sm">{char.name}</p>
-                              <p className="text-xs text-gray-500">{char.tagline}</p>
+                              <p className="font-medium text-sm">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}</p>
+                              <p className="text-xs text-gray-500">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.tagline`)}</p>
                             </button>
                           ))}
                         </div>

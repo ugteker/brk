@@ -103,18 +103,18 @@ describe('AgentsPage three hub shell', () => {
     renderPage();
 
     await screen.findByRole('heading', { name: /dashboard/i });
-    expect(screen.queryByRole('tab', { name: /(agents|followers)/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /agents/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
   });
 
   it('starts in library-only mode and opens admin area on demand', async () => {
     renderPage();
 
-    expect(screen.queryByRole('tab', { name: /(agents|followers)/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /agents/i })).not.toBeInTheDocument();
     const menuBtn = await screen.findByRole('button', { name: /account menu/i });
     fireEvent.click(menuBtn);
     fireEvent.click(await screen.findByRole('menuitem', { name: /agents & playbooks/i }));
-    expect(await screen.findByRole('tab', { name: /(agents|followers)/i })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: /agents/i })).toBeInTheDocument();
   });
 
   it('uses follower terminology in admin workspace', async () => {
@@ -123,8 +123,8 @@ describe('AgentsPage three hub shell', () => {
     const menuBtn = await screen.findByRole('button', { name: /account menu/i });
     fireEvent.click(menuBtn);
     fireEvent.click(await screen.findByRole('menuitem', { name: /agents & playbooks/i }));
-    expect(await screen.findByRole('tab', { name: /followers/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: /followers/i }));
+    expect(await screen.findByRole('tab', { name: /agents/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /agents/i }));
     expect(await screen.findByRole('button', { name: /create follower/i })).toBeInTheDocument();
   });
 
@@ -179,7 +179,7 @@ describe('AgentsPage three hub shell', () => {
     expect(await screen.findByRole('dialog', { name: /summarize/i })).toBeInTheDocument();
     // A non-admin user must never gain access to the admin-only Agents/Playbooks tabs
     // just by following a source.
-    expect(screen.queryByRole('tab', { name: /(agents|followers)/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /agents/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
     // The account menu should not be rendered for non-admin users (no admin entries)
     // but even if it is, there must be no "open admin area" trigger button.
@@ -264,8 +264,8 @@ describe('AgentsPage three hub shell', () => {
     renderPage();
     await openAdminArea();
 
-    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
-    const agentsHeading = await screen.findByRole('heading', { name: /^followers$/i });
+    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
+    const agentsHeading = await screen.findByRole('heading', { name: /^agents$/i });
     expect(agentsHeading.closest('div[class*="lg:grid-cols-[2fr_1fr]"]')).toBeNull();
   });
 
@@ -316,7 +316,7 @@ describe('AgentsPage three hub shell', () => {
     expect(screen.getByRole('button', { name: /create new source/i })).toBeInTheDocument();
     await openAdminArea();
 
-    fireEvent.click(screen.getByRole('tab', { name: /(agents|followers)/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /agents/i }));
     const createAgentButton = await screen.findByRole('button', { name: /create (agent|follower)/i });
     expect(createAgentButton).toBeInTheDocument();
     expect(createAgentButton.className).toContain('w-full');
@@ -372,7 +372,7 @@ describe('AgentsPage three hub shell', () => {
     renderPage();
     await openAdminArea();
 
-    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
 
     expect(screen.queryByText(/Use "Create Agent" to start the setup wizard\./i)).not.toBeInTheDocument();
     expect(document.querySelector('.ant-empty')).toBeNull();
@@ -385,7 +385,7 @@ describe('AgentsPage three hub shell', () => {
     expect(screen.getByRole('button', { name: /create new source/i })).toBeInTheDocument();
     await openAdminArea();
 
-    fireEvent.click(screen.getByRole('tab', { name: /(agents|followers)/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /agents/i }));
     fireEvent.click(await screen.findByRole('button', { name: /create (agent|follower)/i }));
     expect(screen.queryByRole('button', { name: /create new source/i })).not.toBeInTheDocument();
   });
@@ -535,7 +535,7 @@ describe('AgentsPage three hub shell', () => {
     fireEvent.click(menuBtn);
     fireEvent.click(await screen.findByRole('menuitem', { name: /agents & playbooks/i }));
 
-    fireEvent.click(screen.getByRole('tab', { name: /(agents|followers)/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /agents/i }));
     expect(await screen.findByLabelText(/edit agent/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/share or publish agent/i)).toBeInTheDocument();
 
@@ -583,7 +583,7 @@ describe('AgentsPage three hub shell', () => {
     renderPage();
     await openAdminArea();
 
-    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
     expect((await screen.findAllByLabelText(/remove agent/i)).length).toBe(1);
     expect(screen.queryByLabelText(/pause agent/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/resume agent/i)).not.toBeInTheDocument();
@@ -632,7 +632,7 @@ describe('AgentsPage three hub shell', () => {
     renderPage();
     await openAdminArea();
 
-    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
     expect(await screen.findByText(/character: teacher/i)).toBeInTheDocument();
     expect(screen.getByText(/personality: classroom instructor/i)).toBeInTheDocument();
     expect(screen.queryByText(/^sources:/i)).not.toBeInTheDocument();
@@ -649,7 +649,7 @@ describe('AgentsPage three hub shell', () => {
     renderPage();
     await openAdminArea();
 
-    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
     expect(await screen.findByLabelText(/search agents/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /playbooks/i }));
@@ -845,7 +845,7 @@ describe('AgentsPage three hub shell', () => {
   it('shows latest runtime status in Playbooks hub, not Agents hub', async () => {
     renderPage();
     await openAdminArea();
-    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
     expect(screen.queryByText(/latest agent runtime status/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /playbooks/i }));
@@ -889,7 +889,7 @@ describe('AgentsPage three hub shell', () => {
     renderPage();
     await openAdminArea();
 
-    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
     fireEvent.click(await screen.findByText(/macro agent/i));
     expect(screen.queryByRole('tab', { name: /^reports$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /^runs$/i })).not.toBeInTheDocument();
