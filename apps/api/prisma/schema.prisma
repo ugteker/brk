@@ -219,6 +219,9 @@ model Playbook {
   maxSourcesPerRun  Int      @default(3)
   maxItemsPerSource Int      @default(1)
   recipientsJson    String   @default("[]")
+  followTargetType  String?
+  followTargetKey   String?
+  followTargetTitle String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Restrict)

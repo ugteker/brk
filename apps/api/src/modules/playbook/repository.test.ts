@@ -127,3 +127,70 @@ describe('PlaybookRepository marketplace clone', () => {
     );
   });
 });
+
+describe('PlaybookRepository follow target metadata', () => {
+  it('persists and maps follow target fields on create', async () => {
+    const fakeDb = {
+      playbook: {
+        create: vi.fn(async ({ data }: any) => ({
+          id: 'playbook-1',
+          agentId: data.agentId,
+          name: data.name,
+          description: data.description,
+          enabled: true,
+          mode: data.mode,
+          intervalMinutes: data.intervalMinutes,
+          dailyTime: data.dailyTime,
+          timezone: data.timezone,
+          daysOfWeekJson: data.daysOfWeekJson,
+          nextRunAt: new Date('2026-07-14T12:00:00.000Z'),
+          executionMode: data.executionMode,
+          maxSourcesPerRun: data.maxSourcesPerRun,
+          maxItemsPerSource: data.maxItemsPerSource,
+          recipientsJson: data.recipientsJson,
+          followTargetType: data.followTargetType,
+          followTargetKey: data.followTargetKey,
+          followTargetTitle: data.followTargetTitle,
+          createdAt: new Date('2026-07-14T10:00:00.000Z'),
+          updatedAt: new Date('2026-07-14T10:00:00.000Z'),
+          sources: [{ sourceId: 'source-1', position: 0, enabled: true }],
+          agent: { runs: [] }
+        })),
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        findFirst: vi.fn()
+      },
+      playbookSource: { deleteMany: vi.fn(), createMany: vi.fn() },
+      accessGrant: { create: vi.fn() },
+      marketplacePublication: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+      agent: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
+      source: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
+      $transaction: vi.fn(async (callback: any) => callback(fakeDb))
+    };
+
+    const repository = new PlaybookRepository(fakeDb as any);
+    const created = await repository.createPlaybook('owner-1', {
+      agentId: 'agent-1',
+      name: 'Follow this',
+      sourceIds: ['source-1'],
+      followTargetType: 'episode',
+      followTargetKey: 'source-1:item-42',
+      followTargetTitle: 'Episode 42'
+    });
+
+    expect(fakeDb.playbook.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          followTargetType: 'episode',
+          followTargetKey: 'source-1:item-42',
+          followTargetTitle: 'Episode 42'
+        })
+      })
+    );
+    expect(created.followTargetType).toBe('episode');
+    expect(created.followTargetKey).toBe('source-1:item-42');
+    expect(created.followTargetTitle).toBe('Episode 42');
+  });
+});

@@ -16,6 +16,7 @@ export interface PlaybookRoutesDeps {
 const PLAYBOOK_SHARE_PERMISSIONS = new Set(['read', 'edit', 'delete', 'execute']);
 const PLAYBOOK_MODES = new Set(['interval', 'daily', 'weekly']);
 const EXECUTION_MODES = new Set(['latest_only', 'all_sources']);
+const FOLLOW_TARGET_TYPES = new Set(['channel', 'episode']);
 
 async function requirePlaybookAccess(
   deps: PlaybookRoutesDeps,
@@ -66,6 +67,9 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
     if (input.executionMode !== undefined && !EXECUTION_MODES.has(input.executionMode)) {
       return reply.status(400).send({ code: 'validation_error', message: 'executionMode must be latest_only or all_sources' });
     }
+    if (input.followTargetType !== undefined && !FOLLOW_TARGET_TYPES.has(input.followTargetType)) {
+      return reply.status(400).send({ code: 'validation_error', message: 'followTargetType must be channel or episode' });
+    }
 
     const schedule = input.schedule ?? { mode: 'interval' as const, intervalMinutes: 60 };
 
@@ -81,6 +85,9 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
       executionMode: input.executionMode,
       maxSourcesPerRun: input.maxSourcesPerRun,
       maxItemsPerSource: input.maxItemsPerSource,
+      followTargetType: input.followTargetType,
+      followTargetKey: input.followTargetKey,
+      followTargetTitle: input.followTargetTitle,
       schedule
     });
     return reply.status(201).send(created);
@@ -135,6 +142,9 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
         return reply.status(400).send({ code: 'validation_error', message: 'recipients must be an array of emails' });
       }
       patch.recipients = patch.recipients.map((recipient) => recipient.trim()).filter(Boolean);
+    }
+    if (patch.followTargetType !== undefined && patch.followTargetType !== null && !FOLLOW_TARGET_TYPES.has(patch.followTargetType)) {
+      return reply.status(400).send({ code: 'validation_error', message: 'followTargetType must be channel or episode' });
     }
     try {
       const updated = await deps.playbookRepository.updatePlaybook(playbookId, patch);

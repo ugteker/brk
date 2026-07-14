@@ -6,6 +6,7 @@ export type PlaybookSchedule =
 export type PlaybookExecutionMode = 'latest_only' | 'all_sources';
 export type PlaybookSharePermission = 'read' | 'edit' | 'delete' | 'execute';
 export type PublicationVisibility = 'public' | 'private';
+export type FollowTargetType = 'channel' | 'episode';
 
 export interface PlaybookRecord {
   id: string;
@@ -20,6 +21,9 @@ export interface PlaybookRecord {
   executionMode: PlaybookExecutionMode;
   maxSourcesPerRun: number;
   maxItemsPerSource: number;
+  followTargetType?: FollowTargetType | null;
+  followTargetKey?: string | null;
+  followTargetTitle?: string | null;
   lastRunAt: string | null;
   nextRunAt: string;
   createdAt: string;
@@ -37,6 +41,9 @@ export interface CreatePlaybookPayload {
   executionMode?: PlaybookExecutionMode;
   maxSourcesPerRun?: number;
   maxItemsPerSource?: number;
+  followTargetType?: FollowTargetType;
+  followTargetKey?: string;
+  followTargetTitle?: string;
 }
 
 export interface UpdatePlaybookPayload {
@@ -49,6 +56,9 @@ export interface UpdatePlaybookPayload {
   executionMode?: PlaybookExecutionMode;
   maxSourcesPerRun?: number;
   maxItemsPerSource?: number;
+  followTargetType?: FollowTargetType | null;
+  followTargetKey?: string | null;
+  followTargetTitle?: string | null;
 }
 
 export interface SharePlaybookPayload {

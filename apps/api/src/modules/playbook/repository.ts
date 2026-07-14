@@ -70,6 +70,9 @@ function mapPlaybook(row: any): Playbook {
     executionMode: row.executionMode,
     maxSourcesPerRun: row.maxSourcesPerRun,
     maxItemsPerSource: row.maxItemsPerSource,
+    followTargetType: row.followTargetType ?? null,
+    followTargetKey: row.followTargetKey ?? null,
+    followTargetTitle: row.followTargetTitle ?? null,
     lastRunAt: row.agent?.runs?.[0]?.createdAt ?? null,
     nextRunAt: row.nextRunAt,
     createdAt: row.createdAt,
@@ -107,6 +110,9 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
         executionMode: input.executionMode ?? 'latest_only',
         maxSourcesPerRun: input.maxSourcesPerRun ?? 3,
         maxItemsPerSource: input.maxItemsPerSource ?? 1,
+        followTargetType: input.followTargetType ?? null,
+        followTargetKey: input.followTargetKey ?? null,
+        followTargetTitle: input.followTargetTitle ?? null,
         ...schedulePatchData(schedule, now),
         sources: {
           create: input.sourceIds.map((sourceId, index) => ({
@@ -173,6 +179,9 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
           ...(patch.executionMode !== undefined ? { executionMode: patch.executionMode } : {}),
           ...(patch.maxSourcesPerRun !== undefined ? { maxSourcesPerRun: patch.maxSourcesPerRun } : {}),
           ...(patch.maxItemsPerSource !== undefined ? { maxItemsPerSource: patch.maxItemsPerSource } : {}),
+          ...(patch.followTargetType !== undefined ? { followTargetType: patch.followTargetType } : {}),
+          ...(patch.followTargetKey !== undefined ? { followTargetKey: patch.followTargetKey } : {}),
+          ...(patch.followTargetTitle !== undefined ? { followTargetTitle: patch.followTargetTitle } : {}),
           ...(patch.recipients !== undefined ? { recipientsJson: JSON.stringify(patch.recipients) } : {}),
           ...(patch.schedule ? schedulePatchData(patch.schedule, now) : {})
         },
@@ -461,6 +470,9 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
         executionMode: publication.playbook.executionMode,
         maxSourcesPerRun: publication.playbook.maxSourcesPerRun,
         maxItemsPerSource: publication.playbook.maxItemsPerSource,
+        followTargetType: publication.playbook.followTargetType,
+        followTargetKey: publication.playbook.followTargetKey,
+        followTargetTitle: publication.playbook.followTargetTitle,
         recipientsJson: publication.playbook.recipientsJson ?? '[]',
         sources: {
           create: publication.playbook.sources.map((sourceRow: any) => ({

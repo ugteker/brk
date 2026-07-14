@@ -6,6 +6,7 @@ export type PlaybookScheduleInput =
 export type PlaybookExecutionMode = 'latest_only' | 'all_sources';
 export type PlaybookSharePermission = 'read' | 'edit' | 'delete' | 'execute';
 export type PublicationVisibility = 'public' | 'private';
+export type FollowTargetType = 'channel' | 'episode';
 
 export interface CreatePlaybookInput {
   agentId: string;
@@ -18,6 +19,9 @@ export interface CreatePlaybookInput {
   executionMode?: PlaybookExecutionMode;
   maxSourcesPerRun?: number;
   maxItemsPerSource?: number;
+  followTargetType?: FollowTargetType;
+  followTargetKey?: string;
+  followTargetTitle?: string;
 }
 
 export interface UpdatePlaybookInput {
@@ -30,6 +34,9 @@ export interface UpdatePlaybookInput {
   executionMode?: PlaybookExecutionMode;
   maxSourcesPerRun?: number;
   maxItemsPerSource?: number;
+  followTargetType?: FollowTargetType | null;
+  followTargetKey?: string | null;
+  followTargetTitle?: string | null;
 }
 
 export interface Playbook {
@@ -44,6 +51,9 @@ export interface Playbook {
   executionMode: PlaybookExecutionMode;
   maxSourcesPerRun: number;
   maxItemsPerSource: number;
+  followTargetType?: FollowTargetType | null;
+  followTargetKey?: string | null;
+  followTargetTitle?: string | null;
   lastRunAt: Date | null;
   nextRunAt: Date;
   createdAt: Date;

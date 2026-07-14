@@ -104,6 +104,13 @@ const TIMEZONE_OPTIONS = [
 ];
 type HubKey = 'sources' | 'agents' | 'playbooks';
 type ProbeKind = 'feed' | 'listing_page' | 'single_page' | 'unknown';
+interface LibraryTabRecord {
+  id: string;
+  name: string;
+}
+
+const DEFAULT_LIBRARY_TAB_ID = 'library-default';
+const DEFAULT_LIBRARY_TAB_NAME = 'Library';
 
 interface AutoDetectedSource {
   type: SourceType;
@@ -251,6 +258,7 @@ function hasEpisodicSource(agent: AgentSummary): boolean {
 
 export function AgentsPage() {
   const { user, isAdmin, logout } = useAuth();
+  const [showAdminWorkspace, setShowAdminWorkspace] = useState(false);
   const [showAdminUsers, setShowAdminUsers] = useState(false);
   const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
@@ -278,6 +286,12 @@ export function AgentsPage() {
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [sourcesLoadState, setSourcesLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [sourcesSearch, setSourcesSearch] = useState('');
+  const [libraryTabs, setLibraryTabs] = useState<LibraryTabRecord[]>([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
+  const [activeLibraryTabId, setActiveLibraryTabId] = useState(DEFAULT_LIBRARY_TAB_ID);
+  const [sourceLibraryBySourceId, setSourceLibraryBySourceId] = useState<Record<string, string>>({});
+  const [editingLibraryTabId, setEditingLibraryTabId] = useState<string | null>(null);
+  const [editingLibraryTabName, setEditingLibraryTabName] = useState('');
+  const [lastLibraryTabClick, setLastLibraryTabClick] = useState<{ tabId: string; at: number } | null>(null);
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
   const [isSourceCreateOpen, setIsSourceCreateOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<SourceRecord | null>(null);
@@ -292,6 +306,7 @@ export function AgentsPage() {
   const [isPlaybookCreateOpen, setIsPlaybookCreateOpen] = useState(false);
   const [playbookCreateStep, setPlaybookCreateStep] = useState(0);
   const [isPlaybookSaving, setIsPlaybookSaving] = useState(false);
+  const [editingPlaybookId, setEditingPlaybookId] = useState<string | null>(null);
   const [playbookAgentIdDraft, setPlaybookAgentIdDraft] = useState<string | null>(null);
   const [playbookSourceIdsDraft, setPlaybookSourceIdsDraft] = useState<string[]>([]);
   const [playbookScheduleModeDraft, setPlaybookScheduleModeDraft] = useState<'interval' | 'daily' | 'weekly'>('daily');
@@ -316,11 +331,88 @@ export function AgentsPage() {
     return error instanceof Error && /sign in required|unauthenticated/i.test(error.message);
   }
 
+  function libraryTabsStorageKey(): string {
+    return `chattrader:library-tabs:${user?.id ?? 'anonymous'}`;
+  }
+
+  function libraryAssignmentsStorageKey(): string {
+    return `chattrader:library-assignments:${user?.id ?? 'anonymous'}`;
+  }
+
+  function normalizeLibraryTabs(candidate: unknown): LibraryTabRecord[] {
+    if (!Array.isArray(candidate)) {
+      return [{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }];
+    }
+    const normalized = candidate
+      .filter((tab): tab is { id: string; name: string } => typeof tab?.id === 'string' && typeof tab?.name === 'string')
+      .map((tab) => ({ id: tab.id, name: tab.name.trim() || 'Untitled Library' }));
+    if (!normalized.some((tab) => tab.id === DEFAULT_LIBRARY_TAB_ID)) {
+      normalized.unshift({ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME });
+    }
+    return normalized;
+  }
+
+  function reconcileSourceLibraries(nextSources: SourceRecord[]) {
+    setSourceLibraryBySourceId((current) => {
+      const validTabIds = new Set(libraryTabs.map((tab) => tab.id));
+      const next: Record<string, string> = {};
+      for (const source of nextSources) {
+        const assignedTabId = current[source.id];
+        next[source.id] = assignedTabId && validTabIds.has(assignedTabId) ? assignedTabId : DEFAULT_LIBRARY_TAB_ID;
+      }
+      return next;
+    });
+  }
+
+  function createLibraryTab() {
+    const label = window.prompt('Library tab name');
+    if (label === null) return;
+    const trimmed = label.trim();
+    if (!trimmed) {
+      message.warning('Enter a tab name');
+      return;
+    }
+    const newTabId = `library-${Date.now()}`;
+    setLibraryTabs((current) => [...current, { id: newTabId, name: trimmed }]);
+    setActiveLibraryTabId(newTabId);
+  }
+
+  function startEditingLibraryTab(tab: LibraryTabRecord) {
+    if (tab.id === DEFAULT_LIBRARY_TAB_ID) return;
+    setEditingLibraryTabId(tab.id);
+    setEditingLibraryTabName(tab.name);
+  }
+
+  function onLibraryTabClick(tabId: string) {
+    const now = Date.now();
+    if (lastLibraryTabClick && lastLibraryTabClick.tabId === tabId && now - lastLibraryTabClick.at <= 350) {
+      const tab = libraryTabs.find((candidate) => candidate.id === tabId);
+      if (tab) {
+        startEditingLibraryTab(tab);
+      }
+      setLastLibraryTabClick(null);
+      return;
+    }
+    setLastLibraryTabClick({ tabId, at: now });
+  }
+
+  function commitEditingLibraryTab(tabId: string) {
+    const trimmed = editingLibraryTabName.trim();
+    if (!trimmed) {
+      message.warning('Tab name cannot be empty');
+      return;
+    }
+    setLibraryTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, name: trimmed } : tab)));
+    setEditingLibraryTabId(null);
+    setEditingLibraryTabName('');
+  }
+
   async function refreshSources() {
     try {
       setSourcesLoadState('loading');
       const response = await listSources();
       setSources(response);
+      reconcileSourceLibraries(response);
       setSourcesLoadState('idle');
     } catch (error) {
       if (isSignInRequiredError(error)) {
@@ -342,6 +434,39 @@ export function AgentsPage() {
         await logout();
         return;
       }
+
+      useEffect(() => {
+        try {
+          const savedTabs = window.localStorage.getItem(libraryTabsStorageKey());
+          const parsedTabs = savedTabs ? JSON.parse(savedTabs) : null;
+          const normalizedTabs = normalizeLibraryTabs(parsedTabs);
+          setLibraryTabs(normalizedTabs);
+
+          const savedAssignments = window.localStorage.getItem(libraryAssignmentsStorageKey());
+          const parsedAssignments = savedAssignments ? JSON.parse(savedAssignments) : {};
+          if (parsedAssignments && typeof parsedAssignments === 'object') {
+            setSourceLibraryBySourceId(parsedAssignments as Record<string, string>);
+          } else {
+            setSourceLibraryBySourceId({});
+          }
+          setActiveLibraryTabId((current) =>
+            normalizedTabs.some((tab) => tab.id === current) ? current : DEFAULT_LIBRARY_TAB_ID
+          );
+        } catch {
+          setLibraryTabs([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
+          setActiveLibraryTabId(DEFAULT_LIBRARY_TAB_ID);
+          setSourceLibraryBySourceId({});
+        }
+      }, [user?.id]);
+
+      useEffect(() => {
+        try {
+          window.localStorage.setItem(libraryTabsStorageKey(), JSON.stringify(libraryTabs));
+          window.localStorage.setItem(libraryAssignmentsStorageKey(), JSON.stringify(sourceLibraryBySourceId));
+        } catch {
+          // ignore storage failures
+        }
+      }, [libraryTabs, sourceLibraryBySourceId, user?.id]);
       setPlaybooksLoadState('error');
     }
   }
@@ -421,6 +546,7 @@ export function AgentsPage() {
         if (!alive) return;
         if (sourcesResult.status === 'fulfilled') {
           setSources(sourcesResult.value);
+          reconcileSourceLibraries(sourcesResult.value);
           setSourcesLoadState('idle');
         } else {
           if (isSignInRequiredError(sourcesResult.reason)) {
@@ -650,6 +776,7 @@ export function AgentsPage() {
   }
 
   function openPlaybookCreate() {
+    setEditingPlaybookId(null);
     setPlaybookCreateStep(0);
     setPlaybookAgentIdDraft(agents[0]?.id ?? null);
     setPlaybookSourceIdsDraft(sources[0] ? [sources[0].id] : []);
@@ -662,9 +789,47 @@ export function AgentsPage() {
     setIsPlaybookCreateOpen(true);
   }
 
+  function onFollowSource(source: SourceRecord, event?: React.MouseEvent) {
+    event?.stopPropagation();
+    // Opening the follow wizard must never expose the admin-only Agents/Playbooks
+    // tabs to non-admin users, so we no longer flip showAdminWorkspace/activeHub
+    // here. The follow wizard is rendered as a standalone Modal (see
+    // isPlaybookCreateOpen usage below) that is reachable regardless of tab state.
+    const existingFollowPlaybook = playbooks.find((playbook) => playbook.sourceIds.includes(source.id));
+    if (existingFollowPlaybook) {
+      setEditingPlaybookId(existingFollowPlaybook.id);
+      setPlaybookCreateStep(0);
+      setPlaybookAgentIdDraft(existingFollowPlaybook.agentId);
+      setPlaybookSourceIdsDraft(existingFollowPlaybook.sourceIds);
+      setPlaybookScheduleModeDraft(existingFollowPlaybook.schedule.mode);
+      if (existingFollowPlaybook.schedule.mode === 'interval') {
+        setPlaybookIntervalMinutesDraft(existingFollowPlaybook.schedule.intervalMinutes);
+      } else {
+        setPlaybookDailyTimeDraft(existingFollowPlaybook.schedule.dailyTime);
+        setPlaybookTimezoneDraft(existingFollowPlaybook.schedule.timezone);
+        setPlaybookDaysOfWeekDraft(existingFollowPlaybook.schedule.mode === 'weekly' ? existingFollowPlaybook.schedule.daysOfWeek : [1]);
+      }
+      setPlaybookRecipientsDraft(existingFollowPlaybook.recipients);
+      setIsPlaybookCreateOpen(true);
+      return;
+    }
+    setEditingPlaybookId(null);
+    setPlaybookCreateStep(0);
+    setPlaybookAgentIdDraft(agents[0]?.id ?? null);
+    setPlaybookSourceIdsDraft([source.id]);
+    setPlaybookScheduleModeDraft('daily');
+    setPlaybookIntervalMinutesDraft(60);
+    setPlaybookDailyTimeDraft('07:30');
+    setPlaybookTimezoneDraft('UTC');
+    setPlaybookDaysOfWeekDraft([1]);
+    setPlaybookRecipientsDraft([]);
+    setIsPlaybookCreateOpen(true);
+  }
+
   function onCancelPlaybookCreate() {
     setIsPlaybookCreateOpen(false);
     setPlaybookCreateStep(0);
+    setEditingPlaybookId(null);
   }
 
   function derivePlaybookName(agentId: string, sourceIds: string[]): string {
@@ -713,18 +878,29 @@ export function AgentsPage() {
                 timezone: playbookTimezoneDraft
               }
             : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
-      await createPlaybook({
-        agentId: playbookAgentIdDraft,
-        name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft),
-        sourceIds: playbookSourceIdsDraft,
-        recipients: playbookRecipientsDraft.map((value) => value.trim()).filter(Boolean),
-        schedule,
-        executionMode: 'latest_only'
-      });
+      const cleanedRecipients = playbookRecipientsDraft.map((value) => value.trim()).filter(Boolean);
+      if (editingPlaybookId) {
+        await updatePlaybook(editingPlaybookId, {
+          name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft),
+          sourceIds: playbookSourceIdsDraft,
+          recipients: cleanedRecipients,
+          schedule
+        });
+      } else {
+        await createPlaybook({
+          agentId: playbookAgentIdDraft,
+          name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft),
+          sourceIds: playbookSourceIdsDraft,
+          recipients: cleanedRecipients,
+          schedule,
+          executionMode: 'latest_only'
+        });
+      }
       await refreshPlaybooks();
-      message.success('Playbook created');
+      message.success(editingPlaybookId ? 'Playbook updated' : 'Playbook created');
       setIsPlaybookCreateOpen(false);
       setPlaybookCreateStep(0);
+      setEditingPlaybookId(null);
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to create playbook');
     } finally {
@@ -793,6 +969,11 @@ export function AgentsPage() {
   async function onDeleteSource(source: SourceRecord) {
     try {
       await deleteSource(source.id);
+      setSourceLibraryBySourceId((current) => {
+        const next = { ...current };
+        delete next[source.id];
+        return next;
+      });
       await refreshSources();
       message.success('Source removed');
     } catch (err) {
@@ -844,6 +1025,9 @@ export function AgentsPage() {
   const normalizedAgentsSearch = agentsSearch.trim().toLowerCase();
   const normalizedPlaybooksSearch = playbooksSearch.trim().toLowerCase();
   const filteredSources = sources.filter((source) => {
+    if ((sourceLibraryBySourceId[source.id] ?? DEFAULT_LIBRARY_TAB_ID) !== activeLibraryTabId) {
+      return false;
+    }
     if (!normalizedSourceSearch) return true;
     const scannedTitle = source.metadata.title ?? '';
     const preview = source.metadata.previewItems.map((item) => item.title).join(' ');
@@ -978,7 +1162,7 @@ export function AgentsPage() {
           }
         });
       } else {
-        await createSource({
+        const created = await createSource({
           type: autoDetectedSource.type,
           value: autoDetectedSource.url,
           metadata: {
@@ -992,6 +1176,7 @@ export function AgentsPage() {
             }))
           }
         });
+        setSourceLibraryBySourceId((current) => ({ ...current, [created.id]: activeLibraryTabId }));
       }
       await refreshSources();
       message.success(editingSource ? 'Source updated' : 'Source created');
@@ -1011,6 +1196,7 @@ export function AgentsPage() {
     setViewingSymbol(null);
     setIsCreatingAgent(false);
     setEditingAgent(null);
+    setShowAdminWorkspace(false);
     setShowAdminUsers(false);
     setActiveHub('sources');
     setSelectedPlaybookId(null);
@@ -1047,14 +1233,39 @@ export function AgentsPage() {
                 {user.displayName ?? user.email}
               </Text>
             ) : null}
-            {isAdmin ? (
-              <TouchSafeTooltip title="Manage users">
+            {isAdmin && !showAdminWorkspace ? (
+              <TouchSafeTooltip title="Open admin area">
                 <Button
                   icon={<TeamOutlined />}
-                  onClick={() => setShowAdminUsers(true)}
-                  aria-label="Manage users"
+                  onClick={() => {
+                    setShowAdminWorkspace(true);
+                    setActiveHub('agents');
+                  }}
+                  aria-label="Open admin area"
                 />
               </TouchSafeTooltip>
+            ) : null}
+            {isAdmin && showAdminWorkspace ? (
+              <>
+                <TouchSafeTooltip title="Back to library">
+                  <Button
+                    icon={<ArrowLeftOutlined />}
+                    onClick={() => {
+                      setShowAdminWorkspace(false);
+                      setShowAdminUsers(false);
+                      setActiveHub('sources');
+                    }}
+                    aria-label="Back to library"
+                  />
+                </TouchSafeTooltip>
+                <TouchSafeTooltip title="Manage users">
+                  <Button
+                    icon={<TeamOutlined />}
+                    onClick={() => setShowAdminUsers(true)}
+                    aria-label="Manage users"
+                  />
+                </TouchSafeTooltip>
+              </>
             ) : null}
             <ThemePicker />
             <TouchSafeTooltip title="Log out">
@@ -1064,7 +1275,7 @@ export function AgentsPage() {
         </div>
       </Header>
       <Content style={{ padding: 24 }}>
-        {showAdminUsers ? (
+        {showAdminWorkspace && showAdminUsers ? (
           <AdminUsersPage onBack={() => setShowAdminUsers(false)} />
         ) : viewingSymbol && (selectedAgent || executionAgentId) ? (
           <SymbolPerformancePage
@@ -1080,12 +1291,64 @@ export function AgentsPage() {
           <Tabs
             activeKey={activeHub}
             onChange={(key) => setActiveHub(key as HubKey)}
+            tabBarStyle={showAdminWorkspace ? undefined : { display: 'none' }}
             items={[
               {
                 key: 'sources',
-                label: 'Library',
+                label: 'Dashboard',
                 children: (
-                  <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}>Library</Title>}>
+                  <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}>Dashboard</Title>}>
+                    <div
+                      onDoubleClick={() => {
+                        const tab = libraryTabs.find((candidate) => candidate.id === activeLibraryTabId);
+                        if (tab) startEditingLibraryTab(tab);
+                      }}
+                    >
+                      <Tabs
+                        activeKey={activeLibraryTabId}
+                        onChange={setActiveLibraryTabId}
+                        onTabClick={onLibraryTabClick}
+                        tabBarExtraContent={
+                          <Button aria-label="Create library tab" size="small" onClick={createLibraryTab}>
+                            Add library tab
+                          </Button>
+                        }
+                        items={libraryTabs.map((tab) => ({
+                          key: tab.id,
+                          label:
+                            editingLibraryTabId === tab.id ? (
+                              <Input
+                                aria-label="Rename library tab"
+                                autoFocus
+                                size="small"
+                                value={editingLibraryTabName}
+                                onChange={(event) => setEditingLibraryTabName(event.currentTarget.value)}
+                                onPressEnter={() => commitEditingLibraryTab(tab.id)}
+                                onBlur={() => commitEditingLibraryTab(tab.id)}
+                                onClick={(event) => event.stopPropagation()}
+                                style={{ width: 160 }}
+                              />
+                            ) : (
+                              <span className="inline-flex items-center gap-1">
+                                {tab.name}
+                                {tab.id !== DEFAULT_LIBRARY_TAB_ID && tab.id === activeLibraryTabId ? (
+                                  <button
+                                    type="button"
+                                    aria-label="Rename active library tab"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      startEditingLibraryTab(tab);
+                                    }}
+                                    className="text-xs text-gray-500 hover:text-gray-700"
+                                  >
+                                    ✎
+                                  </button>
+                                ) : null}
+                              </span>
+                            )
+                        }))}
+                      />
+                    </div>
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                       <Input
                         aria-label="Search sources"
@@ -1136,6 +1399,14 @@ export function AgentsPage() {
                                 onPublish={(payload) => publishSource(source.id, payload)}
                                 defaultPublishTitle={getSourceDisplayTitle(source)}
                               />
+                              <TouchSafeTooltip title="Follow this source">
+                                <Button
+                                  aria-label="Follow this source"
+                                  shape="circle"
+                                  icon={<PlusCircleOutlined />}
+                                  onClick={(event) => onFollowSource(source, event)}
+                                />
+                              </TouchSafeTooltip>
                             </div>
                           }
                         >
@@ -1284,10 +1555,11 @@ export function AgentsPage() {
                   </Card>
                 )
               },
-              {
-                key: 'agents',
-                label: 'Agents',
-                children: (
+              ...(showAdminWorkspace
+                ? [{
+                    key: 'agents',
+                    label: 'Followers (Agents)',
+                    children: (
                   <div
                     className={
                       isCreatingAgent || editingAgent || selectedAgent
@@ -1397,7 +1669,7 @@ export function AgentsPage() {
                     ) : (
                       <Card
                         className="min-w-0"
-                        title={<Title level={4} style={{ margin: 0 }}>Agents</Title>}
+                        title={<Title level={4} style={{ margin: 0 }}>Followers</Title>}
                       >
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <Input
@@ -1473,7 +1745,7 @@ export function AgentsPage() {
                           ))}
                           <button
                             type="button"
-                            aria-label="Create agent"
+                            aria-label="Create follower"
                             onClick={() => {
                               setIsCreatingAgent(true);
                               setEditingAgent(null);
@@ -1482,7 +1754,7 @@ export function AgentsPage() {
                             className={`${GHOST_CREATE_CARD_CLASS} w-full`}
                           >
                             <AppstoreOutlined className="text-3xl text-sky-700" />
-                            <span className="mt-2 text-base font-semibold">Create agent</span>
+                            <span className="mt-2 text-base font-semibold">Create follower</span>
                             <span className="mt-1 text-xs font-normal text-sky-700">Character + personality setup</span>
                           </button>
                         </div>
@@ -1517,12 +1789,12 @@ export function AgentsPage() {
                       </Card>
                     )}
                   </div>
-                )
-              },
-              {
-                key: 'playbooks',
-                label: 'Playbooks',
-                children: (
+                    )
+                  },
+                  {
+                    key: 'playbooks',
+                    label: 'Playbooks',
+                    children: (
                   <div className="grid min-w-0 gap-4 lg:grid-cols-[2fr_1fr]">
                   <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}>Playbooks</Title>}>
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -1667,226 +1939,19 @@ export function AgentsPage() {
                               </div>
                             </Card>
                           ))}
-                          {!isPlaybookCreateOpen ? (
-                            <button
-                              type="button"
-                              aria-label="Create new playbook"
-                              onClick={openPlaybookCreate}
-                              className={GHOST_CREATE_CARD_CLASS}
-                            >
-                              <RocketOutlined className="text-3xl text-sky-700" />
-                              <span className="mt-2 text-base font-semibold">Create new playbook</span>
-                              <span className="mt-1 text-xs font-normal text-sky-700">Agent + sources + schedule</span>
-                            </button>
-                          ) : null}
+                          <button
+                            type="button"
+                            aria-label="Create new playbook"
+                            onClick={openPlaybookCreate}
+                            className={GHOST_CREATE_CARD_CLASS}
+                          >
+                            <RocketOutlined className="text-3xl text-sky-700" />
+                            <span className="mt-2 text-base font-semibold">Create new playbook</span>
+                            <span className="mt-1 text-xs font-normal text-sky-700">Agent + sources + schedule</span>
+                          </button>
                         </div>
                       </>
                     )}
-                    {isPlaybookCreateOpen ? (
-                      <Card
-                        className="mb-4"
-                        title="Create playbook"
-                      >
-                        <div className="space-y-3">
-                          <Steps
-                            size="small"
-                            current={playbookCreateStep}
-                            items={[
-                              { title: 'Pick source' },
-                              { title: 'Pick agent' },
-                              { title: 'Set schedule' }
-                            ]}
-                          />
-                          {playbookCreateStep === 0 ? (
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {sources.map((source) => {
-                                const selected = playbookSourceIdsDraft[0] === source.id;
-
-                                return (
-                                  <WizardSelectableCard
-                                    key={source.id}
-                                    ariaLabel={`Select source ${getSourceDisplayTitle(source)}`}
-                                    selected={selected}
-                                    onClick={() => setPlaybookSourceIdsDraft([source.id])}
-                                  >
-                                    <div className="grid grid-cols-[56px_1fr] gap-3">
-                                      {getSourceCoverImageUrl(source) ? (
-                                        <img
-                                          src={getSourceCoverImageUrl(source)!}
-                                          alt={`${getSourceDisplayTitle(source)} cover`}
-                                          className="h-14 w-14 rounded-md object-cover"
-                                        />
-                                      ) : (
-                                        <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
-                                          Cover unavailable
-                                        </div>
-                                      )}
-                                      <div className="min-w-0">
-                                        <div className="flex items-start justify-between gap-2">
-                                          <div className="text-sm font-semibold">{getSourceDisplayTitle(source)}</div>
-                                          {selected ? <Tag color="blue">Selected</Tag> : null}
-                                        </div>
-                                        <Text type="secondary" className="text-xs">
-                                          {source.value}
-                                        </Text>
-                                        <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                                          <Tag>{source.type === 'podcast_feeds' ? 'Podcast' : source.type === 'youtube_videos' ? 'YouTube' : 'Web'}</Tag>
-                                          <Tag>{getSourceKindLabel(source)}</Tag>
-                                          {(source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
-                                            <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="mt-3 text-xs text-gray-700 dark:text-gray-300">
-                                      {source.metadata.previewItems.length > 0 ? (
-                                        <>
-                                          <div className="mb-1 font-medium">
-                                            {selected ? 'Episodes preview' : 'Recent episodes preview'}
-                                          </div>
-                                          <ul className="list-inside list-disc space-y-1">
-                                            {(selected ? source.metadata.previewItems : source.metadata.previewItems.slice(0, 3)).map((item) => (
-                                              <li key={`${source.id}:${item.link ?? item.title}`}>{item.title}</li>
-                                            ))}
-                                          </ul>
-                                        </>
-                                      ) : (
-                                        'No scanned episodes/items yet'
-                                      )}
-                                    </div>
-                                  </WizardSelectableCard>
-                                );
-                              })}
-                              {sources.length === 0 ? <Empty description="No sources available." /> : null}
-                            </div>
-                          ) : null}
-                          {playbookCreateStep === 1 ? (
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {agents.map((agent) => {
-                                const selected = playbookAgentIdDraft === agent.id;
-
-                                return (
-                                  <WizardSelectableCard
-                                    key={agent.id}
-                                    ariaLabel={`Select agent ${agent.name}`}
-                                    selected={selected}
-                                    onClick={() => setPlaybookAgentIdDraft(agent.id)}
-                                  >
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="min-w-0">
-                                        <div className="text-sm font-semibold">
-                                          <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={agent.name} />
-                                        </div>
-                                        <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                                          <Tag icon={getCharacterIcon(agent.characterType)}>Character: {getAgentCharacterLabel(agent)}</Tag>
-                                          <Tag>Personality: {getAgentPersonalityLabel(agent)}</Tag>
-                                        </div>
-                                      </div>
-                                      {selected ? <Tag color="blue">Selected</Tag> : null}
-                                    </div>
-                                    <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
-                                      <div className="inline-flex items-center gap-1">
-                                        <FileTextOutlined /> Persona + prompt ready
-                                      </div>
-                                    </div>
-                                  </WizardSelectableCard>
-                                );
-                              })}
-                              {agents.length === 0 ? <Empty description="No agents available." /> : null}
-                            </div>
-                          ) : null}
-                          {playbookCreateStep === 2 ? (
-                            <>
-                              <Select
-                                aria-label="Playbook schedule mode"
-                                value={playbookScheduleModeDraft}
-                                onChange={(value) => setPlaybookScheduleModeDraft(value as 'interval' | 'daily' | 'weekly')}
-                                options={[
-                                  { value: 'interval', label: 'Interval' },
-                                  { value: 'daily', label: 'Daily' },
-                                  { value: 'weekly', label: 'Weekly' }
-                                ]}
-                              />
-                              {playbookScheduleModeDraft === 'interval' ? (
-                                <Input
-                                  aria-label="Playbook interval minutes"
-                                  value={String(playbookIntervalMinutesDraft)}
-                                  onChange={(event) => setPlaybookIntervalMinutesDraft(Math.max(15, Number(event.currentTarget.value) || 60))}
-                                  placeholder="Interval minutes"
-                                />
-                              ) : (
-                                <>
-                                  <div className="grid gap-3 md:grid-cols-2">
-                                    <Input
-                                      aria-label="Playbook daily time"
-                                      value={playbookDailyTimeDraft}
-                                      onChange={(event) => setPlaybookDailyTimeDraft(event.currentTarget.value)}
-                                      placeholder="HH:mm"
-                                    />
-                                    <Select
-                                      aria-label="Playbook timezone"
-                                      value={playbookTimezoneDraft}
-                                      onChange={(value) => setPlaybookTimezoneDraft(value)}
-                                      options={TIMEZONE_OPTIONS}
-                                      placeholder="Select timezone"
-                                      showSearch
-                                      className="w-full"
-                                    />
-                                  </div>
-                                  {playbookScheduleModeDraft === 'weekly' ? (
-                                    <Select
-                                      aria-label="Playbook days of week"
-                                      mode="multiple"
-                                      value={playbookDaysOfWeekDraft}
-                                      onChange={(values) => setPlaybookDaysOfWeekDraft(values as number[])}
-                                      options={[
-                                        { value: 1, label: 'Mon' },
-                                        { value: 2, label: 'Tue' },
-                                        { value: 3, label: 'Wed' },
-                                        { value: 4, label: 'Thu' },
-                                        { value: 5, label: 'Fri' },
-                                        { value: 6, label: 'Sat' },
-                                        { value: 0, label: 'Sun' }
-                                      ]}
-                                    />
-                                  ) : null}
-                                </>
-                              )}
-                              <div className="space-y-2">
-                                <div className="text-sm font-medium text-gray-800 dark:text-gray-200">Recipient emails</div>
-                                <Select
-                                  aria-label="Playbook recipient emails"
-                                  mode="tags"
-                                  value={playbookRecipientsDraft}
-                                  onChange={(values) => setPlaybookRecipientsDraft(values as string[])}
-                                  tokenSeparators={[',', ' ']}
-                                  placeholder="Add one or more email addresses"
-                                  className="w-full"
-                                  style={{ minHeight: 88 }}
-                                />
-                              </div>
-                            </>
-                          ) : null}
-                        </div>
-                        <div className="mt-4 flex items-center justify-between gap-2 border-t pt-3">
-                          <Button onClick={onBackPlaybookCreateStep} disabled={playbookCreateStep === 0}>
-                            Back
-                          </Button>
-                          <div className="flex items-center gap-2">
-                            <Button onClick={onCancelPlaybookCreate}>Cancel</Button>
-                            {playbookCreateStep < 2 ? (
-                              <Button type="primary" onClick={onNextPlaybookCreateStep}>
-                                Next
-                              </Button>
-                            ) : (
-                              <Button type="primary" loading={isPlaybookSaving} onClick={onCreatePlaybook}>
-                                Create playbook
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </Card>
-                    ) : null}
                     <Modal
                       title="Marketplace playbooks"
                       open={showPlaybooksMarketplace}
@@ -1919,12 +1984,220 @@ export function AgentsPage() {
                   <AgentStatusCard />
                   </div>
                 )
-              }
+              }]
+                : [])
             ]}
           />
         </div>
         )}
       </Content>
+      <Modal
+        title={editingPlaybookId ? 'Update playbook' : 'Create playbook'}
+        open={isPlaybookCreateOpen}
+        onCancel={onCancelPlaybookCreate}
+        footer={null}
+        destroyOnHidden
+        width={720}
+      >
+        <div className="space-y-3">
+          <Steps
+            size="small"
+            current={playbookCreateStep}
+            items={[
+              { title: 'Pick source' },
+              { title: 'Pick agent' },
+              { title: 'Set schedule' }
+            ]}
+          />
+          {playbookCreateStep === 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {sources.map((source) => {
+                const selected = playbookSourceIdsDraft[0] === source.id;
+
+                return (
+                  <WizardSelectableCard
+                    key={source.id}
+                    ariaLabel={`Select source ${getSourceDisplayTitle(source)}`}
+                    selected={selected}
+                    onClick={() => setPlaybookSourceIdsDraft([source.id])}
+                  >
+                    <div className="grid grid-cols-[56px_1fr] gap-3">
+                      {getSourceCoverImageUrl(source) ? (
+                        <img
+                          src={getSourceCoverImageUrl(source)!}
+                          alt={`${getSourceDisplayTitle(source)} cover`}
+                          className="h-14 w-14 rounded-md object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
+                          Cover unavailable
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-sm font-semibold">{getSourceDisplayTitle(source)}</div>
+                          {selected ? <Tag color="blue">Selected</Tag> : null}
+                        </div>
+                        <Text type="secondary" className="text-xs">
+                          {source.value}
+                        </Text>
+                        <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                          <Tag>{source.type === 'podcast_feeds' ? 'Podcast' : source.type === 'youtube_videos' ? 'YouTube' : 'Web'}</Tag>
+                          <Tag>{getSourceKindLabel(source)}</Tag>
+                          {(source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
+                            <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-gray-700 dark:text-gray-300">
+                      {source.metadata.previewItems.length > 0 ? (
+                        <>
+                          <div className="mb-1 font-medium">
+                            {selected ? 'Episodes preview' : 'Recent episodes preview'}
+                          </div>
+                          <ul className="list-inside list-disc space-y-1">
+                            {(selected ? source.metadata.previewItems : source.metadata.previewItems.slice(0, 3)).map((item) => (
+                              <li key={`${source.id}:${item.link ?? item.title}`}>{item.title}</li>
+                            ))}
+                          </ul>
+                        </>
+                      ) : (
+                        'No scanned episodes/items yet'
+                      )}
+                    </div>
+                  </WizardSelectableCard>
+                );
+              })}
+              {sources.length === 0 ? <Empty description="No sources available." /> : null}
+            </div>
+          ) : null}
+          {playbookCreateStep === 1 ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {agents.map((agent) => {
+                const selected = playbookAgentIdDraft === agent.id;
+
+                return (
+                  <WizardSelectableCard
+                    key={agent.id}
+                    ariaLabel={`Select agent ${agent.name}`}
+                    selected={selected}
+                    onClick={() => setPlaybookAgentIdDraft(agent.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold">
+                          <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={agent.name} />
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                          <Tag icon={getCharacterIcon(agent.characterType)}>Character: {getAgentCharacterLabel(agent)}</Tag>
+                          <Tag>Personality: {getAgentPersonalityLabel(agent)}</Tag>
+                        </div>
+                      </div>
+                      {selected ? <Tag color="blue">Selected</Tag> : null}
+                    </div>
+                    <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                      <div className="inline-flex items-center gap-1">
+                        <FileTextOutlined /> Persona + prompt ready
+                      </div>
+                    </div>
+                  </WizardSelectableCard>
+                );
+              })}
+              {agents.length === 0 ? <Empty description="No agents available." /> : null}
+            </div>
+          ) : null}
+          {playbookCreateStep === 2 ? (
+            <>
+              <Select
+                aria-label="Playbook schedule mode"
+                value={playbookScheduleModeDraft}
+                onChange={(value) => setPlaybookScheduleModeDraft(value as 'interval' | 'daily' | 'weekly')}
+                options={[
+                  { value: 'interval', label: 'Interval' },
+                  { value: 'daily', label: 'Daily' },
+                  { value: 'weekly', label: 'Weekly' }
+                ]}
+              />
+              {playbookScheduleModeDraft === 'interval' ? (
+                <Input
+                  aria-label="Playbook interval minutes"
+                  value={String(playbookIntervalMinutesDraft)}
+                  onChange={(event) => setPlaybookIntervalMinutesDraft(Math.max(15, Number(event.currentTarget.value) || 60))}
+                  placeholder="Interval minutes"
+                />
+              ) : (
+                <>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Input
+                      aria-label="Playbook daily time"
+                      value={playbookDailyTimeDraft}
+                      onChange={(event) => setPlaybookDailyTimeDraft(event.currentTarget.value)}
+                      placeholder="HH:mm"
+                    />
+                    <Select
+                      aria-label="Playbook timezone"
+                      value={playbookTimezoneDraft}
+                      onChange={(value) => setPlaybookTimezoneDraft(value)}
+                      options={TIMEZONE_OPTIONS}
+                      placeholder="Select timezone"
+                      showSearch
+                      className="w-full"
+                    />
+                  </div>
+                  {playbookScheduleModeDraft === 'weekly' ? (
+                    <Select
+                      aria-label="Playbook days of week"
+                      mode="multiple"
+                      value={playbookDaysOfWeekDraft}
+                      onChange={(values) => setPlaybookDaysOfWeekDraft(values as number[])}
+                      options={[
+                        { value: 1, label: 'Mon' },
+                        { value: 2, label: 'Tue' },
+                        { value: 3, label: 'Wed' },
+                        { value: 4, label: 'Thu' },
+                        { value: 5, label: 'Fri' },
+                        { value: 6, label: 'Sat' },
+                        { value: 0, label: 'Sun' }
+                      ]}
+                    />
+                  ) : null}
+                </>
+              )}
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-gray-800 dark:text-gray-200">Recipient emails</div>
+                <Select
+                  aria-label="Playbook recipient emails"
+                  mode="tags"
+                  value={playbookRecipientsDraft}
+                  onChange={(values) => setPlaybookRecipientsDraft(values as string[])}
+                  tokenSeparators={[',', ' ']}
+                  placeholder="Add one or more email addresses"
+                  className="w-full"
+                  style={{ minHeight: 88 }}
+                />
+              </div>
+            </>
+          ) : null}
+        </div>
+        <div className="mt-4 flex items-center justify-between gap-2 border-t pt-3">
+          <Button onClick={onBackPlaybookCreateStep} disabled={playbookCreateStep === 0}>
+            Back
+          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={onCancelPlaybookCreate}>Cancel</Button>
+            {playbookCreateStep < 2 ? (
+              <Button type="primary" onClick={onNextPlaybookCreateStep}>
+                Next
+              </Button>
+            ) : (
+              <Button type="primary" loading={isPlaybookSaving} onClick={onCreatePlaybook}>
+                {editingPlaybookId ? 'Update playbook' : 'Create playbook'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </Modal>
       <EpisodePickerModal
         open={Boolean(episodePickerAgent)}
         loading={loadingEpisodeOptions}

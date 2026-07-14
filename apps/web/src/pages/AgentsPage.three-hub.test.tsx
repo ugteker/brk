@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentsPage } from './AgentsPage';
 import { AuthProvider } from '../auth/AuthContext';
 import { ThemeProvider } from '../theme/ThemeContext';
-import { logout as apiLogout } from '../api/auth';
+import { logout as apiLogout, getCurrentUser } from '../api/auth';
 import { listAgents } from '../api/agents';
 import { createSource, deleteSource, listSources, probeSource, updateSource } from '../api/sources';
 import { createPlaybook, listPlaybooks } from '../api/playbooks';
@@ -74,14 +74,21 @@ vi.mock('../api/access', () => ({
   revokeAgentAccess: vi.fn()
 }));
 
-function renderPage() {
-  return render(
+function renderPage(options?: { openAdminArea?: boolean }) {
+  const result = render(
     <AuthProvider>
       <ThemeProvider>
         <AgentsPage />
       </ThemeProvider>
     </AuthProvider>
   );
+  const shouldOpenAdminArea = options?.openAdminArea ?? false;
+  if (shouldOpenAdminArea) {
+    void screen.findByRole('button', { name: /open admin area/i }).then((openAdminButton) => {
+      fireEvent.click(openAdminButton);
+    });
+  }
+  return result;
 }
 
 describe('AgentsPage three hub shell', () => {
@@ -90,12 +97,127 @@ describe('AgentsPage three hub shell', () => {
     vi.clearAllMocks();
   });
 
-  it('shows three hubs in order: Library, Agents, Playbooks', async () => {
-    renderPage();
+  it('shows only library by default', async () => {
+    renderPage({ openAdminArea: false });
 
-    await screen.findByRole('tab', { name: /library/i });
-    const tabLabels = screen.getAllByRole('tab').map((node) => node.textContent?.trim());
-    expect(tabLabels.slice(0, 3)).toEqual(['Library', 'Agents', 'Playbooks']);
+    await screen.findByRole('heading', { name: /dashboard/i });
+    expect(screen.queryByRole('tab', { name: /(agents|followers)/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
+  });
+
+  it('starts in library-only mode and opens admin area on demand', async () => {
+    renderPage({ openAdminArea: false });
+
+    expect(screen.queryByRole('tab', { name: /(agents|followers)/i })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /open admin area/i }));
+    expect(await screen.findByRole('tab', { name: /(agents|followers)/i })).toBeInTheDocument();
+  });
+
+  it('uses follower terminology in admin workspace', async () => {
+    renderPage({ openAdminArea: false });
+
+    fireEvent.click(await screen.findByRole('button', { name: /open admin area/i }));
+    expect(await screen.findByRole('tab', { name: /followers/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /followers/i }));
+    expect(await screen.findByRole('button', { name: /create follower/i })).toBeInTheDocument();
+  });
+
+  it('starts follow setup from a library card action', async () => {
+    vi.mocked(listSources).mockResolvedValueOnce([
+      {
+        id: 'source-1',
+        ownerUserId: 'user-1',
+        type: 'web_urls',
+        value: 'https://example.com',
+        status: 'active',
+        config: {},
+        metadata: { title: 'Example source', coverImageUrl: null, previewItems: [] },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+    renderPage({ openAdminArea: false });
+
+    fireEvent.click(await screen.findByRole('button', { name: /follow this source/i }));
+    expect(await screen.findByRole('dialog', { name: /create playbook/i })).toBeInTheDocument();
+    // Following a source must never navigate away from the Library/Dashboard tab.
+    expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
+  });
+
+  it('does not reveal admin-only Agents/Playbooks tabs when a non-admin user follows a source', async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce({
+      id: 'user-2',
+      email: 'reader@example.com',
+      displayName: 'Reader',
+      role: 'user',
+      hasPassword: true,
+      hasGoogleLinked: false,
+      createdAt: new Date().toISOString()
+    });
+    vi.mocked(listSources).mockResolvedValueOnce([
+      {
+        id: 'source-1',
+        ownerUserId: 'user-2',
+        type: 'web_urls',
+        value: 'https://example.com',
+        status: 'active',
+        config: {},
+        metadata: { title: 'Example source', coverImageUrl: null, previewItems: [] },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+    renderPage({ openAdminArea: false });
+
+    fireEvent.click(await screen.findByRole('button', { name: /follow this source/i }));
+    expect(await screen.findByRole('dialog', { name: /create playbook/i })).toBeInTheDocument();
+    // A non-admin user must never gain access to the admin-only Agents/Playbooks tabs
+    // just by following a source.
+    expect(screen.queryByRole('tab', { name: /(agents|followers)/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /open admin area/i })).not.toBeInTheDocument();
+  });
+
+  it('opens follow setup in edit mode when a playbook already follows the source', async () => {
+    vi.mocked(listSources).mockResolvedValueOnce([
+      {
+        id: 'source-1',
+        ownerUserId: 'user-1',
+        type: 'web_urls',
+        value: 'https://example.com',
+        status: 'active',
+        config: {},
+        metadata: { title: 'Example source', coverImageUrl: null, previewItems: [] },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+    vi.mocked(listPlaybooks).mockResolvedValueOnce([
+      {
+        id: 'playbook-1',
+        ownerUserId: 'user-1',
+        agentId: 'agent-1',
+        name: 'Existing follow',
+        description: '',
+        enabled: true,
+        schedule: { mode: 'daily', dailyTime: '07:30', timezone: 'UTC' },
+        sourceIds: ['source-1'],
+        recipients: ['alerts@example.com'],
+        executionMode: 'latest_only',
+        maxSourcesPerRun: 5,
+        maxItemsPerSource: 2,
+        lastRunAt: null,
+        nextRunAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+    renderPage({ openAdminArea: false });
+
+    fireEvent.click(await screen.findByRole('button', { name: /follow this source/i }));
+    expect(await screen.findByRole('dialog', { name: /update playbook/i })).toBeInTheDocument();
+    // Following a source must never navigate away from the Library/Dashboard tab.
+    expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
   });
 
   it('returns to auth when source loading gets a sign-in error', async () => {
@@ -130,10 +252,10 @@ describe('AgentsPage three hub shell', () => {
   });
 
   it('stretches Agents dashboard list mode horizontally without reserving an empty right column', async () => {
-    renderPage();
+    renderPage({ openAdminArea: true });
 
-    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
-    const agentsHeading = await screen.findByRole('heading', { name: /^agents$/i });
+    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
+    const agentsHeading = await screen.findByRole('heading', { name: /^followers$/i });
     expect(agentsHeading.closest('div[class*="lg:grid-cols-[2fr_1fr]"]')).toBeNull();
   });
 
@@ -156,7 +278,7 @@ describe('AgentsPage three hub shell', () => {
       }
     ]);
 
-    renderPage();
+    renderPage({ openAdminArea: false });
 
     expect(await screen.findByText(/macro daily/i)).toBeInTheDocument();
     expect(screen.getByText(/cover unavailable/i)).toBeInTheDocument();
@@ -164,8 +286,8 @@ describe('AgentsPage three hub shell', () => {
   });
 
   it('shows polished dashed ghost card copy in Library hub', async () => {
-    renderPage();
-    await screen.findByRole('tab', { name: /library/i });
+    renderPage({ openAdminArea: false });
+    await screen.findByRole('heading', { name: /dashboard/i });
 
     const createSourceButton = screen.getByRole('button', { name: /create new source/i });
     expect(createSourceButton).toBeInTheDocument();
@@ -180,11 +302,12 @@ describe('AgentsPage three hub shell', () => {
     vi.mocked(listPlaybooks).mockResolvedValueOnce([]);
 
     renderPage();
-    await screen.findByRole('tab', { name: /library/i });
+    await screen.findByRole('heading', { name: /dashboard/i });
     expect(screen.getByRole('button', { name: /create new source/i })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /open admin area/i }));
 
-    fireEvent.click(screen.getByRole('tab', { name: /agents/i }));
-    const createAgentButton = await screen.findByRole('button', { name: /create agent/i });
+    fireEvent.click(screen.getByRole('tab', { name: /(agents|followers)/i }));
+    const createAgentButton = await screen.findByRole('button', { name: /create (agent|follower)/i });
     expect(createAgentButton).toBeInTheDocument();
     expect(createAgentButton.className).toContain('w-full');
 
@@ -214,7 +337,7 @@ describe('AgentsPage three hub shell', () => {
       }
     ]);
 
-    renderPage();
+    renderPage({ openAdminArea: true });
     fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
 
     expect(await screen.findByText(/morning momentum/i)).toBeInTheDocument();
@@ -224,7 +347,7 @@ describe('AgentsPage three hub shell', () => {
 
   it('does not show the old playbook empty-state message when no playbooks exist', async () => {
     vi.mocked(listPlaybooks).mockResolvedValueOnce([]);
-    renderPage();
+    renderPage({ openAdminArea: true });
 
     fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
 
@@ -234,22 +357,23 @@ describe('AgentsPage three hub shell', () => {
 
   it('does not show the old agents empty-state message when no agents exist', async () => {
     vi.mocked(listAgents).mockResolvedValueOnce([]);
-    renderPage();
+    renderPage({ openAdminArea: true });
 
-    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
 
     expect(screen.queryByText(/Use "Create Agent" to start the setup wizard\./i)).not.toBeInTheDocument();
     expect(document.querySelector('.ant-empty')).toBeNull();
-    expect(screen.getByRole('button', { name: /create agent/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create (agent|follower)/i })).toBeInTheDocument();
   });
 
   it('keeps source creation CTA in Library hub and not in Agent wizard', async () => {
     renderPage();
-    await screen.findByRole('tab', { name: /library/i });
+    await screen.findByRole('heading', { name: /dashboard/i });
     expect(screen.getByRole('button', { name: /create new source/i })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /open admin area/i }));
 
-    fireEvent.click(screen.getByRole('tab', { name: /agents/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /create agent/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /(agents|followers)/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /create (agent|follower)/i }));
     expect(screen.queryByRole('button', { name: /create new source/i })).not.toBeInTheDocument();
   });
 
@@ -287,8 +411,8 @@ describe('AgentsPage three hub shell', () => {
       updatedAt: new Date().toISOString()
     });
 
-    renderPage();
-    await screen.findByRole('tab', { name: /library/i });
+    renderPage({ openAdminArea: false });
+    await screen.findByRole('heading', { name: /dashboard/i });
     fireEvent.click(screen.getByRole('button', { name: /create new source/i }));
 
     fireEvent.change(screen.getByLabelText(/source url/i), { target: { value: 'https://pod.example/feed.xml' } });
@@ -325,8 +449,8 @@ describe('AgentsPage three hub shell', () => {
         previewItems: [{ title: 'Video 1', link: 'https://youtube.com/watch?v=abc', pubDate: null }]
       } as never);
 
-    renderPage();
-    await screen.findByRole('tab', { name: /library/i });
+    renderPage({ openAdminArea: false });
+    await screen.findByRole('heading', { name: /dashboard/i });
     fireEvent.click(screen.getByRole('button', { name: /create new source/i }));
 
     fireEvent.change(screen.getByLabelText(/source url/i), {
@@ -388,13 +512,14 @@ describe('AgentsPage three hub shell', () => {
     ]);
 
     renderPage();
-    await screen.findByRole('tab', { name: /library/i });
+    await screen.findByRole('heading', { name: /dashboard/i });
     expect(screen.getByLabelText(/edit source/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/remove source/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/share source/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/publish source/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /open admin area/i }));
 
-    fireEvent.click(screen.getByRole('tab', { name: /agents/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /(agents|followers)/i }));
     expect(await screen.findByLabelText(/edit agent/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/share agent/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/publish agent/i)).toBeInTheDocument();
@@ -441,9 +566,9 @@ describe('AgentsPage three hub shell', () => {
       }
     ]);
 
-    renderPage();
+    renderPage({ openAdminArea: true });
 
-    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
     expect((await screen.findAllByLabelText(/remove agent/i)).length).toBe(1);
     expect(screen.queryByLabelText(/pause agent/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/resume agent/i)).not.toBeInTheDocument();
@@ -489,9 +614,9 @@ describe('AgentsPage three hub shell', () => {
       }
     ]);
 
-    renderPage();
+    renderPage({ openAdminArea: true });
 
-    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
     expect(await screen.findByText(/character: teacher/i)).toBeInTheDocument();
     expect(screen.getByText(/personality: classroom instructor/i)).toBeInTheDocument();
     expect(screen.queryByText(/^sources:/i)).not.toBeInTheDocument();
@@ -505,9 +630,9 @@ describe('AgentsPage three hub shell', () => {
   });
 
   it('shows search bars in Agents and Playbooks hubs', async () => {
-    renderPage();
+    renderPage({ openAdminArea: true });
 
-    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
     expect(await screen.findByLabelText(/search agents/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /playbooks/i }));
@@ -548,8 +673,8 @@ describe('AgentsPage three hub shell', () => {
       updatedAt: new Date().toISOString()
     });
 
-    renderPage();
-    await screen.findByRole('tab', { name: /library/i });
+    renderPage({ openAdminArea: false });
+    await screen.findByRole('heading', { name: /dashboard/i });
     fireEvent.click(screen.getByLabelText(/edit source/i));
     expect(screen.getByText(/edit source from url/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/source url/i), { target: { value: 'https://example.com/updated' } });
@@ -561,6 +686,24 @@ describe('AgentsPage three hub shell', () => {
       'source-edit-1',
       expect.objectContaining({ value: 'https://example.com/updated' })
     );
+  });
+
+  it('adds extra library tabs with custom names', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValueOnce('Research');
+    renderPage({ openAdminArea: false });
+    await screen.findByRole('heading', { name: /dashboard/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /create library tab/i }));
+    expect(await screen.findByRole('tab', { name: /research/i })).toBeInTheDocument();
+  });
+
+  it('shows rename control for the active custom library tab', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValueOnce('Research');
+    renderPage({ openAdminArea: false });
+    await screen.findByRole('heading', { name: /dashboard/i });
+    fireEvent.click(screen.getByRole('button', { name: /create library tab/i }));
+    await screen.findByRole('tab', { name: /research/i });
+    expect(screen.getByRole('button', { name: /rename active library tab/i })).toBeInTheDocument();
   });
 
   it('deletes a Library source card via owner action', async () => {
@@ -579,11 +722,10 @@ describe('AgentsPage three hub shell', () => {
     ]);
     vi.mocked(deleteSource).mockResolvedValueOnce();
 
-    renderPage();
-    await screen.findByRole('tab', { name: /library/i });
+    renderPage({ openAdminArea: false });
+    await screen.findByRole('heading', { name: /dashboard/i });
     fireEvent.click(screen.getByLabelText(/remove source/i));
     fireEvent.click(await screen.findByRole('button', { name: /^remove$/i }));
-
     expect(deleteSource).toHaveBeenCalledWith('source-delete-1');
   });
 
@@ -633,11 +775,10 @@ describe('AgentsPage three hub shell', () => {
       updatedAt: new Date().toISOString()
     });
 
-    renderPage();
+    renderPage({ openAdminArea: true });
     fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
     fireEvent.click(await screen.findByRole('button', { name: /create new playbook/i }));
-    expect(screen.queryByRole('dialog', { name: /create playbook/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/create playbook/i)).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /create playbook/i })).toBeInTheDocument();
 
     expect(screen.queryByLabelText(/playbook name/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/playbook description/i)).not.toBeInTheDocument();
@@ -676,8 +817,8 @@ describe('AgentsPage three hub shell', () => {
   });
 
   it('shows latest runtime status in Playbooks hub, not Agents hub', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
+    renderPage({ openAdminArea: true });
+    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
     expect(screen.queryByText(/latest agent runtime status/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /playbooks/i }));
@@ -718,10 +859,9 @@ describe('AgentsPage three hub shell', () => {
         updatedAt: new Date().toISOString()
       }
     ]);
+    renderPage({ openAdminArea: true });
 
-    renderPage();
-
-    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /(agents|followers)/i }));
     fireEvent.click(await screen.findByText(/macro agent/i));
     expect(screen.queryByRole('tab', { name: /^reports$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /^runs$/i })).not.toBeInTheDocument();
