@@ -2333,7 +2333,7 @@ export function AgentsPage() {
                 current={inlineAgentStep}
                 items={[
                   { title: 'Character' },
-                  { title: 'Personality' },
+                  { title: 'Personality & Model' },
                   { title: 'Schedule & Recipients' }
                 ]}
               />
@@ -2511,7 +2511,7 @@ export function AgentsPage() {
                       <p className="mb-3 text-sm text-red-600">{inlineAgentValidationError}</p>
                     ) : null}
 
-                    {/* Step 0: Character + Personality (visually separated) */}
+                    {/* Step 0: Name + Character type only */}
                     {inlineAgentStep === 0 ? (
                       <div className="space-y-3">
                         {/* Name first */}
@@ -2540,6 +2540,16 @@ export function AgentsPage() {
                             </button>
                           ))}
                         </div>
+                      </div>
+                    ) : null}
+
+                    {/* Step 1: Personality style + model + system prompt */}
+                    {inlineAgentStep === 1 ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Character:</span>
+                          <Tag color="blue">{inlinePersonaLabel}</Tag>
+                        </div>
                         {/* Personality section */}
                         <div className="flex items-center gap-2 rounded-md bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">
                           <ToolOutlined />
@@ -2560,53 +2570,45 @@ export function AgentsPage() {
                             </button>
                           ))}
                         </div>
-                      </div>
-                    ) : null}
-
-                    {/* Step 1: Personality tune — model + system prompt */}
-                    {inlineAgentStep === 1 ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Character:</span>
-                          <Tag color="blue">{inlinePersonaLabel}</Tag>
-                        </div>
-                        {inlineAgentPersonaId === 'finance_expert' ? (
+                        <div className="border-t pt-3 space-y-3">
+                          {inlineAgentPersonaId === 'finance_expert' ? (
+                            <div>
+                              <p className="mb-1 text-xs text-gray-500">Risk level</p>
+                              <Select
+                                aria-label="Inline agent risk level"
+                                value={inlineAgentRiskLevel}
+                                onChange={(v) => setInlineAgentRiskLevel(v as 'low' | 'medium' | 'high')}
+                                options={[
+                                  { value: 'low', label: 'Low' },
+                                  { value: 'medium', label: 'Medium' },
+                                  { value: 'high', label: 'High' }
+                                ]}
+                                className="w-full"
+                              />
+                            </div>
+                          ) : null}
                           <div>
-                            <p className="mb-1 text-xs text-gray-500">Risk level</p>
+                            <p className="mb-1 text-xs text-gray-500">Model</p>
                             <Select
-                              aria-label="Inline agent risk level"
-                              value={inlineAgentRiskLevel}
-                              onChange={(v) => setInlineAgentRiskLevel(v as 'low' | 'medium' | 'high')}
+                              aria-label="Inline agent model"
+                              value={inlineAgentModel}
+                              onChange={setInlineAgentModel}
                               options={[
-                                { value: 'low', label: 'Low' },
-                                { value: 'medium', label: 'Medium' },
-                                { value: 'high', label: 'High' }
+                                { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+                                { value: 'claude-sonnet-4', label: 'Claude Sonnet 4' }
                               ]}
                               className="w-full"
                             />
                           </div>
-                        ) : null}
-                        <div>
-                          <p className="mb-1 text-xs text-gray-500">Model</p>
-                          <Select
-                            aria-label="Inline agent model"
-                            value={inlineAgentModel}
-                            onChange={setInlineAgentModel}
-                            options={[
-                              { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-                              { value: 'claude-sonnet-4', label: 'Claude Sonnet 4' }
-                            ]}
-                            className="w-full"
-                          />
-                        </div>
-                        <div>
-                          <p className="mb-1 text-xs text-gray-500">System prompt</p>
-                          <Input.TextArea
-                            aria-label="Inline agent system prompt"
-                            rows={5}
-                            value={inlineAgentSystemPrompt}
-                            onChange={(e) => setInlineAgentSystemPrompt(e.currentTarget.value)}
-                          />
+                          <div>
+                            <p className="mb-1 text-xs text-gray-500">System prompt</p>
+                            <Input.TextArea
+                              aria-label="Inline agent system prompt"
+                              rows={5}
+                              value={inlineAgentSystemPrompt}
+                              onChange={(e) => setInlineAgentSystemPrompt(e.currentTarget.value)}
+                            />
+                          </div>
                         </div>
                       </div>
                     ) : null}
