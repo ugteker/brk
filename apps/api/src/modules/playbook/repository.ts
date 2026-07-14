@@ -73,6 +73,7 @@ function mapPlaybook(row: any): Playbook {
     followTargetType: row.followTargetType ?? null,
     followTargetKey: row.followTargetKey ?? null,
     followTargetTitle: row.followTargetTitle ?? null,
+    language: row.language ?? 'en',
     lastRunAt: row.agent?.runs?.[0]?.createdAt ?? null,
     nextRunAt: row.nextRunAt,
     createdAt: row.createdAt,
@@ -113,6 +114,7 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
         followTargetType: input.followTargetType ?? null,
         followTargetKey: input.followTargetKey ?? null,
         followTargetTitle: input.followTargetTitle ?? null,
+        language: input.language ?? 'en',
         ...schedulePatchData(schedule, now),
         sources: {
           create: input.sourceIds.map((sourceId, index) => ({
@@ -182,6 +184,7 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
           ...(patch.followTargetType !== undefined ? { followTargetType: patch.followTargetType } : {}),
           ...(patch.followTargetKey !== undefined ? { followTargetKey: patch.followTargetKey } : {}),
           ...(patch.followTargetTitle !== undefined ? { followTargetTitle: patch.followTargetTitle } : {}),
+          ...(patch.language !== undefined ? { language: patch.language } : {}),
           ...(patch.recipients !== undefined ? { recipientsJson: JSON.stringify(patch.recipients) } : {}),
           ...(patch.schedule ? schedulePatchData(patch.schedule, now) : {})
         },

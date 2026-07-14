@@ -33,4 +33,7 @@ export async function ensureSqliteSchemaCompatibility(): Promise<void> {
   if (!columnNames.has('followTargetTitle')) {
     await prisma.$executeRawUnsafe('ALTER TABLE "Playbook" ADD COLUMN "followTargetTitle" TEXT');
   }
+  if (!columnNames.has('language')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Playbook" ADD COLUMN "language" TEXT NOT NULL DEFAULT \'en\'');
+  }
 }

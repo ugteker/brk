@@ -22,6 +22,7 @@ export interface CreatePlaybookInput {
   followTargetType?: FollowTargetType;
   followTargetKey?: string;
   followTargetTitle?: string;
+  language?: string;
 }
 
 export interface UpdatePlaybookInput {

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Badge, Button, Card, Dropdown, Empty, Input, Layout, Modal, Popconfirm, Select, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
   AppstoreOutlined,
@@ -9,7 +10,6 @@ import {
   CaretRightOutlined,
   ClockCircleOutlined,
   CompassOutlined,
-  CustomerServiceOutlined,
   DatabaseOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -117,6 +117,12 @@ interface LibraryTabRecord {
   id: string;
   name: string;
 }
+
+const BrainIcon = ({ style }: { style?: CSSProperties }) => (
+  <span role="img" aria-label="brain" className="anticon" style={{ fontSize: '1em', lineHeight: 1, ...style }}>
+    🧠
+  </span>
+);
 
 const DEFAULT_LIBRARY_TAB_ID = 'library-default';
 const DEFAULT_LIBRARY_TAB_NAME = 'Library';
@@ -311,6 +317,7 @@ function hasEpisodicSource(agent: AgentSummary): boolean {
 
 export function AgentsPage() {
   const { user, isAdmin, logout } = useAuth();
+  const { t, i18n } = useTranslation();
   const [showAdminWorkspace, setShowAdminWorkspace] = useState(false);
   const [showAdminUsers, setShowAdminUsers] = useState(false);
   const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
@@ -1436,6 +1443,15 @@ export function AgentsPage() {
           <div className="flex items-center gap-2">
             <ThemePicker />
             {/* User / account menu — admins get extra admin entries */}
+            <Button
+              size="small"
+              type="text"
+              onClick={() => i18n.changeLanguage(i18n.language.startsWith('de') ? 'en' : 'de')}
+              title={t('language.switchTo')}
+              style={{ fontWeight: 600, minWidth: 32 }}
+            >
+              {t('language.current')}
+            </Button>
             <Dropdown
               trigger={['click']}
               menu={{
@@ -1445,7 +1461,7 @@ export function AgentsPage() {
                   ...(isAdmin ? [
                     {
                       key: 'admin-agents-playbooks',
-                      label: showAdminWorkspace ? 'Back to Library' : 'Agents & Playbooks',
+                      label: showAdminWorkspace ? t('common.back') : t('nav.agentsAndPlaybooks'),
                       icon: showAdminWorkspace ? <ArrowLeftOutlined /> : <RocketOutlined />,
                       onClick: () => {
                         if (showAdminWorkspace) {
@@ -1460,7 +1476,7 @@ export function AgentsPage() {
                     },
                     {
                       key: 'admin-users',
-                      label: 'User Management',
+                      label: t('nav.userManagement'),
                       icon: <TeamOutlined />,
                       onClick: () => {
                         setShowAdminWorkspace(true);
@@ -1471,7 +1487,7 @@ export function AgentsPage() {
                   ] : []),
                   {
                     key: 'logout',
-                    label: 'Log out',
+                    label: t('nav.logOut'),
                     icon: <LogoutOutlined />,
                     onClick: () => logout()
                   }
@@ -1481,7 +1497,7 @@ export function AgentsPage() {
               <Button
                 shape="circle"
                 icon={<UserOutlined />}
-                aria-label="Account menu"
+                aria-label={t('nav.accountMenu')}
               />
             </Dropdown>
           </div>
@@ -1505,11 +1521,11 @@ export function AgentsPage() {
             items={[
               {
                 key: 'sources',
-                label: 'Dashboard',
+                label: t('nav.dashboard'),
                 children: (
                   <Card
                     className="min-w-0"
-                    title={<Title level={4} style={{ margin: 0 }}>Dashboard</Title>}
+                    title={<Title level={4} style={{ margin: 0 }}>{t('nav.dashboard')}</Title>}
                   >
                    {/* Unified inner tab bar: user library tabs + fixed Marketplace tab */}
                    <div
@@ -1526,9 +1542,9 @@ export function AgentsPage() {
                        }}
                        onTabClick={onLibraryTabClick}
                        tabBarExtraContent={
-                         <TouchSafeTooltip title="New library tab">
+                         <TouchSafeTooltip title={t('library.tabTooltip')}>
                            <Button
-                             aria-label="Create library tab"
+                             aria-label={t('library.createTab')}
                              size="small"
                              shape="circle"
                              icon={<PlusOutlined />}
@@ -1541,7 +1557,7 @@ export function AgentsPage() {
                          label:
                            editingLibraryTabId === tab.id ? (
                              <Input
-                               aria-label="Rename library tab"
+                               aria-label={t('library.renameTab')}
                                autoFocus
                                size="small"
                                value={editingLibraryTabName}
@@ -1557,7 +1573,7 @@ export function AgentsPage() {
                                {tab.id !== DEFAULT_LIBRARY_TAB_ID && tab.id === activeLibraryTabId ? (
                                  <button
                                    type="button"
-                                   aria-label="Rename active library tab"
+                                   aria-label={t('library.renameTab')}
                                    onClick={(event) => {
                                      event.stopPropagation();
                                      startEditingLibraryTab(tab);
@@ -1585,24 +1601,24 @@ export function AgentsPage() {
                      />
                      {showSourcesMarketplace ? (
                        <Button
-                         aria-label="Back to library"
+                         aria-label={t('library.backToLibrary')}
                          icon={<ArrowLeftOutlined />}
                          size="small"
                          onClick={() => setShowSourcesMarketplace(false)}
                        >
-                         Back to library
+                         {t('library.backToLibrary')}
                        </Button>
                      ) : (
                        <Badge count={marketplaceSourceCount} size="small">
                          <Button
-                           aria-label="Browse marketplace sources"
+                           aria-label={t('library.browseMarketplace')}
                            icon={<CompassOutlined />}
                            onClick={async () => {
                              await refreshMarketplaceCounts();
                              setShowSourcesMarketplace(true);
                            }}
                          >
-                           Browse marketplace
+                           {t('library.browseMarketplace')}
                          </Button>
                        </Badge>
                      )}
@@ -1679,8 +1695,8 @@ export function AgentsPage() {
                    ) : null}
                    {!showSourcesMarketplace ? (
                    <>
-                   {sourcesLoadState === 'loading' ? <p className="text-sm text-gray-700">Loading sources...</p> : null}
-                   {sourcesLoadState === 'error' ? <p className="text-sm text-red-700">Failed to load sources.</p> : null}
+                   {sourcesLoadState === 'loading' ? <p className="text-sm text-gray-700">{t('library.loadingSources')}</p> : null}
+                   {sourcesLoadState === 'error' ? <p className="text-sm text-red-700">{t('library.failedSources')}</p> : null}
                    <div className="grid gap-3 sm:grid-cols-2">
                      {filteredSources.map((source) => (
                        <Card
@@ -1696,23 +1712,23 @@ export function AgentsPage() {
                              {followedSourceIds.has(source.id) ? (
                                <Button
                                  type="default"
-                                 aria-label="Listening to this source"
+                                 aria-label={t('listen.listeningAriaLabel')}
                                  size="small"
-                                 icon={<CustomerServiceOutlined style={{ color: '#fff' }} />}
+                                 icon={<BrainIcon style={{ color: '#fff' }} />}
                                  style={{ backgroundColor: '#52c41a', borderColor: '#52c41a', color: '#fff' }}
                                  onClick={(event) => onFollowSource(source, event)}
                                >
-                                 Listening
+                                 {t('listen.listening')}
                                </Button>
                              ) : (
                                <Button
                                  type="default"
-                                 aria-label="Listen to this source"
+                                 aria-label={t('listen.listenAriaLabel')}
                                  size="small"
-                                 icon={<CustomerServiceOutlined />}
+                                 icon={<BrainIcon />}
                                  onClick={(event) => onFollowSource(source, event)}
                                >
-                                 Listen
+                                 {t('listen.listen')}
                                </Button>
                              )}
                              {/* Edit + Share/Publish — Delete moved into Edit view */}
@@ -2314,10 +2330,10 @@ export function AgentsPage() {
             const src = sources.find((s) => s.id === playbookSourceIdsDraft[0]);
             const srcTitle = src ? getSourceDisplayTitle(src) : null;
             return editingPlaybookId
-              ? `Listening to: ${srcTitle ?? 'this source'}`
-              : `Listen to: ${srcTitle ?? 'this source'}`;
+              ? t('listen.dialogTitleEdit', { title: srcTitle ?? t('listen.thisSource') })
+              : t('listen.dialogTitleNew', { title: srcTitle ?? t('listen.thisSource') });
           }
-          return editingPlaybookId ? 'Update listener' : 'Set up a listener';
+          return editingPlaybookId ? t('listen.dialogTitleGenericEdit') : t('listen.dialogTitleGenericNew');
         })()}
         open={isPlaybookCreateOpen}
         onCancel={onCancelPlaybookCreate}
@@ -2332,9 +2348,9 @@ export function AgentsPage() {
                 size="small"
                 current={inlineAgentStep}
                 items={[
-                  { title: 'Character' },
-                  { title: 'Personality & Model' },
-                  { title: 'Schedule & Recipients' }
+                  { title: t('agent.stepCharacter') },
+                  { title: t('agent.stepPersonality') },
+                  { title: t('agent.stepSchedule') }
                 ]}
               />
           ) : (
@@ -2342,17 +2358,16 @@ export function AgentsPage() {
               size="small"
               current={followWizardSourcePreselected ? playbookCreateStep - 1 : playbookCreateStep}
               items={[
-                ...(followWizardSourcePreselected ? [] : [{ title: 'Pick source' }]),
-                { title: 'Choose agent' },
-                { title: 'Set schedule' }
+                ...(followWizardSourcePreselected ? [] : [{ title: t('listen.stepPickSource') }]),
+                { title: t('listen.stepChooseAgent') },
+                { title: t('listen.stepSetSchedule') }
               ]}
             />
           )}
           {/* Step 1 subtitle — shown when picking an agent (not inside sub-wizard) */}
           {playbookCreateStep === 1 && !showInlineAgentCreate ? (
             <p className="text-sm text-gray-500">
-              Choose an AI agent that will read this source and generate reports for you.
-              {agents.length === 0 ? null : ' No match? Create a new one below.'}
+              {t('listen.stepSubtitle')}
             </p>
           ) : null}
           {playbookCreateStep === 0 ? (
@@ -2451,11 +2466,11 @@ export function AgentsPage() {
                               <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={agent.name} />
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                              {selected ? <Tag color="blue">Selected</Tag> : null}
+                              {selected ? <BrainIcon style={{ fontSize: '1.1em' }} /> : null}
                               <Popconfirm
-                                title="Delete this agent?"
-                                description="This removes the agent from all library cards that use it. Those cards will return to an 'Unlistened' state."
-                                okText="Delete"
+                                title={t('agent.deleteConfirmTitle')}
+                                description={t('agent.deleteConfirmDesc')}
+                                okText={t('common.delete')}
                                 okButtonProps={{ danger: true }}
                                 onConfirm={async (e) => {
                                   e?.stopPropagation();
@@ -2487,13 +2502,13 @@ export function AgentsPage() {
                 {/* "Create new agent" ghost card — shown only when not in sub-wizard */}
                 <button
                   type="button"
-                  aria-label="Create new agent"
+                  aria-label={t('agent.createNew')}
                   onClick={openInlineAgentCreate}
                   className={GHOST_CREATE_CARD_CLASS}
                 >
                   <PlusOutlined className="text-2xl text-sky-700" />
-                  <span className="mt-1 text-sm font-semibold">Create new agent</span>
-                  <span className="mt-0.5 text-xs font-normal text-sky-700">Full setup wizard</span>
+                  <span className="mt-1 text-sm font-semibold">{t('agent.createNew')}</span>
+                  <span className="mt-0.5 text-xs font-normal text-sky-700">{t('agent.createNewSub')}</span>
                 </button>
               </div>
               ) : null}
@@ -2505,7 +2520,7 @@ export function AgentsPage() {
                 return (
                   <Card
                     size="small"
-                    title="Create new agent"
+                    title={t('agent.createNew')}
                   >
                     {inlineAgentValidationError ? (
                       <p className="mb-3 text-sm text-red-600">{inlineAgentValidationError}</p>
@@ -2516,15 +2531,15 @@ export function AgentsPage() {
                       <div className="space-y-3">
                         {/* Name first */}
                         <Input
-                          aria-label="New agent name"
-                          placeholder="Agent name"
+                          aria-label={t('agent.namePlaceholder')}
+                          placeholder={t('agent.namePlaceholder')}
                           value={inlineAgentName}
                           onChange={(e) => setInlineAgentName(e.currentTarget.value)}
                         />
                         {/* Character section */}
                         <div className="flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
                           <BulbOutlined />
-                          Choose a character type
+                          {t('agent.chooseCharacter')}
                         </div>
                         <div className="grid gap-2 md:grid-cols-3">
                           {PROMPT_PERSONAS.map((persona) => (
@@ -2532,9 +2547,12 @@ export function AgentsPage() {
                               key={persona.id}
                               type="button"
                               onClick={() => onInlineAgentPersonaChange(persona.id)}
-                              className={`rounded-md border p-3 text-left transition ${inlineAgentPersonaId === persona.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              className={`relative rounded-md border p-3 text-left transition ${inlineAgentPersonaId === persona.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
                               aria-label={`Inline character ${persona.name}`}
                             >
+                              {inlineAgentPersonaId === persona.id ? (
+                                <span className="absolute top-1 right-1 text-base leading-none"><BrainIcon /></span>
+                              ) : null}
                               <p className="font-medium text-sm">{persona.name}</p>
                               <p className="text-xs text-gray-500">{persona.tagline}</p>
                             </button>
@@ -2547,14 +2565,14 @@ export function AgentsPage() {
                     {inlineAgentStep === 1 ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Character:</span>
+                          <span className="text-xs text-gray-500">{t('agent.character')}:</span>
                           <Tag color="blue">{inlinePersonaLabel}</Tag>
                         </div>
                         {/* Personality section */}
                         <div className="flex items-center gap-2 rounded-md bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">
                           <ToolOutlined />
-                          Choose a personality style
-                          <span className="ml-1 font-normal text-violet-500">for {inlinePersonaLabel}</span>
+                          {t('agent.choosePersonality')}
+                          <span className="ml-1 font-normal text-violet-500">{t('agent.forCharacter', { character: inlinePersonaLabel })}</span>
                         </div>
                         <div className="grid gap-2 md:grid-cols-3">
                           {inlineChars.map((char) => (
@@ -2562,9 +2580,12 @@ export function AgentsPage() {
                               key={char.id}
                               type="button"
                               onClick={() => onInlineAgentCharacterChange(char.id)}
-                              className={`rounded-md border p-3 text-left transition ${inlineAgentCharacterId === char.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              className={`relative rounded-md border p-3 text-left transition ${inlineAgentCharacterId === char.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:border-gray-300'}`}
                               aria-label={`Inline personality ${char.name}`}
                             >
+                              {inlineAgentCharacterId === char.id ? (
+                                <span className="absolute top-1 right-1 text-base leading-none"><BrainIcon /></span>
+                              ) : null}
                               <p className="font-medium text-sm">{char.name}</p>
                               <p className="text-xs text-gray-500">{char.tagline}</p>
                             </button>
@@ -2573,24 +2594,24 @@ export function AgentsPage() {
                         <div className="border-t pt-3 space-y-3">
                           {inlineAgentPersonaId === 'finance_expert' ? (
                             <div>
-                              <p className="mb-1 text-xs text-gray-500">Risk level</p>
+                              <p className="mb-1 text-xs text-gray-500">{t('agent.riskLevel')}</p>
                               <Select
-                                aria-label="Inline agent risk level"
+                                  aria-label={t('agent.riskLevel')}
                                 value={inlineAgentRiskLevel}
                                 onChange={(v) => setInlineAgentRiskLevel(v as 'low' | 'medium' | 'high')}
                                 options={[
-                                  { value: 'low', label: 'Low' },
-                                  { value: 'medium', label: 'Medium' },
-                                  { value: 'high', label: 'High' }
+                                    { value: 'low', label: t('agent.riskLow') },
+                                    { value: 'medium', label: t('agent.riskMedium') },
+                                    { value: 'high', label: t('agent.riskHigh') }
                                 ]}
                                 className="w-full"
                               />
                             </div>
                           ) : null}
                           <div>
-                            <p className="mb-1 text-xs text-gray-500">Model</p>
+                            <p className="mb-1 text-xs text-gray-500">{t('agent.model')}</p>
                             <Select
-                              aria-label="Inline agent model"
+                              aria-label={t('agent.model')}
                               value={inlineAgentModel}
                               onChange={setInlineAgentModel}
                               options={[
@@ -2601,9 +2622,9 @@ export function AgentsPage() {
                             />
                           </div>
                           <div>
-                            <p className="mb-1 text-xs text-gray-500">System prompt</p>
+                            <p className="mb-1 text-xs text-gray-500">{t('agent.systemPrompt')}</p>
                             <Input.TextArea
-                              aria-label="Inline agent system prompt"
+                              aria-label={t('agent.systemPrompt')}
                               rows={5}
                               value={inlineAgentSystemPrompt}
                               onChange={(e) => setInlineAgentSystemPrompt(e.currentTarget.value)}
@@ -2617,16 +2638,16 @@ export function AgentsPage() {
                     {inlineAgentStep === 2 ? (
                       <div className="space-y-3">
                         <p className="text-sm text-gray-600">
-                          Your agent will automatically scan this source and generate a report on the schedule below. Set how often it should run and who should receive the results by email.
+                          {t('schedule.intro')}
                         </p>
                         <Select
-                          aria-label="Playbook schedule mode"
+                          aria-label={t('schedule.mode')}
                           value={playbookScheduleModeDraft}
                           onChange={(value) => setPlaybookScheduleModeDraft(value as 'interval' | 'daily' | 'weekly')}
                           options={[
-                            { value: 'interval', label: 'Interval' },
-                            { value: 'daily', label: 'Daily' },
-                            { value: 'weekly', label: 'Weekly' }
+                            { value: 'interval', label: t('schedule.interval') },
+                            { value: 'daily', label: t('schedule.daily') },
+                            { value: 'weekly', label: t('schedule.weekly') }
                           ]}
                           className="w-full"
                         />
@@ -2674,17 +2695,17 @@ export function AgentsPage() {
                           </div>
                         )}
                         <div className="border-t pt-3">
-                          <p className="mb-1 text-xs text-gray-500">Email recipients (optional)</p>
+                          <p className="mb-1 text-xs text-gray-500">{t('schedule.recipients')}</p>
                           <Select
-                            aria-label="Playbook recipient emails"
+                           aria-label={t('schedule.recipients')}
                             mode="tags"
                             value={playbookRecipientsDraft}
                             onChange={(values) => setPlaybookRecipientsDraft(values as string[])}
                             tokenSeparators={[',', ' ']}
-                            placeholder="Add one or more email addresses"
+                           placeholder={t('schedule.recipientsPlaceholder')}
                             className="w-full"
                           />
-                          <p className="mt-1 text-xs text-gray-400">Leave empty to skip email delivery. You can add recipients later.</p>
+                          <p className="mt-1 text-xs text-gray-400">{t('schedule.recipientsHint')}</p>
                         </div>
                       </div>
                     ) : null}
@@ -2697,13 +2718,13 @@ export function AgentsPage() {
           {playbookCreateStep === 2 ? (
             <>
               <Select
-                aria-label="Playbook schedule mode"
+                aria-label={t('schedule.mode')}
                 value={playbookScheduleModeDraft}
                 onChange={(value) => setPlaybookScheduleModeDraft(value as 'interval' | 'daily' | 'weekly')}
                 options={[
-                  { value: 'interval', label: 'Interval' },
-                  { value: 'daily', label: 'Daily' },
-                  { value: 'weekly', label: 'Weekly' }
+                  { value: 'interval', label: t('schedule.interval') },
+                  { value: 'daily', label: t('schedule.daily') },
+                  { value: 'weekly', label: t('schedule.weekly') }
                 ]}
               />
               {playbookScheduleModeDraft === 'interval' ? (
@@ -2752,14 +2773,14 @@ export function AgentsPage() {
                 </>
               )}
               <div className="space-y-2">
-                <div className="text-sm font-medium text-gray-800 dark:text-gray-200">Recipient emails</div>
+                <div className="text-sm font-medium text-gray-800 dark:text-gray-200">{t('schedule.recipients')}</div>
                 <Select
-                  aria-label="Playbook recipient emails"
+                  aria-label={t('schedule.recipients')}
                   mode="tags"
                   value={playbookRecipientsDraft}
                   onChange={(values) => setPlaybookRecipientsDraft(values as string[])}
                   tokenSeparators={[',', ' ']}
-                  placeholder="Add one or more email addresses"
+                  placeholder={t('schedule.recipientsPlaceholder')}
                   className="w-full"
                   style={{ minHeight: 88 }}
                 />
@@ -2773,23 +2794,23 @@ export function AgentsPage() {
               onClick={showInlineAgentCreate ? onInlineAgentBack : onBackPlaybookCreateStep}
               disabled={showInlineAgentCreate ? false : (followWizardSourcePreselected ? playbookCreateStep <= 1 : playbookCreateStep === 0)}
             >
-              {showInlineAgentCreate && inlineAgentStep === 0 ? '← Agent selection' : 'Back'}
+                {showInlineAgentCreate && inlineAgentStep === 0 ? `← ${t('listen.stepChooseAgent')}` : t('common.back')}
             </Button>
             {/* Stop listening — only shown when editing a playbook and NOT inside the agent sub-wizard */}
             {editingPlaybookId && !showInlineAgentCreate ? (
               confirmingUnfollow ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-red-600">Stop listening?</span>
+                    <span className="text-sm text-red-600">{t('listen.stopListeningConfirm')}</span>
                   <Button
                     danger
                     size="small"
                     loading={false}
                     onClick={() => void onUnfollowFromWizard()}
                   >
-                    Yes, stop
+                      {t('common.yes')}
                   </Button>
                   <Button size="small" onClick={() => setConfirmingUnfollow(false)}>
-                    Cancel
+                      {t('common.cancel')}
                   </Button>
                 </div>
               ) : (
@@ -2798,30 +2819,30 @@ export function AgentsPage() {
                   icon={<AudioMutedOutlined />}
                   onClick={() => setConfirmingUnfollow(true)}
                 >
-                  Stop listening
+                    {t('listen.stopListening')}
                 </Button>
               )
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={onCancelPlaybookCreate}>Cancel</Button>
+              <Button onClick={onCancelPlaybookCreate}>{t('common.cancel')}</Button>
             {showInlineAgentCreate ? (
               inlineAgentStep < 2 ? (
                 <Button type="primary" onClick={onInlineAgentNext}>
-                  Next
+                    {t('common.next')}
                 </Button>
               ) : (
                 <Button type="primary" loading={isInlineAgentSaving} onClick={() => void onSaveInlineAgent()}>
-                  Create agent
+                    {t('agent.create')}
                 </Button>
               )
             ) : playbookCreateStep < 2 ? (
               <Button type="primary" onClick={onNextPlaybookCreateStep}>
-                Next
+                  {t('common.next')}
               </Button>
             ) : (
               <Button type="primary" loading={isPlaybookSaving} onClick={onCreatePlaybook}>
-                {editingPlaybookId ? 'Update playbook' : 'Create playbook'}
+                  {editingPlaybookId ? t('playbook.updatePlaybook') : t('playbook.createPlaybook')}
               </Button>
             )}
           </div>

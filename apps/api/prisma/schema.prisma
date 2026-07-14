@@ -222,6 +222,7 @@ model Playbook {
   followTargetType  String?
   followTargetKey   String?
   followTargetTitle String?
+  language          String   @default("en")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Restrict)

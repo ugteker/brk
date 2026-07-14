@@ -26,3 +26,21 @@ if (typeof window !== 'undefined' && !('ResizeObserver' in window)) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).ResizeObserver = ResizeObserverStub;
 }
+
+// Initialize i18next with English translations so t() calls resolve to real strings in tests.
+import i18next from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import en from './i18n/locales/en.json';
+
+if (!i18next.isInitialized) {
+  i18next
+    .use(initReactI18next)
+    .init({
+      lng: 'en',
+      fallbackLng: 'en',
+      resources: { en: { translation: en } },
+      ns: ['translation'],
+      defaultNS: 'translation',
+      interpolation: { escapeValue: false }
+    });
+}
