@@ -930,7 +930,11 @@ export function AgentsPage() {
 
   function onInlineAgentBack() {
     setInlineAgentValidationError(null);
-    setInlineAgentStep((prev) => Math.max(0, prev - 1));
+    if (inlineAgentStep === 0) {
+      closeInlineAgentCreate();
+      return;
+    }
+    setInlineAgentStep((prev) => prev - 1);
   }
 
   async function onSaveInlineAgent() {
@@ -1146,6 +1150,18 @@ export function AgentsPage() {
       message.success('Playbook removed');
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to remove playbook');
+    }
+  }
+
+  async function onUnfollowFromWizard() {
+    if (!editingPlaybookId) return;
+    try {
+      await deletePlaybook(editingPlaybookId);
+      await refreshPlaybooks();
+      message.success('Unfollowed');
+      closePlaybookCreate();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to unfollow');
     }
   }
 
@@ -2198,16 +2214,29 @@ export function AgentsPage() {
         width={720}
       >
         <div className="space-y-3">
-          {/* Steps indicator — hide "Pick source" step when source was pre-selected from a card */}
-          <Steps
-            size="small"
-            current={followWizardSourcePreselected ? playbookCreateStep - 1 : playbookCreateStep}
-            items={[
-              ...(followWizardSourcePreselected ? [] : [{ title: 'Pick source' }]),
-              { title: 'Pick agent' },
-              { title: 'Set schedule' }
-            ]}
-          />
+          {/* Unified steps indicator — morphs between pick-agent path and create-agent path */}
+          {showInlineAgentCreate ? (
+            <Steps
+              size="small"
+              current={inlineAgentStep}
+              items={[
+                { title: 'Character' },
+                { title: 'Personality' },
+                { title: 'Schedule' },
+                { title: 'Recipients' }
+              ]}
+            />
+          ) : (
+            <Steps
+              size="small"
+              current={followWizardSourcePreselected ? playbookCreateStep - 1 : playbookCreateStep}
+              items={[
+                ...(followWizardSourcePreselected ? [] : [{ title: 'Pick source' }]),
+                { title: 'Pick agent' },
+                { title: 'Set schedule' }
+              ]}
+            />
+          )}
           {playbookCreateStep === 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {sources.map((source) => {
@@ -2328,25 +2357,11 @@ export function AgentsPage() {
                 const inlineCharData = getPromptCharacter(inlineAgentPersonaId, inlineAgentCharacterId) ?? inlineChars[0];
                 const inlinePersonaLabel = inlinePersonaData?.name ?? inlineAgentPersonaId;
                 const inlineCharLabel = inlineCharData?.name ?? inlineAgentCharacterId;
-                const INLINE_STEPS = ['Character', 'Personality', 'Schedule', 'Recipients'];
                 return (
                   <Card
                     size="small"
-                    title={
-                      <div className="flex items-center gap-2">
-                        <span>New agent — Step {inlineAgentStep + 1} of {INLINE_STEPS.length}: {INLINE_STEPS[inlineAgentStep]}</span>
-                      </div>
-                    }
-                    extra={
-                      <Button size="small" onClick={closeInlineAgentCreate}>Cancel</Button>
-                    }
+                    title="Create new agent"
                   >
-                    <Steps
-                      current={inlineAgentStep}
-                      size="small"
-                      items={INLINE_STEPS.map((title) => ({ title }))}
-                      style={{ marginBottom: 16 }}
-                    />
                     {inlineAgentValidationError ? (
                       <p className="mb-3 text-sm text-red-600">{inlineAgentValidationError}</p>
                     ) : null}
@@ -2529,9 +2544,11 @@ export function AgentsPage() {
                       </div>
                     ) : null}
 
-                    {/* Sub-wizard navigation */}
+                    {/* Sub-wizard navigation — Back at step 0 returns to agent selection */}
                     <div className="mt-4 flex justify-between">
-                      <Button onClick={onInlineAgentBack} disabled={inlineAgentStep === 0}>Back</Button>
+                      <Button onClick={onInlineAgentBack}>
+                        {inlineAgentStep === 0 ? '← Agent selection' : 'Back'}
+                      </Button>
                       {inlineAgentStep < 3 ? (
                         <Button type="primary" onClick={onInlineAgentNext}>Next</Button>
                       ) : (
@@ -2619,12 +2636,25 @@ export function AgentsPage() {
           ) : null}
         </div>
         <div className="mt-4 flex items-center justify-between gap-2 border-t pt-3">
-          <Button
-            onClick={onBackPlaybookCreateStep}
-            disabled={followWizardSourcePreselected ? playbookCreateStep <= 1 : playbookCreateStep === 0}
-          >
-            Back
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={onBackPlaybookCreateStep}
+              disabled={followWizardSourcePreselected ? playbookCreateStep <= 1 : playbookCreateStep === 0}
+            >
+              Back
+            </Button>
+            {editingPlaybookId ? (
+              <Popconfirm
+                title="Unfollow this source?"
+                description="This removes your follow subscription. You can follow again later."
+                okText="Unfollow"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => void onUnfollowFromWizard()}
+              >
+                <Button danger icon={<DeleteOutlined />}>Unfollow</Button>
+              </Popconfirm>
+            ) : null}
+          </div>
           <div className="flex items-center gap-2">
             <Button onClick={onCancelPlaybookCreate}>Cancel</Button>
             {playbookCreateStep < 2 ? (
