@@ -709,9 +709,13 @@ describe('AgentsPage three hub shell', () => {
     renderPage();
     await screen.findByRole('heading', { name: /dashboard/i });
 
+    // Create a new tab — it gets a default name and the pencil rename button appears
     fireEvent.click(screen.getByRole('button', { name: /create library tab/i }));
-    // Tab is created immediately in edit mode — type a name and commit
-    const renameInput = await screen.findByLabelText(/rename library tab/i);
+    const pencil = await screen.findByRole('button', { name: /rename active library tab/i });
+
+    // Open rename mode via the pencil, type a custom name, commit
+    fireEvent.click(pencil);
+    const renameInput = await screen.findByDisplayValue(/^library \d+$/i);
     fireEvent.change(renameInput, { target: { value: 'Research' } });
     fireEvent.keyDown(renameInput, { key: 'Enter' });
     expect(await screen.findByRole('tab', { name: /research/i })).toBeInTheDocument();
@@ -720,11 +724,9 @@ describe('AgentsPage three hub shell', () => {
   it('shows rename control for the active custom library tab', async () => {
     renderPage();
     await screen.findByRole('heading', { name: /dashboard/i });
+
+    // After creation the pencil button is shown on the active non-default tab
     fireEvent.click(screen.getByRole('button', { name: /create library tab/i }));
-    // Commit the default name
-    const renameInput = await screen.findByLabelText(/rename library tab/i);
-    fireEvent.keyDown(renameInput, { key: 'Enter' });
-    // The rename pencil button should appear on the active custom tab
     expect(await screen.findByRole('button', { name: /rename active library tab/i })).toBeInTheDocument();
   });
 
