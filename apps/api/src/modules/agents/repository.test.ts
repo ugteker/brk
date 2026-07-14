@@ -181,6 +181,7 @@ describe('AgentRepository', () => {
 
   it('deletes a agent and its related records inside a transaction', async () => {
     const findMany = vi.fn(async () => [{ id: 'report_1' }]);
+    const findPlaybooks = vi.fn(async () => [{ id: 'playbook_1' }]);
     const deleteSignals = vi.fn(async () => ({ count: 0 }));
     const deleteRunReports = vi.fn(async () => ({ count: 0 }));
     const deleteRunArtifacts = vi.fn(async () => ({ count: 0 }));
@@ -189,6 +190,8 @@ describe('AgentRepository', () => {
     const deleteSchedules = vi.fn(async () => ({ count: 0 }));
     const deleteSources = vi.fn(async () => ({ count: 0 }));
     const deleteAccessGrants = vi.fn(async () => ({ count: 0 }));
+    const deletePlaybookSources = vi.fn(async () => ({ count: 0 }));
+    const deleteMarketplacePublications = vi.fn(async () => ({ count: 0 }));
     const deletePlaybooks = vi.fn(async () => ({ count: 0 }));
     const deleteAgent = vi.fn(async () => ({}));
     const tx = {
@@ -200,7 +203,9 @@ describe('AgentRepository', () => {
       agentSchedule: { deleteMany: deleteSchedules },
       agentSource: { deleteMany: deleteSources },
       accessGrant: { deleteMany: deleteAccessGrants },
-      playbook: { deleteMany: deletePlaybooks },
+      playbookSource: { deleteMany: deletePlaybookSources },
+      marketplacePublication: { deleteMany: deleteMarketplacePublications },
+      playbook: { findMany: findPlaybooks, deleteMany: deletePlaybooks },
       agent: { delete: deleteAgent }
     };
     const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<void>) => fn(tx));
@@ -219,6 +224,10 @@ describe('AgentRepository', () => {
     expect(deleteSchedules).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
     expect(deleteSources).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
     expect(deleteAccessGrants).toHaveBeenCalledWith({ where: { OR: [{ agentId: 'agent_1' }, { granteeAgentId: 'agent_1' }] } });
+    expect(findPlaybooks).toHaveBeenCalledWith({ where: { agentId: 'agent_1' }, select: { id: true } });
+    expect(deletePlaybookSources).toHaveBeenCalledWith({ where: { playbookId: { in: ['playbook_1'] } } });
+    expect(deleteAccessGrants).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ playbookId: { in: ['playbook_1'] } }) }));
+    expect(deleteMarketplacePublications).toHaveBeenCalledWith({ where: { playbookId: { in: ['playbook_1'] } } });
     expect(deletePlaybooks).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
     expect(deleteAgent).toHaveBeenCalledWith({ where: { id: 'agent_1' } });
   });
