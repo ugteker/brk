@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Button, Input, Modal, Popconfirm, Select, Space } from 'antd';
-import { DeleteOutlined, EditOutlined, ShareAltOutlined, UploadOutlined } from '@ant-design/icons';
+import { Button, Checkbox, Divider, Input, Modal, Popconfirm, Select, Space } from 'antd';
+import { DeleteOutlined, EditOutlined, ShareAltOutlined } from '@ant-design/icons';
 
 export interface EntityActionsProps {
   entityLabel: 'source' | 'agent' | 'playbook';
   isOwner: boolean;
   onEdit?: () => void | Promise<void>;
+  /** When provided the delete button is shown — only pass on views where delete is appropriate (e.g. edit modal). */
   onDelete?: () => void | Promise<void>;
   onShare?: (payload: { granteeUserId: string; permission: string; expiresAt?: string }) => void | Promise<void>;
   sharePermissions?: string[];
@@ -13,6 +14,9 @@ export interface EntityActionsProps {
   defaultPublishTitle: string;
 }
 
+/** Combined Share & Publish dialog — the user picks whether to share with a user, publish to
+ *  the marketplace, or both in one action. Share+Publish are merged so the card never shows
+ *  two separate icon buttons for the same concept. */
 export function EntityActions({
   entityLabel,
   isOwner,
@@ -23,18 +27,48 @@ export function EntityActions({
   onPublish,
   defaultPublishTitle
 }: EntityActionsProps) {
-  const [shareOpen, setShareOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Share-with-user section
   const [shareUserId, setShareUserId] = useState('');
   const [sharePermission, setSharePermission] = useState(sharePermissions[0] ?? 'read');
-  const [shareLoading, setShareLoading] = useState(false);
+  const [shareEnabled, setShareEnabled] = useState(false);
 
-  const [publishOpen, setPublishOpen] = useState(false);
+  // Publish-to-marketplace section
   const [publishTitle, setPublishTitle] = useState(defaultPublishTitle);
   const [publishSummary, setPublishSummary] = useState('');
   const [publishVisibility, setPublishVisibility] = useState<'public' | 'private'>('public');
-  const [publishLoading, setPublishLoading] = useState(false);
+  const [publishEnabled, setPublishEnabled] = useState(false);
 
   if (!isOwner) return null;
+
+  const canSubmit = (shareEnabled && shareUserId.trim()) || (publishEnabled && publishTitle.trim());
+
+  function openDialog() {
+    setPublishTitle(defaultPublishTitle);
+    setShareEnabled(false);
+    setPublishEnabled(false);
+    setShareUserId('');
+    setOpen(true);
+  }
+
+  async function onOk() {
+    setLoading(true);
+    try {
+      if (shareEnabled && shareUserId.trim() && onShare) {
+        await onShare({ granteeUserId: shareUserId.trim(), permission: sharePermission });
+      }
+      if (publishEnabled && publishTitle.trim() && onPublish) {
+        await onPublish({ title: publishTitle.trim(), summary: publishSummary.trim() || undefined, visibility: publishVisibility });
+      }
+      setOpen(false);
+      setShareUserId('');
+      setPublishSummary('');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <>
@@ -42,98 +76,100 @@ export function EntityActions({
         {onEdit ? (
           <Button aria-label={`Edit ${entityLabel}`} shape="circle" icon={<EditOutlined />} onClick={() => void onEdit()} />
         ) : null}
-        {onShare ? (
-          <Button aria-label={`Share ${entityLabel}`} shape="circle" icon={<ShareAltOutlined />} onClick={() => setShareOpen(true)} />
-        ) : null}
-        {onPublish ? (
-          <Button
-            aria-label={`Publish ${entityLabel}`}
-            shape="circle"
-            icon={<UploadOutlined />}
-            onClick={() => {
-              setPublishTitle(defaultPublishTitle);
-              setPublishOpen(true);
-            }}
-          />
-        ) : null}
         {onDelete ? (
-          <Popconfirm title={`Remove this ${entityLabel}?`} okText="Remove" okButtonProps={{ danger: true }} onConfirm={() => onDelete()}>
-            <Button aria-label={`Remove ${entityLabel}`} shape="circle" danger icon={<DeleteOutlined />} />
+          <Popconfirm
+            title={`Remove this ${entityLabel}?`}
+            okText="Remove"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => void onDelete()}
+          >
+            <Button aria-label={`Remove ${entityLabel}`} shape="circle" danger icon={<DeleteOutlined />} onClick={(event) => event.stopPropagation()} />
           </Popconfirm>
+        ) : null}
+        {(onShare || onPublish) ? (
+          <Button aria-label={`Share or publish ${entityLabel}`} shape="circle" icon={<ShareAltOutlined />} onClick={openDialog} />
         ) : null}
       </Space>
 
       <Modal
-        title={`Share ${entityLabel}`}
-        open={shareOpen}
-        okText="Share"
-        okButtonProps={{ loading: shareLoading, disabled: !shareUserId.trim() }}
-        onCancel={() => setShareOpen(false)}
-        onOk={async () => {
-          if (!onShare) return;
-          setShareLoading(true);
-          try {
-            await onShare({ granteeUserId: shareUserId.trim(), permission: sharePermission });
-            setShareOpen(false);
-            setShareUserId('');
-          } finally {
-            setShareLoading(false);
-          }
-        }}
+        title={`Share / Publish ${entityLabel}`}
+        open={open}
+        okText="Apply"
+        okButtonProps={{ loading, disabled: !canSubmit }}
+        onCancel={() => setOpen(false)}
+        onOk={onOk}
         destroyOnHidden
       >
-        <Space direction="vertical" className="w-full" size={8}>
-          <Input aria-label={`${entityLabel}-share-user-id`} placeholder="Target user ID" value={shareUserId} onChange={(e) => setShareUserId(e.currentTarget.value)} />
-          <Select
-            aria-label={`${entityLabel}-share-permission`}
-            value={sharePermission}
-            options={sharePermissions.map((permission) => ({ value: permission, label: permission }))}
-            onChange={(value) => setSharePermission(value)}
-          />
-        </Space>
-      </Modal>
+        <Space direction="vertical" className="w-full" size={12}>
+          {onShare ? (
+            <div>
+              <Checkbox
+                aria-label={`share-with-user-toggle`}
+                checked={shareEnabled}
+                onChange={(e) => setShareEnabled(e.target.checked)}
+              >
+                Share with a specific user
+              </Checkbox>
+              {shareEnabled ? (
+                <Space direction="vertical" className="mt-2 w-full" size={8}>
+                  <Input
+                    aria-label={`${entityLabel}-share-user-id`}
+                    placeholder="Target user ID"
+                    value={shareUserId}
+                    onChange={(e) => setShareUserId(e.currentTarget.value)}
+                  />
+                  <Select
+                    aria-label={`${entityLabel}-share-permission`}
+                    value={sharePermission}
+                    options={sharePermissions.map((permission) => ({ value: permission, label: permission }))}
+                    onChange={(value) => setSharePermission(value)}
+                    className="w-full"
+                  />
+                </Space>
+              ) : null}
+            </div>
+          ) : null}
 
-      <Modal
-        title={`Publish ${entityLabel} to marketplace`}
-        open={publishOpen}
-        okText="Publish"
-        okButtonProps={{ loading: publishLoading, disabled: !publishTitle.trim() }}
-        onCancel={() => setPublishOpen(false)}
-        onOk={async () => {
-          if (!onPublish) return;
-          setPublishLoading(true);
-          try {
-            await onPublish({
-              title: publishTitle.trim(),
-              summary: publishSummary.trim() || undefined,
-              visibility: publishVisibility
-            });
-            setPublishOpen(false);
-            setPublishSummary('');
-          } finally {
-            setPublishLoading(false);
-          }
-        }}
-        destroyOnHidden
-      >
-        <Space direction="vertical" className="w-full" size={8}>
-          <Input aria-label={`${entityLabel}-publish-title`} placeholder="Title" value={publishTitle} onChange={(e) => setPublishTitle(e.currentTarget.value)} />
-          <Input.TextArea
-            aria-label={`${entityLabel}-publish-summary`}
-            placeholder="Summary (optional)"
-            value={publishSummary}
-            onChange={(e) => setPublishSummary(e.currentTarget.value)}
-            autoSize={{ minRows: 2, maxRows: 4 }}
-          />
-          <Select
-            aria-label={`${entityLabel}-publish-visibility`}
-            value={publishVisibility}
-            options={[
-              { value: 'public', label: 'public' },
-              { value: 'private', label: 'private' }
-            ]}
-            onChange={(value) => setPublishVisibility(value as 'public' | 'private')}
-          />
+          {onShare && onPublish ? <Divider style={{ margin: '4px 0' }} /> : null}
+
+          {onPublish ? (
+            <div>
+              <Checkbox
+                aria-label={`publish-to-marketplace-toggle`}
+                checked={publishEnabled}
+                onChange={(e) => setPublishEnabled(e.target.checked)}
+              >
+                Publish to marketplace
+              </Checkbox>
+              {publishEnabled ? (
+                <Space direction="vertical" className="mt-2 w-full" size={8}>
+                  <Input
+                    aria-label={`${entityLabel}-publish-title`}
+                    placeholder="Title"
+                    value={publishTitle}
+                    onChange={(e) => setPublishTitle(e.currentTarget.value)}
+                  />
+                  <Input.TextArea
+                    aria-label={`${entityLabel}-publish-summary`}
+                    placeholder="Summary (optional)"
+                    value={publishSummary}
+                    onChange={(e) => setPublishSummary(e.currentTarget.value)}
+                    autoSize={{ minRows: 2, maxRows: 4 }}
+                  />
+                  <Select
+                    aria-label={`${entityLabel}-publish-visibility`}
+                    value={publishVisibility}
+                    options={[
+                      { value: 'public', label: 'Public' },
+                      { value: 'private', label: 'Private' }
+                    ]}
+                    onChange={(value) => setPublishVisibility(value as 'public' | 'private')}
+                    className="w-full"
+                  />
+                </Space>
+              ) : null}
+            </div>
+          ) : null}
         </Space>
       </Modal>
     </>
