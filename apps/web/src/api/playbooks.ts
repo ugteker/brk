@@ -44,6 +44,7 @@ export interface CreatePlaybookPayload {
   followTargetType?: FollowTargetType;
   followTargetKey?: string;
   followTargetTitle?: string;
+  language?: string;
 }
 
 export interface UpdatePlaybookPayload {

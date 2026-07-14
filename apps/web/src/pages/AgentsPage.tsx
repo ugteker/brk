@@ -1051,7 +1051,7 @@ export function AgentsPage() {
             ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
             : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
       const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
-      await createPlaybook({ agentId, name: derivePlaybookName(agentId, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule, executionMode: 'latest_only' });
+      await createPlaybook({ agentId, name: derivePlaybookName(agentId, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule, executionMode: 'latest_only', language: i18n.language.startsWith('de') ? 'de' : 'en' });
       await refreshPlaybooks();
       setIsPlaybookCreateOpen(false);
       setPlaybookCreateStep(0);
@@ -1087,7 +1087,7 @@ export function AgentsPage() {
       if (editingPlaybookId) {
         await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule });
       } else {
-        await createPlaybook({ agentId: playbookAgentIdDraft, name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule, executionMode: 'latest_only' });
+        await createPlaybook({ agentId: playbookAgentIdDraft, name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule, executionMode: 'latest_only', language: i18n.language.startsWith('de') ? 'de' : 'en' });
       }
       await refreshPlaybooks();
       message.success(editingPlaybookId ? t('playbook.updatePlaybook') : t('playbook.createPlaybook'));

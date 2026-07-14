@@ -38,6 +38,7 @@ export interface UpdatePlaybookInput {
   followTargetType?: FollowTargetType | null;
   followTargetKey?: string | null;
   followTargetTitle?: string | null;
+  language?: string;
 }
 
 export interface Playbook {
@@ -55,6 +56,7 @@ export interface Playbook {
   followTargetType?: FollowTargetType | null;
   followTargetKey?: string | null;
   followTargetTitle?: string | null;
+  language: string;
   lastRunAt: Date | null;
   nextRunAt: Date;
   createdAt: Date;

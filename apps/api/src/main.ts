@@ -142,7 +142,7 @@ async function start() {
           if (!playbook) {
             return { status: 'failed', errorCode: 'not_found' };
           }
-          return manualRunTrigger.triggerRun(playbook.agentId, { playbookRecipients: playbook.recipients });
+          return manualRunTrigger.triggerRun(playbook.agentId, { playbookRecipients: playbook.recipients, playbookLanguage: playbook.language });
         }
       }
     },

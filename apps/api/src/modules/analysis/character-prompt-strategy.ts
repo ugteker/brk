@@ -4,6 +4,7 @@ export interface BuildEffectiveSystemPromptInput {
   characterType: CharacterType;
   promptConfig: PromptConfig;
   promptVersionSystemPrompt: string;
+  language?: string;
 }
 
 export interface CharacterPromptStrategy {
@@ -110,6 +111,10 @@ export function buildEffectiveSystemPrompt(input: BuildEffectiveSystemPromptInpu
   const customInstructions = input.promptConfig.custom_instructions?.trim();
   if (customInstructions) {
     sections.push(`Custom instructions override:\n${customInstructions}`);
+  }
+
+  if (input.language === 'de') {
+    sections.push('WICHTIG: Schreibe deine gesamte Antwort auf Deutsch.');
   }
 
   return sections.join('\n\n');

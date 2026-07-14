@@ -88,6 +88,7 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
       followTargetType: input.followTargetType,
       followTargetKey: input.followTargetKey,
       followTargetTitle: input.followTargetTitle,
+      language: typeof input.language === 'string' ? input.language : 'en',
       schedule
     });
     return reply.status(201).send(created);

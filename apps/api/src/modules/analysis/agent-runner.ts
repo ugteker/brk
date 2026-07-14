@@ -30,6 +30,7 @@ export interface ForcedEpisodeSelection {
 export interface AgentRunOptions {
   forcedEpisode?: ForcedEpisodeSelection;
   playbookRecipients?: string[];
+  playbookLanguage?: string;
 }
 
 export interface AgentRunnerDeps {
@@ -152,7 +153,8 @@ export class AgentRunner {
       const effectiveSystemPrompt = buildEffectiveSystemPrompt({
         characterType: agent.characterType,
         promptConfig: agent.promptConfig,
-        promptVersionSystemPrompt: promptVersion.systemPrompt
+        promptVersionSystemPrompt: promptVersion.systemPrompt,
+        language: options?.playbookLanguage
       });
       const request = buildAnalysisRequest({ ...promptVersion, systemPrompt: effectiveSystemPrompt }, evidence, agent.characterType);
       const analysis: ClaudeAnalysisResult = await this.deps.claudeClient.analyze(request);
@@ -192,7 +194,7 @@ export class AgentRunner {
       // Falls back to the source URL for any evidence block without a resolved title (e.g. plain
       // web-page sources), and de-dupes in case the same item appears from more than one source.
       const itemTitles = [...new Set(evidence.map((block) => block.title || block.sourceRef))];
-      await sendReportNotification(this.deps.mailer, agent, report, itemTitles, options?.playbookRecipients ?? []);
+      await sendReportNotification(this.deps.mailer, agent, report, itemTitles, options?.playbookRecipients ?? [], options?.playbookLanguage);
 
       return { status: 'succeeded', reportId: report.id };
     } catch (error) {
