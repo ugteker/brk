@@ -116,7 +116,6 @@ export function AuthPage() {
         <Title level={3} style={{ marginBottom: 0 }}>
           {t('auth.title')}
         </Title>
-        <Paragraph type="secondary">{t('auth.subtitle')}</Paragraph>
 
         {infoBanner ? (
           <Alert

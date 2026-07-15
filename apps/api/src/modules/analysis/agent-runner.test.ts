@@ -185,6 +185,43 @@ describe('AgentRunner', () => {
     expect(result.status).toBe('succeeded');
   });
 
+  it('creates an ad-hoc source config when forcedEpisode refers to a source not in agent.sources (library source run)', async () => {
+    const youtubeFetch = vi.fn(async () => ({
+      evidence: [{ sourceId: 'https://youtube.com/playlist?list=PL123', sourceType: 'youtube_videos' as const, sourceRef: 'https://youtu.be/vid1', content: 'transcript', fidelity: 'high' as const, citations: [] }]
+    }));
+    const deps = createDeps({
+      agentRepository: {
+        getAgent: vi.fn(async () => ({
+          id: 'agent-1',
+          ownerUserId: 'admin-user-id',
+          name: 'Finance Agent',
+          description: '',
+          characterType: 'summarizer',
+          promptConfig: {},
+          status: 'active',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          sources: [], // agent has NO sources configured — library source only
+          preferences: {},
+          schedule: null
+        }))
+      },
+      sourceAdapters: {
+        youtube_videos: { fetch: youtubeFetch }
+      }
+    });
+    const runner = new AgentRunner(deps as never);
+
+    const result = await runner.run('agent-1', 'run-1', {
+      forcedEpisode: { sourceType: 'youtube_videos', sourceValue: 'https://youtube.com/playlist?list=PL123', itemLink: 'https://youtu.be/vid1' }
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(youtubeFetch).toHaveBeenCalledWith('agent-1', expect.objectContaining({ type: 'youtube_videos', value: 'https://youtube.com/playlist?list=PL123' }), {
+      forcedItemLink: 'https://youtu.be/vid1'
+    });
+  });
+
   it('forces crawling one specific episode from one source when forcedEpisode is given, skipping other sources', async () => {
     const podcastFetch = vi.fn(async () => ({
       evidence: [{ sourceId: 'https://example.com/feed.xml', sourceType: 'podcast_feeds' as const, sourceRef: 'https://example.com/ep-2', content: 'transcript', fidelity: 'high' as const, citations: [] }]

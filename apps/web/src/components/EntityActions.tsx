@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Button, Checkbox, Divider, Input, Modal, Popconfirm, Select, Space } from 'antd';
-import { DeleteOutlined, EditOutlined, ShareAltOutlined } from '@ant-design/icons';
+import { Button, Checkbox, Divider, Input, Modal, Select, Space } from 'antd';
+import { EditOutlined, ShareAltOutlined } from '@ant-design/icons';
+import { InlineDeleteButton } from './InlineDeleteButton';
 
 export interface EntityActionsProps {
   entityLabel: 'source' | 'agent' | 'playbook';
@@ -77,14 +78,11 @@ export function EntityActions({
           <Button aria-label={`Edit ${entityLabel}`} shape="circle" icon={<EditOutlined />} onClick={() => void onEdit()} />
         ) : null}
         {onDelete ? (
-          <Popconfirm
-            title={`Remove this ${entityLabel}?`}
-            okText="Remove"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => void onDelete()}
-          >
-            <Button aria-label={`Remove ${entityLabel}`} shape="circle" danger icon={<DeleteOutlined />} onClick={(event) => event.stopPropagation()} />
-          </Popconfirm>
+          <InlineDeleteButton
+            onConfirm={onDelete}
+            ariaLabel={`Remove ${entityLabel}`}
+            confirmText="Remove"
+          />
         ) : null}
         {(onShare || onPublish) ? (
           <Button aria-label={`Share or publish ${entityLabel}`} shape="circle" icon={<ShareAltOutlined />} onClick={openDialog} />

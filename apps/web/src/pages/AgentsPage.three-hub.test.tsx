@@ -301,9 +301,8 @@ describe('AgentsPage three hub shell', () => {
 
     const createSourceButton = screen.getByRole('button', { name: /create new source/i });
     expect(createSourceButton).toBeInTheDocument();
-    expect(createSourceButton.className).toContain('border-dashed');
-    expect(createSourceButton.className).toContain('dark:border-sky-800');
-    expect(createSourceButton.className).toContain('dark:text-sky-100');
+    expect(createSourceButton.className).toContain('rounded-lg');
+    expect(createSourceButton.className).toContain('text-sky-700');
     expect(screen.getByText(/url detect \+ metadata preview/i)).toBeInTheDocument();
   });
 
@@ -429,7 +428,7 @@ describe('AgentsPage three hub shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /create new source/i }));
 
     fireEvent.change(screen.getByLabelText(/source url/i), { target: { value: 'https://pod.example/feed.xml' } });
-    fireEvent.click(screen.getByRole('button', { name: /detect source/i }));
+    fireEvent.keyDown(screen.getByLabelText(/source url/i), { key: 'Enter', code: 'Enter', keyCode: 13 });
 
     expect(await screen.findByText(/macro daily/i)).toBeInTheDocument();
     expect(screen.getByText(/ep 1/i)).toBeInTheDocument();
@@ -469,7 +468,7 @@ describe('AgentsPage three hub shell', () => {
     fireEvent.change(screen.getByLabelText(/source url/i), {
       target: { value: 'https://www.youtube.com/playlist?list=PL6P5rY8mrhqrhVgc_pkSOlRLpuGW3CpJ3' }
     });
-    fireEvent.click(screen.getByRole('button', { name: /detect source/i }));
+    fireEvent.keyDown(screen.getByLabelText(/source url/i), { key: 'Enter', code: 'Enter', keyCode: 13 });
 
     expect(await screen.findByText(/playlist feed/i)).toBeInTheDocument();
     expect(screen.getByText(/video 1/i)).toBeInTheDocument();
@@ -695,7 +694,7 @@ describe('AgentsPage three hub shell', () => {
     fireEvent.click(screen.getByLabelText(/edit source/i));
     expect(screen.getByText(/edit source from url/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/source url/i), { target: { value: 'https://example.com/updated' } });
-    fireEvent.click(screen.getByRole('button', { name: /detect source/i }));
+    fireEvent.keyDown(screen.getByLabelText(/source url/i), { key: 'Enter', code: 'Enter', keyCode: 13 });
     await screen.findByText(/editable source/i);
     fireEvent.click(screen.getByRole('button', { name: /save source/i }));
 

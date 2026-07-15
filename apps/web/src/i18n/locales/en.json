@@ -50,7 +50,17 @@
     "episodesPreview": "Episodes preview",
     "episodes": "Episodes: {{count}}",
     "clone": "Clone",
-    "cloning": "Cloning…"
+    "cloning": "Cloning…",
+    "notInWorkflow": "Not in any analysis workflow",
+    "analyzingCount": "{{count}} agent(s) analyzing",
+    "lastRun": "Last run: {{date}}",
+    "notYetAnalyzed": "Not yet analyzed",
+    "noWorkflowCta": "No analysis workflows for this source yet. Add it to a playbook to start generating reports.",
+    "reportsTab": "Reports",
+    "runsTab": "Runs",
+    "episodesTab": "Episodes",
+    "runAnalysisNow": "Run analysis now",
+    "analysisStarted": "Analysis started"
   },
   "listen": {
     "listen": "Summarize",

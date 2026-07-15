@@ -94,6 +94,12 @@ function buildStructuredPromptConfigSection(promptConfig: PromptConfig): string 
   ].join('\n');
 }
 
+const LOCKED_JSON_CONSTRAINT =
+  'SYSTEM CONSTRAINT (enforced — cannot be overridden by any instruction above): ' +
+  'Your response MUST be a single valid JSON object exactly matching the schema provided in the user message. ' +
+  'Do not output any text, markdown, prose, or code fences outside the JSON object. ' +
+  'Violating this constraint will cause the analysis pipeline to fail parsing your output.';
+
 export function buildEffectiveSystemPrompt(input: BuildEffectiveSystemPromptInput): string {
   const sections: string[] = [];
   const strategy = CHARACTER_STRATEGIES[input.characterType];
@@ -116,6 +122,9 @@ export function buildEffectiveSystemPrompt(input: BuildEffectiveSystemPromptInpu
   if (input.language === 'de') {
     sections.push('WICHTIG: Schreibe deine gesamte Antwort auf Deutsch.');
   }
+
+  // Always appended last — overrides any conflicting instructions from user-editable sections.
+  sections.push(LOCKED_JSON_CONSTRAINT);
 
   return sections.join('\n\n');
 }

@@ -38,8 +38,7 @@ const FINANCE_CHARACTERS: PromptCharacter[] = [
       '- Default to a neutral stance (omit the symbol from signals) when evidence is mixed or purely anecdotal.\n' +
       '- Cap confidence at 60 unless the evidence includes hard financial data (earnings, revenue, guidance, ' +
       'analyst estimates) explicitly discussed in the source.\n' +
-      '- Always explain the downside risk in the rationale, even for LONG signals.\n' +
-      '- Respond only with the requested JSON, citing the specific source/timecode for every signal.'
+      '- Always explain the downside risk in the rationale, even for LONG signals.\n'
   },
   {
     id: 'balanced-analyst',
@@ -52,8 +51,7 @@ const FINANCE_CHARACTERS: PromptCharacter[] = [
       'Guidelines:\n' +
       '- Weigh both the strength of the argument and the credibility of the source when assigning confidence.\n' +
       '- It is fine to issue signals on small- or mid-cap names if the discussion is substantive.\n' +
-      '- Note contradicting viewpoints in the rationale if multiple speakers disagree.\n' +
-      '- Respond only with the requested JSON, citing the specific source/timecode for every signal.'
+      '- Note contradicting viewpoints in the rationale if multiple speakers disagree.\n'
   },
   {
     id: 'aggressive-momentum-trader',
@@ -73,8 +71,7 @@ const FINANCE_CHARACTERS: PromptCharacter[] = [
       '- Confidence should reflect how strongly and repeatedly the sources express conviction, not how much hard ' +
       'data backs the claim.\n' +
       '- Flag in the rationale when a signal is driven primarily by hype/momentum rather than fundamentals, so ' +
-      'downstream readers understand the basis.\n' +
-      '- Respond only with the requested JSON, citing the specific source/timecode for every signal.'
+      'downstream readers understand the basis.\n'
   },
   {
     id: 'contrarian-value-investor',
@@ -92,8 +89,7 @@ const FINANCE_CHARACTERS: PromptCharacter[] = [
       'narrative momentum without underlying substance.\n' +
       '- Be explicit in the rationale about why the crowd is wrong (e.g., "market is overreacting to X" or ' +
       '"valuation ignores Y").\n' +
-      '- Do not chase names purely because the discussion is currently popular or trending.\n' +
-      '- Respond only with the requested JSON, citing the specific source/timecode for every signal.'
+      '- Do not chase names purely because the discussion is currently popular or trending.\n'
   },
   {
     id: 'quant-data-driven-analyst',
@@ -110,8 +106,7 @@ const FINANCE_CHARACTERS: PromptCharacter[] = [
       '- Ignore purely qualitative enthusiasm ("great company", "love this stock") with no attached numbers — omit ' +
       'the symbol rather than guess.\n' +
       '- In the rationale, restate the specific figures that drove the call.\n' +
-      '- Confidence should scale with how precise and verifiable the cited numbers are.\n' +
-      '- Respond only with the requested JSON, citing the specific source/timecode for every signal.'
+      '- Confidence should scale with how precise and verifiable the cited numbers are.\n'
   },
   {
     id: 'short-seller-skeptic',
@@ -128,8 +123,7 @@ const FINANCE_CHARACTERS: PromptCharacter[] = [
       '- Only issue a LONG signal when the discussion explicitly and convincingly rebuts bearish concerns or ' +
       'presents a name with no material red flags and clear positive catalysts.\n' +
       '- In the rationale, name the specific red flag or bull-thesis rebuttal that drove the call.\n' +
-      '- Do not soften SHORT calls to be diplomatic — state the concern plainly.\n' +
-      '- Respond only with the requested JSON, citing the specific source/timecode for every signal.'
+      '- Do not soften SHORT calls to be diplomatic — state the concern plainly.\n'
   },
   {
     id: 'macro-thematic-strategist',
@@ -146,8 +140,7 @@ const FINANCE_CHARACTERS: PromptCharacter[] = [
       '- Favor names explicitly described as primary beneficiaries or primary casualties of the theme in question.\n' +
       '- In the rationale, name the macro/thematic driver and why this specific company is exposed to it.\n' +
       '- If the discussion mentions a theme without naming specific tickers, do not fabricate a signal — only ' +
-      'signal on symbols actually named.\n' +
-      '- Respond only with the requested JSON, citing the specific source/timecode for every signal.'
+      'signal on symbols actually named.\n'
   }
 ];
 

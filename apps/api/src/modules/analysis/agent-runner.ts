@@ -80,9 +80,21 @@ export class AgentRunner {
       const pendingCursorUpdates: SourceCursorState[] = [];
 
       const forcedEpisode = options?.forcedEpisode;
-      const sourcesToCrawl = forcedEpisode
-        ? agent.sources.filter((source) => source.type === forcedEpisode.sourceType && source.value === forcedEpisode.sourceValue)
-        : agent.sources;
+      let sourcesToCrawl: typeof agent.sources;
+      if (forcedEpisode) {
+        const matched = agent.sources.filter(
+          (source) => source.type === forcedEpisode.sourceType && source.value === forcedEpisode.sourceValue
+        );
+        // If the forced source isn't in agent.sources (e.g. it came from the library, not the agent's
+        // own source config), create an ad-hoc config so the run proceeds instead of silently
+        // returning succeeded_no_new_content.
+        sourcesToCrawl =
+          matched.length > 0
+            ? matched
+            : [{ type: forcedEpisode.sourceType, value: forcedEpisode.sourceValue, frequencyMinutes: 60, maxItems: 1 }];
+      } else {
+        sourcesToCrawl = agent.sources;
+      }
 
       for (const source of sourcesToCrawl) {
         try {

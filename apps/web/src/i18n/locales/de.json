@@ -50,7 +50,17 @@
     "episodesPreview": "Folgen-Vorschau",
     "episodes": "Folgen: {{count}}",
     "clone": "Klonen",
-    "cloning": "Wird geklont…"
+    "cloning": "Wird geklont…",
+    "notInWorkflow": "Kein Analyse-Workflow zugeordnet",
+    "analyzingCount": "{{count}} Agent(en) analysiert",
+    "lastRun": "Letzter Lauf: {{date}}",
+    "notYetAnalyzed": "Noch nicht analysiert",
+    "noWorkflowCta": "Noch kein Analyse-Workflow für diese Quelle. Füge sie einem Playbook hinzu, um Berichte zu erstellen.",
+    "reportsTab": "Berichte",
+    "runsTab": "Läufe",
+    "episodesTab": "Episoden",
+    "runAnalysisNow": "Analyse jetzt starten",
+    "analysisStarted": "Analyse gestartet"
   },
   "listen": {
     "listen": "Fasse zusammen!",

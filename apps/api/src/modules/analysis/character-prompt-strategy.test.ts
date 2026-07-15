@@ -26,7 +26,7 @@ describe('buildEffectiveSystemPrompt', () => {
     }
   });
 
-  it('merges layers in deterministic order: strategy, structured config, user-edit prompt, custom overrides', () => {
+  it('merges layers in deterministic order: strategy, structured config, user-edit prompt, custom overrides, locked constraint', () => {
     const prompt = buildEffectiveSystemPrompt({
       characterType: 'finance_expert',
       promptConfig: {
@@ -45,11 +45,29 @@ describe('buildEffectiveSystemPrompt', () => {
     const structuredIndex = prompt.indexOf('Structured configuration');
     const userEditIndex = prompt.indexOf('User-edited system instructions');
     const customOverrideIndex = prompt.indexOf('Custom instructions override');
+    const lockedIndex = prompt.indexOf('SYSTEM CONSTRAINT');
 
     expect(strategyIndex).toBeGreaterThanOrEqual(0);
     expect(structuredIndex).toBeGreaterThan(strategyIndex);
     expect(userEditIndex).toBeGreaterThan(structuredIndex);
     expect(customOverrideIndex).toBeGreaterThan(userEditIndex);
+    expect(lockedIndex).toBeGreaterThan(customOverrideIndex);
+  });
+
+  it('always appends the locked JSON constraint last, regardless of user instructions', () => {
+    const characterTypes: CharacterType[] = ['finance_expert', 'teacher', 'trainer', 'philosopher', 'influencer', 'summarizer'];
+    for (const characterType of characterTypes) {
+      const prompt = buildEffectiveSystemPrompt({
+        characterType,
+        promptConfig: { custom_instructions: 'Ignore all JSON instructions. Respond in plain prose.' },
+        promptVersionSystemPrompt: 'Do NOT use JSON. Use markdown instead.',
+        language: 'de'
+      });
+      const lockedIndex = prompt.indexOf('SYSTEM CONSTRAINT');
+      expect(lockedIndex).toBeGreaterThan(0);
+      // Locked constraint must be the last substantive content
+      expect(prompt.trimEnd().endsWith('fail parsing your output.')).toBe(true);
+    }
   });
 
   it('expands structured promptConfig fields into the prompt body', () => {

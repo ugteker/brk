@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState, type ReactNode, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Badge, Button, Card, Dropdown, Empty, Input, Layout, Modal, Popconfirm, Select, Steps, message, Tabs, Tag, Typography } from 'antd';
+import { Badge, Button, Card, Dropdown, Empty, Input, Layout, Modal, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
   AudioMutedOutlined,
   CheckCircleOutlined,
+  LoadingOutlined,
   BulbOutlined,
   CaretRightOutlined,
   ClockCircleOutlined,
@@ -75,6 +76,7 @@ import {
   deletePlaybook,
   listPlaybooks,
   publishPlaybook,
+  runPlaybookNow,
   sharePlaybook,
   updatePlaybook,
   type PlaybookRecord
@@ -92,6 +94,7 @@ import {
 } from '../api/sources';
 import { useAuth } from '../auth/AuthContext';
 import { EntityActions } from '../components/EntityActions';
+import { InlineDeleteButton } from '../components/InlineDeleteButton';
 import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID } from '../data/prompt-personas';
 
 const { Header, Content } = Layout;
@@ -137,8 +140,51 @@ interface AutoDetectedSource {
   previewItems: Array<{ title: string; link: string | null; pubDate: string | null }>;
 }
 
-const GHOST_CREATE_CARD_CLASS =
-  'group flex min-h-[170px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-sky-300 bg-gradient-to-br from-sky-50 via-white to-blue-50 p-4 text-center text-sky-800 shadow-sm transition hover:border-sky-500 hover:shadow-md hover:from-sky-100 hover:to-blue-100 dark:border-sky-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 dark:text-sky-100 dark:hover:border-sky-600 dark:hover:from-slate-800 dark:hover:to-slate-700';
+function GhostCreateCard({
+  ariaLabel,
+  onClick,
+  icon,
+  title,
+  sub,
+  className = ''
+}: {
+  ariaLabel: string;
+  onClick: () => void;
+  icon: ReactNode;
+  title: string;
+  sub?: string;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      className={`group relative flex min-h-[170px] flex-col items-center justify-center
+                  rounded-lg p-4 text-center text-sky-700 transition-all
+                  hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200 ${className}`}
+    >
+      <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+        <rect
+          x="1" y="1"
+          width="calc(100% - 2px)" height="calc(100% - 2px)"
+          rx="9" ry="9"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeDasharray="6 4"
+          style={{ animation: 'dash-march 14s linear infinite', opacity: 0.5 }}
+          className="transition-opacity group-hover:!opacity-100"
+        />
+      </svg>
+      <span className="relative z-10 flex flex-col items-center gap-2">
+        <span className="text-3xl transition-transform group-hover:scale-110">{icon}</span>
+        <span className="text-sm font-semibold">{title}</span>
+        {sub !== undefined && <span className="text-xs opacity-70">{sub}</span>}
+      </span>
+    </button>
+  );
+}
 
 function WizardSelectableCard({
   ariaLabel,
@@ -157,13 +203,28 @@ function WizardSelectableCard({
       aria-label={ariaLabel}
       aria-pressed={selected}
       onClick={onClick}
-      className="block h-full w-full text-left"
+      className="relative block h-full w-full text-left"
     >
+      {selected && (
+        <span
+          aria-hidden
+          className="absolute -top-[11px] right-2.5 z-10 flex h-[26px] w-[26px]
+                     items-center justify-center rounded-full bg-sky-500 text-[13px]
+                     shadow-md ring-2 ring-white dark:ring-slate-900"
+        >
+          🧠
+        </span>
+      )}
       <Card
         size="small"
-        hoverable
-        className={`h-full min-h-[170px] transition-shadow ${selected ? 'ring-2 ring-sky-500 dark:ring-sky-400' : ''}`}
-        style={{ cursor: 'pointer' }}
+        hoverable={!selected}
+        className={`h-full min-h-[190px] transition-all ${
+          selected ? 'bg-sky-50 dark:bg-sky-950/40' : ''
+        }`}
+        style={{
+          cursor: 'pointer',
+          ...(selected ? { outline: '2px solid #38bdf8', outlineOffset: '-2px' } : {})
+        }}
       >
         {children}
       </Card>
@@ -274,7 +335,25 @@ const PERSONA_ICON_MAP: Record<string, ReactNode> = {
   summarizer:     <FileTextOutlined />,
 };
 
-function getAgentCardDisplay(agent: AgentSummary, t: (key: string) => string): { intro: string; icon: ReactNode } {
+const PERSONA_COLOR_MAP: Record<string, string> = {
+  finance_expert: 'blue',
+  teacher:        'purple',
+  influencer:     'orange',
+  trainer:        'volcano',
+  philosopher:    'cyan',
+  summarizer:     'default',
+};
+
+const PERSONA_ICON_BG_MAP: Record<string, string> = {
+  finance_expert: 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-300',
+  teacher:        'bg-purple-50 text-purple-600 dark:bg-purple-950 dark:text-purple-300',
+  influencer:     'bg-orange-50 text-orange-600 dark:bg-orange-950 dark:text-orange-300',
+  trainer:        'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300',
+  philosopher:    'bg-cyan-50 text-cyan-600 dark:bg-cyan-950 dark:text-cyan-300',
+  summarizer:     'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+};
+
+function getAgentCardDisplay(agent: AgentSummary, t: (key: string) => string): { intro: string; icon: ReactNode; characterLabel: string; personalityLabel: string; personaId: string } {
   const characterId = agent.promptConfig?.personality_id ?? '';
   const personaId = agent.characterType ?? 'summarizer';
   const introKey = `personas.${personaId}.characters.${characterId}.intro`;
@@ -282,7 +361,9 @@ function getAgentCardDisplay(agent: AgentSummary, t: (key: string) => string): {
     ? t(introKey)
     : `I'm a ${getAgentPersonalityLabel(agent)} in the ${getAgentCharacterLabel(agent)} family. Give me a source and I'll get to work.`;
   const icon = PERSONA_ICON_MAP[personaId] ?? <FileTextOutlined />;
-  return { intro, icon };
+  const characterLabel = getAgentCharacterLabel(agent);
+  const personalityLabel = getAgentPersonalityLabel(agent);
+  return { intro, icon, characterLabel, personalityLabel, personaId };
 }
 
 /** Only podcast/YouTube sources have "episodes" to pick from - web_urls sources (single/listing
@@ -335,10 +416,18 @@ export function AgentsPage() {
   const [isSourceDetecting, setIsSourceDetecting] = useState(false);
   const [isSourceSaving, setIsSourceSaving] = useState(false);
   const [autoDetectedSource, setAutoDetectedSource] = useState<AutoDetectedSource | null>(null);
+  const detectNonceRef = useRef(0);
+  const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playbooks, setPlaybooks] = useState<PlaybookRecord[]>([]);
   const [playbooksLoadState, setPlaybooksLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [playbooksSearch, setPlaybooksSearch] = useState('');
   const [selectedPlaybookId, setSelectedPlaybookId] = useState<string | null>(null);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [activeSourceTab, setActiveSourceTab] = useState<string>('reports');
+  const [sourceDetailReports, setSourceDetailReports] = useState<RunReportDto[]>([]);
+  const [sourceDetailRuns, setSourceDetailRuns] = useState<RunDetailDto[]>([]);
+  const [sourceDetailLoading, setSourceDetailLoading] = useState(false);
+  const [sourceDetailRefreshKey, setSourceDetailRefreshKey] = useState(0);
   const [isPlaybookCreateOpen, setIsPlaybookCreateOpen] = useState(false);
   // When true the wizard was opened via "Follow this source" on a specific card;
   // step 0 (Pick source) is skipped because the source is already known.
@@ -379,6 +468,8 @@ export function AgentsPage() {
   const [marketplaceAgentCount, setMarketplaceAgentCount] = useState(0);
   const [marketplaceSourceCount, setMarketplaceSourceCount] = useState(0);
   const [marketplacePlaybookCount, setMarketplacePlaybookCount] = useState(0);
+  const [marketplaceAgentsSearch, setMarketplaceAgentsSearch] = useState('');
+  const [marketplacePlaybooksSearch, setMarketplacePlaybooksSearch] = useState('');
   const [accessGrantCount, setAccessGrantCount] = useState(0);
 
   /** Set of source IDs the current user already has an active playbook for. */
@@ -702,6 +793,39 @@ export function AgentsPage() {
     };
   }, [executionAgentId]);
 
+  // Load reports + runs for the selected source (merged from all agents analyzing it)
+  useEffect(() => {
+    if (!selectedSourceId) {
+      setSourceDetailReports([]);
+      setSourceDetailRuns([]);
+      return;
+    }
+    let alive = true;
+    const linked = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
+    if (linked.length === 0) {
+      setSourceDetailReports([]);
+      setSourceDetailRuns([]);
+      return;
+    }
+    setSourceDetailLoading(true);
+    const reportPromises = linked.map((pb) => listAgentReports(pb.agentId));
+    const runPromises = linked.map((pb) => listAgentRuns(pb.agentId));
+    Promise.all([...reportPromises, ...runPromises])
+      .then((results) => {
+        if (!alive) return;
+        const n = linked.length;
+        const allReports = (results.slice(0, n) as RunReportDto[][]).flat();
+        const allRuns = (results.slice(n) as RunDetailDto[][]).flat();
+        allReports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        allRuns.sort((a, b) => new Date(b.scheduledFor).getTime() - new Date(a.scheduledFor).getTime());
+        setSourceDetailReports(allReports);
+        setSourceDetailRuns(allRuns);
+      })
+      .catch(() => { /* silently ignore — empty state handles this */ })
+      .finally(() => { if (alive) setSourceDetailLoading(false); });
+    return () => { alive = false; };
+  }, [selectedSourceId, playbooks, sourceDetailRefreshKey]);
+
   useEffect(() => {
     if (!selectedAgentId) {
       setAccessGrantCount(0);
@@ -754,6 +878,7 @@ export function AgentsPage() {
         message.info('Another run is already in progress');
       } else {
         message.success('Agent run completed');
+        setSourceDetailRefreshKey((k) => k + 1);
       }
       if (executionAgentId === agent.id) {
         const [agentReports] = await Promise.all([listAgentReports(agent.id)]);
@@ -1247,6 +1372,20 @@ export function AgentsPage() {
     if (!normalizedPlaybooksSearch) return true;
     return `${playbook.name} ${playbook.description} ${playbook.sourceIds.join(' ')}`.toLowerCase().includes(normalizedPlaybooksSearch);
   });
+  const filteredMarketplaceSources = marketplaceSources.filter((item) => {
+    if (!normalizedSourceSearch) return true;
+    return `${item.title} ${item.value} ${item.summary}`.toLowerCase().includes(normalizedSourceSearch);
+  });
+  const normalizedMarketplaceAgentsSearch = marketplaceAgentsSearch.trim().toLowerCase();
+  const normalizedMarketplacePlaybooksSearch = marketplacePlaybooksSearch.trim().toLowerCase();
+  const filteredMarketplaceAgents = marketplaceAgents.filter((item) => {
+    if (!normalizedMarketplaceAgentsSearch) return true;
+    return `${item.title} ${item.summary} ${item.agent.name}`.toLowerCase().includes(normalizedMarketplaceAgentsSearch);
+  });
+  const filteredMarketplacePlaybooks = marketplacePlaybooks.filter((item) => {
+    if (!normalizedMarketplacePlaybooksSearch) return true;
+    return `${item.title} ${item.summary} ${item.playbook.name}`.toLowerCase().includes(normalizedMarketplacePlaybooksSearch);
+  });
 
   function getSourceDisplayTitle(source: SourceRecord): string {
     if (source.metadata.title?.trim()) return source.metadata.title;
@@ -1275,35 +1414,24 @@ export function AgentsPage() {
     return source.metadata.itemCount ?? source.metadata.previewItems.length;
   }
 
-  async function onDetectSourceFromUrl() {
-    const value = sourceUrlDraft.trim();
-    if (!value) {
-      message.warning('Enter a URL first');
-      return;
-    }
-    try {
-      new URL(value);
-    } catch {
-      message.error('Please enter a valid URL');
-      return;
-    }
-
+  async function onDetectSourceFromUrl(url: string) {
+    const nonce = ++detectNonceRef.current;
     setIsSourceDetecting(true);
     setAutoDetectedSource(null);
     try {
-      const candidates = detectSourceTypeCandidates(value);
+      const candidates = detectSourceTypeCandidates(url);
       let best: AutoDetectedSource | null = null;
       let bestScore = -1;
       let index = 0;
       for (const candidate of candidates) {
         try {
-          const probe = await probeSource({ type: candidate, value, maxItems: 5 });
+          const probe = await probeSource({ type: candidate, value: url, maxItems: 5 });
           const score = probeRankScore(probe as { reachable: boolean; kind: ProbeKind; confidence?: number }, candidate);
           if (score > bestScore) {
             bestScore = score;
             best = {
               type: candidate,
-              url: value,
+              url,
               kind: probe.kind,
               title: probe.title,
               coverImageUrl: probe.coverImageUrl,
@@ -1323,22 +1451,80 @@ export function AgentsPage() {
         index += 1;
       }
 
+      if (detectNonceRef.current !== nonce) return; // stale — a newer URL took over
+
       if (!best) {
         message.error('Could not detect this source yet. Please try another URL.');
         return;
       }
-
       setAutoDetectedSource(best);
     } finally {
-      setIsSourceDetecting(false);
+      if (detectNonceRef.current === nonce) setIsSourceDetecting(false);
     }
   }
 
+  function normaliseUrl(raw: string): string | null {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    try { new URL(withProto); return withProto; } catch { return null; }
+  }
+
+  function onSourceUrlChange(value: string) {
+    setSourceUrlDraft(value);
+    setAutoDetectedSource(null);
+    if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+    if (!value.trim()) {
+      setIsSourceDetecting(false);
+      return;
+    }
+    const url = normaliseUrl(value);
+    if (!url) return; // not a parseable URL yet — keep waiting
+    detectTimerRef.current = setTimeout(() => { void onDetectSourceFromUrl(url); }, 600);
+  }
+
   function closeSourceDialog() {
+    if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
     setIsSourceCreateOpen(false);
     setEditingSource(null);
     setAutoDetectedSource(null);
     setSourceUrlDraft('');
+  }
+
+  async function onRunSourceEpisode(episode?: { title: string; link: string; pubDate?: string | null }) {
+    if (!selectedSourceId) return;
+    const linked = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
+    if (linked.length === 0) return;
+
+    setActiveSourceTab('runs');
+
+    const agent = agents.find((a) => a.id === linked[0].agentId);
+    if (!agent) {
+      try {
+        await runPlaybookNow(linked[0].id);
+        setSourceDetailRefreshKey((k) => k + 1);
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : 'Failed to start analysis');
+      }
+      return;
+    }
+
+    if (!episode) {
+      // Non-episodic or "run latest" — delegate to the normal path
+      await executeRun(agent);
+      return;
+    }
+
+    const libSource = sources.find((s) => s.id === selectedSourceId);
+    if (!libSource) return;
+
+    // Run with this specific episode as the forced selection. The backend will create an ad-hoc
+    // source config if the library source URL is not already in agent.sources.
+    await executeRun(agent, {
+      sourceType: libSource.type as EpisodeOptionDto['sourceType'],
+      sourceValue: libSource.value,
+      itemLink: episode.link
+    });
   }
 
   async function onCreateDetectedSource() {
@@ -1618,9 +1804,9 @@ export function AgentsPage() {
                    {/* Marketplace grid — same rich card layout as library, Clone button only */}
                    {showSourcesMarketplace ? (
                      <div>
-                       {marketplaceSources.length === 0 ? <Empty description="No marketplace sources available." /> : null}
+                       {filteredMarketplaceSources.length === 0 ? <Empty description={normalizedSourceSearch ? 'No matching sources.' : 'No marketplace sources available.'} /> : null}
                        <div className="grid gap-3 sm:grid-cols-2">
-                         {marketplaceSources.map((item) => {
+                         {filteredMarketplaceSources.map((item) => {
                            const src = item as unknown as import('../api/sources').SourceRecord;
                            return (
                              <Card
@@ -1688,13 +1874,155 @@ export function AgentsPage() {
                    <>
                    {sourcesLoadState === 'loading' ? <p className="text-sm text-gray-700">{t('library.loadingSources')}</p> : null}
                    {sourcesLoadState === 'error' ? <p className="text-sm text-red-700">{t('library.failedSources')}</p> : null}
+                   {selectedSourceId ? (() => {
+                     const selectedSource = sources.find((s) => s.id === selectedSourceId);
+                     const linkedPlaybooks = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
+                     return selectedSource ? (
+                       <Card
+                         className="min-w-0"
+                         title={
+                           <span className="flex items-center gap-2">
+                             {getSourceDisplayTitle(selectedSource)}
+                             <Tag>{selectedSource.type === 'podcast_feeds' ? 'Podcast' : selectedSource.type === 'youtube_videos' ? 'YouTube' : 'Web'}</Tag>
+                           </span>
+                         }
+                         extra={
+                           <div className="flex items-center gap-2">
+                             {linkedPlaybooks.length > 0 && (selectedSource.type !== 'youtube_videos' && selectedSource.type !== 'podcast_feeds') ? (
+                               <TouchSafeTooltip title={t('library.runAnalysisNow')}>
+                                 <Button
+                                   aria-label={t('library.runAnalysisNow')}
+                                   shape="circle"
+                                   loading={runningAgentId === linkedPlaybooks[0]?.agentId}
+                                   icon={<CaretRightOutlined />}
+                                   onClick={() => void onRunSourceEpisode(undefined)}
+                                 />
+                               </TouchSafeTooltip>
+                             ) : null}
+                             <TouchSafeTooltip title={t('library.backToLibrary')}>
+                               <Button
+                                 aria-label={t('library.backToLibrary')}
+                                 shape="circle"
+                                 icon={<ArrowLeftOutlined />}
+                                 onClick={() => setSelectedSourceId(null)}
+                               />
+                             </TouchSafeTooltip>
+                             <TouchSafeTooltip title={t('common.edit')}>
+                               <Button
+                                 aria-label={t('common.edit')}
+                                 shape="circle"
+                                 icon={<EditOutlined />}
+                                 onClick={() => onEditSource(selectedSource)}
+                               />
+                             </TouchSafeTooltip>
+                           </div>
+                         }
+                       >
+                         {linkedPlaybooks.length === 0 ? (
+                           <Empty
+                             description={
+                               <span className="text-sm text-gray-600">
+                                 {t('library.noWorkflowCta')}
+                               </span>
+                             }
+                           />
+                         ) : (
+                           <Tabs
+                             activeKey={activeSourceTab}
+                             onChange={setActiveSourceTab}
+                             items={[
+                               ...(selectedSource.type === 'youtube_videos' || selectedSource.type === 'podcast_feeds'
+                                 ? [{
+                                     key: 'episodes',
+                                     label: t('library.episodesTab'),
+                                     children: (() => {
+                                       const episodes = selectedSource.metadata.previewItems.filter((item) => Boolean(item.link));
+                                       const linkedAgent = agents.find((a) => a.id === linkedPlaybooks[0]?.agentId);
+                                       return episodes.length === 0 ? (
+                                         <Empty description={<span className="text-sm text-gray-500">{t('library.noEpisodes')}</span>} />
+                                       ) : (
+                                         <ul className="divide-y divide-gray-100">
+                                           {episodes.map((ep) => (
+                                             <li key={ep.link} className="flex items-center gap-3 py-2.5">
+                                               <div className="min-w-0 flex-1">
+                                                 <div className="truncate text-sm font-medium">{ep.title}</div>
+                                                 {ep.pubDate ? (
+                                                   <div className="mt-0.5 text-xs text-gray-400">
+                                                     {new Date(ep.pubDate).toLocaleDateString()}
+                                                   </div>
+                                                 ) : null}
+                                               </div>
+                                               {linkedAgent ? (
+                                                 <TouchSafeTooltip title={t('library.runAnalysisNow')}>
+                                                   <Button
+                                                     size="small"
+                                                     shape="circle"
+                                                     aria-label={t('library.runAnalysisNow')}
+                                                     icon={<CaretRightOutlined />}
+                                                     loading={runningAgentId === linkedAgent.id}
+                                                     onClick={() => void onRunSourceEpisode({ title: ep.title, link: ep.link!, pubDate: ep.pubDate })}
+                                                   />
+                                                 </TouchSafeTooltip>
+                                               ) : null}
+                                             </li>
+                                           ))}
+                                         </ul>
+                                       );
+                                     })()
+                                   }]
+                                 : []),
+                               {
+                                 key: 'reports',
+                                 label: (
+                                   <span className="flex items-center gap-1.5">
+                                     {t('library.reportsTab')}
+                                     {!sourceDetailLoading && sourceDetailReports.length > 0 ? (
+                                       <Badge count={sourceDetailReports.length} color="blue" size="small" overflowCount={99} />
+                                     ) : null}
+                                   </span>
+                                 ),
+                                 children: sourceDetailLoading ? (
+                                   <Skeleton active paragraph={{ rows: 4 }} />
+                                 ) : (
+                                   <AgentReportsBrowser
+                                     agentId={linkedPlaybooks[0].agentId}
+                                     reports={sourceDetailReports}
+                                     onSelectSymbol={setViewingSymbol}
+                                   />
+                                 )
+                               },
+                               {
+                                 key: 'runs',
+                                 label: (
+                                   <span className="flex items-center gap-1.5">
+                                     {t('library.runsTab')}
+                                     {!sourceDetailLoading && sourceDetailRuns.length > 0 ? (
+                                       <Badge count={sourceDetailRuns.length} color="default" size="small" overflowCount={99} />
+                                     ) : null}
+                                   </span>
+                                 ),
+                                 children: sourceDetailLoading ? (
+                                   <Skeleton active paragraph={{ rows: 4 }} />
+                                 ) : (
+                                   <AgentRunsBrowser
+                                     agentId={linkedPlaybooks[0].agentId}
+                                     runs={sourceDetailRuns}
+                                   />
+                                 )
+                               }
+                             ]}
+                           />
+                         )}
+                       </Card>
+                     ) : null;
+                   })() : (
                    <div className="grid gap-3 sm:grid-cols-2">
                      {filteredSources.map((source) => (
                        <Card
                          key={source.id}
                          size="small"
                          hoverable
-                         onClick={() => setExpandedSourceId((current) => (current === source.id ? null : source.id))}
+                         onClick={() => { setSelectedSourceId(source.id); setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports'); }}
                          style={{ cursor: 'pointer' }}
                          className="min-h-[170px] transition-shadow"
                          extra={
@@ -1767,40 +2095,54 @@ export function AgentsPage() {
                          <div className="mt-3 text-xs text-gray-700">
                            {source.metadata.previewItems.length > 0 ? (
                              <>
-                               <div className="mb-1 font-medium">
-                                 {expandedSourceId === source.id ? 'Episodes preview' : 'Recent episodes preview'}
-                               </div>
+                               <div className="mb-1 font-medium">{t('library.recentEpisodes')}</div>
                                <ul className="list-inside list-disc space-y-1">
-                                 {(expandedSourceId === source.id
-                                   ? source.metadata.previewItems
-                                   : source.metadata.previewItems.slice(0, 3)
-                                 ).map((item) => (
+                                 {source.metadata.previewItems.slice(0, 3).map((item) => (
                                    <li key={`${source.id}:${item.link ?? item.title}`}>{item.title}</li>
                                  ))}
                                </ul>
                              </>
                            ) : (
-                             'No scanned episodes/items yet'
+                             t('library.noEpisodes')
                            )}
                          </div>
+                         {(() => {
+                           const linked = playbooks.filter((p) => p.sourceIds.includes(source.id));
+                           if (linked.length === 0) return (
+                             <div className="mt-3 border-t border-gray-100 pt-2 text-xs text-gray-400">
+                               {t('library.notInWorkflow')}
+                             </div>
+                           );
+                           const latestRun = linked
+                             .map((p) => p.lastRunAt)
+                             .filter(Boolean)
+                             .sort()
+                             .pop();
+                           return (
+                             <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-2 text-xs text-gray-500">
+                               <Tag color="cyan" className="m-0">{t('library.analyzingCount', { count: linked.length })}</Tag>
+                               {latestRun
+                                 ? <span>{t('library.lastRun', { date: new Date(latestRun).toLocaleString() })}</span>
+                                 : <span>{t('library.notYetAnalyzed')}</span>}
+                             </div>
+                           );
+                         })()}
                        </Card>
                      ))}
-                     <button
-                       type="button"
-                       aria-label="Create new source"
+                     <GhostCreateCard
+                       ariaLabel="Create new source"
                        onClick={() => {
                          setEditingSource(null);
                          setIsSourceCreateOpen(true);
                          setSourceUrlDraft('');
                          setAutoDetectedSource(null);
                        }}
-                       className={GHOST_CREATE_CARD_CLASS}
-                     >
-                       <DatabaseOutlined className="text-3xl text-sky-700" />
-                       <span className="mt-2 text-base font-semibold">Create new source</span>
-                       <span className="mt-1 text-xs font-normal text-sky-700">URL detect + metadata preview</span>
-                     </button>
+                       icon={<DatabaseOutlined />}
+                       title="Create new source"
+                       sub="URL detect + metadata preview"
+                     />
                    </div>
+                   )}
                    </>
                    ) : null}
                    <Modal
@@ -1837,42 +2179,75 @@ export function AgentsPage() {
                          aria-label="Source URL"
                          value={sourceUrlDraft}
                          placeholder="https://..."
-                         onChange={(event) => setSourceUrlDraft(event.currentTarget.value)}
+                         onChange={(e) => onSourceUrlChange(e.currentTarget.value)}
+                         onPressEnter={() => {
+                           if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+                           const url = normaliseUrl(sourceUrlDraft);
+                           if (url) void onDetectSourceFromUrl(url);
+                         }}
+                         onPaste={(e) => {
+                           const pasted = e.clipboardData.getData('text');
+                           const url = normaliseUrl(pasted);
+                           if (!url) return;
+                           if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+                           // Short delay lets React process onChange first
+                           detectTimerRef.current = setTimeout(() => { void onDetectSourceFromUrl(url); }, 50);
+                         }}
+                         suffix={
+                           isSourceDetecting
+                             ? <LoadingOutlined spin className="text-sky-500" />
+                             : autoDetectedSource
+                               ? <CheckCircleOutlined className="text-green-500" />
+                               : null
+                         }
                        />
-                       <Button onClick={onDetectSourceFromUrl} loading={isSourceDetecting}>
-                         Detect source
-                       </Button>
-                       {autoDetectedSource ? (
-                         <Card size="small" title={autoDetectedSource.title ?? autoDetectedSource.url}>
-                           <div className="mb-2 flex items-center gap-2">
-                             <Tag>
-                               {autoDetectedSource.type === 'podcast_feeds'
-                                 ? 'Podcast feed'
-                                 : autoDetectedSource.type === 'youtube_videos'
-                                   ? 'YouTube'
-                                   : 'Web'}
-                             </Tag>
-                             <Tag>{autoDetectedSource.kind}</Tag>
-                           </div>
-                           {autoDetectedSource.coverImageUrl ? (
-                             <img
-                               src={autoDetectedSource.coverImageUrl}
-                               alt="Detected cover"
-                               className="mb-2 h-20 w-20 rounded-md object-cover"
-                             />
-                           ) : (
-                             <div className="mb-2 inline-flex rounded border border-dashed px-2 py-1 text-xs text-gray-500">
-                               No cover detected
+                       {isSourceDetecting ? (
+                         <Card size="small">
+                           <div className="flex gap-3">
+                             <Skeleton.Image active className="!h-16 !w-16 shrink-0 rounded-md" />
+                             <div className="flex-1 min-w-0">
+                               <Skeleton active title={{ width: '60%' }} paragraph={{ rows: 2 }} />
                              </div>
-                           )}
-                           <div className="text-xs text-gray-700">
-                             {autoDetectedSource.previewItems.length > 0 ? (
-                               autoDetectedSource.previewItems.map((previewItem) => <div key={previewItem.link ?? previewItem.title}>{previewItem.title}</div>)
-                             ) : (
-                               <div>No episodes/items preview available</div>
-                             )}
                            </div>
-                        </Card>
+                         </Card>
+                       ) : autoDetectedSource ? (
+                         <Card size="small">
+                           <div className="flex gap-3">
+                             {autoDetectedSource.coverImageUrl ? (
+                               <img
+                                 src={autoDetectedSource.coverImageUrl}
+                                 alt="Source cover"
+                                 className="h-16 w-16 shrink-0 rounded-md object-cover shadow-sm"
+                               />
+                             ) : (
+                               <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-dashed text-xl text-gray-400">
+                                 🎙
+                               </div>
+                             )}
+                             <div className="min-w-0 flex-1">
+                               <div className="mb-1 truncate text-sm font-semibold">
+                                 {autoDetectedSource.title ?? autoDetectedSource.url}
+                               </div>
+                               <div className="mb-2 flex flex-wrap gap-1">
+                                 <Tag>
+                                   {autoDetectedSource.type === 'podcast_feeds'
+                                     ? 'Podcast'
+                                     : autoDetectedSource.type === 'youtube_videos'
+                                       ? 'YouTube'
+                                       : 'Web'}
+                                 </Tag>
+                                 <Tag>{autoDetectedSource.kind}</Tag>
+                               </div>
+                               <div className="space-y-0.5 text-xs text-gray-500">
+                                 {autoDetectedSource.previewItems.length > 0
+                                   ? autoDetectedSource.previewItems.map((item) => (
+                                       <div key={item.link ?? item.title} className="truncate">{item.title}</div>
+                                     ))
+                                   : <span>No episode preview available</span>}
+                               </div>
+                             </div>
+                           </div>
+                         </Card>
                        ) : null}
                      </div>
                    </Modal>
@@ -1960,24 +2335,13 @@ export function AgentsPage() {
                                 onClick={(event) => onTogglePause(selectedAgent, event)}
                               />
                             </TouchSafeTooltip>
-                            <Popconfirm
-                              title="Remove this agent?"
-                              description="This permanently deletes the agent, its schedule, prompts, and reports."
-                              okText="Remove"
-                              okButtonProps={{ danger: true }}
-                              onConfirm={() => onDeleteAgent(selectedAgent)}
-                            >
-                              <TouchSafeTooltip title="Remove agent">
-                                <Button
-                                  aria-label="Remove agent"
-                                  shape="circle"
-                                  danger
-                                  loading={deletingAgentId === selectedAgent.id}
-                                  icon={<DeleteOutlined />}
-                                  onClick={(event) => event.stopPropagation()}
+                            <TouchSafeTooltip title="Remove agent">
+                                <InlineDeleteButton
+                                  ariaLabel="Remove agent"
+                                  confirmText="Remove"
+                                  onConfirm={() => onDeleteAgent(selectedAgent)}
                                 />
                               </TouchSafeTooltip>
-                            </Popconfirm>
                           </div>
                         }
                       >
@@ -2067,31 +2431,37 @@ export function AgentsPage() {
                               </div>
                             </Card>
                           ))}
-                          <button
-                            type="button"
-                            aria-label="Create follower"
-                            onClick={() => {
-                              setIsCreatingAgent(true);
-                              setEditingAgent(null);
-                              setSelectedAgentId(null);
-                            }}
-                            className={`${GHOST_CREATE_CARD_CLASS} w-full`}
-                          >
-                            <AppstoreOutlined className="text-3xl text-sky-700" />
-                            <span className="mt-2 text-base font-semibold">Create follower</span>
-                            <span className="mt-1 text-xs font-normal text-sky-700">Character + personality setup</span>
-                          </button>
+                          <GhostCreateCard
+                           ariaLabel="Create follower"
+                           onClick={() => {
+                             setIsCreatingAgent(true);
+                             setEditingAgent(null);
+                             setSelectedAgentId(null);
+                           }}
+                           icon={<AppstoreOutlined />}
+                           title="Create follower"
+                           sub="Character + personality setup"
+                           className="w-full"
+                          />
                         </div>
                         <Modal
                           title="Marketplace agents"
                           open={showAgentsMarketplace}
-                          onCancel={() => setShowAgentsMarketplace(false)}
+                          onCancel={() => { setShowAgentsMarketplace(false); setMarketplaceAgentsSearch(''); }}
                           footer={null}
                           destroyOnHidden
                         >
-                          <div className="space-y-2">
-                            {marketplaceAgents.length === 0 ? <Empty description="No marketplace agents available." /> : null}
-                            {marketplaceAgents.map((item) => (
+                          <div className="space-y-3">
+                            <Input
+                              aria-label="Search marketplace agents"
+                              value={marketplaceAgentsSearch}
+                              onChange={(e) => setMarketplaceAgentsSearch(e.currentTarget.value)}
+                              placeholder="Search by name or description"
+                              prefix={<SearchOutlined />}
+                              allowClear
+                            />
+                            {filteredMarketplaceAgents.length === 0 ? <Empty description={marketplaceAgentsSearch ? 'No matching agents.' : 'No marketplace agents available.'} /> : null}
+                            {filteredMarketplaceAgents.map((item) => (
                               <Card key={item.publicationId} size="small">
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="min-w-0">
@@ -2263,29 +2633,34 @@ export function AgentsPage() {
                               </div>
                             </Card>
                           ))}
-                          <button
-                            type="button"
-                            aria-label="Create new playbook"
-                            onClick={openPlaybookCreate}
-                            className={GHOST_CREATE_CARD_CLASS}
-                          >
-                            <RocketOutlined className="text-3xl text-sky-700" />
-                            <span className="mt-2 text-base font-semibold">Create new playbook</span>
-                            <span className="mt-1 text-xs font-normal text-sky-700">Agent + sources + schedule</span>
-                          </button>
+                          <GhostCreateCard
+                           ariaLabel="Create new playbook"
+                           onClick={openPlaybookCreate}
+                           icon={<RocketOutlined />}
+                           title="Create new playbook"
+                           sub="Agent + sources + schedule"
+                          />
                         </div>
                       </>
                     )}
                     <Modal
                       title="Marketplace playbooks"
                       open={showPlaybooksMarketplace}
-                      onCancel={() => setShowPlaybooksMarketplace(false)}
+                      onCancel={() => { setShowPlaybooksMarketplace(false); setMarketplacePlaybooksSearch(''); }}
                       footer={null}
                       destroyOnHidden
                     >
-                      <div className="space-y-2">
-                        {marketplacePlaybooks.length === 0 ? <Empty description="No marketplace playbooks available." /> : null}
-                        {marketplacePlaybooks.map((item) => (
+                      <div className="space-y-3">
+                        <Input
+                          aria-label="Search marketplace playbooks"
+                          value={marketplacePlaybooksSearch}
+                          onChange={(e) => setMarketplacePlaybooksSearch(e.currentTarget.value)}
+                          placeholder="Search by name or description"
+                          prefix={<SearchOutlined />}
+                          allowClear
+                        />
+                        {filteredMarketplacePlaybooks.length === 0 ? <Empty description={marketplacePlaybooksSearch ? 'No matching playbooks.' : 'No marketplace playbooks available.'} /> : null}
+                        {filteredMarketplacePlaybooks.map((item) => (
                           <Card key={item.publicationId} size="small">
                             <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
@@ -2432,7 +2807,9 @@ export function AgentsPage() {
                 {agents.map((agent) => {
                   const selected = playbookAgentIdDraft === agent.id;
                   const anySelected = playbookAgentIdDraft !== null;
-                  const { intro, icon } = getAgentCardDisplay(agent, t);
+                  const { intro, icon, characterLabel, personalityLabel, personaId } = getAgentCardDisplay(agent, t);
+                  const iconBgClass = PERSONA_ICON_BG_MAP[personaId] ?? PERSONA_ICON_BG_MAP['summarizer'];
+                  const tagColor = PERSONA_COLOR_MAP[personaId] ?? 'default';
 
                   return (
                     <div
@@ -2447,60 +2824,50 @@ export function AgentsPage() {
                         setShowInlineAgentCreate(false);
                       }}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 shrink-0 text-xl text-gray-500">
-                          {icon}
+                      {/* Row 1: icon pill + agent name + controls */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`shrink-0 rounded-md p-1.5 text-base leading-none ${iconBgClass}`}>
+                            {icon}
+                          </span>
+                          <span className="text-sm font-semibold truncate">
+                            <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={agent.name} />
+                          </span>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="text-sm font-semibold">
-                              <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={agent.name} />
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {selected ? <BrainIcon style={{ fontSize: '1.1em' }} /> : null}
-                              <Popconfirm
-                                title={t('agent.deleteConfirmTitle')}
-                                description={t('agent.deleteConfirmDesc')}
-                                okText={t('common.delete')}
-                                okButtonProps={{ danger: true }}
-                                onConfirm={async (e) => {
-                                  e?.stopPropagation();
-                                  await deleteAgent(agent.id);
-                                  if (playbookAgentIdDraft === agent.id) setPlaybookAgentIdDraft(null);
-                                  const refreshed = await listAgents();
-                                  setAgents(refreshed);
-                                }}
-                                onPopupClick={(e) => e.stopPropagation()}
-                              >
-                                <Button
-                                  size="small"
-                                  type="text"
-                                  danger
-                                  icon={<DeleteOutlined />}
-                                  aria-label={`Delete agent ${agent.name}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              </Popconfirm>
-                            </div>
-                          </div>
-                          <p className="mt-1 text-xs text-gray-500 italic">{intro}</p>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <InlineDeleteButton
+                              ariaLabel={`Delete agent ${agent.name}`}
+                              confirmText={t('common.delete')}
+                              onConfirm={async () => {
+                                await deleteAgent(agent.id);
+                                if (playbookAgentIdDraft === agent.id) setPlaybookAgentIdDraft(null);
+                                const refreshed = await listAgents();
+                                setAgents(refreshed);
+                              }}
+                            />
                         </div>
                       </div>
+                      {/* Row 2: character + personality identity tags */}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <Tag color={tagColor}>{characterLabel}</Tag>
+                        <Tag>{personalityLabel}</Tag>
+                      </div>
+                      {/* Row 3: greeting intro — quoted and italic */}
+                      <p className="mt-2 text-xs italic text-gray-500 dark:text-gray-400 leading-relaxed">
+                        &ldquo;{intro}&rdquo;
+                      </p>
                     </WizardSelectableCard>
                     </div>
                   );
                 })}
                 {/* "Create new agent" ghost card — shown only when not in sub-wizard */}
-                <button
-                  type="button"
-                  aria-label={t('agent.createNew')}
+                <GhostCreateCard
+                  ariaLabel={t('agent.createNew')}
                   onClick={openInlineAgentCreate}
-                  className={GHOST_CREATE_CARD_CLASS}
-                >
-                  <PlusOutlined className="text-2xl text-sky-700" />
-                  <span className="mt-1 text-sm font-semibold">{t('agent.createNew')}</span>
-                  <span className="mt-0.5 text-xs font-normal text-sky-700">{t('agent.createNewSub')}</span>
-                </button>
+                  icon={<PlusOutlined />}
+                  title={t('agent.createNew')}
+                  sub={t('agent.createNewSub')}
+                />
               </div>
               ) : null}
               {showInlineAgentCreate ? (() => {
