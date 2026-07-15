@@ -12,7 +12,7 @@ import { AuthProvider, useAuth } from '../auth/AuthContext';
 
 const TOTAL_STEPS = 3;
 
-function renderAgentsPage(options?: { openAgentsHub?: boolean }) {
+async function renderAgentsPage(options?: { openAgentsHub?: boolean }) {
   const utils = render(
     <AuthProvider>
       <ThemeProvider>
@@ -21,7 +21,10 @@ function renderAgentsPage(options?: { openAgentsHub?: boolean }) {
     </AuthProvider>
   );
   if (options?.openAgentsHub ?? true) {
-    fireEvent.click(screen.getByRole('tab', { name: /agents/i }));
+    const menuBtn = await screen.findByRole('button', { name: /account menu/i });
+    fireEvent.click(menuBtn);
+    fireEvent.click(await screen.findByRole('menuitem', { name: /agents & playbooks/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
   }
   return utils;
 }
@@ -49,6 +52,7 @@ vi.mock('../api/auth', () => ({
     id: 'user-1',
     email: 'trader@example.com',
     displayName: 'Trader',
+    role: 'admin',
     hasPassword: true,
     hasGoogleLinked: false,
     createdAt: new Date().toISOString()
@@ -222,16 +226,16 @@ it('sends active:false when the Active toggle is switched off', async () => {
   expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({ active: false }));
 });
 
-it('cancels the wizard and returns to the dashboard', () => {
-  renderAgentsPage();
+it('cancels the wizard and returns to the dashboard', async () => {
+  await renderAgentsPage();
 
-  fireEvent.click(screen.getByRole('button', { name: /create agent/i }));
+  fireEvent.click(screen.getByRole('button', { name: /create follower/i }));
   expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
 
   expect(screen.getByRole('heading', { name: 'ChatTrader' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /create agent/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /create follower/i })).toBeInTheDocument();
 });
 
 it('clicking the app name returns to the sources hub from an agent detail view', async () => {
@@ -244,7 +248,7 @@ it('clicking the app name returns to the sources hub from an agent detail view',
     }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   fireEvent.click(await screen.findByText(/housing agent/i));
   expect(await screen.findByRole('button', { name: /back to dashboard/i })).toBeInTheDocument();
@@ -252,7 +256,7 @@ it('clicking the app name returns to the sources hub from an agent detail view',
   fireEvent.click(screen.getByRole('heading', { name: 'ChatTrader' }));
 
   expect(await screen.findByRole('tab', { name: /library/i })).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: /library/i })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /back to dashboard/i })).not.toBeInTheDocument();
 });
 
@@ -266,18 +270,17 @@ it('loads agents from the backend when the dashboard opens', async () => {
     }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   expect(listAgents).toHaveBeenCalled();
   expect(await screen.findByText(/housing agent/i)).toBeInTheDocument();
 });
 
-it('renders ChatTrader dashboard with three hubs by default', () => {
+it('renders ChatTrader dashboard with admin hubs revealed on demand', async () => {
   renderAgentsPage({ openAgentsHub: false });
   expect(screen.getByRole('heading', { name: 'ChatTrader' })).toBeInTheDocument();
-  expect(screen.getByRole('tab', { name: /library/i })).toBeInTheDocument();
-  expect(screen.getByRole('tab', { name: /agents/i })).toBeInTheDocument();
-  expect(screen.getByRole('tab', { name: /playbooks/i })).toBeInTheDocument();
+  expect(screen.queryByRole('tab', { name: /agents/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
 });
 
 it('removes an agent after confirming the popconfirm', async () => {
@@ -286,11 +289,12 @@ it('removes an agent after confirming the popconfirm', async () => {
       id: 'agent-1',
       name: 'Housing Agent',
       status: 'active',
+      ownerUserId: 'user-1',
       sources: [{ type: 'web_urls', value: 'https://example.com' }]
     }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   expect(await screen.findByText(/housing agent/i)).toBeInTheDocument();
   vi.mocked(listAgents).mockResolvedValueOnce([]);
@@ -299,7 +303,7 @@ it('removes an agent after confirming the popconfirm', async () => {
   fireEvent.click(await screen.findByRole('button', { name: /^remove$/i }));
 
   expect(deleteAgent).toHaveBeenCalledWith('agent-1');
-  expect(await screen.findByRole('button', { name: /create agent/i })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /create follower/i })).toBeInTheDocument();
 });
 
 it('runs an agent now via the run-now button', async () => {
@@ -331,7 +335,7 @@ it('runs an agent now via the run-now button', async () => {
     }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
   fireEvent.click(await screen.findByText(/execution playbook/i));
@@ -373,7 +377,7 @@ it('shows an episode picker for an agent with a podcast source, and runs the sel
     { sourceType: 'podcast_feeds', sourceValue: 'https://example.com/feed.xml', title: 'Episode 2', link: 'https://example.com/ep-2', pubDate: null }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
   fireEvent.click(await screen.findByText(/podcast playbook/i));
@@ -423,7 +427,7 @@ it('runs normally from the episode picker without a forced episode', async () =>
   ]);
   vi.mocked(listAgentEpisodeOptions).mockResolvedValueOnce([]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
   fireEvent.click(await screen.findByText(/podcast playbook/i));
@@ -471,7 +475,7 @@ it('shows only the first 5 episodes in the picker, revealing the rest via "Show 
   }));
   vi.mocked(listAgentEpisodeOptions).mockResolvedValueOnce(episodes);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
   fireEvent.click(await screen.findByText(/podcast playbook/i));
@@ -520,7 +524,7 @@ it('does not show a "Show more" button in the picker when there are 5 or fewer e
     { sourceType: 'podcast_feeds', sourceValue: 'https://example.com/feed.xml', title: 'Episode 1', link: 'https://example.com/ep-1', pubDate: null }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
   fireEvent.click(await screen.findByText(/podcast playbook/i));
@@ -530,8 +534,8 @@ it('does not show a "Show more" button in the picker when there are 5 or fewer e
   expect(screen.queryByRole('button', { name: /show more/i })).not.toBeInTheDocument();
 });
 
-it('toggles between light and dark theme', () => {
-  renderAgentsPage();
+it('toggles between light and dark theme', async () => {
+  await renderAgentsPage();
   const picker = screen.getAllByLabelText(/theme picker/i)[0];
 
   fireEvent.click(picker);
@@ -553,7 +557,7 @@ it(
       }
     ]);
 
-    renderAgentsPage();
+    await renderAgentsPage();
 
     fireEvent.click(await screen.findByText(/housing agent/i));
     fireEvent.click(await screen.findByRole('button', { name: /edit agent/i }));

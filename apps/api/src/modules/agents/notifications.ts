@@ -2,6 +2,7 @@ import type { MailerLike } from '../auth/mailer';
 import type { Agent } from './types';
 import type { RunReportRecord } from '../reports/types';
 import { config } from '../../config';
+import { logger } from '../../lib/logger';
 
 export type AgentChangeAction = 'created' | 'updated';
 
@@ -51,8 +52,7 @@ export async function sendAgentChangeConfirmation(
       try {
         await mailer.send({ to, subject, text, html });
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn(`[agents] Failed to send ${action} confirmation email to ${to}:`, error);
+        logger.warn(`[agents] Failed to send ${action} confirmation email to ${to}`, error);
       }
     })
   );
@@ -186,8 +186,7 @@ export async function sendReportNotification(
       try {
         await mailer.send({ to, subject, text, html });
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn(`[agents] Failed to send report notification email to ${to}:`, error);
+        logger.warn(`[agents] Failed to send report notification email to ${to}`, error);
       }
     })
   );

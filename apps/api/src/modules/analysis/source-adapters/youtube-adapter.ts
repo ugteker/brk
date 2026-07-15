@@ -5,6 +5,7 @@ import { parseFeedItems, parseFeedMetadata } from './feed-items';
 import type { SourceProbeResult } from './smart-crawler';
 import { toPreviewItems } from './smart-crawler';
 import { ProxyAgent } from 'undici';
+import { logger } from '../../../lib/logger';
 
 const DEFAULT_MAX_ITEMS_PER_RUN = 1;
 const ABSOLUTE_MAX_ITEMS_PER_RUN = 10;
@@ -256,7 +257,7 @@ async function fetchCaptionTracks(
   // giving enough detail to tell apart the possible causes (bot-walled watch page vs. a
   // client-specific innertube rejection vs. a network-level block) without needing server access.
   if (!apiKey) {
-    console.warn(`[youtube-adapter] video ${videoId}: no INNERTUBE_API_KEY found in watch page HTML (len=${watchPageHtml.length}) - likely served a stripped-down/bot-walled page`);
+    logger.warn(`[youtube-adapter] video ${videoId}: no INNERTUBE_API_KEY found in watch page HTML (len=${watchPageHtml.length}) - likely served a stripped-down/bot-walled page`);
   }
   if (apiKey) {
     for (const attempt of INNERTUBE_CLIENT_ATTEMPTS) {
@@ -269,12 +270,12 @@ async function fetchCaptionTracks(
         const data = JSON.parse(responseText);
         const tracks: YouTubeCaptionTrack[] | undefined = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
         if (tracks && tracks.length > 0) return tracks;
-        console.warn(
+        logger.warn(
           `[youtube-adapter] video ${videoId}: innertube client "${attempt.context.client.clientName}" returned 0 caption tracks ` +
             `(playabilityStatus=${JSON.stringify(data?.playabilityStatus?.status)}, responseLen=${responseText.length})`
         );
       } catch (error) {
-        console.warn(
+        logger.warn(
           `[youtube-adapter] video ${videoId}: innertube client "${attempt.context.client.clientName}" request threw: ${error instanceof Error ? error.message : String(error)}`
         );
       }
@@ -283,7 +284,7 @@ async function fetchCaptionTracks(
 
   const fallbackBaseUrl = extractCaptionTrackBaseUrl(watchPageHtml);
   if (!fallbackBaseUrl) {
-    console.warn(`[youtube-adapter] video ${videoId}: watch-page scrape fallback also found no captionTracks in the embedded player response`);
+    logger.warn(`[youtube-adapter] video ${videoId}: watch-page scrape fallback also found no captionTracks in the embedded player response`);
   }
   return fallbackBaseUrl ? [{ baseUrl: fallbackBaseUrl }] : [];
 }

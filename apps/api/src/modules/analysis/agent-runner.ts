@@ -8,6 +8,7 @@ import type { ArtifactRepository } from '../artifacts/repository';
 import type { ReportRepository } from '../reports/repository';
 import type { SourceCursorRepositoryLike } from '../crawler/source-cursor-repository';
 import type { RunPhase } from '../runs/run-queue.service';
+import { logger } from '../../lib/logger';
 import { sendReportNotification } from '../agents/notifications';
 import type { MailerLike } from '../auth/mailer';
 import { estimateCostUsd } from './token-pricing';
@@ -128,8 +129,7 @@ export class AgentRunner {
             });
           }
         } catch (error) {
-          // eslint-disable-next-line no-console
-          console.warn(`[agent-runner] Failed to fetch source ${source.value}:`, error);
+          logger.warn(`[agent-runner] Failed to fetch source ${source.value}`, error);
           sourceWarnings.push(
             `Failed to fetch source ${source.value}: ${error instanceof Error ? error.message : 'unknown error'}`
           );

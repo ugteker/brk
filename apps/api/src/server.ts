@@ -10,6 +10,7 @@ import { registerPlaybookRoutes, type PlaybookRoutesDeps } from './modules/playb
 import type { DomainAccessResolver } from './modules/access/permissions';
 import { config } from './config';
 import { verifySessionToken } from './modules/auth/jwt';
+import { logger } from './lib/logger';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -38,6 +39,13 @@ export async function buildServer(deps: ServerDeps) {
   // the running API at all (only ad-hoc console.log/warn calls in a few modules).
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
   await app.register(cookie);
+
+  app.setErrorHandler((error, _req, reply) => {
+    logger.error(`[server] Unhandled route error: ${error.message}`, error);
+    if (!reply.sent) {
+      reply.status(error.statusCode ?? 500).send({ code: 'internal_error', message: 'Internal server error' });
+    }
+  });
 
   app.addHook('onRequest', async (req, reply) => {
     if (!req.url.startsWith('/api/')) return;

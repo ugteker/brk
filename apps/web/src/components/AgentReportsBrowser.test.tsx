@@ -179,7 +179,7 @@ it('calls resendReportNotification with the correct agent/report ids and shows a
 
   fireEvent.click(screen.getByRole('button', { name: /re-send email notification/i }));
 
-  await waitFor(() => expect(resendSpy).toHaveBeenCalledWith('agent-1', 'report-1'));
+  await waitFor(() => expect(resendSpy).toHaveBeenCalledWith('agent-1', 'report-1', []));
   expect(onSelectReport).not.toHaveBeenCalled();
 });
 

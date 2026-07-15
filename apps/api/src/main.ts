@@ -31,15 +31,13 @@ import { AccessRepository } from './modules/access/repository';
 import { DomainAccessResolver } from './modules/access/permissions';
 import { SourceRepository } from './modules/source/repository';
 import { PlaybookRepository } from './modules/playbook/repository';
+import { logger } from './lib/logger';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
   const { email, password } = config.auth.bootstrapAdmin;
   if (!email && !password) return;
   if (!email || !password) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      '[auth] ADMIN_EMAIL/ADMIN_PASSWORD are only partially set (both are required to bootstrap an admin account) — skipping bootstrap'
-    );
+    logger.warn('[auth] ADMIN_EMAIL/ADMIN_PASSWORD are only partially set (both are required to bootstrap an admin account) — skipping bootstrap');
     return;
   }
 
@@ -66,8 +64,7 @@ async function bootstrapAdminAccount(userRepository: UserRepository) {
   // normal signup/email-confirmation flow entirely - so it must be marked verified up front,
   // otherwise the new email-verification login gate would lock the admin out of their own app.
   await userRepository.setEmailVerified(admin.id, true);
-  // eslint-disable-next-line no-console
-  console.log(`[auth] Bootstrapped admin account for ${email} from backend config`);
+  logger.info(`[auth] Bootstrapped admin account for ${email} from backend config`);
 }
 
 async function start() {

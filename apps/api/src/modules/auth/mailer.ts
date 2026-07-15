@@ -1,5 +1,6 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import { config, isSmtpConfigured } from '../../config';
+import { logger } from '../../lib/logger';
 
 export interface MailMessage {
   to: string;
@@ -41,8 +42,7 @@ export class SmtpMailer implements MailerLike {
 
   async send(message: MailMessage): Promise<void> {
     if (!isSmtpConfigured()) {
-      // eslint-disable-next-line no-console
-      console.warn(`[mailer] SMTP not configured, skipping email to ${message.to}: ${message.subject}`);
+      logger.warn(`[mailer] SMTP not configured, skipping email to ${message.to}: ${message.subject}`);
       return;
     }
 
