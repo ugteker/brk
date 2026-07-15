@@ -20,6 +20,9 @@ export interface PromptConfig {
   output_length?: string;
   custom_instructions?: string;
   risk_level?: string;
+  personality_label?: string;
+  personality_id?: string;
+  report_detail_level?: 'brief' | 'standard' | 'detailed';
 }
 
 export type ScheduleInput =

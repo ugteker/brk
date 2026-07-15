@@ -836,7 +836,7 @@ describe('AgentsPage three hub shell', () => {
         name: 'Macro Agent · Example source',
         agentId: 'agent-1',
         sourceIds: expect.arrayContaining(['source-1']),
-        recipients: []
+        recipients: ['trader@example.com']
       })
     );
   });
