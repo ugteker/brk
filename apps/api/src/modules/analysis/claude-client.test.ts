@@ -38,7 +38,12 @@ describe('ClaudeClient', () => {
     ];
 
     const client = new ClaudeClient({ client: fakeClient });
-    const result = await client.analyze({ model: 'claude-sonnet-4-5', systemPrompt: 'Analyze for signals', evidence });
+    const result = await client.analyze({
+      model: 'claude-sonnet-4-5',
+      characterType: 'finance_expert',
+      systemPrompt: 'Analyze for signals',
+      evidence
+    });
 
     expect(result.signals[0]?.symbol).toBe('AAPL');
     expect(result.summary).toBe('Mixed outlook');
@@ -60,7 +65,7 @@ describe('ClaudeClient', () => {
     };
 
     const client = new ClaudeClient({ client: fakeClient });
-    const result = await client.analyze({ model: 'claude-sonnet-4-5', systemPrompt: 'sp', evidence: [] });
+    const result = await client.analyze({ model: 'claude-sonnet-4-5', characterType: 'finance_expert', systemPrompt: 'sp', evidence: [] });
 
     expect(result.usage).toEqual({ inputTokens: 1500, outputTokens: 420 });
   });
@@ -80,7 +85,7 @@ describe('ClaudeClient', () => {
     };
 
     const client = new ClaudeClient({ client: fakeClient });
-    const result = await client.analyze({ model: 'claude-sonnet-4-5', systemPrompt: 'sp', evidence: [] });
+    const result = await client.analyze({ model: 'claude-sonnet-4-5', characterType: 'finance_expert', systemPrompt: 'sp', evidence: [] });
 
     expect(result.usage).toBeUndefined();
   });
@@ -94,7 +99,7 @@ describe('ClaudeClient', () => {
 
     const client = new ClaudeClient({ client: fakeClient });
     await expect(
-      client.analyze({ model: 'claude-sonnet-4-5', systemPrompt: 'sp', evidence: [] })
+      client.analyze({ model: 'claude-sonnet-4-5', characterType: 'finance_expert', systemPrompt: 'sp', evidence: [] })
     ).rejects.toThrow('Claude response did not contain a text block');
   });
 
@@ -114,7 +119,7 @@ describe('ClaudeClient', () => {
     };
 
     const client = new ClaudeClient({ client: fakeClient });
-    const result = await client.analyze({ model: 'claude-sonnet-4-5', systemPrompt: 'sp', evidence: [] });
+    const result = await client.analyze({ model: 'claude-sonnet-4-5', characterType: 'finance_expert', systemPrompt: 'sp', evidence: [] });
 
     expect(result.summary).toBe('Wrapped in a json fence');
     expect(result.signals[0]?.symbol).toBe('TSLA');
@@ -136,7 +141,7 @@ describe('ClaudeClient', () => {
     };
 
     const client = new ClaudeClient({ client: fakeClient });
-    const result = await client.analyze({ model: 'claude-sonnet-4-5', systemPrompt: 'sp', evidence: [] });
+    const result = await client.analyze({ model: 'claude-sonnet-4-5', characterType: 'finance_expert', systemPrompt: 'sp', evidence: [] });
 
     expect(result.summary).toBe('Wrapped in a plain fence');
     expect(result.needsHumanReview).toBe(true);
@@ -158,7 +163,7 @@ describe('ClaudeClient', () => {
     };
 
     const client = new ClaudeClient({ client: fakeClient });
-    const result = await client.analyze({ model: 'claude-sonnet-4-5', systemPrompt: 'sp', evidence: [] });
+    const result = await client.analyze({ model: 'claude-sonnet-4-5', characterType: 'finance_expert', systemPrompt: 'sp', evidence: [] });
 
     expect(result.summary).toBe('Prose around the JSON');
   });
@@ -174,7 +179,7 @@ describe('ClaudeClient', () => {
     };
 
     const client = new ClaudeClient({ client: fakeClient });
-    await expect(client.analyze({ model: 'claude-sonnet-4-5', systemPrompt: 'sp', evidence: [] })).rejects.toThrow(
+    await expect(client.analyze({ model: 'claude-sonnet-4-5', characterType: 'finance_expert', systemPrompt: 'sp', evidence: [] })).rejects.toThrow(
       /truncated because it hit the max_tokens limit/
     );
   });
@@ -189,7 +194,7 @@ describe('ClaudeClient', () => {
     };
 
     const client = new ClaudeClient({ client: fakeClient });
-    await expect(client.analyze({ model: 'claude-sonnet-4-5', systemPrompt: 'sp', evidence: [] })).rejects.toThrow(
+    await expect(client.analyze({ model: 'claude-sonnet-4-5', characterType: 'finance_expert', systemPrompt: 'sp', evidence: [] })).rejects.toThrow(
       /Claude response was not valid JSON/
     );
   });

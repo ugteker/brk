@@ -1,4 +1,5 @@
 import { buildAnalysisRequest } from './prompt-builder';
+import { buildEffectiveSystemPrompt } from './character-prompt-strategy';
 import type { ClaudeAnalysisResult, EvidenceBlock, SourceAdapter, SourceConfig, SourceCursorState } from './types';
 import type { ClaudeClient } from './claude-client';
 import type { Agent } from '../agents/types';
@@ -7,6 +8,7 @@ import type { ArtifactRepository } from '../artifacts/repository';
 import type { ReportRepository } from '../reports/repository';
 import type { SourceCursorRepositoryLike } from '../crawler/source-cursor-repository';
 import type { RunPhase } from '../runs/run-queue.service';
+import { logger } from '../../lib/logger';
 import { sendReportNotification } from '../agents/notifications';
 import type { MailerLike } from '../auth/mailer';
 import { estimateCostUsd } from './token-pricing';
@@ -28,6 +30,8 @@ export interface ForcedEpisodeSelection {
 
 export interface AgentRunOptions {
   forcedEpisode?: ForcedEpisodeSelection;
+  playbookRecipients?: string[];
+  playbookLanguage?: string;
 }
 
 export interface AgentRunnerDeps {
@@ -76,9 +80,21 @@ export class AgentRunner {
       const pendingCursorUpdates: SourceCursorState[] = [];
 
       const forcedEpisode = options?.forcedEpisode;
-      const sourcesToCrawl = forcedEpisode
-        ? agent.sources.filter((source) => source.type === forcedEpisode.sourceType && source.value === forcedEpisode.sourceValue)
-        : agent.sources;
+      let sourcesToCrawl: typeof agent.sources;
+      if (forcedEpisode) {
+        const matched = agent.sources.filter(
+          (source) => source.type === forcedEpisode.sourceType && source.value === forcedEpisode.sourceValue
+        );
+        // If the forced source isn't in agent.sources (e.g. it came from the library, not the agent's
+        // own source config), create an ad-hoc config so the run proceeds instead of silently
+        // returning succeeded_no_new_content.
+        sourcesToCrawl =
+          matched.length > 0
+            ? matched
+            : [{ type: forcedEpisode.sourceType, value: forcedEpisode.sourceValue, frequencyMinutes: 60, maxItems: 1 }];
+      } else {
+        sourcesToCrawl = agent.sources;
+      }
 
       for (const source of sourcesToCrawl) {
         try {
@@ -125,8 +141,7 @@ export class AgentRunner {
             });
           }
         } catch (error) {
-          // eslint-disable-next-line no-console
-          console.warn(`[agent-runner] Failed to fetch source ${source.value}:`, error);
+          logger.warn(`[agent-runner] Failed to fetch source ${source.value}`, error);
           sourceWarnings.push(
             `Failed to fetch source ${source.value}: ${error instanceof Error ? error.message : 'unknown error'}`
           );
@@ -147,7 +162,13 @@ export class AgentRunner {
 
       await this.setPhase(agentRunId, 'analyzing');
 
-      const request = buildAnalysisRequest(promptVersion, evidence);
+      const effectiveSystemPrompt = buildEffectiveSystemPrompt({
+        characterType: agent.characterType,
+        promptConfig: agent.promptConfig,
+        promptVersionSystemPrompt: promptVersion.systemPrompt,
+        language: options?.playbookLanguage
+      });
+      const request = buildAnalysisRequest({ ...promptVersion, systemPrompt: effectiveSystemPrompt }, evidence, agent.characterType);
       const analysis: ClaudeAnalysisResult = await this.deps.claudeClient.analyze(request);
 
       const combinedWarnings = [...sourceWarnings, ...analysis.sourceWarnings];
@@ -159,10 +180,12 @@ export class AgentRunner {
         agentId,
         agentRunId,
         promptVersionId: promptVersion.id,
+        characterType: agent.characterType,
         summary: analysis.summary,
         sourceWarnings: combinedWarnings,
         needsHumanReview: analysis.needsHumanReview || combinedWarnings.length > 0,
         signals: analysis.signals,
+        report: analysis.report,
         model: promptVersion.model,
         promptVersionNumber: promptVersion.version,
         inputTokens: usage?.inputTokens ?? null,
@@ -183,7 +206,7 @@ export class AgentRunner {
       // Falls back to the source URL for any evidence block without a resolved title (e.g. plain
       // web-page sources), and de-dupes in case the same item appears from more than one source.
       const itemTitles = [...new Set(evidence.map((block) => block.title || block.sourceRef))];
-      await sendReportNotification(this.deps.mailer, agent, report, itemTitles);
+      await sendReportNotification(this.deps.mailer, agent, report, itemTitles, options?.playbookRecipients ?? [], options?.playbookLanguage);
 
       return { status: 'succeeded', reportId: report.id };
     } catch (error) {

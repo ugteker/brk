@@ -7,6 +7,11 @@ export interface FeedItem {
   transcriptUrl: string | null;
 }
 
+export interface FeedMetadata {
+  title?: string;
+  coverImageUrl?: string;
+}
+
 function extractItemBlocks(xml: string): string[] {
   const rssItems = xml.match(/<item[\s\S]*?<\/item>/gi);
   if (rssItems && rssItems.length > 0) return rssItems;
@@ -16,6 +21,20 @@ function extractItemBlocks(xml: string): string[] {
 function extractTag(block: string, tag: string): string | null {
   const match = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
   return match ? match[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : null;
+}
+
+function extractChannelOrFeedBlock(xml: string): string {
+  const channelMatch = xml.match(/<channel[^>]*>([\s\S]*?)<\/channel>/i);
+  if (channelMatch) return channelMatch[1];
+  const feedMatch = xml.match(/<feed[^>]*>([\s\S]*?)<\/feed>/i);
+  if (feedMatch) return feedMatch[1];
+  return xml;
+}
+
+function extractAttributeValue(block: string, tag: string, attribute: string): string | null {
+  const escapedTag = tag.replace(':', '\\:');
+  const match = block.match(new RegExp(`<${escapedTag}[^>]*${attribute}=["']([^"']+)["'][^>]*\\/?>`, 'i'));
+  return match ? match[1].trim() : null;
 }
 
 function extractGuid(block: string): string | null {
@@ -56,4 +75,20 @@ export function parseFeedItems(xml: string): FeedItem[] {
       };
     })
     .filter((item) => item.itemId.length > 0);
+}
+
+export function parseFeedMetadata(xml: string): FeedMetadata {
+  const block = extractChannelOrFeedBlock(xml);
+  const title = extractTag(block, 'title') ?? undefined;
+  const coverImageUrl =
+    extractAttributeValue(block, 'itunes:image', 'href') ??
+    extractTag(block, 'logo') ??
+    extractTag(block, 'icon') ??
+    extractTag(extractTag(block, 'image') ?? '', 'url') ??
+    undefined;
+
+  return {
+    title,
+    coverImageUrl
+  };
 }

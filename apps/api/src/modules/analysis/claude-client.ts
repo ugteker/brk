@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { renderEvidenceForPrompt } from './prompt-builder';
 import { parseClaudeResponse } from './response-parser';
 import type { ClaudeAnalysisRequest, ClaudeAnalysisResult } from './types';
+import type { CharacterType } from '../agents/types';
 
 export interface ClaudeMessagesClient {
   messages: {
@@ -18,15 +19,36 @@ export interface ClaudeMessagesClient {
   };
 }
 
-const RESPONSE_FORMAT_INSTRUCTIONS = `Respond with ONLY a JSON object matching this shape, no prose outside the JSON:
+function buildSectionShapeInstructions(characterType: CharacterType): string {
+  switch (characterType) {
+    case 'finance_expert':
+      return `"section": { "character_type": "finance_expert", "market_summary": string, "signals": [{ "symbol": string, "side": "long" | "short", "confidence": number (0-100), "rationale": string, "citations": string[] }] }`;
+    case 'teacher':
+      return `"section": { "character_type": "teacher", "lesson_explanation": string }`;
+    case 'trainer':
+      return `"section": { "character_type": "trainer", "qa_drill": [{ "question": string, "answer": string }] }`;
+    case 'philosopher':
+      return `"section": { "character_type": "philosopher", "argument_reflection": string }`;
+    case 'influencer':
+      return `"section": { "character_type": "influencer", "content_angles": string[], "hooks": string[] }`;
+    case 'summarizer':
+    default:
+      return `"section": { "character_type": "summarizer", "bullet_digest": string[] }`;
+  }
+}
+
+function buildResponseFormatInstructions(characterType: CharacterType): string {
+  return `Respond with ONLY a JSON object matching this shape, no prose outside the JSON:
 {
-  "summary": string,
-  "signals": [{ "symbol": string, "side": "long" | "short", "confidence": number (0-100), "rationale": string, "citations": string[] }],
+  "common": { "summary": string, "key_takeaways": string[], "sources_used": string[], "citations": string[] },
+  ${buildSectionShapeInstructions(characterType)},
   "sourceWarnings": string[],
   "needsHumanReview": boolean
 }
 
-Write "summary" and "rationale" tersely: drop filler words, use fragments over full sentences, no pleasantries/hedging. Keep every fact, number, and citation - only cut wordiness. This keeps output token usage (and API cost) down without losing signal substance.`;
+Do not include "signals" anywhere unless character_type is finance_expert.
+Write "summary" and long text fields tersely: drop filler words, use fragments over full sentences, no pleasantries/hedging. Keep every fact, number, and citation - only cut wordiness.`;
+}
 
 const FENCED_CODE_BLOCK_PATTERN = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
 
@@ -65,7 +87,7 @@ export class ClaudeClient {
   }
 
   async analyze(request: ClaudeAnalysisRequest): Promise<ClaudeAnalysisResult> {
-    const userMessage = `${RESPONSE_FORMAT_INSTRUCTIONS}\n\nEvidence:\n${renderEvidenceForPrompt(request.evidence)}`;
+    const userMessage = `${buildResponseFormatInstructions(request.characterType)}\n\nEvidence:\n${renderEvidenceForPrompt(request.evidence)}`;
 
     const response = await this.client.messages.create({
       model: request.model,
@@ -95,7 +117,7 @@ export class ClaudeClient {
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(`Claude response was not valid JSON: ${reason}`);
     }
-    const result = parseClaudeResponse(parsed);
+    const result = parseClaudeResponse(parsed, request.characterType);
     if (response.usage) {
       result.usage = { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens };
     }

@@ -13,6 +13,7 @@ model User {
   passwordHash String?
   googleId     String?  @unique
   displayName  String?
+  role                        String   @default("user")
   emailVerified               Boolean   @default(false)
   emailVerificationToken      String?   @unique
   emailVerificationExpiresAt  DateTime?
@@ -28,9 +29,10 @@ model Agent {
   ownerUserId     String
   name            String
   description     String      @default("")
+  characterType   String      @default("summarizer")
+  promptConfigJson String     @default("{}")
   status          String      @default("active")
   preferencesJson String      @default("{}")
-  recipientsJson  String      @default("[]")
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   sources     AgentSource[]
@@ -40,6 +42,10 @@ model Agent {
   runReports  AgentRunReport[]
   sourceCursors AgentSourceCursor[]
   sourceCrawlConfigs AgentSourceCrawlConfig[]
+  playbooks   Playbook[]
+  accessGrants AccessGrant[] @relation("AccessGrantGranteeAgent")
+  resourceAccessGrants AccessGrant[] @relation("AccessGrantResourceAgent")
+  marketplacePublications MarketplacePublication[]
 }
 
 model AgentSource {
@@ -122,6 +128,7 @@ model AgentRunReport {
   agentRunId           String   @unique
   promptVersionId    String
   summary            String
+  reportJson         String?
   sourceWarningsJson String
   needsHumanReview   Boolean
   model              String?
@@ -178,4 +185,112 @@ model AgentSourceCrawlConfig {
   agent                Agent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
 
   @@unique([agentId, sourceValue])
+}
+
+model Source {
+  id         String   @id @default(cuid())
+  ownerUserId String
+  type       String
+  value      String
+  status     String   @default("active")
+  configJson String   @default("{}")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  playbooks  PlaybookSource[]
+  accessGrants AccessGrant[]
+  marketplacePublications MarketplacePublication[]
+
+  @@unique([ownerUserId, type, value])
+}
+
+model Playbook {
+  id                String   @id @default(cuid())
+  agentId           String
+  name              String
+  description       String   @default("")
+  mode              String   @default("interval")
+  intervalMinutes   Int?
+  dailyTime         String?
+  timezone          String?
+  daysOfWeekJson    String?
+  nextRunAt         DateTime
+  enabled           Boolean  @default(true)
+  executionMode     String   @default("latest_only")
+  maxSourcesPerRun  Int      @default(3)
+  maxItemsPerSource Int      @default(1)
+  recipientsJson    String   @default("[]")
+  followTargetType  String?
+  followTargetKey   String?
+  followTargetTitle String?
+  language          String   @default("en")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  sources           PlaybookSource[]
+  accessGrants      AccessGrant[]
+  marketplacePublications MarketplacePublication[]
+
+  @@index([agentId, enabled])
+}
+
+model PlaybookSource {
+  id         String   @id @default(cuid())
+  playbookId String
+  sourceId   String
+  enabled    Boolean  @default(true)
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
+  playbook   Playbook @relation(fields: [playbookId], references: [id], onDelete: Restrict)
+  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([playbookId, sourceId])
+  @@index([sourceId, enabled])
+}
+
+model AccessGrant {
+  id            String    @id @default(cuid())
+  grantedByUserId String
+  granteeUserId String?
+  granteeAgentId String?
+  resourceType  String
+  resourceId    String
+  permission    String
+  agentId       String?
+  sourceId      String?
+  playbookId    String?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  granteeAgent  Agent?    @relation("AccessGrantGranteeAgent", fields: [granteeAgentId], references: [id], onDelete: Restrict)
+  agent         Agent?    @relation("AccessGrantResourceAgent", fields: [agentId], references: [id], onDelete: Restrict)
+  source        Source?   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  playbook      Playbook? @relation(fields: [playbookId], references: [id], onDelete: Restrict)
+
+  @@index([resourceType, resourceId])
+  @@index([granteeUserId, resourceType, resourceId])
+  @@index([granteeAgentId, resourceType, resourceId])
+}
+
+model MarketplacePublication {
+  id             String    @id @default(cuid())
+  publisherUserId String
+  resourceType   String
+  resourceId     String
+  title          String
+  summary        String    @default("")
+  visibility     String    @default("private")
+  status         String    @default("draft")
+  publishedAt    DateTime?
+  retiredAt      DateTime?
+  agentId        String?
+  sourceId       String?
+  playbookId     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  agent          Agent?    @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  source         Source?   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  playbook       Playbook? @relation(fields: [playbookId], references: [id], onDelete: Restrict)
+
+  @@index([resourceType, resourceId])
+  @@index([publisherUserId, status, visibility])
 }

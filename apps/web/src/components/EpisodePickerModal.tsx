@@ -39,7 +39,7 @@ export function EpisodePickerModal({ open, loading, episodes, onRunNormally, onS
   const hasMore = visibleCount < episodes.length;
 
   return (
-    <Modal title="Run against a specific episode" open={open} onCancel={onCancel} footer={null} destroyOnClose>
+    <Modal title="Run against a specific episode" open={open} onCancel={onCancel} footer={null} destroyOnHidden>
       <p className="mb-3 text-sm text-gray-500">
         Pick a recent episode to run this agent against, or run normally to crawl for new content since the last run.
       </p>
@@ -90,4 +90,3 @@ export function EpisodePickerModal({ open, loading, episodes, onRunNormally, onS
     </Modal>
   );
 }
-

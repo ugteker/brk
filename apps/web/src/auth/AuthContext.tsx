@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { getCurrentUser, login as apiLogin, logout as apiLogout, signup as apiSignup, type AuthUser, type SignupResult } from '../api/auth';
-import { listUsers } from '../api/admin';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -16,16 +15,6 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  const checkIsAdmin = useCallback(async () => {
-    try {
-      await listUsers();
-      setIsAdmin(true);
-    } catch {
-      setIsAdmin(false);
-    }
-  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -35,7 +24,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!alive) return;
         setUser(current);
         setStatus(current ? 'authenticated' : 'unauthenticated');
-        if (current) await checkIsAdmin();
       } catch {
         if (!alive) return;
         setUser(null);
@@ -46,16 +34,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       alive = false;
     };
-  }, [checkIsAdmin]);
+  }, []);
 
   const login = useCallback(
     async (email: string, password: string) => {
       const loggedInUser = await apiLogin(email, password);
       setUser(loggedInUser);
       setStatus('authenticated');
-      await checkIsAdmin();
     },
-    [checkIsAdmin]
+    []
   );
 
   // Signup no longer logs the user in directly - the account stays unverified until the user
@@ -67,8 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await apiLogout();
     setUser(null);
     setStatus('unauthenticated');
-    setIsAdmin(false);
   }, []);
+
+  const isAdmin = user?.role === 'admin';
 
   return (
     <AuthContext.Provider value={{ user, status, isAdmin, login, signup, logout }}>{children}</AuthContext.Provider>

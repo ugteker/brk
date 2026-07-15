@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Card, Divider, Form, Input, Result, Segmented, Typography } from 'antd';
 import { GoogleOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import { GOOGLE_SIGN_IN_URL, forgotPassword, resendConfirmation, resetPassword } from '../api/auth';
 
@@ -20,6 +21,7 @@ function readQueryParams() {
 
 export function AuthPage() {
   const { login, signup } = useAuth();
+  const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>('login');
   const [view, setView] = useState<View>('form');
   const [email, setEmail] = useState('');
@@ -32,9 +34,6 @@ export function AuthPage() {
   const [confirmedEmail, setConfirmedEmail] = useState('');
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
 
-  // No client-side router exists in this app, so backend redirects (email confirmation, locked
-  // account, password reset) communicate via query params on the base URL. Read them once on
-  // mount, then strip them from the URL so a refresh doesn't re-trigger the banner/form.
   useEffect(() => {
     const { emailConfirmed, accountLocked, resetToken: token } = readQueryParams();
 
@@ -42,11 +41,11 @@ export function AuthPage() {
       setResetToken(token);
       setView('resetPassword');
     } else if (emailConfirmed === '1') {
-      setInfoBanner({ type: 'success', message: 'Your email has been confirmed. You can now log in.' });
+      setInfoBanner({ type: 'success', message: t('auth.bannerEmailConfirmed') });
     } else if (emailConfirmed === '0') {
-      setInfoBanner({ type: 'error', message: 'That confirmation link is invalid or has expired. Please request a new one.' });
+      setInfoBanner({ type: 'error', message: t('auth.bannerEmailInvalid') });
     } else if (accountLocked === '1') {
-      setInfoBanner({ type: 'warning', message: 'This account has been locked. Contact an administrator for help.' });
+      setInfoBanner({ type: 'warning', message: t('auth.bannerAccountLocked') });
     }
 
     if (emailConfirmed || accountLocked || token) {
@@ -54,7 +53,7 @@ export function AuthPage() {
       url.search = '';
       window.history.replaceState({}, '', url.toString());
     }
-  }, []);
+  }, [t]);
 
   async function onSubmit() {
     setSubmitting(true);
@@ -68,7 +67,7 @@ export function AuthPage() {
         setView('confirmationSent');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setError(err instanceof Error ? err.message : t('auth.errorFallback'));
     } finally {
       setSubmitting(false);
     }
@@ -88,7 +87,7 @@ export function AuthPage() {
     setError(null);
     try {
       await forgotPassword(email);
-      setInfoBanner({ type: 'success', message: 'If that email is registered, a reset link is on its way.' });
+      setInfoBanner({ type: 'success', message: t('auth.bannerResetSent') });
       setView('form');
       setMode('login');
     } finally {
@@ -101,11 +100,11 @@ export function AuthPage() {
     setError(null);
     try {
       await resetPassword(resetToken as string, newPassword);
-      setInfoBanner({ type: 'success', message: 'Your password has been reset. You can now log in.' });
+      setInfoBanner({ type: 'success', message: t('auth.bannerPasswordReset') });
       setView('form');
       setMode('login');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset password');
+      setError(err instanceof Error ? err.message : t('auth.resetFailFallback'));
     } finally {
       setSubmitting(false);
     }
@@ -115,9 +114,8 @@ export function AuthPage() {
     <div className="flex min-h-screen items-center justify-center p-6">
       <Card style={{ width: 400 }}>
         <Title level={3} style={{ marginBottom: 0 }}>
-          ChatTrader
+          {t('auth.title')}
         </Title>
-        <Paragraph type="secondary">Sign in to manage your AI trading agents.</Paragraph>
 
         {infoBanner ? (
           <Alert
@@ -133,11 +131,11 @@ export function AuthPage() {
         {view === 'confirmationSent' ? (
           <Result
             status="success"
-            title="Check your email"
-            subTitle={`We sent a confirmation link to ${confirmedEmail}. Click it to activate your account.`}
+            title={t('auth.confirmationTitle')}
+            subTitle={t('auth.confirmationSub', { email: confirmedEmail })}
             extra={
               <Button onClick={onResend} loading={resendState === 'sending'} disabled={resendState === 'sent'}>
-                {resendState === 'sent' ? 'Confirmation email resent' : 'Resend confirmation email'}
+                {resendState === 'sent' ? t('auth.confirmationResent') : t('auth.resendConfirmation')}
               </Button>
             }
           />
@@ -145,9 +143,9 @@ export function AuthPage() {
           <>
             {error ? <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} /> : null}
             <Form layout="vertical" onFinish={onRequestReset}>
-              <Form.Item label="Email">
+              <Form.Item label={t('auth.email')}>
                 <Input
-                  aria-label="Email"
+                  aria-label={t('auth.email')}
                   prefix={<MailOutlined />}
                   type="email"
                   value={email}
@@ -156,10 +154,10 @@ export function AuthPage() {
                 />
               </Form.Item>
               <Button type="primary" htmlType="submit" block loading={submitting}>
-                Send reset link
+                {t('auth.sendResetLink')}
               </Button>
               <Button type="link" block onClick={() => setView('form')}>
-                Back to log in
+                {t('auth.backToLogin')}
               </Button>
             </Form>
           </>
@@ -167,9 +165,9 @@ export function AuthPage() {
           <>
             {error ? <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} /> : null}
             <Form layout="vertical" onFinish={onResetPassword}>
-              <Form.Item label="New password">
+              <Form.Item label={t('auth.newPassword')}>
                 <Input.Password
-                  aria-label="New password"
+                  aria-label={t('auth.newPassword')}
                   prefix={<LockOutlined />}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.currentTarget.value)}
@@ -177,7 +175,7 @@ export function AuthPage() {
                 />
               </Form.Item>
               <Button type="primary" htmlType="submit" block loading={submitting}>
-                Reset password
+                {t('auth.resetPassword')}
               </Button>
             </Form>
           </>
@@ -191,8 +189,8 @@ export function AuthPage() {
                 setError(null);
               }}
               options={[
-                { label: 'Log in', value: 'login' },
-                { label: 'Sign up', value: 'signup' }
+                { label: t('auth.login'), value: 'login' },
+                { label: t('auth.signup'), value: 'signup' }
               ]}
               style={{ marginBottom: 16 }}
             />
@@ -200,9 +198,9 @@ export function AuthPage() {
             {error ? <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} /> : null}
 
             <Form layout="vertical" onFinish={onSubmit}>
-              <Form.Item label="Email">
+              <Form.Item label={t('auth.email')}>
                 <Input
-                  aria-label="Email"
+                  aria-label={t('auth.email')}
                   prefix={<MailOutlined />}
                   type="email"
                   value={email}
@@ -210,9 +208,9 @@ export function AuthPage() {
                   autoComplete="email"
                 />
               </Form.Item>
-              <Form.Item label="Password">
+              <Form.Item label={t('auth.password')}>
                 <Input.Password
-                  aria-label="Password"
+                  aria-label={t('auth.password')}
                   prefix={<LockOutlined />}
                   value={password}
                   onChange={(e) => setPassword(e.currentTarget.value)}
@@ -220,19 +218,19 @@ export function AuthPage() {
                 />
               </Form.Item>
               <Button type="primary" htmlType="submit" block loading={submitting}>
-                {mode === 'login' ? 'Log in' : 'Create account'}
+                {mode === 'login' ? t('auth.loginButton') : t('auth.createAccount')}
               </Button>
               {mode === 'login' ? (
                 <Button type="link" block onClick={() => setView('forgotPassword')}>
-                  Forgot password?
+                  {t('auth.forgotPassword')}
                 </Button>
               ) : null}
             </Form>
 
-            <Divider>or</Divider>
+            <Divider>{t('common.or')}</Divider>
 
             <Button block icon={<GoogleOutlined />} href={GOOGLE_SIGN_IN_URL}>
-              {mode === 'login' ? 'Sign in with Google' : 'Sign up with Google'}
+              {mode === 'login' ? t('auth.signInWithGoogle') : t('auth.signUpWithGoogle')}
             </Button>
           </>
         )}

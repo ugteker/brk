@@ -70,7 +70,12 @@ describe('AgentRunner (integration with real repositories)', () => {
       id: agentId,
       ownerUserId: 'admin-user-id',
       name: 'Podcast Signals Agent',
+      characterType: 'finance_expert',
+      promptConfigJson: '{}',
       status: 'active',
+      description: '',
+      preferencesJson: '{}',
+      recipientsJson: '[]',
       createdAt: new Date(),
       updatedAt: new Date(),
       sources: [{ type: 'web_urls', value: 'https://example.com/episode' }]

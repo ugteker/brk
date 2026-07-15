@@ -5,6 +5,25 @@ it updated. For architecture background, trade-offs, and upgrade paths
 (named tunnel, Postgres, splitting the container back up), see
 [`deploy/README.md`](../deploy/README.md).
 
+## Topology decision (alpha vs production)
+
+Chosen topology: **shared host with branch-conditioned rollout + isolation boundaries**.
+
+| Branch | GitHub environment | Server path | Concurrency group |
+| --- | --- | --- | --- |
+| `alpha` | `alpha` | `/opt/ChatTrader-alpha` | `alpha-deploy` |
+| `master` | `production` | `/opt/ChatTrader` | `production-deploy` |
+
+This keeps alpha and production isolated by environment secrets, server path,
+and workflow concurrency while staying on one host.
+
+Implementation status:
+- `alpha-workflow-routing`: enforced in `.github/workflows/deploy.yml` via
+  branch-conditioned deploy jobs, isolated environment selection, isolated
+  server path, and isolated concurrency group.
+- `alpha-script-parameterization`: **N/A** because `deploy/deploy.sh` is not
+  part of the current deploy path (the workflow deploys with inline SSH script).
+
 ## Prerequisites
 
 - SSH access to the existing Hetzner server (Ubuntu 24.04, Docker already installed).
@@ -67,6 +86,8 @@ SSH into the Hetzner server and clone the repo to a stable path:
 ssh <user>@<hetzner-host>
 sudo mkdir -p /opt/ChatTrader && sudo chown $USER:$USER /opt/ChatTrader
 git clone https://github.com/ugteker/brk.git /opt/ChatTrader
+sudo mkdir -p /opt/ChatTrader-alpha && sudo chown $USER:$USER /opt/ChatTrader-alpha
+git clone https://github.com/ugteker/brk.git /opt/ChatTrader-alpha
 cd /opt/ChatTrader
 ```
 
@@ -126,9 +147,12 @@ confirm the ChatTrader SPA loads and you can sign up/log in.
 
 ## Step 7 — Set up GitHub Actions for future deploys
 
-Add these under **Settings → Environments → `production` → Environment secrets**
-in `ugteker/brk` (the deploy job runs with `environment: production`, so this
-is the required scope):
+Add these under **Settings → Environments → Environment secrets**
+in `ugteker/brk`.
+
+Create both environments and add the same key names in each:
+- `alpha` environment (used by branch `alpha`)
+- `production` environment (used by branch `master`)
 
 | Secret | Value |
 | --- | --- |
@@ -137,41 +161,46 @@ is the required scope):
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
 | `HETZNER_APP_ENV` | The entire contents of the production `.env` file from Step 3 |
 
-If these are not present in the `production` environment, deployment fails in
+If these are not present in the target environment (`alpha` or `production`), deployment fails in
 `appleboy/ssh-action` with `Error: missing server host` because host/user/key
 inputs resolve empty.
 
 Release/deploy policy:
-- Deployment is triggered by pushes to `master` only.
-- `alpha` does **not** deploy directly.
-- Promotion flow is: `alpha` -> Pull Request -> merge into `master` -> auto deploy.
+- Push to `alpha` deploys to alpha (`/opt/ChatTrader-alpha`).
+- Push to `master` deploys to production (`/opt/ChatTrader`).
+- Promotion flow remains: `alpha` -> Pull Request -> merge into `master`.
 
-Recommended repository protection for `master`:
+Recommended repository protection for both `alpha` and `master`:
 - Require a pull request before merge.
 - Require status checks before merge (at minimum the deploy workflow `test` job).
-- Restrict direct pushes to `master` where possible.
+- Restrict direct pushes where possible.
 
 Suggested GitHub UI path:
 1. Go to **Settings -> Branches -> Branch protection rules** (or **Rulesets**).
-2. Target branch: `master`.
+2. Target branch: `alpha` (repeat for `master`).
 3. Enable **Require a pull request before merging**.
 4. Enable **Require status checks to pass before merging** and select check **`test`** from workflow **Deploy**.
 5. Enable **Restrict who can push to matching branches** (optional but recommended).
 
-Once set, every push to `master` will: run the `apps/api`/`apps/web` test
-suites, then (if green) SSH into the server, rewrite `.env` from
-`HETZNER_APP_ENV`, and redeploy automatically.
+Once set, every push to `alpha` or `master` will: run the
+`apps/api`/`apps/web` test suites, then (if green) SSH into the server,
+rewrite `.env` from `HETZNER_APP_ENV`, and redeploy to the branch-mapped
+path/environment.
 
 ## Ongoing deploys
 
-- **Automatic**: merge PRs from `alpha` to `master` (or push directly to `master`) — GitHub Actions handles it (Step 7).
+- **Automatic alpha deploy**: push to `alpha` (deploys from `/opt/ChatTrader-alpha`).
+- **Automatic production deploy**: merge PRs from `alpha` to `master` (or push directly to `master`) — deploys from `/opt/ChatTrader`.
 - **Manual**: SSH to the server and run:
   ```bash
   cd /opt/ChatTrader
-  ./deploy/deploy.sh
+  git pull --ff-only origin master
+  docker compose build
+  docker compose up -d --remove-orphans
+  docker compose logs chattrader --tail 50 | grep trycloudflare.com
   ```
-  This does `git pull --ff-only origin master` + `docker compose build` + `docker compose up -d`,
-  then prints the current tunnel URL.
+  This pulls the latest code, rebuilds the image, and restarts the container.
+  For alpha, use `/opt/ChatTrader-alpha` and `origin alpha`.
 
 ## Rotating secrets
 

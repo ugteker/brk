@@ -1,0 +1,273 @@
+{
+  "common": {
+    "back": "Zurück",
+    "next": "Weiter",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "create": "Erstellen",
+    "update": "Aktualisieren",
+    "close": "Schließen",
+    "loading": "Lädt…",
+    "error": "Fehler",
+    "or": "oder",
+    "yes": "Ja",
+    "no": "Nein",
+    "confirm": "Bestätigen",
+    "search": "Suchen",
+    "noData": "Keine Daten",
+    "selected": "Ausgewählt",
+    "optional": "optional"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "library": "Bibliothek",
+    "agents": "Agenten",
+    "playbooks": "Playbooks",
+    "accountMenu": "Kontomenü",
+    "agentsAndPlaybooks": "Agenten & Playbooks",
+    "userManagement": "Benutzerverwaltung",
+    "logOut": "Abmelden",
+    "openAdminArea": "Adminbereich öffnen"
+  },
+  "language": {
+    "switchTo": "Language: English",
+    "current": "DE"
+  },
+  "library": {
+    "heading": "Dashboard",
+    "loadingSources": "Quellen werden geladen…",
+    "failedSources": "Quellen konnten nicht geladen werden.",
+    "noSources": "Diese Bibliothek enthält noch keine Quellen.",
+    "browseMarketplace": "Marketplace durchsuchen",
+    "backToLibrary": "← Zurück zur Bibliothek",
+    "createTab": "Bibliotheks-Tab erstellen",
+    "renameTab": "Aktiven Bibliotheks-Tab umbenennen",
+    "tabTooltip": "Tab hinzufügen",
+    "noEpisodes": "Noch keine Folgen / Elemente gefunden.",
+    "recentEpisodes": "Vorschau neueste Folgen",
+    "episodesPreview": "Folgen-Vorschau",
+    "episodes": "Folgen: {{count}}",
+    "clone": "Klonen",
+    "cloning": "Wird geklont…",
+    "notInWorkflow": "Kein Analyse-Workflow zugeordnet",
+    "analyzingCount": "{{count}} Agent(en) analysiert",
+    "lastRun": "Letzter Lauf: {{date}}",
+    "notYetAnalyzed": "Noch nicht analysiert",
+    "noWorkflowCta": "Noch kein Analyse-Workflow für diese Quelle. Füge sie einem Playbook hinzu, um Berichte zu erstellen.",
+    "reportsTab": "Berichte",
+    "runsTab": "Läufe",
+    "episodesTab": "Episoden",
+    "runAnalysisNow": "Analyse jetzt starten",
+    "analysisStarted": "Analyse gestartet"
+  },
+  "listen": {
+    "listen": "Fasse zusammen!",
+    "listening": "Fasse zusammen!",
+    "listenAriaLabel": "Diese Quelle zusammenfassen",
+    "listeningAriaLabel": "Fasst diese Quelle zusammen",
+    "stopListening": "Nicht mehr zusammenfassen",
+    "stopListeningConfirm": "Zusammenfassen beenden?",
+    "stopListeningYes": "Ja, beenden",
+    "dialogTitleNew": "Zusammenfassen: {{title}}",
+    "dialogTitleEdit": "Fasst zusammen: {{title}}",
+    "dialogTitleGenericNew": "Zusammenfassung einrichten",
+    "dialogTitleGenericEdit": "Zusammenfassung aktualisieren",
+    "thisSource": "diese Quelle",
+    "stepSubtitle": "Wähle einen KI-Agenten, der diese Quelle zusammenfasst und Berichte erstellt. Noch kein Agent? Erstelle einen unten.",
+    "stepPickSource": "Quelle wählen",
+    "stepChooseAgent": "Agent wählen",
+    "stepSetSchedule": "Zeitplan festlegen"
+  },
+  "agent": {
+    "createNew": "Neuen Agenten erstellen",
+    "createNewSub": "Vollständiger Assistent",
+    "selectAgent": "Agent {{name}} auswählen",
+    "deleteAgent": "Agent {{name}} löschen",
+    "deleteConfirmTitle": "Diesen Agenten löschen?",
+    "deleteConfirmDesc": "Der Agent wird von allen Bibliothekskarten entfernt. Diese kehren in den Status 'Nicht zusammengefasst' zurück.",
+    "personaPromptReady": "Persona + Prompt bereit",
+    "stepCharacter": "Charakter",
+    "stepPersonality": "Persönlichkeit & Modell",
+    "stepSchedule": "Zeitplan & Empfänger",
+    "nameLabel": "Agentenname",
+    "namePlaceholder": "Agentenname",
+    "chooseCharacter": "Charaktertyp wählen",
+    "choosePersonality": "Persönlichkeitsstil wählen",
+    "choosePersonalityFor": "für {{persona}}",
+    "characterLabel": "Charakter:",
+    "riskLevel": "Risikoniveau",
+    "riskLow": "Niedrig",
+    "riskMedium": "Mittel",
+    "riskHigh": "Hoch",
+    "model": "Modell",
+    "systemPrompt": "System-Prompt",
+    "validationName": "Gib dem Agenten einen Namen, um fortzufahren.",
+    "validationRisk": "Risikoniveau ist für Finance Expert erforderlich.",
+    "saving": "Wird erstellt…",
+    "createAgent": "Agenten erstellen",
+    "create": "Agenten erstellen",
+    "character": "Charakter",
+    "forCharacter": "für {{character}}",
+    "agentCreated": "Agent \"{{name}}\" erstellt — Zeitplan prüfen und speichern."
+  },
+  "schedule": {
+    "intro": "Dein Agent scannt diese Quelle automatisch und erstellt Berichte nach dem unten festgelegten Zeitplan. Lege fest, wie oft er laufen und wer die Ergebnisse per E-Mail erhalten soll.",
+    "mode": "Zeitplan",
+    "interval": "Intervall",
+    "daily": "Täglich",
+    "weekly": "Wöchentlich",
+    "intervalMinutes": "Intervall in Minuten",
+    "dailyTime": "HH:mm",
+    "timezone": "Zeitzone wählen",
+    "daysOfWeek": "Wochentage",
+    "recipients": "E-Mail-Empfänger (optional)",
+    "recipientsPlaceholder": "Eine oder mehrere E-Mail-Adressen eingeben",
+    "recipientsHint": "Leer lassen, um keine E-Mails zu senden. Empfänger können später hinzugefügt werden.",
+    "recipientsLabel": "Empfänger-E-Mails"
+  },
+  "playbook": {
+    "createPlaybook": "Playbook erstellen",
+    "updatePlaybook": "Playbook aktualisieren",
+    "createNew": "Neues Playbook erstellen",
+    "noPlaybooks": "Noch keine Playbooks.",
+    "status": "Status",
+    "lastRun": "Letzter Lauf",
+    "nextRun": "Nächster Lauf",
+    "enable": "Aktivieren",
+    "disable": "Deaktivieren",
+    "runNow": "Jetzt ausführen",
+    "pickSourceFirst": "Zuerst eine Quelle auswählen",
+    "pickAgentFirst": "Zuerst einen Agenten auswählen"
+  },
+  "source": {
+    "noSources": "Keine Quellen verfügbar.",
+    "selectSource": "Quelle {{title}} auswählen",
+    "type": {
+      "podcast": "Podcast",
+      "youtube": "YouTube",
+      "web": "Web"
+    }
+  },
+  "marketplace": {
+    "heading": "Marketplace",
+    "noItems": "Keine Marketplace-Einträge gefunden.",
+    "cloneButton": "Klonen",
+    "cloningButton": "Wird geklont…"
+  },
+  "entityActions": {
+    "edit": "{{label}} bearbeiten",
+    "share": "{{label}} teilen",
+    "publish": "{{label}} veröffentlichen",
+    "delete": "{{label}} löschen",
+    "shareAndPublish": "Teilen & Veröffentlichen",
+    "confirmDelete": "Diesen {{label}} löschen?",
+    "runNow": "Jetzt ausführen"
+  },
+  "auth": {
+    "title": "ChatTrader",
+    "subtitle": "Anmelden, um deine KI-Handelsagenten zu verwalten.",
+    "login": "Anmelden",
+    "signup": "Registrieren",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "newPassword": "Neues Passwort",
+    "loginButton": "Anmelden",
+    "createAccount": "Konto erstellen",
+    "forgotPassword": "Passwort vergessen?",
+    "sendResetLink": "Reset-Link senden",
+    "resetPassword": "Passwort zurücksetzen",
+    "backToLogin": "Zurück zur Anmeldung",
+    "signInWithGoogle": "Mit Google anmelden",
+    "signUpWithGoogle": "Mit Google registrieren",
+    "confirmationTitle": "E-Mail prüfen",
+    "confirmationSub": "Wir haben einen Bestätigungslink an {{email}} gesendet. Klicke darauf, um dein Konto zu aktivieren.",
+    "resendConfirmation": "Bestätigungs-E-Mail erneut senden",
+    "confirmationResent": "Bestätigungs-E-Mail erneut gesendet",
+    "bannerEmailConfirmed": "Deine E-Mail wurde bestätigt. Du kannst dich jetzt anmelden.",
+    "bannerEmailInvalid": "Dieser Bestätigungslink ist ungültig oder abgelaufen. Bitte fordere einen neuen an.",
+    "bannerAccountLocked": "Dieses Konto wurde gesperrt. Wende dich an einen Administrator.",
+    "bannerResetSent": "Falls diese E-Mail registriert ist, ist ein Reset-Link unterwegs.",
+    "bannerPasswordReset": "Dein Passwort wurde zurückgesetzt. Du kannst dich jetzt anmelden.",
+    "errorFallback": "Etwas ist schiefgelaufen",
+    "resetFailFallback": "Passwort zurücksetzen fehlgeschlagen"
+  },
+  "admin": {
+    "users": {
+      "title": "Benutzerverwaltung",
+      "loadingUsers": "Benutzer werden geladen…",
+      "noUsers": "Keine Benutzer gefunden.",
+      "role": "Rolle",
+      "status": "Status",
+      "actions": "Aktionen",
+      "lockUser": "Sperren",
+      "unlockUser": "Entsperren",
+      "deleteUser": "Löschen",
+      "confirmDelete": "Diesen Benutzer löschen?",
+      "confirmLock": "Diesen Benutzer sperren?",
+      "active": "Aktiv",
+      "locked": "Gesperrt"
+    }
+  },
+  "personas": {
+    "finance_expert": {
+      "name": "Finanzexperte",
+      "tagline": "Signalbasierte Aktienanalyse und risikobewusste Marktinterpretation.",
+      "characters": {
+        "conservative-analyst":       { "name": "Konservativer Analyst",       "tagline": "Blue-Chip-Fokus, hohe Beweishürde, vorsichtig bei Long/Short.",    "intro": "Ich halte mein Pulver trocken. Erst harte Zahlen — ohne konkrete Belege schweige ich." },
+        "balanced-analyst":           { "name": "Ausgewogener Analyst",        "tagline": "Ausgewogene, beweisbasierte Long/Short-Entscheidungen (Standard).", "intro": "Ich wäge beide Seiten ab, bevor ich eine Richtung wähle. Solide Analyse, kein Drama." },
+        "aggressive-momentum-trader": { "name": "Aggressiver Momentum-Trader", "tagline": "Schnell, stimmungsgetrieben, hohes Signalvolumen.",                "intro": "Ich bewege mich schnell und verfolge Überzeugung. Stimmung zählt — wer zuerst kommt, gewinnt." },
+        "contrarian-value-investor":  { "name": "Konträrer Value-Investor",    "tagline": "Sucht nach überkauften Namen, die die Masse zu früh aufgegeben hat.","intro": "Manchmal liegen alle falsch. Ich suche nach Namen, die die Masse zu früh aufgegeben hat." },
+        "quant-data-driven-analyst":  { "name": "Quant / Datenbasierter Analyst","tagline": "Nur Zahlen: erfordert explizite Finanzkennzahlen vor dem Signal.", "intro": "Keine Zahlen, kein Signal. Ich spreche nur, wenn es etwas Messbares zu sagen gibt." },
+        "short-seller-skeptic":       { "name": "Short-Seller / Skeptiker",    "tagline": "Sucht nach Red Flags, Übertreibungen und Bilanzproblemen.",        "intro": "Zeig mir die Warnsignale. Ich finde Probleme, bevor du darüber stolperst." },
+        "macro-thematic-strategist":  { "name": "Makro / Thematischer Stratege","tagline": "Sektorrotation und makrothematische Calls (Zinsen, KI, Energie).","intro": "Ich verbinde einzelne Werte mit dem großen Bild — Zinsen, KI-Zyklen, Sektorrotationen." }
+      }
+    },
+    "teacher": {
+      "name": "Lehrer",
+      "tagline": "Erklärt Ideen Schritt für Schritt zum Lernen und Behalten.",
+      "characters": {
+        "teacher-mentor":               { "name": "Mentor",              "tagline": "Begleitet Lernende mit Coaching-Erklärungen.",         "intro": "Ich führe dich Schritt für Schritt — stell dir mich als deinen persönlichen Lernbegleiter vor." },
+        "teacher-classroom-instructor": { "name": "Klassenlehrer",       "tagline": "Strukturierte Lektionen mit klaren Checkpoints.",      "intro": "Klare Struktur, stetige Checkpoints. Ich mache komplexe Ideen leicht verständlich." },
+        "teacher-practical-coach":      { "name": "Praxis-Coach",        "tagline": "Handlungsorientierte Anleitungen mit praktischen Beispielen.", "intro": "Keine Theorie. Ich gebe dir praktische Beispiele, die du sofort nutzen kannst." }
+      }
+    },
+    "influencer": {
+      "name": "Influencer",
+      "tagline": "Erstellt publikumsgerechte Narrative und Content-Winkel.",
+      "characters": {
+        "influencer-trend-scout":         { "name": "Trend Scout",         "tagline": "Findet aktuelle Themen und Aufmerksamkeitshaken.",    "intro": "Ich spüre auf, was trendet, bevor die Masse es merkt. Hooks zuerst, immer." },
+        "influencer-storyteller":         { "name": "Geschichtenerzähler", "tagline": "Gestaltet überzeugende Narrative aus Belegen.",        "intro": "Jeder Datenpunkt hat eine Geschichte. Ich gestalte die Narrative, die Menschen zuhören lässt." },
+        "influencer-campaign-strategist": { "name": "Kampagnenstratege",   "tagline": "Entwickelt klare Kampagnenbotschaften.",              "intro": "Ich verwandle Erkenntnisse in Botschaftspläne, auf die dein Publikum wirklich reagiert." }
+      }
+    },
+    "trainer": {
+      "name": "Trainer",
+      "tagline": "Entwickelt wiederholbare Übungsroutinen und Leistungsdrills.",
+      "characters": {
+        "trainer-drill-sergeant":   { "name": "Drillsergeant",     "tagline": "Direktes Training mit disziplinierter Wiederholung.",  "intro": "Wiederholung ist der Schlüssel. Ich treibe dich, bis die richtigen Gewohnheiten sitzen." },
+        "trainer-supportive-coach": { "name": "Unterstützender Coach","tagline": "Ermutigendes Feedback mit schrittweisen Zielen.",   "intro": "Fortschritt vor Perfektion. Ich halte dich mit Ermutigung in Bewegung." },
+        "trainer-exam-prep":        { "name": "Prüfungscoach",     "tagline": "Zielt auf wahrscheinliche Prüfungsthemen und Abrufdrills.", "intro": "Gezielte Abrufdrills zu den wichtigsten Themen. Lass uns dich vorbereiten." }
+      }
+    },
+    "philosopher": {
+      "name": "Philosoph",
+      "tagline": "Interpretiert Ideen durch Argumentation, Annahmen und Ethik.",
+      "characters": {
+        "philosopher-socratic-guide":   { "name": "Sokratischer Führer", "tagline": "Nutzt Fragen, um Annahmen aufzudecken.",             "intro": "Ich beantworte deine Fragen mit besseren Fragen. Annahmen verdienen Prüfung." },
+        "philosopher-critical-thinker": { "name": "Kritischer Denker",  "tagline": "Stresst Logik und Beweisqualität.",                  "intro": "Ich teste jedes Argument. Wenn die Logik nicht stimmt, finde ich den Riss." },
+        "philosopher-ethics-analyst":   { "name": "Ethik-Analyst",      "tagline": "Wägt Entscheidungen mit ethischen Konsequenzen ab.", "intro": "Entscheidungen haben Konsequenzen jenseits des Offensichtlichen. Ich halte das große Bild ehrlich." }
+      }
+    },
+    "summarizer": {
+      "name": "Zusammenfasser",
+      "tagline": "Destilliert komplexe Eingaben in prägnante, entscheidungsreife Erkenntnisse.",
+      "characters": {
+        "summarizer-executive-briefer":  { "name": "Executive-Briefer",   "tagline": "Kurzübersicht für schnelle Führungsentscheidungen.",  "intro": "Nur das Wesentliche. Ich gebe dir das Signal ohne das Rauschen — schnell." },
+        "summarizer-research-digestor":  { "name": "Forschungsdestillat", "tagline": "Verwandelt unstrukturierte Eingaben in Forschungsnotizen.", "intro": "Viele Eingaben, fokussierter Output. Ich verwandle Chaos in eine klare Forschungsnotiz." },
+        "summarizer-action-planner":     { "name": "Aktionsplaner",       "tagline": "Wandelt Erkenntnisse in priorisierte Maßnahmen um.", "intro": "Erkenntnisse sind nutzlos, bis sie zu Handlungen werden. Ich verwandle Befunde in nächste Schritte." }
+      }
+    }
+  }
+}

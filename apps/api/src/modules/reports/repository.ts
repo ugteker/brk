@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { CreateRunReportInput, RunReportRecord, SignalRecord } from './types';
+import { normalizeUnifiedCharacterReport } from './unified-report';
 
 type ReportDb = Pick<PrismaClient, 'agentRunReport'>;
 
@@ -11,10 +12,12 @@ type ReportRow = {
   agentRunId: string;
   promptVersionId: string;
   summary: string;
+  reportJson: string | null;
   sourceWarningsJson: string;
   needsHumanReview: boolean;
   createdAt: Date;
   signals: SignalRow[];
+  agent?: { characterType: string };
   model: string | null;
   promptVersionNumber: number | null;
   inputTokens: number | null;
@@ -26,12 +29,22 @@ export class ReportRepository {
   constructor(private readonly db: ReportDb) {}
 
   async saveRunReport(input: CreateRunReportInput): Promise<RunReportRecord> {
+    const characterType = input.characterType ?? 'finance_expert';
+    const normalizedReport = normalizeUnifiedCharacterReport({
+      characterType,
+      candidate: input.report,
+      legacySummary: input.summary,
+      legacySignals: input.signals
+    });
+    const normalizedSignals = normalizedReport.section.character_type === 'finance_expert' ? normalizedReport.section.signals : [];
+
     const created = await this.db.agentRunReport.create({
       data: {
         agentId: input.agentId,
         agentRunId: input.agentRunId,
         promptVersionId: input.promptVersionId,
         summary: input.summary,
+        reportJson: JSON.stringify(normalizedReport),
         needsHumanReview: input.needsHumanReview,
         sourceWarningsJson: JSON.stringify(input.sourceWarnings),
         model: input.model ?? null,
@@ -40,7 +53,7 @@ export class ReportRepository {
         outputTokens: input.outputTokens ?? null,
         estimatedCostUsd: input.estimatedCostUsd ?? null,
         signals: {
-          create: input.signals.map((signal) => ({
+          create: normalizedSignals.map((signal) => ({
             symbol: signal.symbol,
             side: signal.side,
             confidence: signal.confidence,
@@ -59,7 +72,7 @@ export class ReportRepository {
     const latest = await this.db.agentRunReport.findFirst({
       where: { agentId },
       orderBy: { createdAt: 'desc' },
-      include: { signals: true }
+      include: { signals: true, agent: { select: { characterType: true } } }
     });
 
     return latest ? this.toRecord(latest as unknown as ReportRow) : null;
@@ -73,7 +86,7 @@ export class ReportRepository {
   async getReportById(reportId: string): Promise<RunReportRecord | null> {
     const found = await this.db.agentRunReport.findFirst({
       where: { id: reportId },
-      include: { signals: true }
+      include: { signals: true, agent: { select: { characterType: true } } }
     });
 
     return found ? this.toRecord(found as unknown as ReportRow) : null;
@@ -83,7 +96,7 @@ export class ReportRepository {
     const rows = await this.db.agentRunReport.findMany({
       where: { agentId },
       orderBy: { createdAt: 'desc' },
-      include: { signals: true }
+      include: { signals: true, agent: { select: { characterType: true } } }
     });
 
     return rows.map((row: unknown) => this.toRecord(row as ReportRow));
@@ -98,13 +111,35 @@ export class ReportRepository {
     const rows = await this.db.agentRunReport.findMany({
       where: { agentId, signals: { some: { symbol } } },
       orderBy: { createdAt: 'asc' },
-      include: { signals: true }
+      include: { signals: true, agent: { select: { characterType: true } } }
     });
 
     return rows.map((row: unknown) => this.toRecord(row as ReportRow));
   }
 
   private toRecord(row: ReportRow): RunReportRecord {
+    const signals = row.signals.map((signal): SignalRecord => ({
+      symbol: signal.symbol,
+      side: signal.side as SignalRecord['side'],
+      confidence: signal.confidence,
+      rationale: signal.rationale,
+      citations: JSON.parse(signal.citationsJson) as string[]
+    }));
+    const report = normalizeUnifiedCharacterReport({
+      characterType:
+        row.agent?.characterType === 'finance_expert' ||
+        row.agent?.characterType === 'teacher' ||
+        row.agent?.characterType === 'trainer' ||
+        row.agent?.characterType === 'philosopher' ||
+        row.agent?.characterType === 'influencer' ||
+        row.agent?.characterType === 'summarizer'
+          ? row.agent.characterType
+          : 'finance_expert',
+      candidate: row.reportJson ? (JSON.parse(row.reportJson) as unknown) : undefined,
+      legacySummary: row.summary,
+      legacySignals: signals
+    });
+
     return {
       id: row.id,
       agentId: row.agentId,
@@ -113,13 +148,8 @@ export class ReportRepository {
       summary: row.summary,
       sourceWarnings: JSON.parse(row.sourceWarningsJson) as string[],
       needsHumanReview: row.needsHumanReview,
-      signals: row.signals.map((signal): SignalRecord => ({
-        symbol: signal.symbol,
-        side: signal.side as SignalRecord['side'],
-        confidence: signal.confidence,
-        rationale: signal.rationale,
-        citations: JSON.parse(signal.citationsJson) as string[]
-      })),
+      signals,
+      report,
       createdAt: row.createdAt,
       model: row.model,
       promptVersionNumber: row.promptVersionNumber,

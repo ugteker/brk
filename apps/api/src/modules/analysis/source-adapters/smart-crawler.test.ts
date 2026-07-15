@@ -193,10 +193,18 @@ describe('probeSource', () => {
   });
 
   it('identifies a feed source and its item count without persisting anything', async () => {
-    const feedXml = '<rss><channel><item><guid>ep-1</guid><title>Episode 1</title></item></channel></rss>';
+    const feedXml =
+      '<rss><channel><title>Daily Briefing</title><image><url>https://example.com/cover.png</url></image><item><guid>ep-1</guid><title>Episode 1</title></item></channel></rss>';
     const deps = { httpGet: vi.fn(async () => feedXml), siteInspector: { inspect: vi.fn(async () => null) } };
     const result = await probeSource(deps, { type: 'podcast_feeds', value: 'https://example.com/feed.xml', maxItems: 5 });
-    expect(result).toMatchObject({ reachable: true, kind: 'feed', itemCount: 1, maxItemsPerRun: 5 });
+    expect(result).toMatchObject({
+      reachable: true,
+      kind: 'feed',
+      itemCount: 1,
+      maxItemsPerRun: 5,
+      title: 'Daily Briefing',
+      coverImageUrl: 'https://example.com/cover.png'
+    });
     expect(deps.siteInspector.inspect).not.toHaveBeenCalled();
   });
 

@@ -2,8 +2,6 @@ name: ChatTrader Deploy
 
 on:
   push:
-    # Release policy: deployments happen from master only.
-    # Changes from alpha must be promoted via PR merge into master.
     branches: [master]
   pull_request:
     branches: [master]
@@ -29,24 +27,20 @@ jobs:
         run: npm run test
         working-directory: apps/web
 
-  deploy:
+  deploy-production:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: production
+    env:
+      DEPLOY_PATH: /opt/ChatTrader
+      DEPLOY_BRANCH: master
     concurrency:
       group: production-deploy
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
-      # The server keeps its own git clone at /opt/ChatTrader (set up once
-      # during the manual first run — see deploy/README.md). We only need to
-      # (1) refresh the .env from the current secret value, since it can
-      # change independently of code, and (2) trigger deploy/deploy.sh, which
-      # does the git pull + docker compose build/up itself. The .env content
-      # is written via a heredoc over the SSH connection so it never appears
-      # as a command-line argument or in this workflow's own logs.
       - name: Write server .env and deploy
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -57,10 +51,12 @@ jobs:
           script: |
             set -e
             umask 077
-            printf '%s\n' "$HETZNER_APP_ENV" > /opt/ChatTrader/.env
-            chmod 600 /opt/ChatTrader/.env
-            cd /opt/ChatTrader
-            git pull --ff-only origin master
+            printf '%s\n' "$HETZNER_APP_ENV" > "$DEPLOY_PATH/.env"
+            chmod 600 "$DEPLOY_PATH/.env"
+            cd "$DEPLOY_PATH"
+            git pull --ff-only origin "$DEPLOY_BRANCH"
+            export VITE_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            export VITE_BUILD_COMMIT_SHA="$(git rev-parse --short HEAD)"
             docker compose build
             docker compose up -d --remove-orphans
             sleep 5

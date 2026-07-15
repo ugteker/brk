@@ -5,7 +5,7 @@ import { RunQueueService } from './modules/runs/run-queue.service';
 import { PrismaRunStore } from './modules/runs/prisma-run-store';
 import { startSchedulerLoop } from './modules/schedules/scheduler-loop';
 import { ManualRunTrigger } from './modules/runs/manual-run-trigger';
-import { prisma } from './lib/db';
+import { ensureSqliteSchemaCompatibility, prisma } from './lib/db';
 import { PromptRepository } from './modules/prompts/repository';
 import { ArtifactRepository } from './modules/artifacts/repository';
 import { ReportRepository } from './modules/reports/repository';
@@ -27,15 +27,17 @@ import { GoogleOAuthHttpClient } from './modules/auth/google-oauth';
 import { hashPassword } from './modules/auth/password';
 import { SmtpMailer } from './modules/auth/mailer';
 import { config } from './config';
+import { AccessRepository } from './modules/access/repository';
+import { DomainAccessResolver } from './modules/access/permissions';
+import { SourceRepository } from './modules/source/repository';
+import { PlaybookRepository } from './modules/playbook/repository';
+import { logger } from './lib/logger';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
   const { email, password } = config.auth.bootstrapAdmin;
   if (!email && !password) return;
   if (!email || !password) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      '[auth] ADMIN_EMAIL/ADMIN_PASSWORD are only partially set (both are required to bootstrap an admin account) — skipping bootstrap'
-    );
+    logger.warn('[auth] ADMIN_EMAIL/ADMIN_PASSWORD are only partially set (both are required to bootstrap an admin account) — skipping bootstrap');
     return;
   }
 
@@ -44,6 +46,9 @@ async function bootstrapAdminAccount(userRepository: UserRepository) {
     // The account may have been created before email-confirmation/locking existed, or before this
     // bootstrap fix landed - make sure the configured admin is always usable on every boot, not
     // just at first creation, otherwise the admin can get silently locked out of their own app.
+    if (existing.role !== 'admin') {
+      await userRepository.setRole(existing.id, 'admin');
+    }
     if (!existing.emailVerified) {
       await userRepository.setEmailVerified(existing.id, true);
     }
@@ -54,16 +59,17 @@ async function bootstrapAdminAccount(userRepository: UserRepository) {
   }
 
   const passwordHash = await hashPassword(password);
-  const admin = await userRepository.createWithPassword(email, passwordHash, 'Admin');
+  const admin = await userRepository.createWithPassword(email, passwordHash, 'Admin', 'admin');
   // The bootstrap admin is configured directly via trusted backend env vars, bypassing the
   // normal signup/email-confirmation flow entirely - so it must be marked verified up front,
   // otherwise the new email-verification login gate would lock the admin out of their own app.
   await userRepository.setEmailVerified(admin.id, true);
-  // eslint-disable-next-line no-console
-  console.log(`[auth] Bootstrapped admin account for ${email} from backend config`);
+  logger.info(`[auth] Bootstrapped admin account for ${email} from backend config`);
 }
 
 async function start() {
+  await ensureSqliteSchemaCompatibility();
+
   const agentRepository = new AgentRepository(prisma);
   const promptRepository = new PromptRepository(prisma);
   const artifactRepository = new ArtifactRepository(prisma);
@@ -71,6 +77,9 @@ async function start() {
   const runsRepository = new RunsRepository(prisma);
   const claudeClient = new ClaudeClient({ apiKey: process.env.ANTHROPIC_API_KEY });
   const userRepository = new UserRepository(prisma);
+  const sourceRepository = new SourceRepository(prisma);
+  const playbookRepository = new PlaybookRepository(prisma);
+  const accessResolver = new DomainAccessResolver(new AccessRepository(prisma));
   const cursorRepository = new SourceCursorRepository(prisma);
   const crawlConfigRepository = new SourceCrawlConfigRepository(prisma);
   const siteInspector = new SiteInspectorClient({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -108,8 +117,32 @@ async function start() {
   const app = await buildServer({
     agentRepository,
     agents: { promptRepository, reportRepository, agentRepository, mailer },
+    accessResolver,
     runs: { runsRepository },
     auth: { userRepository, googleOAuthClient: new GoogleOAuthHttpClient(), mailer },
+    source: {
+      sourceRepository,
+      accessResolver,
+      sourceProbe: {
+        probeSource: (source, previewLimit) =>
+          source.type === 'youtube_videos'
+            ? probeYouTubeSource({ httpGet: youtubeHttpGet, httpPostJson: defaultHttpPostJson }, source, previewLimit)
+            : probeSource({ httpGet: defaultHttpGet, siteInspector }, source, previewLimit)
+      }
+    },
+    playbook: {
+      playbookRepository,
+      accessResolver,
+      runTrigger: {
+        triggerRun: async (playbookId: string) => {
+          const playbook = await playbookRepository.getPlaybook(playbookId);
+          if (!playbook) {
+            return { status: 'failed', errorCode: 'not_found' };
+          }
+          return manualRunTrigger.triggerRun(playbook.agentId, { playbookRecipients: playbook.recipients, playbookLanguage: playbook.language });
+        }
+      }
+    },
     sourceProbe: {
       probeSource: (source, previewLimit) =>
         source.type === 'youtube_videos'
@@ -124,6 +157,3 @@ async function start() {
 }
 
 start();
-
-
-

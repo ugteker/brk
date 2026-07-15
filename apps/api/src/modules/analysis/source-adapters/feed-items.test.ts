@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseFeedItems } from './feed-items';
+import { parseFeedItems, parseFeedMetadata } from './feed-items';
 
 describe('parseFeedItems', () => {
   it('parses RSS items with guid, link, and pubDate', () => {
@@ -27,6 +27,36 @@ describe('parseFeedItems', () => {
     expect(items[0].title).toBe('Episode 12: Markets Update');
     expect(items[0].description).toContain('AAPL guidance');
     expect(items[1].itemId).toBe('https://example.com/?p=11');
+  });
+
+  describe('parseFeedMetadata', () => {
+    it('extracts podcast/library card metadata from RSS channel title and itunes:image', () => {
+      const xml = `<rss><channel>
+        <title>Market Pulse Podcast</title>
+        <itunes:image href="https://cdn.example.com/podcast-cover.jpg" />
+        <item><title>Episode 1</title></item>
+      </channel></rss>`;
+
+      const metadata = parseFeedMetadata(xml);
+      expect(metadata).toEqual({
+        title: 'Market Pulse Podcast',
+        coverImageUrl: 'https://cdn.example.com/podcast-cover.jpg'
+      });
+    });
+
+    it('extracts metadata from Atom feed title and logo', () => {
+      const xml = `<feed xmlns="http://www.w3.org/2005/Atom">
+        <title>YouTube Uploads</title>
+        <logo>https://yt3.ggpht.com/channel-cover.png</logo>
+        <entry><title>Episode 1</title></entry>
+      </feed>`;
+
+      const metadata = parseFeedMetadata(xml);
+      expect(metadata).toEqual({
+        title: 'YouTube Uploads',
+        coverImageUrl: 'https://yt3.ggpht.com/channel-cover.png'
+      });
+    });
   });
 
   it('extracts a podcast:transcript url when present on an item', () => {

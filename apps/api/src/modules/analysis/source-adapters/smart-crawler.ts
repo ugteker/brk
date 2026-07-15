@@ -3,7 +3,7 @@ import type { EvidenceBlock, SiteProfile, SourceConfig, SourceCursorState, Sourc
 import type { SiteInspectorClient } from '../site-inspector-client';
 import { validateSiteProfile } from '../site-inspector-client';
 import { isFeedDocument } from './feed-detection';
-import { parseFeedItems, type FeedItem } from './feed-items';
+import { parseFeedItems, parseFeedMetadata, type FeedItem } from './feed-items';
 import { extractLinks, extractText, stripHtml } from './html-extraction';
 import type { SourceCursorRepositoryLike } from '../../crawler/source-cursor-repository';
 import type { SourceCrawlConfigRepositoryLike } from '../../crawler/crawl-config-repository';
@@ -373,6 +373,8 @@ export const PREVIEW_ITEM_COUNT = 5;
 export interface SourceProbeResult {
   reachable: boolean;
   kind: 'feed' | 'listing_page' | 'single_page' | 'unknown';
+  title?: string;
+  coverImageUrl?: string;
   itemCount?: number;
   confidence?: number;
   warning?: string;
@@ -413,10 +415,13 @@ export async function probeSource(
 
   if (isFeedDocument(html)) {
     const items = parseFeedItems(html);
+    const metadata = parseFeedMetadata(html);
     const maxItemsPerRun = resolveMaxItems(source);
     return {
       reachable: true,
       kind: 'feed',
+      title: metadata.title,
+      coverImageUrl: metadata.coverImageUrl,
       itemCount: items.length,
       maxItemsPerRun,
       previewItems: toPreviewItems(items, previewLimit),

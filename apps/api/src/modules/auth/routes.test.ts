@@ -30,7 +30,12 @@ function createFakeAgentRepo(): AgentRepositoryLike {
     },
     async listRecentRuns() {
       return [];
-    }
+    },
+    async shareAgent(): Promise<void> {},
+    async listAgentShares() {
+      return [];
+    },
+    async revokeAgentShare(): Promise<void> {}
   };
 }
 
@@ -143,6 +148,7 @@ describe('auth routes', () => {
       payload: { email: 'trader@example.com', password: 'super-secret-1' }
     });
     expect(goodLogin.statusCode).toBe(200);
+    expect(goodLogin.json().role).toBe('user');
 
     const badLogin = await app.inject({
       method: 'POST',

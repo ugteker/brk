@@ -15,7 +15,6 @@ function createAgent(overrides: Partial<Agent> = {}): Agent {
     updatedAt: new Date('2026-07-10T00:00:00.000Z'),
     sources: [],
     preferences: {},
-    recipients: ['alerts@example.com'],
     schedule: null,
     ...overrides
   };
@@ -41,20 +40,20 @@ describe('sendReportNotification', () => {
     await expect(sendReportNotification(undefined, createAgent(), createReport())).resolves.toBeUndefined();
   });
 
-  it('does nothing when the agent has no recipients', async () => {
+  it('does nothing when no recipients are provided', async () => {
     const send = vi.fn();
     const mailer: MailerLike = { send };
-    await sendReportNotification(mailer, createAgent({ recipients: [] }), createReport());
+    await sendReportNotification(mailer, createAgent(), createReport(), [], []);
     expect(send).not.toHaveBeenCalled();
   });
 
   it('emails every configured recipient with the report summary and signals', async () => {
     const send = vi.fn().mockResolvedValue(undefined);
     const mailer: MailerLike = { send };
-    const agent = createAgent({ recipients: ['a@example.com', 'b@example.com'] });
+    const agent = createAgent();
     const report = createReport();
 
-    await sendReportNotification(mailer, agent, report);
+    await sendReportNotification(mailer, agent, report, [], ['a@example.com', 'b@example.com']);
 
     expect(send).toHaveBeenCalledTimes(2);
     const [firstCall] = send.mock.calls;
@@ -76,7 +75,7 @@ describe('sendReportNotification', () => {
       ]
     });
 
-    await sendReportNotification(mailer, agent, report);
+    await sendReportNotification(mailer, agent, report, [], ['alerts@example.com']);
 
     const { html, text } = send.mock.calls[0][0];
     expect(html).toContain('Signal summary');
@@ -95,7 +94,7 @@ describe('sendReportNotification', () => {
     const agent = createAgent();
     const report = createReport({ signals: [] });
 
-    await sendReportNotification(mailer, agent, report);
+    await sendReportNotification(mailer, agent, report, [], ['alerts@example.com']);
 
     const { html } = send.mock.calls[0][0];
     expect(html).not.toContain('Signal summary');
@@ -109,7 +108,7 @@ describe('sendReportNotification', () => {
       signals: [{ symbol: 'AAPL', side: 'long', confidence: 82, rationale: 'Strong product cycle', citations: [] }]
     });
 
-    await sendReportNotification(mailer, agent, report);
+    await sendReportNotification(mailer, agent, report, [], ['alerts@example.com']);
 
     const { html, text } = send.mock.calls[0][0];
     expect(html).toContain('href="http://localhost:4173/?agentId=agent-42&symbol=AAPL"');
@@ -120,7 +119,7 @@ describe('sendReportNotification', () => {
     const send = vi.fn().mockRejectedValue(new Error('smtp down'));
     const mailer: MailerLike = { send };
 
-    await expect(sendReportNotification(mailer, createAgent(), createReport())).resolves.toBeUndefined();
+    await expect(sendReportNotification(mailer, createAgent(), createReport(), [], ['alerts@example.com'])).resolves.toBeUndefined();
     expect(send).toHaveBeenCalledTimes(1);
   });
 });
@@ -130,7 +129,7 @@ describe('sendAgentChangeConfirmation (regression)', () => {
     const send = vi.fn().mockResolvedValue(undefined);
     const mailer: MailerLike = { send };
 
-    await sendAgentChangeConfirmation(mailer, createAgent(), 'created');
+    await sendAgentChangeConfirmation(mailer, createAgent(), 'created', ['alerts@example.com']);
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0][0].subject).toContain('created');

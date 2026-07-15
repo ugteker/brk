@@ -2,6 +2,7 @@ import type { MailerLike } from '../auth/mailer';
 import type { Agent } from './types';
 import type { RunReportRecord } from '../reports/types';
 import { config } from '../../config';
+import { logger } from '../../lib/logger';
 
 export type AgentChangeAction = 'created' | 'updated';
 
@@ -12,25 +13,21 @@ function formatSourcesList(agent: Agent): string {
     .join('\n');
 }
 
-function buildAgentConfirmationEmail(agent: Agent, action: AgentChangeAction): { subject: string; text: string; html: string } {
-  const verb = action === 'created' ? 'created' : 'updated';
-  const subject = `Agent "${agent.name}" ${verb}`;
-  const text = [
-    `The agent "${agent.name}" has been ${verb}.`,
-    '',
-    `Status: ${agent.status}`,
-    `Sources:`,
-    formatSourcesList(agent),
-    '',
-    `You're receiving this because you're listed as a recipient for this agent's notifications.`
-  ].join('\n');
-  const html = `
-    <p>The agent <strong>${agent.name}</strong> has been <strong>${verb}</strong>.</p>
-    <p><strong>Status:</strong> ${agent.status}</p>
-    <p><strong>Sources:</strong></p>
-    <ul>${agent.sources.map((source) => `<li>[${source.type}] ${source.value} (every ${source.frequencyMinutes} min)</li>`).join('')}</ul>
-    <p style="color:#666;font-size:12px;">You're receiving this because you're listed as a recipient for this agent's notifications.</p>
-  `;
+function buildAgentConfirmationEmail(agent: Agent, action: AgentChangeAction, language = 'en'): { subject: string; text: string; html: string } {
+  const de = language === 'de';
+  const verb = de
+    ? (action === 'created' ? 'erstellt' : 'aktualisiert')
+    : (action === 'created' ? 'created' : 'updated');
+  const subject = de ? `Agent „${agent.name}" ${verb}` : `Agent "${agent.name}" ${verb}`;
+  const footer = de
+    ? 'Sie erhalten diese E-Mail, weil Sie als Empfänger für Benachrichtigungen dieses Agenten eingetragen sind.'
+    : "You're receiving this because you're listed as a recipient for this agent's notifications.";
+  const text = de
+    ? [`Der Agent „${agent.name}" wurde ${verb}.`, '', `Status: ${agent.status}`, 'Quellen:', formatSourcesList(agent), '', footer].join('\n')
+    : [`The agent "${agent.name}" has been ${verb}.`, '', `Status: ${agent.status}`, `Sources:`, formatSourcesList(agent), '', footer].join('\n');
+  const html = de
+    ? `<p>Der Agent <strong>${agent.name}</strong> wurde <strong>${verb}</strong>.</p><p><strong>Status:</strong> ${agent.status}</p><p><strong>Quellen:</strong></p><ul>${agent.sources.map((s) => `<li>[${s.type}] ${s.value} (alle ${s.frequencyMinutes} Min)</li>`).join('')}</ul><p style="color:#666;font-size:12px;">${footer}</p>`
+    : `<p>The agent <strong>${agent.name}</strong> has been <strong>${verb}</strong>.</p><p><strong>Status:</strong> ${agent.status}</p><p><strong>Sources:</strong></p><ul>${agent.sources.map((s) => `<li>[${s.type}] ${s.value} (every ${s.frequencyMinutes} min)</li>`).join('')}</ul><p style="color:#666;font-size:12px;">${footer}</p>`;
   return { subject, text, html };
 }
 
@@ -42,19 +39,20 @@ function buildAgentConfirmationEmail(agent: Agent, action: AgentChangeAction): {
 export async function sendAgentChangeConfirmation(
   mailer: MailerLike | undefined,
   agent: Agent,
-  action: AgentChangeAction
+  action: AgentChangeAction,
+  recipients: string[] = [],
+  language = 'en'
 ): Promise<void> {
   if (!mailer) return;
-  if (agent.recipients.length === 0) return;
+  if (recipients.length === 0) return;
 
-  const { subject, text, html } = buildAgentConfirmationEmail(agent, action);
+  const { subject, text, html } = buildAgentConfirmationEmail(agent, action, language);
   await Promise.all(
-    agent.recipients.map(async (to) => {
+    recipients.map(async (to) => {
       try {
         await mailer.send({ to, subject, text, html });
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn(`[agents] Failed to send ${action} confirmation email to ${to}:`, error);
+        logger.warn(`[agents] Failed to send ${action} confirmation email to ${to}`, error);
       }
     })
   );
@@ -119,52 +117,44 @@ function formatItemTitlesList(itemTitles: string[]): string {
 function buildReportNotificationEmail(
   agent: Agent,
   report: RunReportRecord,
-  itemTitles: string[]
+  itemTitles: string[],
+  language = 'en'
 ): { subject: string; text: string; html: string } {
-  const subject = `Report for "${agent.name}"`;
+  const de = language === 'de';
+  const subject = de ? `Bericht für „${agent.name}"` : `Report for "${agent.name}"`;
+  const footer = de
+    ? 'Sie erhalten diese E-Mail, weil Sie als Empfänger für Benachrichtigungen dieses Agenten eingetragen sind.'
+    : "You're receiving this because you're listed as a recipient for this agent's notifications.";
   const summaryLine = buildSignalSummaryText(report, agent.id);
   const text = [
-    `A report is available for the agent "${agent.name}".`,
+    de ? `Für den Agenten „${agent.name}" ist ein neuer Bericht verfügbar.` : `A report is available for the agent "${agent.name}".`,
     '',
-    itemTitles.length > 0 ? `Crawled item(s):\n${formatItemTitlesList(itemTitles)}` : '',
+    itemTitles.length > 0 ? `${de ? 'Verarbeitete Inhalte' : 'Crawled item(s)'}:\n${formatItemTitlesList(itemTitles)}` : '',
     '',
-    summaryLine ? `Signal summary: ${summaryLine}` : '',
+    summaryLine ? `${de ? 'Signalübersicht' : 'Signal summary'}: ${summaryLine}` : '',
     '',
-    `Summary: ${report.summary}`,
+    `${de ? 'Zusammenfassung' : 'Summary'}: ${report.summary}`,
     '',
-    `Signals:`,
+    `${de ? 'Signale' : 'Signals'}:`,
     formatSignalsList(report, agent.id),
     '',
-    report.needsHumanReview ? 'This report is flagged as needing human review.' : '',
-    report.sourceWarnings.length > 0 ? `Source warnings:\n${report.sourceWarnings.map((w) => `  - ${w}`).join('\n')}` : '',
+    report.needsHumanReview ? (de ? 'Dieser Bericht ist zur manuellen Überprüfung markiert.' : 'This report is flagged as needing human review.') : '',
+    report.sourceWarnings.length > 0 ? `${de ? 'Quellwarnungen' : 'Source warnings'}:\n${report.sourceWarnings.map((w) => `  - ${w}`).join('\n')}` : '',
     '',
-    `You're receiving this because you're listed as a recipient for this agent's notifications.`
+    footer
   ]
     .filter((line) => line !== '')
     .join('\n');
   const html = `
-    <p>A report is available for the agent <strong>${agent.name}</strong>.</p>
-    ${
-      itemTitles.length > 0
-        ? `<p><strong>Crawled item(s):</strong></p><ul>${itemTitles.map((title) => `<li>${title}</li>`).join('')}</ul>`
-        : ''
-    }
+    <p>${de ? `Für den Agenten <strong>${agent.name}</strong> ist ein neuer Bericht verfügbar.` : `A report is available for the agent <strong>${agent.name}</strong>.`}</p>
+    ${itemTitles.length > 0 ? `<p><strong>${de ? 'Verarbeitete Inhalte' : 'Crawled item(s)'}:</strong></p><ul>${itemTitles.map((title) => `<li>${title}</li>`).join('')}</ul>` : ''}
     ${buildSignalSummaryHtml(report, agent.id)}
-    <p><strong>Summary:</strong> ${report.summary}</p>
-    <p><strong>Signals:</strong></p>
-    <ul>${report.signals
-      .map(
-        (signal) =>
-          `<li><span style="color:${signalColor(signal.side)};font-weight:700;">${signalArrow(signal.side)}</span> <a href="${buildSymbolLink(agent.id, signal.symbol)}" style="color:#1677ff;font-weight:600;text-decoration:none;">${signal.symbol}</a> · ${signal.side.toUpperCase()} (confidence ${signal.confidence}%): ${signal.rationale}</li>`
-      )
-      .join('')}</ul>
-    ${report.needsHumanReview ? '<p><strong>This report is flagged as needing human review.</strong></p>' : ''}
-    ${
-      report.sourceWarnings.length > 0
-        ? `<p><strong>Source warnings:</strong></p><ul>${report.sourceWarnings.map((w) => `<li>${w}</li>`).join('')}</ul>`
-        : ''
-    }
-    <p style="color:#666;font-size:12px;">You're receiving this because you're listed as a recipient for this agent's notifications.</p>
+    <p><strong>${de ? 'Zusammenfassung' : 'Summary'}:</strong> ${report.summary}</p>
+    <p><strong>${de ? 'Signale' : 'Signals'}:</strong></p>
+    <ul>${report.signals.map((signal) => `<li><span style="color:${signalColor(signal.side)};font-weight:700;">${signalArrow(signal.side)}</span> <a href="${buildSymbolLink(agent.id, signal.symbol)}" style="color:#1677ff;font-weight:600;text-decoration:none;">${signal.symbol}</a> · ${signal.side.toUpperCase()} (${de ? 'Konfidenz' : 'confidence'} ${signal.confidence}%): ${signal.rationale}</li>`).join('')}</ul>
+    ${report.needsHumanReview ? `<p><strong>${de ? 'Dieser Bericht ist zur manuellen Überprüfung markiert.' : 'This report is flagged as needing human review.'}</strong></p>` : ''}
+    ${report.sourceWarnings.length > 0 ? `<p><strong>${de ? 'Quellwarnungen' : 'Source warnings'}:</strong></p><ul>${report.sourceWarnings.map((w) => `<li>${w}</li>`).join('')}</ul>` : ''}
+    <p style="color:#666;font-size:12px;">${footer}</p>
   `;
   return { subject, text, html };
 }
@@ -183,19 +173,20 @@ export async function sendReportNotification(
   mailer: MailerLike | undefined,
   agent: Agent,
   report: RunReportRecord,
-  itemTitles: string[] = []
+  itemTitles: string[] = [],
+  recipients: string[] = [],
+  language = 'en'
 ): Promise<void> {
   if (!mailer) return;
-  if (agent.recipients.length === 0) return;
+  if (recipients.length === 0) return;
 
-  const { subject, text, html } = buildReportNotificationEmail(agent, report, itemTitles);
+  const { subject, text, html } = buildReportNotificationEmail(agent, report, itemTitles, language);
   await Promise.all(
-    agent.recipients.map(async (to) => {
+    recipients.map(async (to) => {
       try {
         await mailer.send({ to, subject, text, html });
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn(`[agents] Failed to send report notification email to ${to}:`, error);
+        logger.warn(`[agents] Failed to send report notification email to ${to}`, error);
       }
     })
   );

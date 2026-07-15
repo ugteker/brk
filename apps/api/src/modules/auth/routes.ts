@@ -8,6 +8,7 @@ import { signSessionToken, verifySessionToken } from './jwt';
 import { buildGoogleAuthUrl, type GoogleOAuthClient } from './google-oauth';
 import type { MailerLike } from './mailer';
 import { sendEmailConfirmationLink, sendPasswordResetLink, sendAdminNewUserNotification } from './emails';
+import { logger } from '../../lib/logger';
 
 export interface AuthRoutesDeps {
   userRepository: UserRepositoryLike;
@@ -47,8 +48,7 @@ async function notifyAdminOfNewUser(
   try {
     await sendAdminNewUserNotification(mailer, adminEmail, newUserEmail, signupMethod);
   } catch (error) {
-    // eslint-disable-next-line no-console
-    console.warn(`[auth] Failed to send admin new-user notification for ${newUserEmail}:`, error);
+    logger.warn(`[auth] Failed to send admin new-user notification for ${newUserEmail}`, error);
   }
 }
 
@@ -82,8 +82,7 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesD
       try {
         await sendEmailConfirmationLink(mailer, user.email, token);
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn(`[auth] Failed to send confirmation email to ${user.email}:`, error);
+        logger.warn(`[auth] Failed to send confirmation email to ${user.email}`, error);
       }
     }
 
@@ -120,8 +119,7 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesD
         try {
           await sendEmailConfirmationLink(mailer, user.email, token);
         } catch (error) {
-          // eslint-disable-next-line no-console
-          console.warn(`[auth] Failed to resend confirmation email to ${user.email}:`, error);
+          logger.warn(`[auth] Failed to resend confirmation email to ${user.email}`, error);
         }
       }
     }
@@ -144,8 +142,7 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesD
         try {
           await sendPasswordResetLink(mailer, user.email, token);
         } catch (error) {
-          // eslint-disable-next-line no-console
-          console.warn(`[auth] Failed to send password reset email to ${user.email}:`, error);
+          logger.warn(`[auth] Failed to send password reset email to ${user.email}`, error);
         }
       }
     }

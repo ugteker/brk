@@ -1,0 +1,273 @@
+{
+  "common": {
+    "back": "Back",
+    "next": "Next",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "update": "Update",
+    "close": "Close",
+    "loading": "Loading…",
+    "error": "Error",
+    "or": "or",
+    "yes": "Yes",
+    "no": "No",
+    "confirm": "Confirm",
+    "search": "Search",
+    "noData": "No data",
+    "selected": "Selected",
+    "optional": "optional"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "library": "Library",
+    "agents": "Agents",
+    "playbooks": "Playbooks",
+    "accountMenu": "Account menu",
+    "agentsAndPlaybooks": "Agents & Playbooks",
+    "userManagement": "User Management",
+    "logOut": "Log out",
+    "openAdminArea": "Open admin area"
+  },
+  "language": {
+    "switchTo": "Sprache: Deutsch",
+    "current": "EN"
+  },
+  "library": {
+    "heading": "Dashboard",
+    "loadingSources": "Loading sources…",
+    "failedSources": "Failed to load sources.",
+    "noSources": "No sources in this library yet.",
+    "browseMarketplace": "Browse marketplace",
+    "backToLibrary": "← Back to library",
+    "createTab": "Create library tab",
+    "renameTab": "Rename active library tab",
+    "tabTooltip": "Add library tab",
+    "noEpisodes": "No scanned episodes/items yet",
+    "recentEpisodes": "Recent episodes preview",
+    "episodesPreview": "Episodes preview",
+    "episodes": "Episodes: {{count}}",
+    "clone": "Clone",
+    "cloning": "Cloning…",
+    "notInWorkflow": "Not in any analysis workflow",
+    "analyzingCount": "{{count}} agent(s) analyzing",
+    "lastRun": "Last run: {{date}}",
+    "notYetAnalyzed": "Not yet analyzed",
+    "noWorkflowCta": "No analysis workflows for this source yet. Add it to a playbook to start generating reports.",
+    "reportsTab": "Reports",
+    "runsTab": "Runs",
+    "episodesTab": "Episodes",
+    "runAnalysisNow": "Run analysis now",
+    "analysisStarted": "Analysis started"
+  },
+  "listen": {
+    "listen": "Summarize",
+    "listening": "Summarizing",
+    "listenAriaLabel": "Summarize this source",
+    "listeningAriaLabel": "Summarizing this source",
+    "stopListening": "Stop summarizing",
+    "stopListeningConfirm": "Stop summarizing?",
+    "stopListeningYes": "Yes, stop",
+    "dialogTitleNew": "Summarize: {{title}}",
+    "dialogTitleEdit": "Summarizing: {{title}}",
+    "dialogTitleGenericNew": "Set up summarizer",
+    "dialogTitleGenericEdit": "Update summarizer",
+    "thisSource": "this source",
+    "stepSubtitle": "Choose an AI agent to summarize this source and generate reports for you. No agents yet? Create one below.",
+    "stepPickSource": "Pick source",
+    "stepChooseAgent": "Choose agent",
+    "stepSetSchedule": "Set schedule"
+  },
+  "agent": {
+    "createNew": "Create new agent",
+    "createNewSub": "Full setup wizard",
+    "selectAgent": "Select agent {{name}}",
+    "deleteAgent": "Delete agent {{name}}",
+    "deleteConfirmTitle": "Delete this agent?",
+    "deleteConfirmDesc": "This removes the agent from all library cards that use it. Those cards will return to an 'Unsummarized' state.",
+    "personaPromptReady": "Persona + prompt ready",
+    "stepCharacter": "Character",
+    "stepPersonality": "Personality & Model",
+    "stepSchedule": "Schedule & Recipients",
+    "nameLabel": "Agent name",
+    "namePlaceholder": "Agent name",
+    "chooseCharacter": "Choose a character type",
+    "choosePersonality": "Choose a personality style",
+    "choosePersonalityFor": "for {{persona}}",
+    "characterLabel": "Character:",
+    "riskLevel": "Risk level",
+    "riskLow": "Low",
+    "riskMedium": "Medium",
+    "riskHigh": "High",
+    "model": "Model",
+    "systemPrompt": "System prompt",
+    "validationName": "Give the agent a name to continue.",
+    "validationRisk": "Risk level is required for Finance Expert.",
+    "saving": "Creating…",
+    "createAgent": "Create agent",
+    "create": "Create agent",
+    "character": "Character",
+    "forCharacter": "for {{character}}",
+    "agentCreated": "Agent \"{{name}}\" created — review schedule and save."
+  },
+  "schedule": {
+    "intro": "Your agent will automatically scan this source and generate a report on the schedule below. Set how often it should run and who should receive the results by email.",
+    "mode": "Schedule",
+    "interval": "Interval",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "intervalMinutes": "Interval in minutes",
+    "dailyTime": "HH:mm",
+    "timezone": "Select timezone",
+    "daysOfWeek": "Days of week",
+    "recipients": "Email recipients (optional)",
+    "recipientsPlaceholder": "Add one or more email addresses",
+    "recipientsHint": "Leave empty to skip email delivery. You can add recipients later.",
+    "recipientsLabel": "Recipient emails"
+  },
+  "playbook": {
+    "createPlaybook": "Create playbook",
+    "updatePlaybook": "Update playbook",
+    "createNew": "Create new playbook",
+    "noPlaybooks": "No playbooks yet.",
+    "status": "Status",
+    "lastRun": "Last run",
+    "nextRun": "Next run",
+    "enable": "Enable",
+    "disable": "Disable",
+    "runNow": "Run now",
+    "pickSourceFirst": "Pick a source first",
+    "pickAgentFirst": "Pick an agent first"
+  },
+  "source": {
+    "noSources": "No sources available.",
+    "selectSource": "Select source {{title}}",
+    "type": {
+      "podcast": "Podcast",
+      "youtube": "YouTube",
+      "web": "Web"
+    }
+  },
+  "marketplace": {
+    "heading": "Marketplace",
+    "noItems": "No marketplace items found.",
+    "cloneButton": "Clone",
+    "cloningButton": "Cloning…"
+  },
+  "entityActions": {
+    "edit": "Edit {{label}}",
+    "share": "Share {{label}}",
+    "publish": "Publish {{label}}",
+    "delete": "Delete {{label}}",
+    "shareAndPublish": "Share & Publish",
+    "confirmDelete": "Delete this {{label}}?",
+    "runNow": "Run now"
+  },
+  "auth": {
+    "title": "ChatTrader",
+    "subtitle": "Sign in to manage your AI trading agents.",
+    "login": "Log in",
+    "signup": "Sign up",
+    "email": "Email",
+    "password": "Password",
+    "newPassword": "New password",
+    "loginButton": "Log in",
+    "createAccount": "Create account",
+    "forgotPassword": "Forgot password?",
+    "sendResetLink": "Send reset link",
+    "resetPassword": "Reset password",
+    "backToLogin": "Back to log in",
+    "signInWithGoogle": "Sign in with Google",
+    "signUpWithGoogle": "Sign up with Google",
+    "confirmationTitle": "Check your email",
+    "confirmationSub": "We sent a confirmation link to {{email}}. Click it to activate your account.",
+    "resendConfirmation": "Resend confirmation email",
+    "confirmationResent": "Confirmation email resent",
+    "bannerEmailConfirmed": "Your email has been confirmed. You can now log in.",
+    "bannerEmailInvalid": "That confirmation link is invalid or has expired. Please request a new one.",
+    "bannerAccountLocked": "This account has been locked. Contact an administrator for help.",
+    "bannerResetSent": "If that email is registered, a reset link is on its way.",
+    "bannerPasswordReset": "Your password has been reset. You can now log in.",
+    "errorFallback": "Something went wrong",
+    "resetFailFallback": "Failed to reset password"
+  },
+  "admin": {
+    "users": {
+      "title": "User Management",
+      "loadingUsers": "Loading users…",
+      "noUsers": "No users found.",
+      "role": "Role",
+      "status": "Status",
+      "actions": "Actions",
+      "lockUser": "Lock",
+      "unlockUser": "Unlock",
+      "deleteUser": "Delete",
+      "confirmDelete": "Delete this user?",
+      "confirmLock": "Lock this user?",
+      "active": "Active",
+      "locked": "Locked"
+    }
+  },
+  "personas": {
+    "finance_expert": {
+      "name": "Finance Expert",
+      "tagline": "Signals-focused equity analysis and risk-aware market interpretation.",
+      "characters": {
+        "conservative-analyst":       { "name": "Conservative Analyst",       "tagline": "Blue-chip focus, high evidence bar, cautious on long/short calls.", "intro": "I keep my powder dry. Hard numbers first — if the evidence isn't concrete, I stay quiet." },
+        "balanced-analyst":           { "name": "Balanced Analyst",           "tagline": "General-purpose, evidence-weighted long/short calls (default).",   "intro": "I weigh both sides before picking a direction. Solid analysis, no drama, always cite the source." },
+        "aggressive-momentum-trader": { "name": "Aggressive Momentum Trader", "tagline": "Fast-moving, hype and sentiment driven, higher signal volume.",     "intro": "I move fast and chase conviction. Sentiment counts — first in wins." },
+        "contrarian-value-investor":  { "name": "Contrarian Value Investor",  "tagline": "Looks for oversold/undervalued names the crowd has given up on.",  "intro": "Everyone's wrong sometimes. I look for the names the crowd gave up on too early." },
+        "quant-data-driven-analyst":  { "name": "Quant / Data-Driven Analyst","tagline": "Numbers-only: requires explicit financial metrics before signaling.","intro": "No numbers, no signal. I only speak when there's something measurable to say." },
+        "short-seller-skeptic":       { "name": "Short-Seller / Skeptic",     "tagline": "Hunts for red flags, overhype, and fraud/accounting concerns.",    "intro": "Show me the red flags. I find trouble before you stumble into it." },
+        "macro-thematic-strategist":  { "name": "Macro / Thematic Strategist","tagline": "Sector rotation and macro-theme driven calls (rates, AI, energy).","intro": "I tie individual names to the big picture — rates, AI cycles, sector rotations." }
+      }
+    },
+    "teacher": {
+      "name": "Teacher",
+      "tagline": "Explains ideas step-by-step for learning and retention.",
+      "characters": {
+        "teacher-mentor":               { "name": "Mentor",               "tagline": "Guides learners with coaching-style explanations.",   "intro": "I guide you step by step — think of me as your personal learning companion." },
+        "teacher-classroom-instructor": { "name": "Classroom Instructor", "tagline": "Structured lessons with clear checkpoints.",          "intro": "Clear structure, steady checkpoints. I make complex ideas easy to follow." },
+        "teacher-practical-coach":      { "name": "Practical Coach",      "tagline": "Actionable guidance with hands-on examples.",         "intro": "Skip the theory. I give you hands-on examples you can use right away." }
+      }
+    },
+    "influencer": {
+      "name": "Influencer",
+      "tagline": "Creates audience-ready narratives and content angles.",
+      "characters": {
+        "influencer-trend-scout":          { "name": "Trend Scout",          "tagline": "Finds timely themes and attention hooks.",           "intro": "I sniff out what's trending before the crowd notices. Hooks first, always." },
+        "influencer-storyteller":          { "name": "Storyteller",          "tagline": "Crafts compelling narratives from evidence.",         "intro": "Every data point has a story. I craft the narrative that makes people listen." },
+        "influencer-campaign-strategist":  { "name": "Campaign Strategist",  "tagline": "Builds clear campaign messaging plans.",             "intro": "I turn insights into messaging plans your audience will actually act on." }
+      }
+    },
+    "trainer": {
+      "name": "Trainer",
+      "tagline": "Builds repeatable practice routines and performance drills.",
+      "characters": {
+        "trainer-drill-sergeant":   { "name": "Drill Sergeant",      "tagline": "Direct training with disciplined repetition.",       "intro": "Repetition is key. I push you until the right habits stick — no excuses." },
+        "trainer-supportive-coach": { "name": "Supportive Coach",    "tagline": "Encouraging feedback with progressive goals.",       "intro": "Progress over perfection. I keep you moving forward with encouragement." },
+        "trainer-exam-prep":        { "name": "Exam Prep Trainer",   "tagline": "Targets likely test points and recall drills.",      "intro": "Focused recall drills on the topics that matter most. Let's get you ready." }
+      }
+    },
+    "philosopher": {
+      "name": "Philosopher",
+      "tagline": "Interprets ideas through reasoning, assumptions, and ethics.",
+      "characters": {
+        "philosopher-socratic-guide":   { "name": "Socratic Guide",   "tagline": "Uses questions to reveal assumptions.",              "intro": "I answer your questions with better questions. Assumptions deserve scrutiny." },
+        "philosopher-critical-thinker": { "name": "Critical Thinker", "tagline": "Stress-tests logic and evidence quality.",           "intro": "I stress-test every argument. If the logic doesn't hold, I'll find the crack." },
+        "philosopher-ethics-analyst":   { "name": "Ethics Analyst",   "tagline": "Balances decisions with ethical consequences.",      "intro": "Decisions have consequences beyond the obvious. I keep the bigger picture honest." }
+      }
+    },
+    "summarizer": {
+      "name": "Summarizer",
+      "tagline": "Distills complex inputs into concise decision-ready takeaways.",
+      "characters": {
+        "summarizer-executive-briefer":  { "name": "Executive Briefer",  "tagline": "Top-line brief for fast executive decisions.",     "intro": "Top-line only. I give you the signal without the noise — fast." },
+        "summarizer-research-digestor":  { "name": "Research Digestor",  "tagline": "Turns noisy inputs into focused research notes.",  "intro": "Dense inputs, focused output. I turn chaos into a clean research note." },
+        "summarizer-action-planner":     { "name": "Action Planner",     "tagline": "Converts insights into prioritized action items.", "intro": "Insights are useless unless they drive action. I turn findings into next steps." }
+      }
+    }
+  }
+}

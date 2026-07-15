@@ -11,10 +11,15 @@ function createFakeAgentRepo() {
         id: 'agent-1',
         ownerUserId,
         name: input.name,
+        description: input.description ?? '',
+        characterType: input.characterType ?? 'summarizer',
+        promptConfig: input.promptConfig ?? {},
         status: 'active',
         createdAt: new Date(),
         updatedAt: new Date(),
-        sources: input.sources
+        sources: input.sources ?? [],
+        preferences: input.preferences ?? {},
+        schedule: input.schedule ?? null
       };
       agents.set(agent.id, agent);
       return agent;
@@ -32,7 +37,25 @@ function createFakeAgentRepo() {
     },
     async getAgent(agentId: string): Promise<Agent | null> {
       return agents.get(agentId) ?? null;
-    }
+    },
+    async listRecentRuns() {
+      return [];
+    },
+    async shareAgent(): Promise<void> {},
+    async listAgentShares() {
+      return [];
+    },
+    async revokeAgentShare(): Promise<void> {}
+  };
+}
+
+function createAccessResolver(
+  allow: (input: { actorUserId: string; action: string; resourceId: string }) => boolean = () => true
+) {
+  return {
+    resolve: vi.fn(async (input: { actorUserId: string; action: string; resourceId: string }) =>
+      allow(input) ? { allowed: true as const, reason: 'owner' as const } : { allowed: false as const, reason: 'denied' as const }
+    )
   };
 }
 
@@ -70,7 +93,8 @@ describe('agent routes', () => {
           }),
           listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => []
         }
-      }
+      },
+      accessResolver: createAccessResolver() as any
     });
 
     const res = await app.inject({ method: 'GET', url: '/api/agents/agent-1/report/latest', headers: authCookieHeader() });
@@ -90,7 +114,8 @@ describe('agent routes', () => {
       agents: {
         promptRepository: { savePromptVersion: async () => { throw new Error('unused'); }, getLatestPromptVersion: async () => null },
         reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [] }
-      }
+      },
+      accessResolver: createAccessResolver() as any
     });
 
     const res = await app.inject({ method: 'GET', url: '/api/agents/agent-1/report/latest', headers: authCookieHeader() });
@@ -129,7 +154,8 @@ describe('agent routes', () => {
       agents: {
         promptRepository: { savePromptVersion: async () => { throw new Error('unused'); }, getLatestPromptVersion: async () => null },
         reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => reports, listSignalHistoryForSymbol: async () => [] }
-      }
+      },
+      accessResolver: createAccessResolver() as any
     });
 
     const res = await app.inject({ method: 'GET', url: '/api/agents/agent-1/reports', headers: authCookieHeader() });
@@ -163,7 +189,8 @@ describe('agent routes', () => {
           listReportsForAgent: async () => [],
           listSignalHistoryForSymbol: async (agentId: string, symbol: string) => (agentId === 'agent-1' && symbol === 'AAPL' ? history : [])
         }
-      }
+      },
+      accessResolver: createAccessResolver() as any
     });
 
     const res = await app.inject({ method: 'GET', url: '/api/agents/agent-1/signals/AAPL', headers: authCookieHeader() });
@@ -183,7 +210,8 @@ describe('agent routes', () => {
           listReportsForAgent: async () => [],
           listSignalHistoryForSymbol: async () => []
         }
-      }
+      },
+      accessResolver: createAccessResolver() as any
     });
 
     const res = await app.inject({ method: 'GET', url: '/api/agents/agent-1/signals/MSFT', headers: authCookieHeader() });
@@ -209,7 +237,8 @@ describe('agent routes', () => {
           getLatestPromptVersion: async () => null
         },
         reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [] }
-      }
+      },
+      accessResolver: createAccessResolver() as any
     });
 
     const res = await app.inject({
@@ -221,6 +250,65 @@ describe('agent routes', () => {
 
     expect(res.statusCode).toBe(201);
     expect(res.json().version).toBe(2);
+  });
+
+  it('denies read endpoints before querying reports', async () => {
+    const listReportsForAgent = vi.fn(async () => []);
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      auth: createTestAuthDeps(),
+      agents: {
+        promptRepository: { savePromptVersion: async () => { throw new Error('unused'); }, getLatestPromptVersion: async () => null },
+        reportRepository: {
+          getLatestRunReport: async () => null,
+          listReportsForAgent,
+          listSignalHistoryForSymbol: async () => []
+        }
+      },
+      accessResolver: createAccessResolver(() => false) as any
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/agents/agent-1/reports', headers: authCookieHeader('blocked-user') });
+    expect(res.statusCode).toBe(403);
+    expect(listReportsForAgent).not.toHaveBeenCalled();
+  });
+
+  it('denies edit endpoints before writing prompt versions', async () => {
+    const savePromptVersion = vi.fn(async () => ({
+      id: 'prompt-2',
+      agentId: 'agent-1',
+      version: 2,
+      model: 'claude-sonnet-4-5',
+      systemPrompt: 'Analyze for signals',
+      enabled: true,
+      createdAt: new Date()
+    }));
+    const accessResolver = createAccessResolver(({ action }) => action !== 'edit');
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      auth: createTestAuthDeps(),
+      agents: {
+        promptRepository: { savePromptVersion, getLatestPromptVersion: async () => null },
+        reportRepository: {
+          getLatestRunReport: async () => null,
+          listReportsForAgent: async () => [],
+          listSignalHistoryForSymbol: async () => []
+        }
+      },
+      accessResolver: accessResolver as any
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-1/prompt',
+      headers: authCookieHeader('blocked-user'),
+      payload: { model: 'claude-sonnet-4-5', systemPrompt: 'Analyze for signals', enabled: true }
+    });
+    expect(res.statusCode).toBe(403);
+    expect(savePromptVersion).not.toHaveBeenCalled();
+    expect(accessResolver.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'edit', resourceType: 'agent', resourceId: 'agent-1' })
+    );
   });
 
   describe('POST /api/agents/:agentId/reports/:reportId/resend-notification', () => {
@@ -248,15 +336,17 @@ describe('agent routes', () => {
         agents: {
           promptRepository: unusedPromptRepo(),
           reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [], getReportById: async () => sampleReport },
-          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, recipients: ['a@example.com', 'b@example.com'], schedule: null }) },
+          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, schedule: null }) },
           mailer: { send }
-        }
+        },
+        accessResolver: createAccessResolver() as any
       });
 
       const res = await app.inject({
         method: 'POST',
         url: '/api/agents/agent-1/reports/report-1/resend-notification',
-        headers: authCookieHeader()
+        headers: authCookieHeader(),
+        payload: { recipients: ['a@example.com', 'b@example.com'] }
       });
 
       expect(res.statusCode).toBe(200);
@@ -272,7 +362,8 @@ describe('agent routes', () => {
           promptRepository: unusedPromptRepo(),
           reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [], getReportById: async () => sampleReport },
           agentRepository: { getAgent: async () => null }
-        }
+        },
+        accessResolver: createAccessResolver() as any
       });
 
       const res = await app.inject({
@@ -291,8 +382,9 @@ describe('agent routes', () => {
         agents: {
           promptRepository: unusedPromptRepo(),
           reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [], getReportById: async () => null },
-          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, recipients: ['a@example.com'], schedule: null }) }
-        }
+          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, schedule: null }) }
+        },
+        accessResolver: createAccessResolver() as any
       });
 
       const res = await app.inject({
@@ -315,8 +407,9 @@ describe('agent routes', () => {
             listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [],
             getReportById: async () => ({ ...sampleReport, agentId: 'agent-2' })
           },
-          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, recipients: ['a@example.com'], schedule: null }) }
-        }
+          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, schedule: null }) }
+        },
+        accessResolver: createAccessResolver() as any
       });
 
       const res = await app.inject({
@@ -328,15 +421,16 @@ describe('agent routes', () => {
       expect(res.statusCode).toBe(404);
     });
 
-    it('returns 400 when the agent has no recipients configured', async () => {
+    it('returns 400 when playbook recipients are not provided', async () => {
       const app = await buildServer({
         agentRepository: createFakeAgentRepo(),
         auth: createTestAuthDeps(),
         agents: {
           promptRepository: unusedPromptRepo(),
           reportRepository: { getLatestRunReport: async () => null, listReportsForAgent: async () => [], listSignalHistoryForSymbol: async () => [], getReportById: async () => sampleReport },
-          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, recipients: [], schedule: null }) }
-        }
+          agentRepository: { getAgent: async () => ({ id: 'agent-1', ownerUserId: 'user-1', name: 'Agent One', description: '', status: 'active', createdAt: new Date(), updatedAt: new Date(), sources: [], preferences: {}, schedule: null }) }
+        },
+        accessResolver: createAccessResolver() as any
       });
 
       const res = await app.inject({
@@ -346,7 +440,7 @@ describe('agent routes', () => {
       });
 
       expect(res.statusCode).toBe(400);
-      expect(res.json().code).toBe('no_recipients');
+      expect(res.json().code).toBe('playbook_recipients_required');
     });
   });
 });

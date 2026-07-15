@@ -1,5 +1,7 @@
 import type { ClaudeAnalysisResult } from './types';
 import type { SignalRecord } from '../reports/types';
+import type { CharacterType } from '../agents/types';
+import { normalizeUnifiedCharacterReport, ReportShapeValidationError } from '../reports/unified-report';
 
 interface RawSignal {
   symbol?: unknown;
@@ -12,6 +14,8 @@ interface RawSignal {
 interface RawClaudeResponse {
   summary?: unknown;
   signals?: unknown;
+  common?: unknown;
+  section?: unknown;
   sourceWarnings?: unknown;
   needsHumanReview?: unknown;
 }
@@ -38,17 +42,33 @@ function parseSignal(raw: RawSignal, index: number): SignalRecord {
   };
 }
 
-export function parseClaudeResponse(raw: RawClaudeResponse): ClaudeAnalysisResult {
-  if (typeof raw.summary !== 'string') {
+export function parseClaudeResponse(raw: RawClaudeResponse, characterType: CharacterType = 'finance_expert'): ClaudeAnalysisResult {
+  const legacySummary = typeof raw.summary === 'string' ? raw.summary : '';
+  const legacySignals = Array.isArray(raw.signals) ? raw.signals.map((signal, index) => parseSignal(signal as RawSignal, index)) : [];
+
+  if (!raw.common && !raw.summary) {
     throw new ClaudeResponseParseError('response is missing a summary');
   }
-  if (!Array.isArray(raw.signals)) {
-    throw new ClaudeResponseParseError('response is missing a signals array');
+
+  let report;
+  try {
+    report = normalizeUnifiedCharacterReport({
+      characterType,
+      candidate: raw.common || raw.section ? { common: raw.common, section: raw.section } : undefined,
+      legacySummary,
+      legacySignals
+    });
+  } catch (error) {
+    if (error instanceof ReportShapeValidationError) {
+      throw new ClaudeResponseParseError(error.message);
+    }
+    throw error;
   }
 
   return {
-    summary: raw.summary,
-    signals: raw.signals.map((signal, index) => parseSignal(signal as RawSignal, index)),
+    summary: report.common.summary,
+    signals: report.section.character_type === 'finance_expert' ? report.section.signals : [],
+    report,
     sourceWarnings: Array.isArray(raw.sourceWarnings)
       ? raw.sourceWarnings.filter((w): w is string => typeof w === 'string')
       : [],

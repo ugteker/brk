@@ -8,6 +8,7 @@ function createFakeDb() {
     agentRunId: string;
     promptVersionId: string;
     summary: string;
+    reportJson: string | null;
     sourceWarningsJson: string;
     needsHumanReview: boolean;
     createdAt: Date;
@@ -30,6 +31,7 @@ function createFakeDb() {
           agentRunId: string;
           promptVersionId: string;
           summary: string;
+          reportJson: string;
           sourceWarningsJson: string;
           needsHumanReview: boolean;
           model: string | null;
@@ -47,6 +49,7 @@ function createFakeDb() {
           agentRunId: data.agentRunId,
           promptVersionId: data.promptVersionId,
           summary: data.summary,
+          reportJson: data.reportJson,
           sourceWarningsJson: data.sourceWarningsJson,
           needsHumanReview: data.needsHumanReview,
           createdAt: new Date('2026-07-10T00:00:00.000Z'),
@@ -110,6 +113,7 @@ describe('ReportRepository', () => {
 
     expect(saved.signals[0]?.symbol).toBe('AAPL');
     expect(saved.sourceWarnings[0]).toBe('one podcast transcript was missing');
+    expect(saved.report.section.character_type).toBe('finance_expert');
   });
 
   it('returns the latest run report for a agent', async () => {
@@ -304,5 +308,43 @@ describe('ReportRepository', () => {
     });
 
     expect(await repo.listSignalHistoryForSymbol('agent-1', 'AAPL')).toEqual([]);
+  });
+
+  it('normalizes a legacy-style report into v2 shape', async () => {
+    const repo = new ReportRepository(createFakeDb() as never);
+
+    const saved = await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-legacy',
+      promptVersionId: 'prompt-1',
+      summary: 'legacy summary',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: [{ symbol: 'AAPL', side: 'long', confidence: 70, rationale: 'legacy', citations: ['c1'] }]
+    });
+
+    expect(saved.report.common.summary).toBe('legacy summary');
+    expect(saved.report.section.character_type).toBe('finance_expert');
+  });
+
+  it('rejects non-finance report payloads that include signals', async () => {
+    const repo = new ReportRepository(createFakeDb() as never);
+
+    await expect(() =>
+      repo.saveRunReport({
+        agentId: 'agent-1',
+        agentRunId: 'run-2',
+        promptVersionId: 'prompt-1',
+        characterType: 'teacher',
+        summary: 'teacher summary',
+        needsHumanReview: false,
+        sourceWarnings: [],
+        signals: [],
+        report: {
+          common: { summary: 'teacher summary', key_takeaways: [], sources_used: [], citations: [] },
+          section: { character_type: 'teacher', lesson_explanation: 'lesson', signals: [{ symbol: 'AAPL' }] } as never
+        }
+      })
+    ).rejects.toThrow('signals are only allowed for finance_expert');
   });
 });

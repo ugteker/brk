@@ -4,27 +4,33 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, expect, it, vi } from 'vitest';
 import { createAgent, deleteAgent, getAgent, listAgents, updateAgent, listAgentEpisodeOptions, runAgentNow } from '../api/agents';
 import { saveAgentPrompt } from '../api/agents';
+import { listPlaybooks } from '../api/playbooks';
 import { AgentForm } from './AgentForm';
 import { AgentsPage } from '../pages/AgentsPage';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 3;
 
-function renderAgentsPage() {
-  return render(
+async function renderAgentsPage(options?: { openAgentsHub?: boolean }) {
+  const utils = render(
     <AuthProvider>
       <ThemeProvider>
         <AgentsPage />
       </ThemeProvider>
     </AuthProvider>
   );
+  if (options?.openAgentsHub ?? true) {
+    const menuBtn = await screen.findByRole('button', { name: /account menu/i });
+    fireEvent.click(menuBtn);
+    fireEvent.click(await screen.findByRole('menuitem', { name: /agents & playbooks/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
+  }
+  return utils;
 }
 
-// AgentForm reads the logged-in user's email (via useAuth) once, at mount, to default the
-// recipients field - matching how App.tsx only mounts children after auth has resolved (it shows
-// a Spin while status === 'loading'). This helper mirrors that gating so tests see the same
-// "already loaded" state production code relies on.
+// App.tsx mounts children only after auth resolves (Spin while status === 'loading').
+// This helper mirrors that gating so tests run against the same ready state.
 function AgentFormWhenReady(props: ComponentProps<typeof AgentForm>) {
   const { status } = useAuth();
   if (status === 'loading') return null;
@@ -46,6 +52,7 @@ vi.mock('../api/auth', () => ({
     id: 'user-1',
     email: 'trader@example.com',
     displayName: 'Trader',
+    role: 'admin',
     hasPassword: true,
     hasGoogleLinked: false,
     createdAt: new Date().toISOString()
@@ -66,7 +73,6 @@ vi.mock('../api/agents', () => ({
     status: 'active',
     sources: [{ type: 'web_urls', value: 'https://example.com', frequencyMinutes: 90 }],
     preferences: { risk_level: ['high'] },
-    recipients: ['ops@example.com'],
     schedule: { mode: 'interval', intervalMinutes: 120 }
   }),
   listAgents: vi.fn().mockResolvedValue([]),
@@ -82,6 +88,28 @@ vi.mock('../api/agents', () => ({
   getLatestAgentPrompt: vi.fn().mockResolvedValue(null)
 }));
 
+vi.mock('../api/sources', () => ({
+  listSources: vi.fn().mockResolvedValue([])
+}));
+
+vi.mock('../api/playbooks', () => ({
+  listPlaybooks: vi.fn().mockResolvedValue([])
+}));
+
+vi.mock('../api/marketplace', () => ({
+  listMarketplaceAgents: vi.fn().mockResolvedValue([]),
+  cloneMarketplaceAgent: vi.fn(),
+  listMarketplaceSources: vi.fn().mockResolvedValue([]),
+  cloneMarketplaceSource: vi.fn(),
+  listMarketplacePlaybooks: vi.fn().mockResolvedValue([]),
+  cloneMarketplacePlaybook: vi.fn()
+}));
+
+vi.mock('../api/access', () => ({
+  listAgentAccessGrants: vi.fn().mockResolvedValue([]),
+  grantAgentAccess: vi.fn()
+}));
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -95,94 +123,92 @@ it('renders wizard stepper controls and key fields', async () => {
   expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();
 });
 
-it('shows complete on the last step and saves the agent from the footer button', async () => {
+it('uses a concise three-step character-first wizard flow', async () => {
+  await renderAgentForm();
+  expect(screen.getByLabelText(/wizard progress/i)).toHaveTextContent(new RegExp(`step 1 of ${TOTAL_STEPS}`, 'i'));
+  expect(screen.getAllByText(/choose character/i).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/configure personality/i).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/save agent/i).length).toBeGreaterThan(0);
+});
+
+it('shows character cards first and derives personality options from selected character', async () => {
+  await renderAgentForm();
+  expect(screen.getByRole('button', { name: /character finance expert/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /personality balanced analyst/i })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /character teacher/i }));
+
+  expect(screen.getByRole('button', { name: /personality mentor/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /personality classroom instructor/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /personality practical coach/i })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /personality balanced analyst/i })).not.toBeInTheDocument();
+});
+
+it('keeps risk level control finance-character only in personality configuration', async () => {
+  await renderAgentForm();
+  fireEvent.click(screen.getByRole('button', { name: /character teacher/i }));
+  fireEvent.click(screen.getByRole('button', { name: /next/i }));
+
+  expect(screen.queryByLabelText(/risk level/i)).not.toBeInTheDocument();
+  expect(screen.getByText(/risk level is only used for finance expert personality/i)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /back/i }));
+  fireEvent.click(screen.getByRole('button', { name: /character finance expert/i }));
+  fireEvent.click(screen.getByRole('button', { name: /next/i }));
+  expect(screen.getByLabelText(/risk level/i)).toBeInTheDocument();
+});
+
+it('shows inline guidance when trying to continue without an agent name', async () => {
+  await renderAgentForm();
+  fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: ' ' } });
+  fireEvent.click(screen.getByRole('button', { name: /next/i }));
+  expect(screen.getAllByText(/give this agent a short name to continue/i).length).toBeGreaterThan(0);
+  expect(screen.getByLabelText(/wizard progress/i)).toHaveTextContent(new RegExp(`step 1 of ${TOTAL_STEPS}`, 'i'));
+});
+
+it('shows save agent on the last step and saves from the footer button', async () => {
   await renderAgentForm();
 
   for (let index = 0; index < TOTAL_STEPS - 1; index += 1) {
     fireEvent.click(screen.getByRole('button', { name: /next/i }));
   }
 
-  const completeButtons = screen.getAllByRole('button', { name: /^complete$/i });
-  expect(completeButtons.length).toBeGreaterThan(0);
-
-  fireEvent.click(completeButtons[completeButtons.length - 1]);
+  fireEvent.click(screen.getByRole('button', { name: /^save agent$/i }));
 
   expect(await screen.findByTestId('agent-save-state', {}, { timeout: 3000 })).toHaveTextContent(/agent saved successfully/i);
   expect(createAgent).toHaveBeenCalled();
+  expect(createAgent).toHaveBeenCalledWith(expect.not.objectContaining({ sources: expect.anything() }));
   expect(saveAgentPrompt).toHaveBeenCalledWith('agent-1', expect.objectContaining({ model: expect.any(String) }));
 });
 
-it('shows a per-source episode count input (default 1) and no longer shows a per-source frequency field', async () => {
+it('sends finance risk preference only for finance personality', async () => {
   await renderAgentForm();
-  fireEvent.click(screen.getByRole('button', { name: /next/i })); // Identity -> Sources
+  fireEvent.click(screen.getByRole('button', { name: /character teacher/i }));
 
-  expect(screen.getByLabelText(/source 1 episode count/i)).toHaveValue('1');
-  expect(screen.queryByLabelText(/frequency/i)).not.toBeInTheDocument();
-});
-
-it('supports selecting a weekly schedule with specific days', async () => {
-  await renderAgentForm();
-  for (let index = 0; index < 3; index += 1) {
+  for (let index = 0; index < TOTAL_STEPS - 1; index += 1) {
     fireEvent.click(screen.getByRole('button', { name: /next/i }));
   }
-
-  fireEvent.mouseDown(screen.getByLabelText(/schedule mode/i));
-  fireEvent.click(await screen.findByText('Weekly'));
-
-  expect(screen.getByLabelText(/days of week/i)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Wed' }));
-  expect(screen.getByLabelText(/daily time/i)).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole('button', { name: /next/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^complete$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^save agent$/i }));
 
   expect(await screen.findByTestId('agent-save-state', {}, { timeout: 3000 })).toHaveTextContent(/agent saved successfully/i);
-  expect(createAgent).toHaveBeenCalledWith(
-    expect.objectContaining({
-      schedule: expect.objectContaining({ mode: 'weekly', daysOfWeek: expect.arrayContaining([1, 3]) })
-    })
-  );
+  expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({ preferences: {} }));
+  expect(createAgent).toHaveBeenCalledWith(expect.not.objectContaining({ sources: expect.anything() }));
 });
 
-it('supports adding multiple recipient emails as tags', async () => {
+it('does not render source controls in the wizard', async () => {
   await renderAgentForm();
-  for (let index = 0; index < 3; index += 1) {
-    fireEvent.click(screen.getByRole('button', { name: /next/i }));
-  }
+  fireEvent.click(screen.getByRole('button', { name: /next/i })); // Choose Character -> Configure Personality
 
-  const recipientsSelect = document.querySelector('.ant-select-multiple') as HTMLElement;
-  const recipientsInput = recipientsSelect.querySelector('.ant-select-input') as HTMLInputElement;
-  fireEvent.mouseDown(recipientsInput);
-  fireEvent.focus(recipientsInput);
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    'value'
-  )!.set!;
-  nativeInputValueSetter.call(recipientsInput, 'second@example.com');
-  recipientsInput.dispatchEvent(new Event('input', { bubbles: true }));
-  await screen.findByTitle('second@example.com');
-  fireEvent.keyDown(recipientsInput, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13 });
+  expect(screen.queryByText(/^sources$/i)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /create new source/i })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/source 1/i)).not.toBeInTheDocument();
+});
 
-  await waitFor(() => {
-    expect(recipientsSelect.querySelectorAll('.ant-select-selection-item')).toHaveLength(2);
-  });
-
+it('does not render recipient emails in agent wizard anymore', async () => {
+  await renderAgentForm();
   fireEvent.click(screen.getByRole('button', { name: /next/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^complete$/i }));
 
-  expect(await screen.findByTestId('agent-save-state', {}, { timeout: 3000 })).toHaveTextContent(/agent saved successfully/i);
-  expect(createAgent).toHaveBeenCalledWith(
-    expect.objectContaining({ recipients: expect.arrayContaining(['trader@example.com', 'second@example.com']) })
-  );
-});
-
-it('defaults recipients to the logged-in user email for a new agent', async () => {
-  await renderAgentForm();
-  for (let index = 0; index < 3; index += 1) {
-    fireEvent.click(screen.getByRole('button', { name: /next/i }));
-  }
-
-  expect(screen.getByTitle('trader@example.com')).toBeInTheDocument();
+  expect(screen.queryByLabelText(/recipient emails/i)).not.toBeInTheDocument();
 });
 
 it('sends active:false when the Active toggle is switched off', async () => {
@@ -194,26 +220,25 @@ it('sends active:false when the Active toggle is switched off', async () => {
     fireEvent.click(screen.getByRole('button', { name: /next/i }));
   }
 
-  const completeButtons = screen.getAllByRole('button', { name: /^complete$/i });
-  fireEvent.click(completeButtons[completeButtons.length - 1]);
+  fireEvent.click(screen.getByRole('button', { name: /^save agent$/i }));
 
   expect(await screen.findByTestId('agent-save-state', {}, { timeout: 3000 })).toHaveTextContent(/agent saved successfully/i);
   expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({ active: false }));
 });
 
-it('cancels the wizard and returns to the dashboard', () => {
-  renderAgentsPage();
+it('cancels the wizard and returns to the dashboard', async () => {
+  await renderAgentsPage();
 
-  fireEvent.click(screen.getByRole('button', { name: /create agent/i }));
+  fireEvent.click(screen.getByRole('button', { name: /create follower/i }));
   expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
 
   expect(screen.getByRole('heading', { name: 'ChatTrader' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /create agent/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /create follower/i })).toBeInTheDocument();
 });
 
-it('clicking the app name returns to the dashboard from an agent detail view', async () => {
+it('clicking the app name returns to the sources hub from an agent detail view', async () => {
   vi.mocked(listAgents).mockResolvedValueOnce([
     {
       id: 'agent-1',
@@ -223,14 +248,15 @@ it('clicking the app name returns to the dashboard from an agent detail view', a
     }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   fireEvent.click(await screen.findByText(/housing agent/i));
   expect(await screen.findByRole('button', { name: /back to dashboard/i })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('heading', { name: 'ChatTrader' }));
 
-  expect(screen.getByText(/housing agent/i)).toBeInTheDocument();
+  expect(await screen.findByRole('tab', { name: /library/i })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /back to dashboard/i })).not.toBeInTheDocument();
 });
 
@@ -244,17 +270,17 @@ it('loads agents from the backend when the dashboard opens', async () => {
     }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   expect(listAgents).toHaveBeenCalled();
   expect(await screen.findByText(/housing agent/i)).toBeInTheDocument();
 });
 
-it('renders ChatTrader dashboard by default', () => {
-  renderAgentsPage();
+it('renders ChatTrader dashboard with admin hubs revealed on demand', async () => {
+  renderAgentsPage({ openAgentsHub: false });
   expect(screen.getByRole('heading', { name: 'ChatTrader' })).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: /^agent dashboard$/i })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /create agent/i })).toBeInTheDocument();
+  expect(screen.queryByRole('tab', { name: /agents/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
 });
 
 it('removes an agent after confirming the popconfirm', async () => {
@@ -263,11 +289,12 @@ it('removes an agent after confirming the popconfirm', async () => {
       id: 'agent-1',
       name: 'Housing Agent',
       status: 'active',
+      ownerUserId: 'user-1',
       sources: [{ type: 'web_urls', value: 'https://example.com' }]
     }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
   expect(await screen.findByText(/housing agent/i)).toBeInTheDocument();
   vi.mocked(listAgents).mockResolvedValueOnce([]);
@@ -276,7 +303,7 @@ it('removes an agent after confirming the popconfirm', async () => {
   fireEvent.click(await screen.findByRole('button', { name: /^remove$/i }));
 
   expect(deleteAgent).toHaveBeenCalledWith('agent-1');
-  expect(await screen.findByText(/use "create agent" to start the setup wizard/i)).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /create follower/i })).toBeInTheDocument();
 });
 
 it('runs an agent now via the run-now button', async () => {
@@ -288,11 +315,31 @@ it('runs an agent now via the run-now button', async () => {
       sources: [{ type: 'web_urls', value: 'https://example.com' }]
     }
   ]);
+  vi.mocked(listPlaybooks).mockResolvedValueOnce([
+    {
+      id: 'playbook-1',
+      agentId: 'agent-1',
+      name: 'Execution Playbook',
+      description: '',
+      enabled: true,
+      schedule: { mode: 'daily', dailyTime: '07:30', timezone: 'UTC' },
+      sourceIds: ['source-1'],
+      recipients: [],
+      executionMode: 'latest_only',
+      maxSourcesPerRun: 5,
+      maxItemsPerSource: 2,
+      lastRunAt: null,
+      nextRunAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
-  expect(await screen.findByText(/housing agent/i)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /run agent now/i }));
+  fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
+  fireEvent.click(await screen.findByText(/execution playbook/i));
+  fireEvent.click(await screen.findByRole('button', { name: /run playbook now/i }));
 
   const { runAgentNow } = await import('../api/agents');
   await vi.waitFor(() => expect(runAgentNow).toHaveBeenCalledWith('agent-1', undefined));
@@ -307,14 +354,34 @@ it('shows an episode picker for an agent with a podcast source, and runs the sel
       sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
     }
   ]);
+  vi.mocked(listPlaybooks).mockResolvedValueOnce([
+    {
+      id: 'playbook-1',
+      agentId: 'agent-1',
+      name: 'Podcast Playbook',
+      description: '',
+      enabled: true,
+      schedule: { mode: 'daily', dailyTime: '07:30', timezone: 'UTC' },
+      sourceIds: ['source-1'],
+      recipients: [],
+      executionMode: 'latest_only',
+      maxSourcesPerRun: 5,
+      maxItemsPerSource: 2,
+      lastRunAt: null,
+      nextRunAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ]);
   vi.mocked(listAgentEpisodeOptions).mockResolvedValueOnce([
     { sourceType: 'podcast_feeds', sourceValue: 'https://example.com/feed.xml', title: 'Episode 2', link: 'https://example.com/ep-2', pubDate: null }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
-  expect(await screen.findByText(/podcast agent/i)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /run agent now/i }));
+  fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
+  fireEvent.click(await screen.findByText(/podcast playbook/i));
+  fireEvent.click(await screen.findByRole('button', { name: /run playbook now/i }));
 
   expect(await screen.findByText(/run against a specific episode/i)).toBeInTheDocument();
   expect(await screen.findByText(/episode 2/i)).toBeInTheDocument();
@@ -339,12 +406,32 @@ it('runs normally from the episode picker without a forced episode', async () =>
       sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
     }
   ]);
+  vi.mocked(listPlaybooks).mockResolvedValueOnce([
+    {
+      id: 'playbook-1',
+      agentId: 'agent-1',
+      name: 'Podcast Playbook',
+      description: '',
+      enabled: true,
+      schedule: { mode: 'daily', dailyTime: '07:30', timezone: 'UTC' },
+      sourceIds: ['source-1'],
+      recipients: [],
+      executionMode: 'latest_only',
+      maxSourcesPerRun: 5,
+      maxItemsPerSource: 2,
+      lastRunAt: null,
+      nextRunAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ]);
   vi.mocked(listAgentEpisodeOptions).mockResolvedValueOnce([]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
-  expect(await screen.findByText(/podcast agent/i)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /run agent now/i }));
+  fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
+  fireEvent.click(await screen.findByText(/podcast playbook/i));
+  fireEvent.click(await screen.findByRole('button', { name: /run playbook now/i }));
 
   fireEvent.click(await screen.findByRole('button', { name: /run normally/i }));
 
@@ -360,6 +447,25 @@ it('shows only the first 5 episodes in the picker, revealing the rest via "Show 
       sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
     }
   ]);
+  vi.mocked(listPlaybooks).mockResolvedValueOnce([
+    {
+      id: 'playbook-1',
+      agentId: 'agent-1',
+      name: 'Podcast Playbook',
+      description: '',
+      enabled: true,
+      schedule: { mode: 'daily', dailyTime: '07:30', timezone: 'UTC' },
+      sourceIds: ['source-1'],
+      recipients: [],
+      executionMode: 'latest_only',
+      maxSourcesPerRun: 5,
+      maxItemsPerSource: 2,
+      lastRunAt: null,
+      nextRunAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ]);
   const episodes = Array.from({ length: 8 }, (_, i) => ({
     sourceType: 'podcast_feeds' as const,
     sourceValue: 'https://example.com/feed.xml',
@@ -369,10 +475,11 @@ it('shows only the first 5 episodes in the picker, revealing the rest via "Show 
   }));
   vi.mocked(listAgentEpisodeOptions).mockResolvedValueOnce(episodes);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
-  expect(await screen.findByText(/podcast agent/i)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /run agent now/i }));
+  fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
+  fireEvent.click(await screen.findByText(/podcast playbook/i));
+  fireEvent.click(await screen.findByRole('button', { name: /run playbook now/i }));
 
   expect(await screen.findByText(/episode 1$/i)).toBeInTheDocument();
   expect(screen.getByText(/episode 5$/i)).toBeInTheDocument();
@@ -394,21 +501,41 @@ it('does not show a "Show more" button in the picker when there are 5 or fewer e
       sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml' }]
     }
   ]);
+  vi.mocked(listPlaybooks).mockResolvedValueOnce([
+    {
+      id: 'playbook-1',
+      agentId: 'agent-1',
+      name: 'Podcast Playbook',
+      description: '',
+      enabled: true,
+      schedule: { mode: 'daily', dailyTime: '07:30', timezone: 'UTC' },
+      sourceIds: ['source-1'],
+      recipients: [],
+      executionMode: 'latest_only',
+      maxSourcesPerRun: 5,
+      maxItemsPerSource: 2,
+      lastRunAt: null,
+      nextRunAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ]);
   vi.mocked(listAgentEpisodeOptions).mockResolvedValueOnce([
     { sourceType: 'podcast_feeds', sourceValue: 'https://example.com/feed.xml', title: 'Episode 1', link: 'https://example.com/ep-1', pubDate: null }
   ]);
 
-  renderAgentsPage();
+  await renderAgentsPage();
 
-  expect(await screen.findByText(/podcast agent/i)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /run agent now/i }));
+  fireEvent.click(await screen.findByRole('tab', { name: /playbooks/i }));
+  fireEvent.click(await screen.findByText(/podcast playbook/i));
+  fireEvent.click(await screen.findByRole('button', { name: /run playbook now/i }));
 
   expect(await screen.findByText(/episode 1$/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /show more/i })).not.toBeInTheDocument();
 });
 
-it('toggles between light and dark theme', () => {
-  renderAgentsPage();
+it('toggles between light and dark theme', async () => {
+  await renderAgentsPage();
   const picker = screen.getAllByLabelText(/theme picker/i)[0];
 
   fireEvent.click(picker);
@@ -430,7 +557,7 @@ it(
       }
     ]);
 
-    renderAgentsPage();
+    await renderAgentsPage();
 
     fireEvent.click(await screen.findByText(/housing agent/i));
     fireEvent.click(await screen.findByRole('button', { name: /edit agent/i }));
@@ -444,12 +571,12 @@ it(
       fireEvent.click(screen.getByRole('button', { name: /next/i }));
     }
 
-    const completeButtons = screen.getAllByRole('button', { name: /^complete$/i });
-    fireEvent.click(completeButtons[completeButtons.length - 1]);
+    fireEvent.click(screen.getByRole('button', { name: /^save agent$/i }));
 
     await waitFor(() => {
       expect(updateAgent).toHaveBeenCalledWith('agent-1', expect.objectContaining({ name: 'Housing Agent' }));
     });
+    expect(updateAgent).toHaveBeenCalledWith('agent-1', expect.not.objectContaining({ sources: expect.anything() }));
     expect(createAgent).not.toHaveBeenCalled();
   },
   10000

@@ -17,13 +17,19 @@ export class InMemoryUserRepository implements UserRepositoryLike {
     return [...this.users.values()].find((u) => u.googleId === googleId) ?? null;
   }
 
-  async createWithPassword(email: string, passwordHash: string, displayName: string | null = null): Promise<UserRecord> {
+  async createWithPassword(
+    email: string,
+    passwordHash: string,
+    displayName: string | null = null,
+    role: UserRecord['role'] = 'user'
+  ): Promise<UserRecord> {
     const user: UserRecord = {
       id: `user-${this.nextId++}`,
       email,
       passwordHash,
       googleId: null,
       displayName,
+      role,
       emailVerified: false,
       emailVerificationToken: null,
       emailVerificationExpiresAt: null,
@@ -37,13 +43,19 @@ export class InMemoryUserRepository implements UserRepositoryLike {
     return user;
   }
 
-  async createWithGoogle(email: string, googleId: string, displayName: string | null = null): Promise<UserRecord> {
+  async createWithGoogle(
+    email: string,
+    googleId: string,
+    displayName: string | null = null,
+    role: UserRecord['role'] = 'user'
+  ): Promise<UserRecord> {
     const user: UserRecord = {
       id: `user-${this.nextId++}`,
       email,
       passwordHash: null,
       googleId,
       displayName,
+      role,
       emailVerified: true,
       emailVerificationToken: null,
       emailVerificationExpiresAt: null,
@@ -91,6 +103,14 @@ export class InMemoryUserRepository implements UserRepositoryLike {
     const existing = this.users.get(userId);
     if (!existing) throw new Error('not_found');
     this.users.set(userId, { ...existing, emailVerified: verified, updatedAt: new Date() });
+  }
+
+  async setRole(userId: string, role: UserRecord['role']): Promise<UserRecord> {
+    const existing = this.users.get(userId);
+    if (!existing) throw new Error('not_found');
+    const updated = { ...existing, role, updatedAt: new Date() };
+    this.users.set(userId, updated);
+    return updated;
   }
 
   async setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
