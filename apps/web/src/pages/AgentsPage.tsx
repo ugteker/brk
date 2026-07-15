@@ -8,6 +8,7 @@ import {
   AudioMutedOutlined,
   CheckCircleOutlined,
   LoadingOutlined,
+  MailOutlined,
   BulbOutlined,
   CaretRightOutlined,
   ClockCircleOutlined,
@@ -217,21 +218,23 @@ function WizardSelectableCard({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       aria-label={ariaLabel}
       aria-pressed={selected}
       onClick={onClick}
-      className="relative block h-full w-full text-left"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      className="relative block h-full w-full text-left cursor-pointer"
     >
       {selected && (
         <span
           aria-hidden
           className="absolute -top-[11px] right-2.5 z-10 flex h-[26px] w-[26px]
-                     items-center justify-center rounded-full bg-sky-500 text-[13px]
+                     items-center justify-center rounded-full bg-sky-500 text-white text-[13px]
                      shadow-md ring-2 ring-white dark:ring-slate-900"
         >
-          🧠
+          ✓
         </span>
       )}
       <Card
@@ -247,7 +250,7 @@ function WizardSelectableCard({
       >
         {children}
       </Card>
-    </button>
+    </div>
   );
 }
 
@@ -462,7 +465,13 @@ export function AgentsPage() {
   const [isPlaybookSaving, setIsPlaybookSaving] = useState(false);
   const [confirmingUnfollow, setConfirmingUnfollow] = useState(false);
   const [editingPlaybookId, setEditingPlaybookId] = useState<string | null>(null);
-  const [playbookAgentIdDraft, setPlaybookAgentIdDraft] = useState<string | null>(null);
+  const [playbookAgentIdsDraft, setPlaybookAgentIdsDraft] = useState<string[]>([]);
+  // Tracks which agents already watch the source when the wizard opens — used for save diff
+  // (create new playbooks for additions, delete playbooks for removals, skip unchanged).
+  const [wizardAlreadyLinkedAgentIds, setWizardAlreadyLinkedAgentIds] = useState<string[]>([]);
+  const [wizardAlreadyLinkedPlaybooks, setWizardAlreadyLinkedPlaybooks] = useState<{ agentId: string; playbookId: string }[]>([]);
+  // The agent whose playbook settings are shown in the schedule step (edit mode via ✎ button)
+  const [wizardFocusedAgentId, setWizardFocusedAgentId] = useState<string | null>(null);
   const [playbookSourceIdsDraft, setPlaybookSourceIdsDraft] = useState<string[]>([]);
   const [playbookScheduleModeDraft, setPlaybookScheduleModeDraft] = useState<'interval' | 'daily' | 'weekly'>('daily');
   const [playbookIntervalMinutesDraft, setPlaybookIntervalMinutesDraft] = useState(60);
@@ -470,6 +479,14 @@ export function AgentsPage() {
   const [playbookTimezoneDraft, setPlaybookTimezoneDraft] = useState('UTC');
   const [playbookDaysOfWeekDraft, setPlaybookDaysOfWeekDraft] = useState<number[]>([1]);
   const [playbookRecipientsDraft, setPlaybookRecipientsDraft] = useState<string[]>([]);
+  // Agent picker for manual runs when multiple agents are linked to the same source
+  const [runPickerOpen, setRunPickerOpen] = useState(false);
+  const [runPickerLinked, setRunPickerLinked] = useState<{ playbook: PlaybookRecord; agent: AgentSummary | undefined }[]>([]);
+  const [runPickerEpisode, setRunPickerEpisode] = useState<{ title: string; link: string; pubDate?: string | null } | undefined>(undefined);
+  // Schedule-only edit modal — opened via ✎ on individual playbook cards
+  const [isScheduleEditOpen, setIsScheduleEditOpen] = useState(false);
+  const [scheduleEditPlaybook, setScheduleEditPlaybook] = useState<PlaybookRecord | null>(null);
+  const [isScheduleEditSaving, setIsScheduleEditSaving] = useState(false);
   // Inline agent creation inside the follow wizard (step: pick agent) — full 4-step sub-wizard
   const [showInlineAgentCreate, setShowInlineAgentCreate] = useState(false);
   const [isInlineAgentSaving, setIsInlineAgentSaving] = useState(false);
@@ -995,8 +1012,11 @@ export function AgentsPage() {
 
   function openPlaybookCreate() {
     setEditingPlaybookId(null);
+    setWizardFocusedAgentId(null);
     setPlaybookCreateStep(0);
-    setPlaybookAgentIdDraft(agents[0]?.id ?? null);
+    setPlaybookAgentIdsDraft([]);
+    setWizardAlreadyLinkedAgentIds([]);
+    setWizardAlreadyLinkedPlaybooks([]);
     setPlaybookSourceIdsDraft(sources[0] ? [sources[0].id] : []);
     setPlaybookScheduleModeDraft('daily');
     setPlaybookIntervalMinutesDraft(60);
@@ -1015,29 +1035,9 @@ export function AgentsPage() {
     setFollowWizardSourcePreselected(true);
     setShowInlineAgentCreate(false);
     setInlineAgentName('My Analyst');
-    const existingFollowPlaybook = playbooks.find((playbook) => playbook.sourceIds.includes(source.id));
-    if (existingFollowPlaybook) {
-      setEditingPlaybookId(existingFollowPlaybook.id);
-      // Start at step 1 (Pick agent) because source is pre-selected
-      setPlaybookCreateStep(1);
-      setPlaybookAgentIdDraft(existingFollowPlaybook.agentId);
-      setPlaybookSourceIdsDraft(existingFollowPlaybook.sourceIds);
-      setPlaybookScheduleModeDraft(existingFollowPlaybook.schedule.mode);
-      if (existingFollowPlaybook.schedule.mode === 'interval') {
-        setPlaybookIntervalMinutesDraft(existingFollowPlaybook.schedule.intervalMinutes);
-      } else {
-        setPlaybookDailyTimeDraft(existingFollowPlaybook.schedule.dailyTime);
-        setPlaybookTimezoneDraft(existingFollowPlaybook.schedule.timezone);
-        setPlaybookDaysOfWeekDraft(existingFollowPlaybook.schedule.mode === 'weekly' ? existingFollowPlaybook.schedule.daysOfWeek : [1]);
-      }
-      setPlaybookRecipientsDraft(existingFollowPlaybook.recipients);
-      setIsPlaybookCreateOpen(true);
-      return;
-    }
     setEditingPlaybookId(null);
-    // Start at step 1 (Pick agent) because source is already known from the card
+    setWizardFocusedAgentId(null);
     setPlaybookCreateStep(1);
-    setPlaybookAgentIdDraft(null);
     setPlaybookSourceIdsDraft([source.id]);
     setPlaybookScheduleModeDraft('daily');
     setPlaybookIntervalMinutesDraft(60);
@@ -1045,6 +1045,13 @@ export function AgentsPage() {
     setPlaybookTimezoneDraft('UTC');
     setPlaybookDaysOfWeekDraft([1]);
     setPlaybookRecipientsDraft(user?.email ? [user.email] : []);
+    // Pre-select agents that already watch this source; track their playbook IDs for the
+    // save diff (delete removed, create added, skip unchanged).
+    const linkedPbs = playbooks.filter((p) => p.sourceIds.includes(source.id));
+    const alreadyLinkedAgentIds = linkedPbs.map((p) => p.agentId);
+    setWizardAlreadyLinkedAgentIds(alreadyLinkedAgentIds);
+    setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
+    setPlaybookAgentIdsDraft(alreadyLinkedAgentIds);
     setIsPlaybookCreateOpen(true);
     if (agents.length === 0) {
       openInlineAgentCreate();
@@ -1055,6 +1062,8 @@ export function AgentsPage() {
     setIsPlaybookCreateOpen(false);
     setPlaybookCreateStep(0);
     setEditingPlaybookId(null);
+    setWizardFocusedAgentId(null);
+    setWizardAlreadyLinkedPlaybooks([]);
     setFollowWizardSourcePreselected(false);
     setShowInlineAgentCreate(false);
     setInlineAgentStep(0);
@@ -1073,7 +1082,7 @@ export function AgentsPage() {
     setInlineAgentRiskLevel('medium');
     setInlineAgentReportDetailLevel('standard');
     setInlineAgentValidationError(null);
-    setPlaybookAgentIdDraft(null);
+    setPlaybookAgentIdsDraft([]);
     setShowInlineAgentCreate(true);
   }
 
@@ -1158,15 +1167,11 @@ export function AgentsPage() {
       const newAgent = await createAgent(payload) as AgentSummary;
       await saveAgentPrompt(newAgent.id, { model: inlineAgentModel, systemPrompt: inlineAgentSystemPrompt, enabled: true });
       setAgents((prev) => [...prev, newAgent]);
-      setPlaybookAgentIdDraft(newAgent.id);
+      // Auto-select the new agent in the wizard draft and return to the agent grid
+      setPlaybookAgentIdsDraft((prev) => [...prev, newAgent.id]);
       void inlinePersona;
-      // Auto-create playbook and close modal — schedule was already set in step 2
-      const created = await doCreatePlaybook(newAgent.id);
-      if (!created) {
-        // fallback: let user review schedule and try again
-        setShowInlineAgentCreate(false);
-        setPlaybookCreateStep(2);
-      }
+      setShowInlineAgentCreate(false);
+      // Stay on step 1 so the user sees the newly selected agent and can confirm / pick more
     } catch {
       message.error('Failed to create agent');
     } finally {
@@ -1187,7 +1192,7 @@ export function AgentsPage() {
       message.warning('Pick a source first');
       return;
     }
-    if (playbookCreateStep === 1 && !playbookAgentIdDraft) {
+    if (playbookCreateStep === 1 && playbookAgentIdsDraft.length === 0 && !editingPlaybookId) {
       message.warning('Pick an agent first');
       return;
     }
@@ -1206,38 +1211,11 @@ export function AgentsPage() {
     updatedHighlightTimerRef.current = setTimeout(() => setRecentlyUpdatedSourceId(null), 4000);
   }
 
-  async function doCreatePlaybook(agentId: string): Promise<boolean> {
-    if (playbookSourceIdsDraft.length === 0) {
-      message.warning(t('playbook.pickSourceFirst'));
-      return false;
-    }
-    setIsPlaybookSaving(true);
-    try {
-      const schedule =
-        playbookScheduleModeDraft === 'interval'
-          ? { mode: 'interval' as const, intervalMinutes: playbookIntervalMinutesDraft }
-          : playbookScheduleModeDraft === 'weekly'
-            ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
-            : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
-      const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
-      await createPlaybook({ agentId, name: derivePlaybookName(agentId, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule, executionMode: 'latest_only', language: i18n.language.startsWith('de') ? 'de' : 'en' });
-      await refreshPlaybooks();
-      if (playbookSourceIdsDraft[0]) markSourceUpdated(playbookSourceIdsDraft[0]);
-      setIsPlaybookCreateOpen(false);
-      setPlaybookCreateStep(0);
-      setEditingPlaybookId(null);
-      setShowInlineAgentCreate(false);
-      return true;
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to create playbook');
-      return false;
-    } finally {
-      setIsPlaybookSaving(false);
-    }
-  }
-
   async function onCreatePlaybook() {
-    if (!playbookAgentIdDraft) {
+    // In follow mode, deselecting all agents is valid — it means "remove all" (diff will delete them).
+    // Only block empty selection in admin-hub create mode where you must pick at least one agent.
+    const isRemoveAll = followWizardSourcePreselected && wizardAlreadyLinkedAgentIds.length > 0 && playbookAgentIdsDraft.length === 0;
+    if (!editingPlaybookId && playbookAgentIdsDraft.length === 0 && !isRemoveAll) {
       message.warning(t('playbook.pickAgentFirst'));
       return;
     }
@@ -1247,21 +1225,51 @@ export function AgentsPage() {
     }
     setIsPlaybookSaving(true);
     try {
-      const schedule =
+      const lang = i18n.language.startsWith('de') ? 'de' : 'en';
+      // Default schedule used when the follow-source wizard does not show a schedule step
+      const defaultSchedule = { mode: 'daily' as const, dailyTime: '07:30', timezone: 'UTC' };
+      // Admin-hub create wizard does pass through the schedule step; follow wizard does not
+      const explicitSchedule =
         playbookScheduleModeDraft === 'interval'
           ? { mode: 'interval' as const, intervalMinutes: playbookIntervalMinutesDraft }
           : playbookScheduleModeDraft === 'weekly'
             ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
             : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
+      // In follow mode the schedule draft is never shown/edited, so use the default for new
+      // playbooks; in admin-hub mode use the explicit draft values.
+      const scheduleForNew = followWizardSourcePreselected ? defaultSchedule : explicitSchedule;
       const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
+      // Recipients for new playbooks in follow mode: default to current user email
+      const recipientsForNew = followWizardSourcePreselected ? (user?.email ? [user.email] : []) : cleanedRecipients;
       if (editingPlaybookId) {
-        await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule });
+        // Admin-hub edit mode: update the explicit playbook + diff agent selection
+        const agentId = wizardFocusedAgentId ?? playbookAgentIdsDraft[0] ?? '';
+        await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(agentId, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule: explicitSchedule });
+        // Diff: additions and removals relative to the originally linked set
+        const toCreate = playbookAgentIdsDraft.filter((id) => !wizardAlreadyLinkedAgentIds.includes(id));
+        const toDelete = wizardAlreadyLinkedAgentIds.filter((id) => !playbookAgentIdsDraft.includes(id) && id !== agentId);
+        await Promise.all([
+          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule: explicitSchedule, executionMode: 'latest_only', language: lang })),
+          ...toDelete.map((id) => {
+            const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
+            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
+          })
+        ]);
       } else {
-        await createPlaybook({ agentId: playbookAgentIdDraft, name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule, executionMode: 'latest_only', language: i18n.language.startsWith('de') ? 'de' : 'en' });
+        // Create mode (follow-source or admin-hub): diff against already-linked
+        const toCreate = playbookAgentIdsDraft.filter((id) => !wizardAlreadyLinkedAgentIds.includes(id));
+        const toDelete = wizardAlreadyLinkedAgentIds.filter((id) => !playbookAgentIdsDraft.includes(id));
+        await Promise.all([
+          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: recipientsForNew, schedule: scheduleForNew, executionMode: 'latest_only', language: lang })),
+          ...toDelete.map((id) => {
+            const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
+            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
+          })
+        ]);
       }
       await refreshPlaybooks();
       if (playbookSourceIdsDraft[0]) markSourceUpdated(playbookSourceIdsDraft[0]);
-      message.success(editingPlaybookId ? t('playbook.updatePlaybook') : t('playbook.createPlaybook'));
+      message.success(t('playbook.updatePlaybook'));
       setIsPlaybookCreateOpen(false);
       setPlaybookCreateStep(0);
       setEditingPlaybookId(null);
@@ -1350,8 +1358,8 @@ export function AgentsPage() {
     setShowInlineAgentCreate(false);
     setInlineAgentName('My Analyst');
     setEditingPlaybookId(playbook.id);
+    setWizardFocusedAgentId(playbook.agentId);
     setPlaybookCreateStep(1);
-    setPlaybookAgentIdDraft(playbook.agentId);
     setPlaybookSourceIdsDraft(playbook.sourceIds);
     setPlaybookScheduleModeDraft(playbook.schedule.mode);
     if (playbook.schedule.mode === 'interval') {
@@ -1365,7 +1373,52 @@ export function AgentsPage() {
     // Pre-fill detail level from existing agent if available
     const existingAgent = agents.find((a) => a.id === playbook.agentId);
     setInlineAgentReportDetailLevel((existingAgent?.promptConfig as { report_detail_level?: 'brief' | 'standard' | 'detailed' } | undefined)?.report_detail_level ?? 'standard');
+    // Pre-select ALL linked agents for this source; track their playbook IDs for the save diff
+    const linkedPbs = playbooks.filter((p) => p.sourceIds.some((sid) => playbook.sourceIds.includes(sid)));
+    const alreadyLinkedAgentIds = linkedPbs.map((p) => p.agentId);
+    setWizardAlreadyLinkedAgentIds(alreadyLinkedAgentIds);
+    setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
+    setPlaybookAgentIdsDraft(alreadyLinkedAgentIds);
     setIsPlaybookCreateOpen(true);
+  }
+
+  /** Opens the schedule-only edit modal for a specific playbook (from ✎ on expert cards). */
+  function onOpenScheduleEdit(playbook: PlaybookRecord, event?: React.MouseEvent) {
+    event?.stopPropagation();
+    setScheduleEditPlaybook(playbook);
+    setPlaybookScheduleModeDraft(playbook.schedule.mode);
+    if (playbook.schedule.mode === 'interval') {
+      setPlaybookIntervalMinutesDraft(playbook.schedule.intervalMinutes);
+    } else {
+      setPlaybookDailyTimeDraft(playbook.schedule.dailyTime);
+      setPlaybookTimezoneDraft(playbook.schedule.timezone);
+      setPlaybookDaysOfWeekDraft(playbook.schedule.mode === 'weekly' ? playbook.schedule.daysOfWeek : [1]);
+    }
+    setPlaybookRecipientsDraft(playbook.recipients);
+    setIsScheduleEditOpen(true);
+  }
+
+  async function onSaveScheduleEdit() {
+    if (!scheduleEditPlaybook) return;
+    setIsScheduleEditSaving(true);
+    try {
+      const schedule =
+        playbookScheduleModeDraft === 'interval'
+          ? { mode: 'interval' as const, intervalMinutes: playbookIntervalMinutesDraft }
+          : playbookScheduleModeDraft === 'weekly'
+            ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
+            : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
+      const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
+      await updatePlaybook(scheduleEditPlaybook.id, { schedule, recipients: cleanedRecipients });
+      await refreshPlaybooks();
+      message.success(t('playbook.updatePlaybook'));
+      setIsScheduleEditOpen(false);
+      setScheduleEditPlaybook(null);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to update schedule');
+    } finally {
+      setIsScheduleEditSaving(false);
+    }
   }
 
   async function onTogglePlaybookEnabled(playbook: PlaybookRecord, event: React.MouseEvent) {
@@ -1578,6 +1631,14 @@ export function AgentsPage() {
     const linked = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
     if (linked.length === 0) return;
 
+    // When multiple agents watch this source, ask the user which one to run
+    if (linked.length > 1) {
+      setRunPickerLinked(linked.map((pb) => ({ playbook: pb, agent: agents.find((a) => a.id === pb.agentId) })));
+      setRunPickerEpisode(episode);
+      setRunPickerOpen(true);
+      return;
+    }
+
     setActiveSourceTab('runs');
 
     const agent = agents.find((a) => a.id === linked[0].agentId);
@@ -1603,6 +1664,35 @@ export function AgentsPage() {
 
     // Run with this specific episode as the forced selection. The backend will create an ad-hoc
     // source config if the library source URL is not already in agent.sources.
+    await executeRun(agent, {
+      sourceType: libSource.type as EpisodeOptionDto['sourceType'],
+      sourceValue: libSource.value,
+      itemLink: episode.link
+    });
+  }
+
+  // Called when user picks a specific agent from the multi-agent run picker modal
+  async function onRunPickerSelect(playbook: PlaybookRecord, agent: AgentSummary | undefined) {
+    setRunPickerOpen(false);
+    const episode = runPickerEpisode;
+    setRunPickerEpisode(undefined);
+    setActiveSourceTab('runs');
+    if (!agent) {
+      try {
+        setSourceDetailRefreshKey((k) => k + 1);
+        await runPlaybookNow(playbook.id);
+        setSourceDetailRefreshKey((k) => k + 1);
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : 'Failed to start analysis');
+      }
+      return;
+    }
+    if (!episode) {
+      await executeRun(agent);
+      return;
+    }
+    const libSource = sources.find((s) => s.id === selectedSourceId);
+    if (!libSource) return;
     await executeRun(agent, {
       sourceType: libSource.type as EpisodeOptionDto['sourceType'],
       sourceValue: libSource.value,
@@ -2089,6 +2179,17 @@ export function AgentsPage() {
                                              <span>{formatPlaybookSchedule(pb.schedule)}</span>
                                              <Tag color={pb.enabled ? 'green' : 'default'} className="m-0 leading-none py-0">{pb.enabled ? t('playbook.active') : t('playbook.paused')}</Tag>
                                            </div>
+                                           {pb.recipients.length > 0 && (
+                                             <div className="flex flex-wrap gap-1 text-gray-400 mt-0.5">
+                                               <MailOutlined className="opacity-50 mt-0.5" />
+                                               {pb.recipients.slice(0, 2).map((r) => (
+                                                 <span key={r} className="truncate max-w-[120px]">{r}</span>
+                                               ))}
+                                               {pb.recipients.length > 2 && (
+                                                 <span className="text-gray-400">+{pb.recipients.length - 2}</span>
+                                               )}
+                                             </div>
+                                           )}
                                          </div>
                                          <TouchSafeTooltip title={pb.enabled ? t('playbook.pause') : t('playbook.resume')}>
                                            <Button
@@ -2106,9 +2207,17 @@ export function AgentsPage() {
                                              shape="circle"
                                              aria-label={t('common.edit')}
                                              icon={<EditOutlined />}
-                                             onClick={(e) => { e.stopPropagation(); onOpenPlaybookWizard(pb); }}
+                                          onClick={(e) => { e.stopPropagation(); onOpenScheduleEdit(pb, e); }}
                                            />
                                          </TouchSafeTooltip>
+                                         <InlineDeleteButton
+                                           ariaLabel={`Remove ${agents.find((a) => a.id === pb.agentId)?.name ?? 'agent'} from this source`}
+                                           confirmText={t('common.delete')}
+                                           onConfirm={async () => {
+                                             await deletePlaybook(pb.id);
+                                             await refreshPlaybooks();
+                                           }}
+                                         />
                                        </div>
                                      );
                                    })}
@@ -2826,7 +2935,7 @@ export function AgentsPage() {
                             },
                             {
                               key: 'runs',
-                              label: 'Runs',
+                              label: t('library.runsTab'),
                               children: (
                                 <AgentRunsBrowser agentId={selectedPlaybook.agentId} runs={runs} onViewReport={onViewReport} />
                               )
@@ -3073,11 +3182,20 @@ export function AgentsPage() {
               {!showInlineAgentCreate ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 {agents.map((agent) => {
-                  const selected = playbookAgentIdDraft === agent.id;
-                  const anySelected = playbookAgentIdDraft !== null;
+                  const selected = playbookAgentIdsDraft.includes(agent.id);
+                  const anySelected = playbookAgentIdsDraft.length > 0;
+                  const isFocused = wizardFocusedAgentId === agent.id;
                   const { intro, icon, characterLabel, personalityLabel, personaId } = getAgentCardDisplay(agent, t);
                   const iconBgClass = PERSONA_ICON_BG_MAP[personaId] ?? PERSONA_ICON_BG_MAP['summarizer'];
                   const tagColor = PERSONA_COLOR_MAP[personaId] ?? 'default';
+
+                  const linkedPlaybookEntry = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === agent.id);
+                  // If this agent is already linked to the current source, show that playbook's schedule.
+                  // Otherwise fall back to any playbook the agent owns (as a hint of their typical schedule).
+                  const linkedPlaybook = linkedPlaybookEntry
+                    ? playbooks.find((p) => p.id === linkedPlaybookEntry.playbookId)
+                    : playbooks.find((p) => p.agentId === agent.id);
+                  const linkedToThisSource = Boolean(linkedPlaybookEntry);
 
                   return (
                     <div
@@ -3088,7 +3206,10 @@ export function AgentsPage() {
                       ariaLabel={`Select agent ${agent.name}`}
                       selected={selected}
                       onClick={() => {
-                        setPlaybookAgentIdDraft(agent.id);
+                        // Always toggle — works in both create and edit modes
+                        setPlaybookAgentIdsDraft((prev) =>
+                          prev.includes(agent.id) ? prev.filter((id) => id !== agent.id) : [...prev, agent.id]
+                        );
                         setShowInlineAgentCreate(false);
                       }}
                     >
@@ -3103,16 +3224,23 @@ export function AgentsPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <InlineDeleteButton
-                              ariaLabel={`Delete agent ${agent.name}`}
-                              confirmText={t('common.delete')}
-                              onConfirm={async () => {
-                                await deleteAgent(agent.id);
-                                if (playbookAgentIdDraft === agent.id) setPlaybookAgentIdDraft(null);
-                                const refreshed = await listAgents();
-                                setAgents(refreshed);
-                              }}
-                            />
+                          {isFocused ? (
+                            <Tag color="blue" className="m-0 text-xs">{t('common.editing') || 'Editing'}</Tag>
+                          ) : (
+                            <InlineDeleteButton
+                                ariaLabel={`Delete agent ${agent.name}`}
+                                confirmText={t('common.delete')}
+                                onConfirm={async () => {
+                                  await deleteAgent(agent.id);
+                                  setPlaybookAgentIdsDraft((prev) => prev.filter((id) => id !== agent.id));
+                                  setWizardAlreadyLinkedAgentIds((prev) => prev.filter((id) => id !== agent.id));
+                                  setWizardAlreadyLinkedPlaybooks((prev) => prev.filter((p) => p.agentId !== agent.id));
+                                  await refreshPlaybooks();
+                                  const refreshed = await listAgents();
+                                  setAgents(refreshed);
+                                }}
+                              />
+                          )}
                         </div>
                       </div>
                       {/* Row 2: character + personality identity tags */}
@@ -3124,6 +3252,25 @@ export function AgentsPage() {
                       <p className="mt-2 text-xs italic text-gray-500 dark:text-gray-400 leading-relaxed">
                         &ldquo;{intro}&rdquo;
                       </p>
+                      {/* Row 4: schedule + recipients — current source if linked, otherwise from agent's other playbooks as a hint */}
+                      {linkedPlaybook && (
+                        <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                          {!linkedToThisSource && (
+                            <span className="w-full text-gray-300 dark:text-gray-600 italic">{t('playbook.scheduleHint') || 'typical:'}</span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <ClockCircleOutlined />
+                            {formatPlaybookSchedule(linkedPlaybook.schedule)}
+                          </span>
+                          {linkedPlaybook.recipients.length > 0 && (
+                            <span className="flex items-center gap-1">
+                              <MailOutlined />
+                              {linkedPlaybook.recipients.slice(0, 2).join(', ')}
+                              {linkedPlaybook.recipients.length > 2 && ` +${linkedPlaybook.recipients.length - 2}`}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </WizardSelectableCard>
                     </div>
                   );
@@ -3484,6 +3631,14 @@ export function AgentsPage() {
                     {t('agent.create')}
                 </Button>
               )
+            ) : playbookCreateStep < 2 && !followWizardSourcePreselected ? (
+              <Button type="primary" onClick={onNextPlaybookCreateStep}>
+                  {t('common.next')}
+              </Button>
+            ) : playbookCreateStep === 1 && followWizardSourcePreselected ? (
+              <Button type="primary" loading={isPlaybookSaving} onClick={() => void onCreatePlaybook()}>
+                  {t('common.save')}
+              </Button>
             ) : playbookCreateStep < 2 ? (
               <Button type="primary" onClick={onNextPlaybookCreateStep}>
                   {t('common.next')}
@@ -3504,6 +3659,145 @@ export function AgentsPage() {
         onSelectEpisode={onSelectEpisodeFromPicker}
         onCancel={closeEpisodePicker}
       />
+      {/* Agent picker: shown when multiple agents watch the same source and user clicks ▶ */}
+      <Modal
+        title="Which agent should run?"
+        open={runPickerOpen}
+        onCancel={() => setRunPickerOpen(false)}
+        footer={null}
+        destroyOnHidden
+      >
+        <div className="space-y-2 py-1">
+          {runPickerLinked.map(({ playbook, agent }) => {
+            const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
+            const characterLabel = agent?.characterType ? humanizeCharacterType(agent.characterType) : null;
+            const tagColor = PERSONA_COLOR_MAP[agent?.characterType ?? ''] ?? 'default';
+            return (
+              <Button
+                key={playbook.id}
+                block
+                size="large"
+                className="text-left h-auto py-3"
+                onClick={() => void onRunPickerSelect(playbook, agent)}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{emoji}</span>
+                  <div className="flex flex-col items-start gap-0.5 min-w-0">
+                    <span className="font-semibold text-sm">{agent?.name ?? playbook.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      {characterLabel ? <Tag color={tagColor} className="m-0 text-xs">{characterLabel}</Tag> : null}
+                      {agent?.promptConfig?.personality_label ? <Tag color="magenta" className="m-0 text-xs">{agent.promptConfig.personality_label}</Tag> : null}
+                    </div>
+                  </div>
+                </div>
+              </Button>
+            );
+          })}
+        </div>
+      </Modal>
+      {/* Schedule-only edit modal — opened via ✎ on individual playbook cards in the detail panel */}
+      <Modal
+        title={scheduleEditPlaybook ? `${agents.find((a) => a.id === scheduleEditPlaybook.agentId)?.name ?? t('common.edit')} — ${t('playbook.schedule')}` : t('common.edit')}
+        open={isScheduleEditOpen}
+        onCancel={() => { setIsScheduleEditOpen(false); setScheduleEditPlaybook(null); }}
+        footer={null}
+        destroyOnHidden
+        width={480}
+      >
+        <div className="space-y-4 pt-2">
+          <Select
+            aria-label={t('schedule.mode')}
+            value={playbookScheduleModeDraft}
+            onChange={(value) => setPlaybookScheduleModeDraft(value as 'interval' | 'daily' | 'weekly')}
+            options={[
+              { value: 'interval', label: t('schedule.interval') },
+              { value: 'daily', label: t('schedule.daily') },
+              { value: 'weekly', label: t('schedule.weekly') }
+            ]}
+            className="w-full"
+          />
+          {playbookScheduleModeDraft === 'interval' ? (
+            <Input
+              aria-label={t('schedule.intervalAriaLabel')}
+              value={String(playbookIntervalMinutesDraft)}
+              onChange={(event) => setPlaybookIntervalMinutesDraft(Math.max(15, Number(event.currentTarget.value) || 60))}
+              placeholder={t('schedule.intervalPlaceholder')}
+            />
+          ) : (
+            <>
+              <div className="grid gap-3 grid-cols-2">
+                <Input
+                  aria-label={t('schedule.dailyTimeAriaLabel')}
+                  value={playbookDailyTimeDraft}
+                  onChange={(event) => setPlaybookDailyTimeDraft(event.currentTarget.value)}
+                  placeholder="HH:mm"
+                />
+                <Select
+                  aria-label={t('schedule.timezoneAriaLabel')}
+                  value={playbookTimezoneDraft}
+                  onChange={(value) => setPlaybookTimezoneDraft(value)}
+                  options={TIMEZONE_OPTIONS}
+                  placeholder={t('schedule.timezonePlaceholder')}
+                  showSearch
+                  className="w-full"
+                />
+              </div>
+              {playbookScheduleModeDraft === 'weekly' && (
+                <Select
+                  aria-label={t('schedule.daysOfWeekAriaLabel')}
+                  mode="multiple"
+                  value={playbookDaysOfWeekDraft}
+                  onChange={(values) => setPlaybookDaysOfWeekDraft(values as number[])}
+                  options={[
+                    { value: 1, label: t('schedule.days.mon') },
+                    { value: 2, label: t('schedule.days.tue') },
+                    { value: 3, label: t('schedule.days.wed') },
+                    { value: 4, label: t('schedule.days.thu') },
+                    { value: 5, label: t('schedule.days.fri') },
+                    { value: 6, label: t('schedule.days.sat') },
+                    { value: 0, label: t('schedule.days.sun') }
+                  ]}
+                  className="w-full"
+                />
+              )}
+            </>
+          )}
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t('playbook.recipients')}</p>
+            {playbookRecipientsDraft.map((recipient, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <Input
+                  value={recipient}
+                  onChange={(e) => {
+                    const updated = [...playbookRecipientsDraft];
+                    updated[index] = e.target.value;
+                    setPlaybookRecipientsDraft(updated);
+                  }}
+                  placeholder="email@example.com"
+                />
+                <Button
+                  size="small"
+                  danger
+                  onClick={() => setPlaybookRecipientsDraft((prev) => prev.filter((_, i) => i !== index))}
+                >
+                  ✕
+                </Button>
+              </div>
+            ))}
+            <Button size="small" onClick={() => setPlaybookRecipientsDraft((prev) => [...prev, ''])}>
+              + {t('playbook.addRecipient')}
+            </Button>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+            <Button onClick={() => { setIsScheduleEditOpen(false); setScheduleEditPlaybook(null); }}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="primary" loading={isScheduleEditSaving} onClick={() => void onSaveScheduleEdit()}>
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </Layout>
   );
 }

@@ -18,7 +18,8 @@
     "search": "Search",
     "noData": "No data",
     "selected": "Selected",
-    "optional": "optional"
+    "optional": "optional",
+    "editing": "Editing"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -57,7 +58,7 @@
     "notYetAnalyzed": "Not yet analyzed",
     "noWorkflowCta": "No analysis workflows for this source yet. Add it to a playbook to start generating reports.",
     "reportsTab": "Reports",
-    "runsTab": "Runs",
+    "runsTab": "History",
     "episodesTab": "Episodes",
     "runAnalysisNow": "Run analysis now",
     "openLink": "Open link",
@@ -65,7 +66,8 @@
     "expertsWatching": "Your experts watching this",
     "tabNameRequired": "Tab name cannot be empty",
     "reportSingular": "report",
-    "reportPlural": "reports"
+    "reportPlural": "reports",
+    "alreadyWatching": "Already watching"
   },
   "listen": {
     "listen": "Summarize",
@@ -158,7 +160,12 @@
     "pause": "Pause",
     "resume": "Resume",
     "paused": "Paused",
-    "active": "Active"
+    "active": "Active",
+    "createPlaybooks": "{{count}} playbooks created",
+    "schedule": "Schedule & Recipients",
+    "recipients": "Email recipients",
+    "addRecipient": "Add recipient",
+    "scheduleHint": "typical:"
   },
   "source": {
     "noSources": "No sources available.",
@@ -176,7 +183,7 @@
     "cloningButton": "Cloning…"
   },
   "runs": {
-    "noRuns": "No runs yet. Run history appears here once the agent's schedule kicks in (or you trigger a manual run).",
+    "noRuns": "No history yet. Analysis history appears here once the agent's schedule kicks in (or you trigger a manual run).",
     "scheduled": "Scheduled",
     "runningFor": "Running for",
     "viewReport": "View report",

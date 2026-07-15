@@ -18,7 +18,8 @@
     "search": "Suchen",
     "noData": "Keine Daten",
     "selected": "Ausgewählt",
-    "optional": "optional"
+    "optional": "optional",
+    "editing": "Wird bearbeitet"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -57,7 +58,7 @@
     "notYetAnalyzed": "Noch nicht analysiert",
     "noWorkflowCta": "Noch kein Analyse-Workflow für diese Quelle. Füge sie einem Playbook hinzu, um Berichte zu erstellen.",
     "reportsTab": "Berichte",
-    "runsTab": "Läufe",
+    "runsTab": "Verlauf",
     "episodesTab": "Episoden",
     "runAnalysisNow": "Analyse jetzt starten",
     "openLink": "Link öffnen",
@@ -65,7 +66,8 @@
     "expertsWatching": "Deine Experten beobachten dies",
     "tabNameRequired": "Tab-Name darf nicht leer sein",
     "reportSingular": "Bericht",
-    "reportPlural": "Berichte"
+    "reportPlural": "Berichte",
+    "alreadyWatching": "Beobachtet bereits"
   },
   "listen": {
     "listen": "Fasse zusammen",
@@ -158,7 +160,12 @@
     "pause": "Pausieren",
     "resume": "Fortsetzen",
     "paused": "Pausiert",
-    "active": "Aktiv"
+    "active": "Aktiv",
+    "createPlaybooks": "{{count}} Playbooks erstellt",
+    "schedule": "Zeitplan & Empfänger",
+    "recipients": "E-Mail-Empfänger",
+    "addRecipient": "Empfänger hinzufügen",
+    "scheduleHint": "typisch:"
   },
   "source": {
     "noSources": "Keine Quellen verfügbar.",
@@ -176,7 +183,7 @@
     "cloningButton": "Wird geklont…"
   },
   "runs": {
-    "noRuns": "Noch keine Läufe. Der Verlauf erscheint hier, sobald der Zeitplan des Agenten startet (oder du manuell ausführst).",
+    "noRuns": "Noch kein Verlauf. Der Verlauf erscheint hier, sobald der Zeitplan des Agenten startet (oder du manuell ausführst).",
     "scheduled": "Geplant",
     "runningFor": "Läuft seit",
     "viewReport": "Bericht anzeigen",

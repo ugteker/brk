@@ -222,9 +222,10 @@ describe('AgentsPage three hub shell', () => {
     ]);
     renderPage();
 
-    // When a source is already summarized, the button shows "Summarizing" state
+    // When a source is already summarized, clicking the button opens the wizard in CREATE mode
+    // (allowing the user to add more agents, while the existing one shows as "already watching")
     fireEvent.click(await screen.findByRole('button', { name: /summarizing this source/i }));
-    expect(await screen.findByRole('dialog', { name: /summarizing/i })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /summarize/i })).toBeInTheDocument();
     // Following a source must never navigate away from the Library/Dashboard tab.
     expect(screen.queryByRole('tab', { name: /playbooks/i })).not.toBeInTheDocument();
   });
@@ -814,8 +815,7 @@ describe('AgentsPage three hub shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /next/i }));
 
     const agentCard = await screen.findByRole('button', { name: /select agent macro agent/i });
-    expect(agentCard).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(agentCard);
+    fireEvent.click(agentCard); // select the agent
     fireEvent.click(screen.getByRole('button', { name: /next/i }));
 
     const dailyTime = await screen.findByLabelText(/playbook daily time/i);
@@ -891,13 +891,13 @@ describe('AgentsPage three hub shell', () => {
     fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
     fireEvent.click(await screen.findByText(/macro agent/i));
     expect(screen.queryByRole('tab', { name: /^reports$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /^runs$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /^history$/i })).not.toBeInTheDocument();
     expect(screen.getAllByText(/system prompt/i).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('tab', { name: /playbooks/i }));
     fireEvent.click(await screen.findByText(/execution playbook/i));
     expect(await screen.findByRole('tab', { name: /^reports$/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /^runs$/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /^history$/i })).toBeInTheDocument();
   });
 });
 

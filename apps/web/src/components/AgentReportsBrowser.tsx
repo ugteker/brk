@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, Empty, Progress, Tag, message } from 'antd';
+import { Button, Card, Empty, Input, Progress, Tag, message } from 'antd';
 import { DownOutlined, MailOutlined, UpOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { resendReportNotification, type RunReportDto, type SignalDto } from '../api/agents';
@@ -102,6 +102,10 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
   // so re-clicking the same tag collapses it, and clicking a different tag (even on another
   // report) closes whichever chart was previously open.
   const [expandedChartKey, setExpandedChartKey] = useState<string | null>(null);
+  // Tracks user-overridden symbols (e.g. "AAPL" → "NASDAQ:AAPL") per chart key so the user can
+  // fix "This symbol doesn't exist" errors by adding the exchange prefix themselves.
+  const [symbolOverrides, setSymbolOverrides] = useState<Record<string, string>>({});
+  const [symbolInputDraft, setSymbolInputDraft] = useState<Record<string, string>>({});
 
   const aiTotals = useMemo(() => computeAiTotals(reports), [reports]);
 
@@ -113,9 +117,20 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
     }
   }, [highlightedReportId]);
 
-  function onToggleChart(key: string, event: React.MouseEvent) {
+  function onToggleChart(key: string, symbol: string, event: React.MouseEvent) {
     event.stopPropagation();
-    setExpandedChartKey((prev) => (prev === key ? null : key));
+    setExpandedChartKey((prev) => {
+      if (prev === key) return null;
+      // Initialise the input draft with whatever symbol we have (override or original)
+      setSymbolInputDraft((d) => ({ ...d, [key]: symbolOverrides[key] ?? symbol }));
+      return key;
+    });
+  }
+
+  function onApplySymbolOverride(key: string) {
+    const draft = (symbolInputDraft[key] ?? '').trim();
+    if (!draft) return;
+    setSymbolOverrides((prev) => ({ ...prev, [key]: draft }));
   }
 
   function onToggleExpand(reportId: string, event: React.MouseEvent) {
@@ -197,7 +212,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                         key={chartKey}
                         color={signal.side === 'long' ? 'green' : 'red'}
                         style={{ cursor: 'pointer' }}
-                        onClick={(event) => onToggleChart(chartKey, event)}
+                        onClick={(event) => onToggleChart(chartKey, signal.symbol, event)}
                       >
                         {signal.symbol} · {signal.side === 'long' ? 'Long' : 'Short'}
                       </Tag>
@@ -242,9 +257,10 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
             {report.signals.map((signal) => {
               const chartKey = `${report.id}:${signal.symbol}`;
               if (expandedChartKey !== chartKey) return null;
+              const displaySymbol = symbolOverrides[chartKey] ?? signal.symbol;
               return (
                 <div key={chartKey} className="mt-3" onClick={(event) => event.stopPropagation()}>
-                  <div className="mb-1 flex items-center justify-between">
+                  <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-medium">{signal.symbol} · Weekly line chart</span>
                     <div className="flex items-center gap-2">
                       {onSelectSymbol ? (
@@ -252,12 +268,32 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                           View full performance
                         </Button>
                       ) : null}
-                      <Button size="small" onClick={(event) => onToggleChart(chartKey, event)}>
+                      <Button size="small" onClick={(event) => onToggleChart(chartKey, signal.symbol, event)}>
                         Close
                       </Button>
                     </div>
                   </div>
-                  <TradingViewSymbolChart symbol={signal.symbol} interval="W" style="2" height={640} />
+                  {/* Symbol search input — lets users fix "symbol not found" by adding exchange prefix */}
+                  <div className="mb-2 flex items-center gap-2">
+                    <Input
+                      size="small"
+                      style={{ maxWidth: 220 }}
+                      placeholder="e.g. NASDAQ:AAPL, XETR:BMW"
+                      value={symbolInputDraft[chartKey] ?? displaySymbol}
+                      onChange={(e) => setSymbolInputDraft((d) => ({ ...d, [chartKey]: e.target.value }))}
+                      onPressEnter={() => onApplySymbolOverride(chartKey)}
+                      addonAfter={
+                        <span
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => onApplySymbolOverride(chartKey)}
+                        >
+                          ↵
+                        </span>
+                      }
+                    />
+                    <span className="text-xs text-gray-400">If the chart shows "symbol not found", add the exchange prefix and press Enter</span>
+                  </div>
+                  <TradingViewSymbolChart symbol={displaySymbol} interval="W" style="2" height={640} />
                 </div>
               );
             })}
