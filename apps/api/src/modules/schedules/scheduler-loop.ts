@@ -4,11 +4,11 @@ import { processNextRun as defaultProcessNextRun } from '../runs/worker';
 
 interface StartSchedulerLoopOptions {
   intervalMs: number;
-  queue: Pick<RunQueueService, 'enqueueDueRuns' | 'claimNextRun' | 'completeRun'>;
+  queue: Pick<RunQueueService, 'enqueueDueRuns' | 'claimNextRun' | 'completeRun' | 'markPlaybookExecuted'>;
   runner: Pick<AgentRunner, 'run'>;
   processNextRun?: (
     workerId: string,
-    queue: Pick<RunQueueService, 'claimNextRun' | 'completeRun'>,
+    queue: Pick<RunQueueService, 'claimNextRun' | 'completeRun' | 'markPlaybookExecuted'>,
     runner: Pick<AgentRunner, 'run'>
   ) => Promise<void>;
 }

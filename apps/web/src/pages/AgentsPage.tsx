@@ -7,6 +7,7 @@ import {
   AudioOutlined,
   AudioMutedOutlined,
   CheckCircleOutlined,
+  DashboardOutlined,
   LoadingOutlined,
   MailOutlined,
   BulbOutlined,
@@ -28,6 +29,7 @@ import {
   RobotOutlined,
   RocketOutlined,
   SearchOutlined,
+  SettingOutlined,
   TeamOutlined,
   ToolOutlined,
   UserOutlined
@@ -515,6 +517,10 @@ export function AgentsPage() {
   const [marketplaceAgentsSearch, setMarketplaceAgentsSearch] = useState('');
   const [marketplacePlaybooksSearch, setMarketplacePlaybooksSearch] = useState('');
   const [accessGrantCount, setAccessGrantCount] = useState(0);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() =>
+    localStorage.getItem('chattrader:onboarding:dismissed') === '1'
+  );
+  const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
 
   /** Set of source IDs the current user already has an active playbook for. */
   const followedSourceIds = useMemo(
@@ -818,22 +824,34 @@ export function AgentsPage() {
   const selectedPlaybook = playbooks.find((playbook) => playbook.id === selectedPlaybookId) ?? null;
   const executionAgentId = selectedPlaybook?.agentId ?? null;
 
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     if (!executionAgentId) return;
     let alive = true;
+
+    function stopPolling() {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    }
 
     async function refreshPlaybookExecution() {
       const [agentReports, agentRuns] = await Promise.all([listAgentReports(executionAgentId), listAgentRuns(executionAgentId)]);
       if (!alive) return;
       setReports(agentReports);
       setRuns(agentRuns);
+      // Stop polling when no runs are active — poll resumes automatically when executionAgentId changes or a manual run is triggered
+      const hasActiveRuns = agentRuns.some((r) => r.status === 'running' || r.status === 'queued');
+      if (!hasActiveRuns) stopPolling();
     }
 
     refreshPlaybookExecution();
-    const intervalId = setInterval(refreshPlaybookExecution, RUNS_POLL_INTERVAL_MS);
+    pollIntervalRef.current = setInterval(refreshPlaybookExecution, RUNS_POLL_INTERVAL_MS);
     return () => {
       alive = false;
-      clearInterval(intervalId);
+      stopPolling();
     };
   }, [executionAgentId]);
 
@@ -923,6 +941,19 @@ export function AgentsPage() {
 
   async function executeRun(agent: AgentSummary, forcedEpisode?: ForcedEpisodeSelection) {
     setRunningAgentId(agent.id);
+    // Re-arm polling for this agent's playbook if it was stopped
+    if (executionAgentId === agent.id && !pollIntervalRef.current) {
+      pollIntervalRef.current = setInterval(async () => {
+        const [agentReports, agentRuns] = await Promise.all([listAgentReports(agent.id), listAgentRuns(agent.id)]);
+        setReports(agentReports);
+        setRuns(agentRuns);
+        const hasActiveRuns = agentRuns.some((r) => r.status === 'running' || r.status === 'queued');
+        if (!hasActiveRuns && pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      }, RUNS_POLL_INTERVAL_MS);
+    }
     try {
       const result = await runAgentNow(agent.id, forcedEpisode);
       if (result.status === 'failed') {
@@ -1653,22 +1684,23 @@ export function AgentsPage() {
       return;
     }
 
-    if (!episode) {
-      // Non-episodic or "run latest" — delegate to the normal path
-      await executeRun(agent);
-      return;
+    try {
+      setSourceDetailRefreshKey((k) => k + 1);
+      if (episode) {
+        const libSource = sources.find((s) => s.id === selectedSourceId);
+        if (!libSource) return;
+        await runPlaybookNow(linked[0].id, {
+          sourceType: libSource.type,
+          sourceValue: libSource.value,
+          itemLink: episode.link
+        });
+      } else {
+        await runPlaybookNow(linked[0].id);
+      }
+      setSourceDetailRefreshKey((k) => k + 1);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to start analysis');
     }
-
-    const libSource = sources.find((s) => s.id === selectedSourceId);
-    if (!libSource) return;
-
-    // Run with this specific episode as the forced selection. The backend will create an ad-hoc
-    // source config if the library source URL is not already in agent.sources.
-    await executeRun(agent, {
-      sourceType: libSource.type as EpisodeOptionDto['sourceType'],
-      sourceValue: libSource.value,
-      itemLink: episode.link
-    });
   }
 
   // Called when user picks a specific agent from the multi-agent run picker modal
@@ -1677,27 +1709,23 @@ export function AgentsPage() {
     const episode = runPickerEpisode;
     setRunPickerEpisode(undefined);
     setActiveSourceTab('runs');
-    if (!agent) {
-      try {
-        setSourceDetailRefreshKey((k) => k + 1);
+    try {
+      setSourceDetailRefreshKey((k) => k + 1);
+      if (episode) {
+        const libSource = sources.find((s) => s.id === selectedSourceId);
+        if (!libSource) return;
+        await runPlaybookNow(playbook.id, {
+          sourceType: libSource.type,
+          sourceValue: libSource.value,
+          itemLink: episode.link
+        });
+      } else {
         await runPlaybookNow(playbook.id);
-        setSourceDetailRefreshKey((k) => k + 1);
-      } catch (err) {
-        message.error(err instanceof Error ? err.message : 'Failed to start analysis');
       }
-      return;
+      setSourceDetailRefreshKey((k) => k + 1);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to start analysis');
     }
-    if (!episode) {
-      await executeRun(agent);
-      return;
-    }
-    const libSource = sources.find((s) => s.id === selectedSourceId);
-    if (!libSource) return;
-    await executeRun(agent, {
-      sourceType: libSource.type as EpisodeOptionDto['sourceType'],
-      sourceValue: libSource.value,
-      itemLink: episode.link
-    });
   }
 
   async function onCreateDetectedSource() {
@@ -1789,6 +1817,26 @@ export function AgentsPage() {
             >
               ChatTrader
             </Title>
+            {isAdmin && (
+              showAdminWorkspace ? (
+                <Tag
+                  color="orange"
+                  icon={<SettingOutlined />}
+                  onClick={goToDashboard}
+                  style={{ cursor: 'pointer', marginLeft: 8, fontSize: 12 }}
+                >
+                  {t('nav.modeAdmin')}
+                </Tag>
+              ) : (
+                <Tag
+                  color="green"
+                  icon={<DashboardOutlined />}
+                  style={{ marginLeft: 8, fontSize: 12 }}
+                >
+                  {t('nav.modeDashboard')}
+                </Tag>
+              )
+            )}
           </div>
           <div className="flex items-center gap-2">
             <ThemePicker />
@@ -1831,6 +1879,16 @@ export function AgentsPage() {
                       onClick: () => {
                         setShowAdminWorkspace(true);
                         setShowAdminUsers(true);
+                      }
+                    },
+                    {
+                      key: 'admin-onboarding-preview',
+                      label: forceShowOnboarding ? 'Hide onboarding preview' : 'Preview onboarding',
+                      icon: <RobotOutlined />,
+                      onClick: () => {
+                        setForceShowOnboarding((prev) => !prev);
+                        setShowAdminWorkspace(false);
+                        setActiveHub('sources');
                       }
                     },
                     { type: 'divider' as const }
@@ -1877,6 +1935,48 @@ export function AgentsPage() {
                     className="min-w-0"
                     title={<Title level={4} style={{ margin: 0 }}>{t('nav.dashboard')}</Title>}
                   >
+                   {/* First-run onboarding checklist — shown only when all 3 hubs are empty and not dismissed */}
+                   {(forceShowOnboarding || (!onboardingDismissed && !showAdminWorkspace && sourcesLoadState !== 'loading' && loadState !== 'loading' && playbooksLoadState !== 'loading' && sources.length === 0 && agents.length === 0 && playbooks.length === 0)) ? (
+                     <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950 px-5 py-4">
+                       <div className="flex items-start justify-between gap-3">
+                         <div className="min-w-0">
+                           <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-100">{t('onboarding.gettingStarted')}</p>
+                           <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">{t('onboarding.gettingStartedDesc')}</p>
+                         </div>
+                         <Button
+                           type="text"
+                           size="small"
+                           className="shrink-0 text-indigo-400 hover:text-indigo-600"
+                           onClick={() => {
+                             localStorage.setItem('chattrader:onboarding:dismissed', '1');
+                             setOnboardingDismissed(true);
+                           }}
+                         >
+                           {t('onboarding.dismiss')}
+                         </Button>
+                       </div>
+                       <div className="mt-3 space-y-2">
+                         {[
+                           { done: sources.length > 0, label: t('onboarding.step1'), desc: t('onboarding.step1Desc'), action: () => { setEditingSource(null); setIsSourceCreateOpen(true); setSourceUrlDraft(''); setAutoDetectedSource(null); } },
+                           { done: agents.length > 0, label: t('onboarding.step2'), desc: t('onboarding.step2Desc'), action: () => { setActiveHub('agents'); setShowAdminWorkspace(true); } },
+                           { done: playbooks.length > 0, label: t('onboarding.step3'), desc: t('onboarding.step3Desc'), action: () => openPlaybookCreate() },
+                         ].map((step, i) => (
+                           <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 ${step.done ? 'opacity-50' : 'bg-white dark:bg-indigo-900'}`}>
+                             <span className="text-lg shrink-0">{step.done ? '✅' : '⬜'}</span>
+                             <div className="min-w-0 flex-1">
+                               <p className={`text-xs font-medium ${step.done ? 'line-through text-gray-400' : 'text-indigo-900 dark:text-indigo-100'}`}>{step.label}</p>
+                               <p className="text-xs text-indigo-500 dark:text-indigo-400">{step.desc}</p>
+                             </div>
+                             {!step.done && (
+                               <Button size="small" type="primary" onClick={step.action}>
+                                 {t('common.next')}
+                               </Button>
+                             )}
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   ) : null}
                    {/* Unified inner tab bar: user library tabs + fixed Marketplace tab */}
                    <div
                      onDoubleClick={() => {
@@ -1977,7 +2077,21 @@ export function AgentsPage() {
                    {/* Marketplace grid — same rich card layout as library, Clone button only */}
                    {showSourcesMarketplace ? (
                      <div>
-                       {filteredMarketplaceSources.length === 0 ? <Empty description={normalizedSourceSearch ? 'No matching sources.' : 'No marketplace sources available.'} /> : null}
+                       {/* Marketplace mode indicator banner */}
+                       <div className="mb-4 flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-800 dark:bg-sky-950">
+                         <CompassOutlined className="text-sky-500 text-lg shrink-0" />
+                         <div className="min-w-0">
+                           <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{t('marketplace.sourcesHeading')}</p>
+                           <p className="text-xs text-sky-600 dark:text-sky-400">{t('marketplace.sourcesDesc')}</p>
+                         </div>
+                       </div>
+                       {filteredMarketplaceSources.length === 0 ? (
+                         <div className="flex flex-col items-center gap-3 py-12 text-center">
+                           <span className="text-5xl">🧭</span>
+                           <p className="text-base font-semibold text-gray-700 dark:text-gray-200">{t('marketplace.emptyHeadline')}</p>
+                           <p className="text-sm text-gray-400 max-w-xs">{normalizedSourceSearch ? t('marketplace.noItems') : t('marketplace.emptyDesc')}</p>
+                         </div>
+                       ) : null}
                        <div className="grid gap-3 sm:grid-cols-2">
                          {filteredMarketplaceSources.map((item) => {
                            const src = item as unknown as import('../api/sources').SourceRecord;
@@ -2191,6 +2305,19 @@ export function AgentsPage() {
                                              </div>
                                            )}
                                          </div>
+                                         <TouchSafeTooltip title={pb.notificationsEnabled !== false ? t('playbook.notificationsOn') : t('playbook.notificationsOff')}>
+                                           <Button
+                                             size="small"
+                                             shape="circle"
+                                             aria-label={pb.notificationsEnabled !== false ? t('playbook.notificationsOn') : t('playbook.notificationsOff')}
+                                             icon={pb.notificationsEnabled !== false ? <MailOutlined /> : <MailOutlined style={{ opacity: 0.3 }} />}
+                                             onClick={async (e) => {
+                                               e.stopPropagation();
+                                               await updatePlaybook(pb.id, { notificationsEnabled: !(pb.notificationsEnabled !== false) });
+                                               await refreshPlaybooks();
+                                             }}
+                                           />
+                                         </TouchSafeTooltip>
                                          <TouchSafeTooltip title={pb.enabled ? t('playbook.pause') : t('playbook.resume')}>
                                            <Button
                                              size="small"
@@ -2490,18 +2617,55 @@ export function AgentsPage() {
                        </Card>
                        );
                      })}
-                     <GhostCreateCard
-                       ariaLabel="Create new source"
-                       onClick={() => {
-                         setEditingSource(null);
-                         setIsSourceCreateOpen(true);
-                         setSourceUrlDraft('');
-                         setAutoDetectedSource(null);
-                       }}
-                       icon={<DatabaseOutlined />}
-                       title="Create new source"
-                       sub="URL detect + metadata preview"
-                     />
+                     {sources.length === 0 ? (
+                       <div className="col-span-full flex flex-col items-center gap-4 rounded-xl border border-dashed border-gray-200 py-12 px-6 text-center dark:border-gray-700">
+                         <span className="text-5xl">📚</span>
+                         <div>
+                           <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('library.emptyHeadline')}</p>
+                           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('library.emptyDesc')}</p>
+                         </div>
+                         <Button
+                           type="primary"
+                           size="large"
+                           icon={<PlusCircleOutlined />}
+                           onClick={() => {
+                             setEditingSource(null);
+                             setIsSourceCreateOpen(true);
+                             setSourceUrlDraft('');
+                             setAutoDetectedSource(null);
+                           }}
+                         >
+                           {t('library.emptyCta')}
+                         </Button>
+                         <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-gray-400">
+                           <span className="font-medium text-gray-500">{t('library.howItWorks')}:</span>
+                           {[
+                             t('library.howStep1'),
+                             t('library.howStep2'),
+                             t('library.howStep3'),
+                           ].map((step, i, arr) => (
+                             <span key={step} className="flex items-center gap-1">
+                               <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700 dark:bg-sky-950 dark:text-sky-300">{step}</span>
+                               {i < arr.length - 1 ? <span className="text-gray-300">→</span> : null}
+                             </span>
+                           ))}
+                         </div>
+                       </div>
+                     ) : null}
+                     {sources.length > 0 && (
+                       <GhostCreateCard
+                         ariaLabel={t('library.addSource')}
+                         onClick={() => {
+                           setEditingSource(null);
+                           setIsSourceCreateOpen(true);
+                           setSourceUrlDraft('');
+                           setAutoDetectedSource(null);
+                         }}
+                         icon={<DatabaseOutlined />}
+                         title={t('library.addSource')}
+                         sub="YouTube, podcast, or any website"
+                       />
+                     )}
                    </div>
                    ) : null}
                    </>
@@ -2744,8 +2908,40 @@ export function AgentsPage() {
                             </Button>
                           </Badge>
                         </div>
-                        {loadState === 'loading' ? <p className="text-sm text-gray-700">Loading agents...</p> : null}
+                        {loadState === 'loading' ? (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {[1, 2, 3, 4].map((i) => (
+                              <Card key={i} size="small" className="min-h-[170px]">
+                                <Skeleton active paragraph={{ rows: 3 }} />
+                              </Card>
+                            ))}
+                          </div>
+                        ) : null}
                         {loadState === 'error' ? <p className="text-sm text-red-700">Failed to load agents.</p> : null}
+                        {loadState !== 'loading' && filteredAgents.length === 0 && !showAgentsMarketplace ? (
+                          <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-gray-200 py-12 px-6 text-center dark:border-gray-700">
+                            <span className="text-5xl">🤖</span>
+                            <div>
+                              <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('agent.emptyHeadline')}</p>
+                              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('agent.emptyDesc')}</p>
+                            </div>
+                            <Button
+                              type="primary"
+                              size="large"
+                              icon={<PlusCircleOutlined />}
+                              onClick={() => {
+                                setIsCreatingAgent(true);
+                                setEditingAgent(null);
+                                setSelectedAgentId(null);
+                              }}
+                            >
+                              {t('agent.emptyCta')}
+                            </Button>
+                            {sources.length === 0 ? (
+                              <p className="text-xs text-amber-600 dark:text-amber-400 max-w-xs">{t('agent.emptySourceHint')}</p>
+                            ) : null}
+                          </div>
+                        ) : null}
                         <div className="grid gap-3 sm:grid-cols-2">
                           {filteredAgents.map((agent) => (
                             <Card
@@ -2795,20 +2991,20 @@ export function AgentsPage() {
                             </Card>
                           ))}
                           <GhostCreateCard
-                           ariaLabel="Create follower"
+                           ariaLabel={t('agent.emptyCta')}
                            onClick={() => {
                              setIsCreatingAgent(true);
                              setEditingAgent(null);
                              setSelectedAgentId(null);
                            }}
                            icon={<AppstoreOutlined />}
-                           title="Create follower"
-                           sub="Character + personality setup"
+                           title={t('agent.createNew')}
+                           sub={t('agent.createNewSub')}
                            className="w-full"
                           />
                         </div>
                         <Modal
-                          title="Marketplace agents"
+                          title={<span className="flex items-center gap-2"><CompassOutlined className="text-sky-500" />{t('marketplace.heading')} — {t('nav.agents')}</span>}
                           open={showAgentsMarketplace}
                           onCancel={() => { setShowAgentsMarketplace(false); setMarketplaceAgentsSearch(''); }}
                           footer={null}
@@ -2823,7 +3019,12 @@ export function AgentsPage() {
                               prefix={<SearchOutlined />}
                               allowClear
                             />
-                            {filteredMarketplaceAgents.length === 0 ? <Empty description={marketplaceAgentsSearch ? 'No matching agents.' : 'No marketplace agents available.'} /> : null}
+                            {filteredMarketplaceAgents.length === 0 ? (
+                              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                                <span className="text-4xl">🧭</span>
+                                <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">{marketplaceAgentsSearch ? t('marketplace.noItems') : t('marketplace.emptyHeadline')}</p>
+                              </div>
+                            ) : null}
                             {filteredMarketplaceAgents.map((item) => (
                               <Card key={item.publicationId} size="small">
                                 <div className="flex items-center justify-between gap-3">
@@ -2947,6 +3148,39 @@ export function AgentsPage() {
                       <>
                         {playbooksLoadState === 'loading' ? <p className="text-sm text-gray-700">Loading playbooks...</p> : null}
                         {playbooksLoadState === 'error' ? <p className="text-sm text-red-700">Failed to load playbooks.</p> : null}
+                        {playbooksLoadState !== 'loading' && filteredPlaybooks.length === 0 ? (
+                          <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-gray-200 py-12 px-6 text-center dark:border-gray-700">
+                            <span className="text-5xl">📅</span>
+                            <div>
+                              <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('playbook.emptyHeadline')}</p>
+                              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('playbook.emptyDesc')}</p>
+                            </div>
+                            {sources.length === 0 ? (
+                              <Button
+                                size="large"
+                                onClick={() => setActiveHub('sources')}
+                              >
+                                {t('playbook.emptyCtaNoSources')}
+                              </Button>
+                            ) : agents.length === 0 ? (
+                              <Button
+                                size="large"
+                                onClick={() => setActiveHub('agents')}
+                              >
+                                {t('playbook.emptyCtaNoAgents')}
+                              </Button>
+                            ) : (
+                              <Button
+                                type="primary"
+                                size="large"
+                                icon={<PlusCircleOutlined />}
+                                onClick={openPlaybookCreate}
+                              >
+                                {t('playbook.emptyCtaReady')}
+                              </Button>
+                            )}
+                          </div>
+                        ) : null}
                         <div className="grid gap-3 sm:grid-cols-2">
                           {filteredPlaybooks.map((playbook) => (
                             <Card
@@ -3010,18 +3244,20 @@ export function AgentsPage() {
                               </div>
                             </Card>
                           ))}
-                          <GhostCreateCard
-                           ariaLabel="Create new playbook"
-                           onClick={openPlaybookCreate}
-                           icon={<RocketOutlined />}
-                           title="Create new playbook"
-                           sub="Agent + sources + schedule"
-                          />
+                          {filteredPlaybooks.length > 0 && (
+                           <GhostCreateCard
+                            ariaLabel={t('playbook.emptyCtaReady')}
+                            onClick={openPlaybookCreate}
+                            icon={<RocketOutlined />}
+                            title={t('playbook.createNew')}
+                            sub={t('playbook.createNewSub')}
+                           />
+                          )}
                         </div>
                       </>
                     )}
                     <Modal
-                      title="Marketplace playbooks"
+                      title={<span className="flex items-center gap-2"><CompassOutlined className="text-sky-500" />{t('marketplace.heading')} — {t('nav.playbooks')}</span>}
                       open={showPlaybooksMarketplace}
                       onCancel={() => { setShowPlaybooksMarketplace(false); setMarketplacePlaybooksSearch(''); }}
                       footer={null}
@@ -3036,7 +3272,12 @@ export function AgentsPage() {
                           prefix={<SearchOutlined />}
                           allowClear
                         />
-                        {filteredMarketplacePlaybooks.length === 0 ? <Empty description={marketplacePlaybooksSearch ? t('marketplace.noItems') : t('marketplace.noItems')} /> : null}
+                        {filteredMarketplacePlaybooks.length === 0 ? (
+                          <div className="flex flex-col items-center gap-3 py-8 text-center">
+                            <span className="text-4xl">🧭</span>
+                            <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">{marketplacePlaybooksSearch ? t('marketplace.noItems') : t('marketplace.emptyHeadline')}</p>
+                          </div>
+                        ) : null}
                         {filteredMarketplacePlaybooks.map((item) => (
                           <Card key={item.publicationId} size="small">
                             <div className="flex items-center justify-between gap-3">

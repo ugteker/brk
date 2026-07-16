@@ -36,7 +36,7 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
       updatedAt: new Date(),
       sources: (input.sources ?? []).map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60, maxItems: s.maxItems ?? 1 })),
       preferences: input.preferences ?? {},
-      schedule: input.schedule ?? null
+      schedule: null
     };
     this.agents.set(id, agent);
     return agent;
@@ -56,7 +56,7 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
         ? patch.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60, maxItems: s.maxItems ?? 1 }))
         : existing.sources,
       preferences: patch.preferences ?? existing.preferences,
-      schedule: patch.schedule ?? existing.schedule,
+      schedule: existing.schedule,
       updatedAt: new Date()
     };
     this.agents.set(agentId, updated);
@@ -185,8 +185,7 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
       promptConfig: source.promptConfig,
       active: source.status !== 'disabled',
       sources: source.sources,
-      preferences: source.preferences,
-      schedule: source.schedule ?? undefined
+      preferences: source.preferences
     });
     return { agent: cloned, cloned: true };
   }

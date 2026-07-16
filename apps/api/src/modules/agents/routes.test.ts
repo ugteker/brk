@@ -39,7 +39,7 @@ function createFakeRepo() {
         updatedAt: new Date('2026-07-10T00:00:00.000Z'),
         sources: (input.sources ?? []).map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60 })),
         preferences: input.preferences ?? {},
-        schedule: input.schedule ?? null
+        schedule: null
       };
       agents.set(agent.id, agent);
       return agent;
@@ -57,7 +57,7 @@ function createFakeRepo() {
           ? patch.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60 }))
           : existing.sources,
         preferences: patch.preferences ?? existing.preferences,
-        schedule: patch.schedule ?? existing.schedule,
+        schedule: existing.schedule,
         updatedAt: new Date('2026-07-10T01:00:00.000Z')
       };
       agents.set(agentId, updated);
@@ -179,8 +179,7 @@ function createFakeRepo() {
         promptConfig: source.promptConfig,
         active: source.status !== 'disabled',
         sources: source.sources,
-        preferences: source.preferences,
-        schedule: source.schedule ?? undefined
+        preferences: source.preferences
       });
       return { agent: cloned, cloned: true };
     },
@@ -223,23 +222,6 @@ describe('agent routes', () => {
       }
     };
   }
-
-  it('returns 400 for invalid schedule interval', async () => {
-    const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/agents',
-      headers: authCookieHeader(),
-      payload: {
-        name: 'Bad Agent',
-        sources: [{ type: 'web_urls', value: 'https://example.com' }],
-        schedule: { mode: 'interval', intervalMinutes: 30 },
-        preferences: { sector: ['tech'] }
-      }
-    });
-
-    expect(res.statusCode).toBe(400);
-  });
 
   it('returns 400 for unsupported character type on create', async () => {
     const app = await buildServer({ agentRepository: createFakeRepo(), agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
@@ -477,7 +459,7 @@ describe('agent routes', () => {
     const detail = res.json();
     expect(detail.description).toBe('Watches tech news podcasts');
     expect(detail.preferences).toEqual({ sector: ['tech'] });
-    expect(detail.schedule).toEqual({ mode: 'interval', intervalMinutes: 120 });
+    expect(detail.schedule).toBeNull();
     expect(detail.sources[0]).toMatchObject({ frequencyMinutes: 90 });
   });
 
@@ -514,7 +496,7 @@ describe('agent routes', () => {
     expect(patchRes.statusCode).toBe(200);
     const updated = patchRes.json();
     expect(updated.description).toBe('Updated description');
-    expect(updated.schedule).toEqual({ mode: 'daily', dailyTime: '08:00', timezone: 'UTC' });
+    expect(updated.schedule).toBeNull();
   });
 
   it('returns 400 when PATCH sets non-finance character with risk_level', async () => {

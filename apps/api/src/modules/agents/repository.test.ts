@@ -187,7 +187,6 @@ describe('AgentRepository', () => {
     const deleteRunArtifacts = vi.fn(async () => ({ count: 0 }));
     const deleteRuns = vi.fn(async () => ({ count: 0 }));
     const deletePromptVersions = vi.fn(async () => ({ count: 0 }));
-    const deleteSchedules = vi.fn(async () => ({ count: 0 }));
     const deleteSources = vi.fn(async () => ({ count: 0 }));
     const deleteAccessGrants = vi.fn(async () => ({ count: 0 }));
     const deletePlaybookSources = vi.fn(async () => ({ count: 0 }));
@@ -200,7 +199,6 @@ describe('AgentRepository', () => {
       agentRunArtifact: { deleteMany: deleteRunArtifacts },
       agentRun: { deleteMany: deleteRuns },
       agentPromptVersion: { deleteMany: deletePromptVersions },
-      agentSchedule: { deleteMany: deleteSchedules },
       agentSource: { deleteMany: deleteSources },
       accessGrant: { deleteMany: deleteAccessGrants },
       playbookSource: { deleteMany: deletePlaybookSources },
@@ -221,7 +219,6 @@ describe('AgentRepository', () => {
     expect(deleteRunArtifacts).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
     expect(deleteRuns).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
     expect(deletePromptVersions).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
-    expect(deleteSchedules).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
     expect(deleteSources).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
     expect(deleteAccessGrants).toHaveBeenCalledWith({ where: { OR: [{ agentId: 'agent_1' }, { granteeAgentId: 'agent_1' }] } });
     expect(findPlaybooks).toHaveBeenCalledWith({ where: { agentId: 'agent_1' }, select: { id: true } });

@@ -40,14 +40,6 @@ export function validateCreateAgentInput(input: CreateAgentInput): ValidationRes
     }
   }
 
-  if (input.schedule?.mode === 'interval' && input.schedule.intervalMinutes < 60) {
-    errors.push('intervalMinutes must be >= 60');
-  }
-
-  if (input.schedule?.mode === 'weekly' && input.schedule.daysOfWeek.length === 0) {
-    errors.push('weekly schedule requires at least one day of week');
-  }
-
   validateCharacterPromptRules(characterType, promptConfig, errors);
 
   return { ok: errors.length === 0, errors };

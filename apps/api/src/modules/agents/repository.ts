@@ -1,5 +1,4 @@
 import type { PrismaClient } from '@prisma/client';
-import { computeNextRun } from '../schedules/compute-next-run';
 import { DEFAULT_CHARACTER_TYPE } from './types';
 import type {
   Agent,
@@ -11,7 +10,6 @@ import type {
   PromptConfig,
   PublishAgentInput,
   RecentRun,
-  ScheduleInput,
   ShareAgentInput
 } from './types';
 
@@ -19,7 +17,6 @@ type AgentDb = Pick<
   PrismaClient,
   | 'agent'
   | 'agentSource'
-  | 'agentSchedule'
   | 'agentRun'
   | 'agentPromptVersion'
   | 'agentRunArtifact'
@@ -31,13 +28,6 @@ type AgentDb = Pick<
   | '$transaction'
 >;
 type SourceRow = { type: string; value: string; frequencyMinutes?: number; maxItems?: number };
-type ScheduleRow = {
-  mode?: string;
-  intervalMinutes?: number | null;
-  dailyTime?: string | null;
-  timezone?: string | null;
-  daysOfWeekJson?: string | null;
-};
 
 function parsePreferences(json: string | null | undefined): Record<string, string[]> {
   if (!json) return {};
@@ -57,47 +47,8 @@ function parsePromptConfig(json: string | null | undefined): PromptConfig {
   }
 }
 
-function parseDaysOfWeek(json: string | null | undefined): number[] {
-  if (!json) return [];
-  try {
-    const parsed = JSON.parse(json);
-    return Array.isArray(parsed) ? parsed.filter((n) => typeof n === 'number') : [];
-  } catch {
-    return [];
-  }
-}
-
-function scheduleFromRow(row: ScheduleRow | undefined | null): ScheduleInput | null {
-  if (!row) return null;
-  if (row.mode === 'weekly') {
-    return {
-      mode: 'weekly',
-      daysOfWeek: parseDaysOfWeek(row.daysOfWeekJson),
-      dailyTime: row.dailyTime ?? '07:30',
-      timezone: row.timezone ?? 'UTC'
-    };
-  }
-  if (row.mode === 'daily') {
-    return { mode: 'daily', dailyTime: row.dailyTime ?? '07:30', timezone: row.timezone ?? 'UTC' };
-  }
-  return { mode: 'interval', intervalMinutes: row.intervalMinutes ?? 60 };
-}
-
-function scheduleCreateData(schedule: ScheduleInput, now: Date) {
-  return {
-    mode: schedule.mode,
-    intervalMinutes: schedule.mode === 'interval' ? schedule.intervalMinutes : null,
-    dailyTime: schedule.mode === 'daily' || schedule.mode === 'weekly' ? schedule.dailyTime : null,
-    timezone: schedule.mode === 'daily' || schedule.mode === 'weekly' ? schedule.timezone : null,
-    daysOfWeekJson: schedule.mode === 'weekly' ? JSON.stringify(schedule.daysOfWeek) : null,
-    nextRunAt: computeNextRun(schedule, now),
-    enabled: true
-  };
-}
-
 function mapAgent(row: any): Agent {
   const sourceRows = (row.sources ?? []) as SourceRow[];
-  const latestSchedule = (row.schedules ?? [])[0] as ScheduleRow | undefined;
 
   return {
     id: row.id,
@@ -116,7 +67,7 @@ function mapAgent(row: any): Agent {
       maxItems: s.maxItems ?? 1
     })),
     preferences: parsePreferences(row.preferencesJson),
-    schedule: scheduleFromRow(latestSchedule)
+    schedule: null
   };
 }
 
@@ -128,7 +79,6 @@ export class AgentRepository {
       where: ownerUserId ? { ownerUserId } : {},
       include: {
         sources: true,
-        schedules: { orderBy: { createdAt: 'desc' }, take: 1 },
         _count: { select: { runs: true, runReports: true } },
         runReports: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } }
       },
@@ -146,7 +96,7 @@ export class AgentRepository {
   async getAgent(agentId: string): Promise<Agent | null> {
     const agent = await this.db.agent.findUnique({
       where: { id: agentId },
-      include: { sources: true, schedules: { orderBy: { createdAt: 'desc' }, take: 1 } }
+      include: { sources: true }
     });
     if (!agent) return null;
 
@@ -154,7 +104,6 @@ export class AgentRepository {
   }
 
   async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
-    const now = new Date();
     const created = await this.db.agent.create({
       data: {
         ownerUserId,
@@ -175,16 +124,9 @@ export class AgentRepository {
                 }))
               }
             }
-          : {}),
-        ...(input.schedule
-          ? {
-              schedules: {
-                create: scheduleCreateData(input.schedule, now)
-              }
-            }
           : {})
       },
-      include: { sources: true, schedules: true }
+      include: { sources: true }
     });
 
     return mapAgent(created);
@@ -215,7 +157,6 @@ export class AgentRepository {
       await tx.agentRunArtifact.deleteMany({ where: { agentId } });
       await tx.agentRun.deleteMany({ where: { agentId } });
       await tx.agentPromptVersion.deleteMany({ where: { agentId } });
-      await tx.agentSchedule.deleteMany({ where: { agentId } });
       await tx.agentSource.deleteMany({ where: { agentId } });
       await tx.accessGrant.deleteMany({ where: { OR: [{ agentId }, { granteeAgentId: agentId }] } });
 
@@ -234,8 +175,6 @@ export class AgentRepository {
   }
 
   async updateAgent(agentId: string, patch: Partial<CreateAgentInput>): Promise<Agent> {
-    const now = new Date();
-
     const updated = await this.db.$transaction(async (tx: any) => {
       if (patch.sources) {
         await tx.agentSource.deleteMany({ where: { agentId } });
@@ -250,13 +189,6 @@ export class AgentRepository {
         });
       }
 
-      if (patch.schedule) {
-        await tx.agentSchedule.deleteMany({ where: { agentId } });
-        await tx.agentSchedule.create({
-          data: { agentId, ...scheduleCreateData(patch.schedule, now) }
-        });
-      }
-
       return tx.agent.update({
         where: { id: agentId },
         data: {
@@ -267,7 +199,7 @@ export class AgentRepository {
           ...(patch.active !== undefined ? { status: patch.active ? 'active' : 'disabled' } : {}),
           ...(patch.preferences !== undefined ? { preferencesJson: JSON.stringify(patch.preferences) } : {})
         },
-        include: { sources: true, schedules: { orderBy: { createdAt: 'desc' }, take: 1 } }
+        include: { sources: true }
       });
     });
 
@@ -427,8 +359,7 @@ export class AgentRepository {
       include: {
         agent: {
           include: {
-            sources: true,
-            schedules: { orderBy: { createdAt: 'desc' }, take: 1 }
+            sources: true
           }
         }
       },
@@ -461,8 +392,7 @@ export class AgentRepository {
       include: {
         agent: {
           include: {
-            sources: true,
-            schedules: { orderBy: { createdAt: 'desc' }, take: 1 }
+            sources: true
           }
         }
       }
@@ -477,16 +407,13 @@ export class AgentRepository {
         name: publication.agent.name
       },
       include: {
-        sources: true,
-        schedules: { orderBy: { createdAt: 'desc' }, take: 1 }
+        sources: true
       }
     });
     if (existing) {
       return { agent: mapAgent(existing), cloned: false };
     }
 
-    const latestSchedule = publication.agent.schedules?.[0];
-    const now = new Date();
     const cloned = await this.db.agent.create({
       data: {
         ownerUserId: targetOwnerUserId,
@@ -503,26 +430,10 @@ export class AgentRepository {
             frequencyMinutes: source.frequencyMinutes ?? 60,
             maxItems: source.maxItems ?? 1
           }))
-        },
-        ...(latestSchedule
-          ? {
-              schedules: {
-                create: {
-                  mode: latestSchedule.mode,
-                  intervalMinutes: latestSchedule.intervalMinutes,
-                  dailyTime: latestSchedule.dailyTime,
-                  timezone: latestSchedule.timezone,
-                  daysOfWeekJson: latestSchedule.daysOfWeekJson,
-                  nextRunAt: scheduleFromRow(latestSchedule) ? computeNextRun(scheduleFromRow(latestSchedule)!, now) : now,
-                  enabled: latestSchedule.enabled ?? true
-                }
-              }
-            }
-          : {})
+        }
       },
       include: {
-        sources: true,
-        schedules: { orderBy: { createdAt: 'desc' }, take: 1 }
+        sources: true
       }
     });
 

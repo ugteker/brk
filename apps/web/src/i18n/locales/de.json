@@ -30,7 +30,9 @@
     "agentsAndPlaybooks": "Agenten & Playbooks",
     "userManagement": "Benutzerverwaltung",
     "logOut": "Abmelden",
-    "openAdminArea": "Adminbereich öffnen"
+    "openAdminArea": "Adminbereich öffnen",
+    "modeDashboard": "Dashboard",
+    "modeAdmin": "Admin"
   },
   "language": {
     "switchTo": "Language: English",
@@ -41,6 +43,14 @@
     "loadingSources": "Quellen werden geladen…",
     "failedSources": "Quellen konnten nicht geladen werden.",
     "noSources": "Diese Bibliothek enthält noch keine Quellen.",
+    "emptyHeadline": "Deine Recherche-Bibliothek ist leer",
+    "emptyDesc": "Quellen sind die YouTube-Kanäle, Podcasts und Websites, die ChatTrader in deinem Auftrag liest.",
+    "emptyCta": "Erste Quelle hinzufügen",
+    "addSource": "Weitere Quelle hinzufügen",
+    "howItWorks": "So funktioniert es",
+    "howStep1": "Quelle hinzufügen",
+    "howStep2": "Analysten erstellen",
+    "howStep3": "Berichte erhalten",
     "browseMarketplace": "Marketplace durchsuchen",
     "backToLibrary": "Zurück zur Bibliothek",
     "createTab": "Bibliotheks-Tab erstellen",
@@ -88,8 +98,12 @@
     "stepSetSchedule": "Zeitplan festlegen"
   },
   "agent": {
-    "createNew": "Neuen Agenten erstellen",
-    "createNewSub": "Vollständiger Assistent",
+    "createNew": "Neuen Analysten erstellen",
+    "createNewSub": "Trading-Charakter + KI-Persona",
+    "emptyHeadline": "Noch keine Analysten",
+    "emptyDesc": "Analysten sind KI-Personas mit einem System-Prompt. Jeder liest deine Quellen mit seinem eigenen Charakter und seiner eigenen Handelsphilosophie.",
+    "emptyCta": "Ersten Analysten erstellen",
+    "emptySourceHint": "Tipp: Füge zuerst eine Quelle in der Bibliothek hinzu, damit dein Analyst etwas zu lesen hat.",
     "selectAgent": "Agent {{name}} auswählen",
     "deleteAgent": "Agent {{name}} löschen",
     "deleteConfirmTitle": "Diesen Agenten löschen?",
@@ -147,8 +161,16 @@
   "playbook": {
     "createPlaybook": "Playbook erstellen",
     "updatePlaybook": "Playbook aktualisieren",
-    "createNew": "Neues Playbook erstellen",
+    "createNew": "Playbook einrichten",
+    "createNewSub": "Quelle + Analyst + Zeitplan",
     "noPlaybooks": "Noch keine Playbooks.",
+    "emptyHeadline": "Noch keine Playbooks",
+    "emptyDesc": "Playbooks verbinden eine Quelle mit einem Analysten nach einem Zeitplan und senden dir automatisch Berichte per E-Mail.",
+    "emptyCtaNoSources": "Zuerst eine Quelle in der Bibliothek hinzufügen",
+    "emptyCtaNoAgents": "Zuerst einen Analysten im Agenten-Hub erstellen",
+    "emptyCtaReady": "Erste Quelle folgen",
+    "notificationsOn": "E-Mail-Benachrichtigungen aktiv",
+    "notificationsOff": "E-Mail-Benachrichtigungen stumm",
     "status": "Status",
     "lastRun": "Letzter Lauf",
     "nextRun": "Nächster Lauf",
@@ -178,9 +200,24 @@
   },
   "marketplace": {
     "heading": "Marketplace",
+    "sourcesHeading": "Quellen-Marktplatz",
+    "sourcesDesc": "Fertige Quellen aus der Community. Klonen, um sie zur Bibliothek hinzuzufügen.",
+    "emptyHeadline": "Noch keine Quellen im Marktplatz",
+    "emptyDesc": "Der Marktplatz ist aktuell leer. Füge eigene Quellen über die Bibliothek hinzu.",
     "noItems": "Keine Marketplace-Einträge gefunden.",
     "cloneButton": "Klonen",
     "cloningButton": "Wird geklont…"
+  },
+  "onboarding": {
+    "gettingStarted": "Erste Schritte",
+    "gettingStartedDesc": "Schließe diese Schritte ab, um deinen ersten automatischen Bericht einzurichten.",
+    "step1": "Quelle hinzufügen",
+    "step1Desc": "Füge einen YouTube-Kanal, Podcast oder eine Website zu deiner Bibliothek hinzu.",
+    "step2": "Analysten erstellen",
+    "step2Desc": "Richte einen KI-Analysten mit Handelspersona und System-Prompt ein.",
+    "step3": "Quelle folgen",
+    "step3Desc": "Verbinde eine Quelle mit einem Analysten und einem Zeitplan für Berichte.",
+    "dismiss": "Verstanden, schließen"
   },
   "runs": {
     "noRuns": "Noch kein Verlauf. Der Verlauf erscheint hier, sobald der Zeitplan des Agenten startet (oder du manuell ausführst).",
@@ -252,8 +289,9 @@
     "backToLogin": "Zurück zur Anmeldung",
     "signInWithGoogle": "Mit Google anmelden",
     "signUpWithGoogle": "Mit Google registrieren",
-    "confirmationTitle": "E-Mail prüfen",
-    "confirmationSub": "Wir haben einen Bestätigungslink an {{email}} gesendet. Klicke darauf, um dein Konto zu aktivieren.",
+    "confirmationTitle": "Posteingang prüfen 📬",
+    "confirmationSub": "Wir haben einen Bestätigungslink an {{email}} gesendet. Klicke darauf, um dein Konto zu aktivieren und loszulegen.",
+    "confirmationSpamHint": "Nichts erhalten? Prüfe deinen Spam-Ordner.",
     "resendConfirmation": "Bestätigungs-E-Mail erneut senden",
     "confirmationResent": "Bestätigungs-E-Mail erneut gesendet",
     "bannerEmailConfirmed": "Deine E-Mail wurde bestätigt. Du kannst dich jetzt anmelden.",
@@ -262,7 +300,10 @@
     "bannerResetSent": "Falls diese E-Mail registriert ist, ist ein Reset-Link unterwegs.",
     "bannerPasswordReset": "Dein Passwort wurde zurückgesetzt. Du kannst dich jetzt anmelden.",
     "errorFallback": "Etwas ist schiefgelaufen",
-    "resetFailFallback": "Passwort zurücksetzen fehlgeschlagen"
+    "resetFailFallback": "Passwort zurücksetzen fehlgeschlagen",
+    "valueProp1": "📚 Quellen hinzufügen — YouTube-Kanäle, Podcasts, Websites",
+    "valueProp2": "🤖 Analysten erstellen — KI-Personas mit Handelsphilosophie",
+    "valueProp3": "📬 Berichte erhalten — Automatische Signal-Berichte per E-Mail"
   },
   "admin": {
     "users": {

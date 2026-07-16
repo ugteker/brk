@@ -3,6 +3,7 @@ import { buildServer } from './server';
 import { AgentRepository } from './modules/agents/repository';
 import { RunQueueService } from './modules/runs/run-queue.service';
 import { PrismaRunStore } from './modules/runs/prisma-run-store';
+import type { ForcedEpisodeSelection } from './modules/analysis/agent-runner';
 import { startSchedulerLoop } from './modules/schedules/scheduler-loop';
 import { ManualRunTrigger } from './modules/runs/manual-run-trigger';
 import { ensureSqliteSchemaCompatibility, prisma } from './lib/db';
@@ -134,12 +135,17 @@ async function start() {
       playbookRepository,
       accessResolver,
       runTrigger: {
-        triggerRun: async (playbookId: string) => {
+        triggerRun: async (playbookId: string, options?: { forcedEpisode?: { sourceType: string; sourceValue: string; itemLink: string } }) => {
           const playbook = await playbookRepository.getPlaybook(playbookId);
           if (!playbook) {
             return { status: 'failed', errorCode: 'not_found' };
           }
-          return manualRunTrigger.triggerRun(playbook.agentId, { playbookRecipients: playbook.recipients, playbookLanguage: playbook.language });
+          return manualRunTrigger.triggerRun(playbook.agentId, {
+            playbookRecipients: playbook.recipients,
+            playbookLanguage: playbook.language,
+            playbookNotificationsEnabled: playbook.notificationsEnabled,
+            forcedEpisode: options?.forcedEpisode as ForcedEpisodeSelection | undefined
+          });
         }
       }
     },

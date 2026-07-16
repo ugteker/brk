@@ -38,7 +38,6 @@ export interface CreateAgentInput {
   promptConfig?: PromptConfig;
   sources?: Array<{ type: SourceType; value: string; frequencyMinutes?: number; maxItems?: number }>;
   preferences?: Record<string, string[]>;
-  schedule?: ScheduleInput;
 }
 
 export type AgentSharePermission = 'read' | 'edit' | 'delete';

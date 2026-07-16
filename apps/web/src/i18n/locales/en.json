@@ -30,7 +30,9 @@
     "agentsAndPlaybooks": "Agents & Playbooks",
     "userManagement": "User Management",
     "logOut": "Log out",
-    "openAdminArea": "Open admin area"
+    "openAdminArea": "Open admin area",
+    "modeDashboard": "Dashboard",
+    "modeAdmin": "Admin"
   },
   "language": {
     "switchTo": "Sprache: Deutsch",
@@ -41,6 +43,14 @@
     "loadingSources": "Loading sources…",
     "failedSources": "Failed to load sources.",
     "noSources": "No sources in this library yet.",
+    "emptyHeadline": "Your research library is empty",
+    "emptyDesc": "Sources are the YouTube channels, podcasts, and websites ChatTrader reads on your behalf.",
+    "emptyCta": "Add your first source",
+    "addSource": "Add another source",
+    "howItWorks": "How it works",
+    "howStep1": "Add a source",
+    "howStep2": "Create analysts",
+    "howStep3": "Get reports",
     "browseMarketplace": "Browse marketplace",
     "backToLibrary": "Back to library",
     "createTab": "Create library tab",
@@ -88,8 +98,12 @@
     "stepSetSchedule": "Set schedule"
   },
   "agent": {
-    "createNew": "Create new agent",
-    "createNewSub": "Full setup wizard",
+    "createNew": "Create new analyst",
+    "createNewSub": "Trading character + AI persona",
+    "emptyHeadline": "No analysts yet",
+    "emptyDesc": "Analysts are AI personas with a system prompt. Each one reads your sources with its own character and trading philosophy.",
+    "emptyCta": "Create your first analyst",
+    "emptySourceHint": "Tip: add a source in the Library first so your analyst has something to read.",
     "selectAgent": "Select agent {{name}}",
     "deleteAgent": "Delete agent {{name}}",
     "deleteConfirmTitle": "Delete this agent?",
@@ -147,8 +161,16 @@
   "playbook": {
     "createPlaybook": "Create playbook",
     "updatePlaybook": "Update playbook",
-    "createNew": "Create new playbook",
+    "createNew": "Set up a playbook",
+    "createNewSub": "Source + analyst + schedule",
     "noPlaybooks": "No playbooks yet.",
+    "emptyHeadline": "No playbooks yet",
+    "emptyDesc": "Playbooks connect a source to an analyst on a schedule and email you reports automatically.",
+    "emptyCtaNoSources": "Add a source in the Library first",
+    "emptyCtaNoAgents": "Create an analyst in the Agents hub first",
+    "emptyCtaReady": "Follow your first source",
+    "notificationsOn": "Email notifications on",
+    "notificationsOff": "Email notifications off (muted)",
     "status": "Status",
     "lastRun": "Last run",
     "nextRun": "Next run",
@@ -178,9 +200,24 @@
   },
   "marketplace": {
     "heading": "Marketplace",
+    "sourcesHeading": "Source Marketplace",
+    "sourcesDesc": "Ready-made sources shared by the community. Clone one to add it to your library.",
+    "emptyHeadline": "No sources in the marketplace yet",
+    "emptyDesc": "The marketplace is empty right now. Add your own sources from the Library.",
     "noItems": "No marketplace items found.",
     "cloneButton": "Clone",
     "cloningButton": "Cloning…"
+  },
+  "onboarding": {
+    "gettingStarted": "Getting started",
+    "gettingStartedDesc": "Complete these steps to set up your first automated report.",
+    "step1": "Add a source",
+    "step1Desc": "Add a YouTube channel, podcast, or website to your library.",
+    "step2": "Create an analyst",
+    "step2Desc": "Set up an AI analyst with a trading persona and system prompt.",
+    "step3": "Follow a source",
+    "step3Desc": "Connect a source to an analyst on a schedule to get reports.",
+    "dismiss": "Got it, dismiss"
   },
   "runs": {
     "noRuns": "No history yet. Analysis history appears here once the agent's schedule kicks in (or you trigger a manual run).",
@@ -252,8 +289,9 @@
     "backToLogin": "Back to log in",
     "signInWithGoogle": "Sign in with Google",
     "signUpWithGoogle": "Sign up with Google",
-    "confirmationTitle": "Check your email",
-    "confirmationSub": "We sent a confirmation link to {{email}}. Click it to activate your account.",
+    "confirmationTitle": "Check your inbox 📬",
+    "confirmationSub": "We sent a confirmation link to {{email}}. Click it to activate your account and start tracking.",
+    "confirmationSpamHint": "Didn't receive it? Check your spam folder.",
     "resendConfirmation": "Resend confirmation email",
     "confirmationResent": "Confirmation email resent",
     "bannerEmailConfirmed": "Your email has been confirmed. You can now log in.",
@@ -262,7 +300,10 @@
     "bannerResetSent": "If that email is registered, a reset link is on its way.",
     "bannerPasswordReset": "Your password has been reset. You can now log in.",
     "errorFallback": "Something went wrong",
-    "resetFailFallback": "Failed to reset password"
+    "resetFailFallback": "Failed to reset password",
+    "valueProp1": "📚 Add sources — YouTube channels, podcasts, websites",
+    "valueProp2": "🤖 Create analysts — AI personas with a trading philosophy",
+    "valueProp3": "📬 Get reports — Automated signal reports in your inbox"
   },
   "admin": {
     "users": {

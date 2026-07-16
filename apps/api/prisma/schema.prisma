@@ -36,7 +36,6 @@ model Agent {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   sources     AgentSource[]
-  schedules   AgentSchedule[]
   runs        AgentRun[]
   promptVersions AgentPromptVersion[]
   runReports  AgentRunReport[]
@@ -59,24 +58,10 @@ model AgentSource {
   agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
 }
 
-model AgentSchedule {
-  id        String   @id @default(cuid())
-  agentId     String
-  mode      String   @default("interval")
-  intervalMinutes Int?
-  dailyTime String?
-  timezone  String?
-  daysOfWeekJson String?
-  nextRunAt DateTime
-  enabled   Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  agent       Agent      @relation(fields: [agentId], references: [id], onDelete: Restrict)
-}
-
 model AgentRun {
   id           String   @id @default(cuid())
   agentId        String
+  playbookId   String?
   scheduledFor DateTime
   status       String
   phase        String?
@@ -89,6 +74,7 @@ model AgentRun {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   agent          Agent      @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  playbook       Playbook?  @relation(fields: [playbookId], references: [id], onDelete: Restrict)
   artifacts    AgentRunArtifact[]
   report       AgentRunReport?
 
@@ -215,6 +201,7 @@ model Playbook {
   daysOfWeekJson    String?
   nextRunAt         DateTime
   enabled           Boolean  @default(true)
+  notificationsEnabled Boolean @default(true)
   executionMode     String   @default("latest_only")
   maxSourcesPerRun  Int      @default(3)
   maxItemsPerSource Int      @default(1)
@@ -227,6 +214,7 @@ model Playbook {
   updatedAt         DateTime @updatedAt
   agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Restrict)
   sources           PlaybookSource[]
+  runs              AgentRun[]
   accessGrants      AccessGrant[]
   marketplacePublications MarketplacePublication[]
 

@@ -29,6 +29,7 @@ export interface UpdatePlaybookInput {
   name?: string;
   description?: string;
   enabled?: boolean;
+  notificationsEnabled?: boolean;
   schedule?: PlaybookScheduleInput;
   sourceIds?: string[];
   recipients?: string[];
@@ -47,6 +48,7 @@ export interface Playbook {
   name: string;
   description: string;
   enabled: boolean;
+  notificationsEnabled: boolean;
   schedule: PlaybookScheduleInput;
   sourceIds: string[];
   recipients: string[];

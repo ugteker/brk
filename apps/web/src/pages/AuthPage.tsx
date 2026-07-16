@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Divider, Form, Input, Result, Segmented, Typography } from 'antd';
+import { Alert, Button, Card, Divider, Form, Input, Segmented, Typography } from 'antd';
 import { GoogleOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
@@ -129,16 +129,15 @@ export function AuthPage() {
         ) : null}
 
         {view === 'confirmationSent' ? (
-          <Result
-            status="success"
-            title={t('auth.confirmationTitle')}
-            subTitle={t('auth.confirmationSub', { email: confirmedEmail })}
-            extra={
-              <Button onClick={onResend} loading={resendState === 'sending'} disabled={resendState === 'sent'}>
-                {resendState === 'sent' ? t('auth.confirmationResent') : t('auth.resendConfirmation')}
-              </Button>
-            }
-          />
+          <div className="py-4 text-center space-y-3">
+            <p className="text-3xl">📬</p>
+            <p className="text-base font-semibold">{t('auth.confirmationTitle')}</p>
+            <p className="text-sm text-gray-500">{t('auth.confirmationSub', { email: confirmedEmail })}</p>
+            <p className="text-xs text-gray-400">{t('auth.confirmationSpamHint')}</p>
+            <Button onClick={onResend} loading={resendState === 'sending'} disabled={resendState === 'sent'} className="mt-2">
+              {resendState === 'sent' ? t('auth.confirmationResent') : t('auth.resendConfirmation')}
+            </Button>
+          </div>
         ) : view === 'forgotPassword' ? (
           <>
             {error ? <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} /> : null}
@@ -196,6 +195,14 @@ export function AuthPage() {
             />
 
             {error ? <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} /> : null}
+
+            {mode === 'signup' && (
+              <div className="mb-4 space-y-1.5 rounded-lg border border-sky-100 bg-sky-50 px-4 py-3 dark:border-sky-900 dark:bg-sky-950">
+                {[t('auth.valueProp1'), t('auth.valueProp2'), t('auth.valueProp3')].map((prop) => (
+                  <p key={prop} className="text-xs text-sky-800 dark:text-sky-200">{prop}</p>
+                ))}
+              </div>
+            )}
 
             <Form layout="vertical" onFinish={onSubmit}>
               <Form.Item label={t('auth.email')}>

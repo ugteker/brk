@@ -32,6 +32,7 @@ export interface AgentRunOptions {
   forcedEpisode?: ForcedEpisodeSelection;
   playbookRecipients?: string[];
   playbookLanguage?: string;
+  playbookNotificationsEnabled?: boolean;
 }
 
 export interface AgentRunnerDeps {
@@ -205,8 +206,11 @@ export class AgentRunner {
       // internally and never throws, so a flaky SMTP server can't fail an otherwise-successful run.
       // Falls back to the source URL for any evidence block without a resolved title (e.g. plain
       // web-page sources), and de-dupes in case the same item appears from more than one source.
-      const itemTitles = [...new Set(evidence.map((block) => block.title || block.sourceRef))];
-      await sendReportNotification(this.deps.mailer, agent, report, itemTitles, options?.playbookRecipients ?? [], options?.playbookLanguage);
+      // Skipped when the playbook has muted notifications (notificationsEnabled === false).
+      if (options?.playbookNotificationsEnabled !== false) {
+        const itemTitles = [...new Set(evidence.map((block) => block.title || block.sourceRef))];
+        await sendReportNotification(this.deps.mailer, agent, report, itemTitles, options?.playbookRecipients ?? [], options?.playbookLanguage);
+      }
 
       return { status: 'succeeded', reportId: report.id };
     } catch (error) {

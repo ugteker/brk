@@ -3,8 +3,18 @@ import type { DomainAccessResolver } from '../access/permissions';
 import type { CreatePlaybookInput, PublishPlaybookInput, SharePlaybookInput, UpdatePlaybookInput } from './types';
 import type { PlaybookRepositoryLike } from './repository';
 
+export interface PlaybookForcedEpisode {
+  sourceType: string;
+  sourceValue: string;
+  itemLink: string;
+}
+
+export interface PlaybookRunOptions {
+  forcedEpisode?: PlaybookForcedEpisode;
+}
+
 export interface PlaybookRunTriggerLike {
-  triggerRun(playbookId: string): Promise<{ status: string; errorCode?: string }>;
+  triggerRun(playbookId: string, options?: PlaybookRunOptions): Promise<{ status: string; errorCode?: string }>;
 }
 
 export interface PlaybookRoutesDeps {
@@ -178,7 +188,12 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
     if (!access.ok) {
       return reply.status(access.statusCode).send({ code: access.code, message: access.message });
     }
-    const result = await deps.runTrigger.triggerRun(playbookId);
+    const body = (req.body ?? {}) as Partial<{ sourceType: string; sourceValue: string; itemLink: string }>;
+    const forcedEpisode =
+      body.sourceType && body.sourceValue && body.itemLink
+        ? { sourceType: body.sourceType, sourceValue: body.sourceValue, itemLink: body.itemLink }
+        : undefined;
+    const result = await deps.runTrigger.triggerRun(playbookId, forcedEpisode ? { forcedEpisode } : undefined);
     await deps.playbookRepository.markExecuted(playbookId);
     return reply.status(200).send(result);
   });
