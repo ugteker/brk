@@ -7,15 +7,27 @@ Last updated: 2026-07-16
 
 ---
 
+> ⚠️ **Platform scope note (2026-07-16):** Trading/stocks is the *initial* use case —
+> the platform is intentionally designed to be **source-type agnostic**. It will open to
+> ALL types of content sources and domains (news, research, HR, legal, product intel,
+> etc.). Avoid hardcoding trading-specific language in UI, copy, or data models.
+
+---
+
 ## 1. What is ChatTrader?
 
-ChatTrader turns **spoken/written financial content** (YouTube videos, podcasts, blogs,
-web pages) into **structured, emailed stock-signal reports** using AI analysts
-(Anthropic Claude, Sonnet).
+ChatTrader turns **spoken/written content** (YouTube videos, podcasts, blogs, web pages,
+documents) into **structured, AI-analysed signal reports** delivered by email.
 
-A user says: *"Summarize this podcast/YouTube channel with this analyst persona every
+The platform started with financial content / stock signals, but is designed to work for
+**any domain**: news monitoring, competitive intelligence, product research, and more.
+
+A user says: *"Summarise this podcast/YouTube channel with this analyst persona every
 Monday at 8:00 and email me the result."* — ChatTrader crawls new episodes, fetches
-full transcripts, runs them through a Claude system prompt, and produces a report with:
+full transcripts, runs them through a Claude system prompt, and produces a structured
+report emailed to the user.
+
+For the initial finance use case this means:
 
 - **Long/short signal per stock symbol** with confidence, rationale, and source
   citations/timecodes
@@ -100,41 +112,22 @@ inline) → set schedule → reports arrive by email and in the Playbooks hub.
 ## 6. Improvement proposals (UX / layout / onboarding / empty states)
 
 ### Onboarding & first-run experience
-1. **Guided first-report wizard ("time-to-first-report")**: a single end-to-end flow on
-   first login — paste a YouTube/podcast URL → auto-probe → pick persona → "Run now" —
-   producing a real report in <2 minutes. Today the user must understand 3 hubs first.
-2. **Demo/sample content for empty accounts**: pre-seeded example source + read-only
-   sample report so new users see the *output value* (signal badges, chart, confidence)
-   before configuring anything. "Try with this example" CTA on every empty state.
-3. **Progress checklist upgrade**: the existing "Getting started" card should track
-   real completion state (source added ✓, agent created ✓, playbook scheduled ✓,
-   first report ✓) rather than being a static dismissible card.
-4. **Marketplace as onboarding**: surface popular public playbooks on the empty
-   dashboard — "Follow this playbook" is the fastest possible activation path.
+1. **Guided first-report wizard** ✅ Done: end-to-end flow on first login — paste URL → auto-probe → pick persona → "Run now". Skip button dismisses to localStorage. Fully i18n (en+de).
+2. **Demo/sample content for empty accounts** ✅ Done: `POST /api/admin/seed-demo` creates pre-seeded source + agent + playbook + completed run + report (5 signals). Admin "Seed demo data" button in the menu. Idempotent (409 if already seeded).
+3. **Progress checklist upgrade** ✅ Done: 4-step checklist (source added, agent created, playbook scheduled, first report received) — live-checked from real data, auto-dismisses when all done, admin "Preview onboarding" toggle, load-state gating eliminates login flicker.
+4. **Marketplace as onboarding** ✅ Done: empty Playbooks hub shows up to 3 marketplace playbooks with Follow button; sky-blue "Source Marketplace" banner; 🧭 empty states in marketplace modal.
 
 ### Layout & information architecture
-5. **Real routing**: replace state-swapped views with URL routes (react-router) —
-   deep links currently need query-param hacks; back button and refresh don't preserve
-   context. This also unlocks shareable report/symbol URLs.
-6. **Split `AgentsPage.tsx`**: extract hubs, wizards, admin, and symbol page into
-   separate route-level components. Required before any larger UX work is safe.
-7. **Dashboard = outcomes, not config**: make the landing view a *reports feed*
-   (latest signals across all playbooks, portfolio-style symbol overview) instead of
-   entity lists. Users come back for signals, not settings.
-8. **Unify "Summarize" and Playbook wizards**: two overlapping creation flows exist;
-   keep the lightweight Summarize dialog as the primary path and make the full wizard
-   an "advanced" mode.
+5. **Real routing** ✅ Done: react-router-dom v7 — BrowserRouter + 5 routes (`/`, `/library`, `/agents`, `/playbooks`, `*`→redirect). `AgentsPage` accepts `hub` prop; `setActiveHub()` calls `navigate()`. nginx already supports SPA routing.
+6. **Split `AgentsPage.tsx`** ✅ Done: extracted `AppDataContext` providing agents/sources/playbooks/marketplace data + refresh functions to all children. `App.tsx` wraps with `AppDataProvider` inside `AuthGate`. AgentsPage now pulls data from context; old inline load useEffects and duplicate refresh functions removed. Build clean.
+7. **Dashboard = outcomes, not config** ✅ Done: added "Feed" tab (default landing, key `feed`) showing latest reports across all playbooks in a card list with signal counts, symbol tags, agent/playbook name, date. Clicking a card navigates to that report in the playbooks hub. Empty state with CTA to Library. Feed tab visible to all users; Sources renamed to "Library" in tab.
+8. **Unify "Summarize" and Playbook wizards** ✅ Done: added "Advanced settings" expandable section in follow-source wizard step 1 (schedule + recipients). When collapsed, sane defaults are used automatically.
 
 ### UX polish
-9. **Push-based live updates**: replace 4s polling with SSE/WebSocket for run phases
-   and new reports (cheaper + snappier).
-10. **Notifications center**: in-app bell with run failures/successes — email is
-    currently the only channel; failed runs are easy to miss.
-11. **Error-state empathy**: when a YouTube source hits the ASR-caption block, tell
-    the user *in the source card* ("transcripts unavailable for this channel from our
-    server — show notes only") instead of silent "no new content" runs.
-12. **Mobile pass on the 3-hub layout**: original app was mobile-first; the hub grid
-    and inline charts need a dedicated small-screen audit.
+9. **Push-based live updates** ✅ Done: replaced 4s client-side `setInterval` polling with SSE (`GET /api/agents/:agentId/stream`). Server streams `runs` + `reports` events at 2s cadence during active runs, 20s when idle. Frontend `useAgentStream` hook uses native `EventSource` (auto-reconnects). `AgentsPage.tsx` `pollIntervalRef` removed; bell notification accumulation moved to a `useEffect` watching `runs`.
+10. **Notifications center** ✅ Done: in-app bell (`BellOutlined`) in header with `Badge` count; accumulates failed runs via SSE updates; "Clear all" persists dismissed IDs to `localStorage`; fully i18n (en+de).
+11. **Error-state empathy** ✅ Done: YouTube `youtube_videos` source cards show an amber ⚠️ note explaining transcript limitations inline.
+12. **Mobile pass on the 3-hub layout** ✅ Done: responsive header padding (`clamp`), content padding (`clamp`), modal widths (`min(Npx, 95vw)`), `ct-header-actions` flex-wrap, global CSS for `.ant-modal` max-width + body scroll + tab overflow on `@media (max-width: 767px)`.
 
 ## 7. Implementation focus proposals (features / flows)
 
@@ -171,5 +164,27 @@ inline) → set schedule → reports arrive by email and in the Playbooks hub.
 
 ---
 
-*When priorities from §6/§7 are picked up, move them into
+## 8. Agent Discussions & Studio Hub (designed, pending implementation)
+
+> Full spec: `docs/superpowers/specs/2026-07-16-agent-discussions-design.md`
+
+A **Studio hub** (5th nav tab, `/studio`) where two or more AI Agents discuss their
+reports and source material. Each discussion run produces a text transcript and an
+optional audio podcast (OpenAI TTS, distinct voice per agent). The discussion output
+becomes a **synthetic Source** in the Library — fully re-analyzable by other agents,
+enabling a recursive knowledge network.
+
+**Key design decisions:**
+- `Discussion` is a first-class domain entity (not a Playbook subtype)
+- Formats: free_form / structured / hosted / hybrid — user-configurable
+- Triggers: manual, auto-suggested (when 2 agents share a source), or scheduled
+- Synthetic source type `synthetic_discussion` — each run appends a SourceItem (episode)
+- Fully recursive: agents can analyze synthetic sources, then discuss those analyses
+- TTS via OpenAI (`tts-1`), voice assigned per participant
+- Auto-suggestion notifications when agents share analyzed sources
+- Scheduler reuses existing Playbook cron infrastructure
+
+---
+
+*When priorities from §6/§7/§8 are picked up, move them into
 `docs/implementation/PROJECT.md` as requirements and track progress there.*
