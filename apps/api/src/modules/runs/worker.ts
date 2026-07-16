@@ -13,7 +13,8 @@ export async function processNextRun(
     const result = await runner.run(run.agentId, run.id, {
       playbookRecipients: run.playbookRecipients,
       playbookLanguage: run.playbookLanguage,
-      playbookNotificationsEnabled: run.playbookNotificationsEnabled
+      playbookNotificationsEnabled: run.playbookNotificationsEnabled,
+      playbookDigestFrequency: run.playbookDigestFrequency
     });
     await queue.completeRun(run.id, result.status, result.errorCode, result.errorMessage);
   } catch (error) {

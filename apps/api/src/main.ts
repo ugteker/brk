@@ -32,6 +32,7 @@ import { AccessRepository } from './modules/access/repository';
 import { DomainAccessResolver } from './modules/access/permissions';
 import { SourceRepository } from './modules/source/repository';
 import { PlaybookRepository } from './modules/playbook/repository';
+import { PrismaDigestStore, startDigestLoop } from './modules/playbook/digest';
 import { logger } from './lib/logger';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
@@ -144,6 +145,7 @@ async function start() {
             playbookRecipients: playbook.recipients,
             playbookLanguage: playbook.language,
             playbookNotificationsEnabled: playbook.notificationsEnabled,
+            playbookDigestFrequency: playbook.digestFrequency,
             forcedEpisode: options?.forcedEpisode as ForcedEpisodeSelection | undefined
           });
         }
@@ -159,6 +161,7 @@ async function start() {
   });
 
   startSchedulerLoop({ intervalMs: 60_000, queue, runner: agentRunner });
+  startDigestLoop({ store: new PrismaDigestStore(prisma), mailer });
   await app.listen({ port: 3000, host: '0.0.0.0' });
 }
 

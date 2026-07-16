@@ -30,6 +30,7 @@ export interface AgentRunRecord {
   playbookRecipients?: string[];
   playbookLanguage?: string;
   playbookNotificationsEnabled?: boolean;
+  playbookDigestFrequency?: string;
 }
 
 export interface RunStore {

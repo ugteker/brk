@@ -7,6 +7,7 @@ export type PlaybookExecutionMode = 'latest_only' | 'all_sources';
 export type PlaybookSharePermission = 'read' | 'edit' | 'delete' | 'execute';
 export type PublicationVisibility = 'public' | 'private';
 export type FollowTargetType = 'channel' | 'episode';
+export type DigestFrequency = 'immediate' | 'daily' | 'weekly';
 
 export interface PlaybookRecord {
   id: string;
@@ -16,6 +17,7 @@ export interface PlaybookRecord {
   description: string;
   enabled: boolean;
   notificationsEnabled: boolean;
+  digestFrequency: DigestFrequency;
   schedule: PlaybookSchedule;
   sourceIds: string[];
   recipients: string[];
@@ -53,6 +55,7 @@ export interface UpdatePlaybookPayload {
   description?: string;
   enabled?: boolean;
   notificationsEnabled?: boolean;
+  digestFrequency?: DigestFrequency;
   schedule?: PlaybookSchedule;
   sourceIds?: string[];
   recipients?: string[];

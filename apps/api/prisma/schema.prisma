@@ -202,6 +202,8 @@ model Playbook {
   nextRunAt         DateTime
   enabled           Boolean  @default(true)
   notificationsEnabled Boolean @default(true)
+  digestFrequency   String   @default("immediate")
+  lastDigestSentAt  DateTime?
   executionMode     String   @default("latest_only")
   maxSourcesPerRun  Int      @default(3)
   maxItemsPerSource Int      @default(1)

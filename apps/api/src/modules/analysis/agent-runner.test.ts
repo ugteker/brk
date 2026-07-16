@@ -444,6 +444,34 @@ describe('AgentRunner', () => {
     expect(send.mock.calls[0][0].to).toBe('alerts@example.com');
   });
 
+  it('suppresses the immediate per-run email when the playbook uses a daily/weekly digest cadence', async () => {
+    const send = vi.fn(async () => undefined);
+    const deps = createDeps();
+    deps.agentRepository.getAgent = vi.fn(async () => ({
+      id: 'agent-1',
+      ownerUserId: 'admin-user-id',
+      name: 'Housing Agent',
+      description: '',
+      characterType: 'summarizer',
+      promptConfig: {},
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
+      preferences: {},
+      schedule: null
+    }));
+    const runner = new AgentRunner({ ...deps, mailer: { send } } as never);
+
+    const result = await runner.run('agent-1', 'run-1', {
+      playbookRecipients: ['alerts@example.com'],
+      playbookDigestFrequency: 'daily'
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it('does not fail the run when the mailer send throws', async () => {
     const send = vi.fn(async () => { throw new Error('smtp down'); });
     const deps = createDeps();

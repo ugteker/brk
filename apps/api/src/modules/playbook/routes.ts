@@ -27,6 +27,7 @@ const PLAYBOOK_SHARE_PERMISSIONS = new Set(['read', 'edit', 'delete', 'execute']
 const PLAYBOOK_MODES = new Set(['interval', 'daily', 'weekly']);
 const EXECUTION_MODES = new Set(['latest_only', 'all_sources']);
 const FOLLOW_TARGET_TYPES = new Set(['channel', 'episode']);
+const DIGEST_FREQUENCIES = new Set(['immediate', 'daily', 'weekly']);
 
 async function requirePlaybookAccess(
   deps: PlaybookRoutesDeps,
@@ -156,6 +157,9 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
     }
     if (patch.followTargetType !== undefined && patch.followTargetType !== null && !FOLLOW_TARGET_TYPES.has(patch.followTargetType)) {
       return reply.status(400).send({ code: 'validation_error', message: 'followTargetType must be channel or episode' });
+    }
+    if (patch.digestFrequency !== undefined && !DIGEST_FREQUENCIES.has(patch.digestFrequency)) {
+      return reply.status(400).send({ code: 'validation_error', message: 'digestFrequency must be immediate, daily, or weekly' });
     }
     try {
       const updated = await deps.playbookRepository.updatePlaybook(playbookId, patch);

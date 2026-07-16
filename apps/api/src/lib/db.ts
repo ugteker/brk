@@ -36,6 +36,12 @@ export async function ensureSqliteSchemaCompatibility(): Promise<void> {
   if (!columnNames.has('language')) {
     await prisma.$executeRawUnsafe('ALTER TABLE "Playbook" ADD COLUMN "language" TEXT NOT NULL DEFAULT \'en\'');
   }
+  if (!columnNames.has('digestFrequency')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Playbook" ADD COLUMN "digestFrequency" TEXT NOT NULL DEFAULT \'immediate\'');
+  }
+  if (!columnNames.has('lastDigestSentAt')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Playbook" ADD COLUMN "lastDigestSentAt" DATETIME');
+  }
 
   const agentRunColumns = await prisma.$queryRawUnsafe<SqliteTableInfoRow[]>("PRAGMA table_info('AgentRun')");
   const agentRunColumnNames = new Set(agentRunColumns.map((col) => col.name));

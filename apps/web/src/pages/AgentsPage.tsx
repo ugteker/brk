@@ -17,6 +17,7 @@ import {
   DatabaseOutlined,
   DeleteOutlined,
   EditOutlined,
+  FieldTimeOutlined,
   FileTextOutlined,
   GlobalOutlined,
   LinkOutlined,
@@ -83,6 +84,7 @@ import {
   runPlaybookNow,
   sharePlaybook,
   updatePlaybook,
+  type DigestFrequency,
   type PlaybookRecord
 } from '../api/playbooks';
 import {
@@ -2318,6 +2320,44 @@ export function AgentsPage() {
                                              }}
                                            />
                                          </TouchSafeTooltip>
+                                         <Dropdown
+                                           trigger={['click']}
+                                           menu={{
+                                             selectedKeys: [pb.digestFrequency ?? 'immediate'],
+                                             items: [
+                                               { key: 'immediate', label: t('playbook.digestImmediate') },
+                                               { key: 'daily', label: t('playbook.digestDaily') },
+                                               { key: 'weekly', label: t('playbook.digestWeekly') }
+                                             ],
+                                             onClick: async ({ key, domEvent }) => {
+                                               domEvent.stopPropagation();
+                                               await updatePlaybook(pb.id, { digestFrequency: key as DigestFrequency });
+                                               await refreshPlaybooks();
+                                             }
+                                           }}
+                                         >
+                                           <TouchSafeTooltip
+                                             title={`${t('playbook.digestFrequency')}: ${t(
+                                               (pb.digestFrequency ?? 'immediate') === 'daily'
+                                                 ? 'playbook.digestDaily'
+                                                 : (pb.digestFrequency ?? 'immediate') === 'weekly'
+                                                   ? 'playbook.digestWeekly'
+                                                   : 'playbook.digestImmediate'
+                                             )}`}
+                                           >
+                                             <Button
+                                               size="small"
+                                               shape="circle"
+                                               aria-label={t('playbook.digestFrequency')}
+                                               icon={
+                                                 <FieldTimeOutlined
+                                                   style={(pb.digestFrequency ?? 'immediate') === 'immediate' ? { opacity: 0.3 } : undefined}
+                                                 />
+                                               }
+                                               onClick={(e) => e.stopPropagation()}
+                                             />
+                                           </TouchSafeTooltip>
+                                         </Dropdown>
                                          <TouchSafeTooltip title={pb.enabled ? t('playbook.pause') : t('playbook.resume')}>
                                            <Button
                                              size="small"

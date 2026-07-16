@@ -44,7 +44,7 @@ export class PrismaRunStore implements RunStore {
       where: { status: 'queued' },
       orderBy: { scheduledFor: 'asc' },
       include: {
-        playbook: { select: { recipientsJson: true, language: true } }
+        playbook: { select: { recipientsJson: true, language: true, notificationsEnabled: true, digestFrequency: true } }
       }
     });
     if (!queued) return null;
@@ -54,7 +54,9 @@ export class PrismaRunStore implements RunStore {
       data: { status: 'running', workerId, startedAt: new Date() }
     });
 
-    const playbookData = (queued as typeof queued & { playbook?: { recipientsJson: string; language: string } | null }).playbook;
+    const playbookData = (queued as typeof queued & {
+      playbook?: { recipientsJson: string; language: string; notificationsEnabled?: boolean; digestFrequency?: string } | null;
+    }).playbook;
 
     return {
       id: claimed.id,
@@ -71,7 +73,8 @@ export class PrismaRunStore implements RunStore {
       playbookId: (claimed as { playbookId?: string | null }).playbookId ?? undefined,
       playbookRecipients: playbookData ? parseRecipients(playbookData.recipientsJson) : undefined,
       playbookLanguage: playbookData?.language ?? undefined,
-      playbookNotificationsEnabled: playbookData ? ((playbookData as any).notificationsEnabled ?? true) : undefined
+      playbookNotificationsEnabled: playbookData ? (playbookData.notificationsEnabled ?? true) : undefined,
+      playbookDigestFrequency: playbookData?.digestFrequency ?? undefined
     };
   }
 
