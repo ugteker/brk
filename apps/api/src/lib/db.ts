@@ -48,4 +48,10 @@ export async function ensureSqliteSchemaCompatibility(): Promise<void> {
   if (!agentRunColumnNames.has('playbookId')) {
     await prisma.$executeRawUnsafe('ALTER TABLE "AgentRun" ADD COLUMN "playbookId" TEXT REFERENCES "Playbook"("id") ON DELETE RESTRICT ON UPDATE CASCADE');
   }
+
+  const userColumns = await prisma.$queryRawUnsafe<SqliteTableInfoRow[]>("PRAGMA table_info('User')");
+  const userColumnNames = new Set(userColumns.map((col) => col.name));
+  if (!userColumnNames.has('monthlyBudgetUsd')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN "monthlyBudgetUsd" REAL');
+  }
 }

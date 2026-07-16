@@ -8,6 +8,7 @@ import { registerAdminRoutes } from './modules/admin/routes';
 import { registerSourceRoutes, type SourceRoutesDeps } from './modules/source/routes';
 import { registerPlaybookRoutes, type PlaybookRoutesDeps } from './modules/playbook/routes';
 import { registerWatchlistRoutes, type WatchlistRoutesDeps } from './modules/watchlist/routes';
+import { registerUsageRoutes, type UsageRoutesDeps } from './modules/usage/routes';
 import type { DomainAccessResolver } from './modules/access/permissions';
 import { config } from './config';
 import { verifySessionToken } from './modules/auth/jwt';
@@ -28,6 +29,7 @@ export interface ServerDeps {
   source?: SourceRoutesDeps;
   playbook?: PlaybookRoutesDeps;
   watchlist?: WatchlistRoutesDeps;
+  usage?: UsageRoutesDeps;
   accessResolver?: DomainAccessResolver;
   sourceProbe?: SourceProbeLike;
   runTrigger?: RunTriggerLike;
@@ -88,6 +90,9 @@ export async function buildServer(deps: ServerDeps) {
   }
   if (deps.watchlist) {
     await registerWatchlistRoutes(app, deps.watchlist);
+  }
+  if (deps.usage) {
+    await registerUsageRoutes(app, deps.usage);
   }
   // Admin user-management routes reuse the same userRepository as auth - there's no separate
   // "admin service", just extra ADMIN_EMAIL-gated endpoints on top of the existing user store.

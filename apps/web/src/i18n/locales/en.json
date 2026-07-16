@@ -268,6 +268,23 @@
       "detailedDesc": "In-depth analysis with full context"
     }
   },
+  "usage": {
+    "menuLabel": "Usage & budget",
+    "title": "AI usage & monthly budget",
+    "spentThisMonth": "Spent this month (est.)",
+    "reports": "Reports",
+    "tokens": "Tokens in / out",
+    "noBudget": "No monthly budget set — runs are never blocked by cost.",
+    "budgetLabel": "Monthly budget (USD)",
+    "budgetPlaceholder": "e.g. 25",
+    "budgetHint": "When estimated spend reaches the budget, new agent runs are blocked until next month (or until you raise/remove the budget).",
+    "budgetProgress": "~${{spent}} of ${{budget}} used this month",
+    "budgetReached": "Budget reached — new runs are blocked until next month.",
+    "removeBudget": "Remove budget",
+    "budgetSaved": "Budget updated",
+    "budgetSaveFailed": "Failed to update budget",
+    "loadFailed": "Failed to load usage"
+  },
   "watchlist": {
     "title": "My watchlist",
     "empty": "No symbols followed yet",

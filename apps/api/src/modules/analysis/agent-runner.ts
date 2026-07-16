@@ -55,6 +55,11 @@ export interface AgentRunnerDeps {
   watchlistNotifier?: {
     notifyForReport(input: { agentId: string; agentName: string; report: RunReportRecord; language?: string }): Promise<void>;
   };
+  // Monthly cost guardrail: when configured and the agent owner's month-to-date estimated spend
+  // has reached their budget, the run fails fast with budget_exceeded *before* calling Claude.
+  budgetGuard?: {
+    checkRunAllowed(userId: string): Promise<{ allowed: boolean; spentUsd: number; budgetUsd: number | null }>;
+  };
   // Reports the run's current sub-stage (crawling/analyzing/notifying) so the Runs view can show
   // more than a generic spinner. Best-effort: a failure here must never fail the run itself.
   onPhaseChange?: (agentRunId: string, phase: RunPhase) => Promise<void>;
@@ -171,6 +176,20 @@ export class AgentRunner {
       }
 
       await this.setPhase(agentRunId, 'analyzing');
+
+      // Budget gate sits after the no-new-content check (free) and before the Claude call (the
+      // costly part). Cursors haven't advanced yet, so blocked items are retried once the budget
+      // resets or is raised - nothing is silently lost.
+      if (this.deps.budgetGuard) {
+        const budgetCheck = await this.deps.budgetGuard.checkRunAllowed(agent.ownerUserId);
+        if (!budgetCheck.allowed) {
+          return {
+            status: 'failed',
+            errorCode: 'budget_exceeded',
+            errorMessage: `Monthly AI budget reached: ~$${budgetCheck.spentUsd.toFixed(2)} of $${(budgetCheck.budgetUsd ?? 0).toFixed(2)} spent this month. Raise or remove the budget in Usage & budget to resume runs.`
+          };
+        }
+      }
 
       const effectiveSystemPrompt = buildEffectiveSystemPrompt({
         characterType: agent.characterType,

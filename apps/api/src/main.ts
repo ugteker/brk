@@ -36,6 +36,7 @@ import { PrismaDigestStore, startDigestLoop } from './modules/playbook/digest';
 import { ReportChatRepository, ReportChatService } from './modules/reports/chat';
 import { WatchlistRepository } from './modules/watchlist/repository';
 import { WatchlistNotifier } from './modules/watchlist/notifier';
+import { PrismaUsageStore, UsageService } from './modules/usage/budget';
 import { logger } from './lib/logger';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
@@ -91,6 +92,7 @@ async function start() {
   const mailer = new SmtpMailer();
   const watchlistRepository = new WatchlistRepository(prisma);
   const watchlistNotifier = new WatchlistNotifier({ watchlistRepository, userRepository, mailer });
+  const usageService = new UsageService(new PrismaUsageStore(prisma));
   const smartCrawlerDeps = {
     httpGet: defaultHttpGet,
     cursorRepository,
@@ -112,6 +114,7 @@ async function start() {
     cursorRepository,
     mailer,
     watchlistNotifier,
+    budgetGuard: usageService,
     onPhaseChange: (agentRunId, phase) => queue.setPhase(agentRunId, phase),
     sourceAdapters: {
       web_urls: new WebUrlAdapter(smartCrawlerDeps),
@@ -173,7 +176,8 @@ async function start() {
           : probeSource({ httpGet: defaultHttpGet, siteInspector }, source, previewLimit)
     },
     runTrigger: manualRunTrigger,
-    watchlist: { watchlistRepository }
+    watchlist: { watchlistRepository },
+    usage: { usageService }
   });
 
   startSchedulerLoop({ intervalMs: 60_000, queue, runner: agentRunner });

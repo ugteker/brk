@@ -268,6 +268,23 @@
       "detailedDesc": "Tiefgreifende Analyse mit vollem Kontext"
     }
   },
+  "usage": {
+    "menuLabel": "Verbrauch & Budget",
+    "title": "KI-Verbrauch & Monatsbudget",
+    "spentThisMonth": "Ausgaben diesen Monat (geschätzt)",
+    "reports": "Reports",
+    "tokens": "Tokens ein / aus",
+    "noBudget": "Kein Monatsbudget gesetzt — Runs werden nie aus Kostengründen blockiert.",
+    "budgetLabel": "Monatsbudget (USD)",
+    "budgetPlaceholder": "z. B. 25",
+    "budgetHint": "Erreichen die geschätzten Ausgaben das Budget, werden neue Agent-Runs bis zum nächsten Monat blockiert (oder bis du das Budget erhöhst/entfernst).",
+    "budgetProgress": "~${{spent}} von ${{budget}} diesen Monat verbraucht",
+    "budgetReached": "Budget erreicht — neue Runs sind bis zum nächsten Monat blockiert.",
+    "removeBudget": "Budget entfernen",
+    "budgetSaved": "Budget aktualisiert",
+    "budgetSaveFailed": "Budget konnte nicht aktualisiert werden",
+    "loadFailed": "Verbrauch konnte nicht geladen werden"
+  },
   "watchlist": {
     "title": "Meine Watchlist",
     "empty": "Noch keine Symbole gefolgt",

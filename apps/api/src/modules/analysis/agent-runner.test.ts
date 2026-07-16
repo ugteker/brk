@@ -495,4 +495,45 @@ describe('AgentRunner', () => {
 
     expect(result.status).toBe('succeeded');
   });
+
+  it('fails fast with budget_exceeded before calling Claude when the owner is over budget', async () => {
+    const deps = createDeps();
+    const checkRunAllowed = vi.fn(async () => ({ allowed: false, spentUsd: 10.5, budgetUsd: 10 }));
+    const runner = new AgentRunner({ ...deps, budgetGuard: { checkRunAllowed } } as never);
+
+    const result = await runner.run('agent-1', 'run-1');
+
+    expect(result.status).toBe('failed');
+    expect(result.errorCode).toBe('budget_exceeded');
+    expect(result.errorMessage).toContain('$10.50');
+    expect(checkRunAllowed).toHaveBeenCalledWith('admin-user-id');
+    expect(deps.claudeClient.analyze).not.toHaveBeenCalled();
+    expect(deps.reportRepository.saveRunReport).not.toHaveBeenCalled();
+    // Cursors must not advance so the blocked items are retried after the budget resets.
+    expect(deps.cursorRepository.saveCursor).not.toHaveBeenCalled();
+  });
+
+  it('runs normally when the budget guard allows the run', async () => {
+    const deps = createDeps();
+    const checkRunAllowed = vi.fn(async () => ({ allowed: true, spentUsd: 1, budgetUsd: 10 }));
+    const runner = new AgentRunner({ ...deps, budgetGuard: { checkRunAllowed } } as never);
+
+    const result = await runner.run('agent-1', 'run-1');
+
+    expect(result.status).toBe('succeeded');
+    expect(deps.claudeClient.analyze).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies the watchlist notifier after a successful run', async () => {
+    const deps = createDeps();
+    const notifyForReport = vi.fn(async () => {});
+    const runner = new AgentRunner({ ...deps, watchlistNotifier: { notifyForReport } } as never);
+
+    const result = await runner.run('agent-1', 'run-1', { playbookLanguage: 'de' });
+
+    expect(result.status).toBe('succeeded');
+    expect(notifyForReport).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'agent-1', agentName: 'Housing Agent', language: 'de' })
+    );
+  });
 });

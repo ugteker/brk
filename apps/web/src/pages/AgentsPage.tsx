@@ -8,6 +8,7 @@ import {
   AudioMutedOutlined,
   CheckCircleOutlined,
   DashboardOutlined,
+  DollarOutlined,
   LoadingOutlined,
   MailOutlined,
   BulbOutlined,
@@ -39,6 +40,7 @@ import { AgentForm } from '../components/AgentForm';
 import { AgentStatusCard } from '../components/AgentStatusCard';
 import { ThemePicker } from '../components/ThemePicker';
 import { WatchlistMenu } from '../components/WatchlistMenu';
+import { UsageBudgetModal } from '../components/UsageBudgetModal';
 import { AgentReportsBrowser } from '../components/AgentReportsBrowser';
 import { AgentRunsBrowser } from '../components/AgentRunsBrowser';
 import { AgentPromptEditor } from '../components/AgentPromptEditor';
@@ -524,6 +526,7 @@ export function AgentsPage() {
     localStorage.getItem('chattrader:onboarding:dismissed') === '1'
   );
   const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
+  const [usageModalOpen, setUsageModalOpen] = useState(false);
 
   /** Set of source IDs the current user already has an active playbook for. */
   const followedSourceIds = useMemo(
@@ -1898,6 +1901,12 @@ export function AgentsPage() {
                     { type: 'divider' as const }
                   ] : []),
                   {
+                    key: 'usage-budget',
+                    label: t('usage.menuLabel'),
+                    icon: <DollarOutlined />,
+                    onClick: () => setUsageModalOpen(true)
+                  },
+                  {
                     key: 'logout',
                     label: t('nav.logOut'),
                     icon: <LogoutOutlined />,
@@ -1912,6 +1921,7 @@ export function AgentsPage() {
                 aria-label={t('nav.accountMenu')}
               />
             </Dropdown>
+            <UsageBudgetModal open={usageModalOpen} onClose={() => setUsageModalOpen(false)} />
           </div>
         </div>
       </Header>

@@ -20,6 +20,9 @@ model User {
   locked                      Boolean   @default(false)
   passwordResetToken          String?   @unique
   passwordResetExpiresAt      DateTime?
+  // Monthly Claude-spend budget in USD - null means unlimited. When month-to-date estimated cost
+  // across the user's agents reaches this, new runs fail fast with budget_exceeded.
+  monthlyBudgetUsd            Float?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
