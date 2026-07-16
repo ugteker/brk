@@ -4,6 +4,7 @@ import { AudioOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { deleteDiscussion, listDiscussions, triggerDiscussionRun, type DiscussionDto } from '../api/discussions';
+import { StudioLayout } from '../components/StudioLayout';
 
 const FORMAT_COLORS: Record<string, string> = {
   free_form: 'blue',
@@ -50,14 +51,17 @@ export function StudioHub() {
 
   if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <Spin size="large" />
-      </div>
+      <StudioLayout>
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <Spin size="large" />
+        </div>
+      </StudioLayout>
     );
   }
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 1100, margin: '0 auto' }}>
+    <StudioLayout>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h2 style={{ margin: 0 }}>
           <AudioOutlined style={{ marginRight: 8 }} />
@@ -160,5 +164,6 @@ export function StudioHub() {
         </div>
       )}
     </div>
+    </StudioLayout>
   );
 }

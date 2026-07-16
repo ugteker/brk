@@ -18,7 +18,7 @@ import {
   UserOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   getDiscussion,
   listDiscussionRuns,
@@ -29,6 +29,7 @@ import {
   type DiscussionTurnDto
 } from '../api/discussions';
 import { useDiscussionStream } from '../hooks/useDiscussionStream';
+import { StudioLayout } from '../components/StudioLayout';
 
 const { Text, Paragraph } = Typography;
 
@@ -61,7 +62,6 @@ function TurnBubble({ turn, participantIndex }: { turn: DiscussionTurnDto; parti
 export function DiscussionDetail() {
   const { t } = useTranslation();
   const { discussionId } = useParams<{ discussionId: string }>();
-  const navigate = useNavigate();
 
   const [discussion, setDiscussion] = useState<DiscussionDto | null>(null);
   const [runs, setRuns] = useState<DiscussionRunDto[]>([]);
@@ -130,9 +130,11 @@ export function DiscussionDetail() {
 
   if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <Spin size="large" />
-      </div>
+      <StudioLayout>
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <Spin size="large" />
+        </div>
+      </StudioLayout>
     );
   }
 
@@ -144,21 +146,17 @@ export function DiscussionDetail() {
     liveRun && liveRun === selectedRunId ? liveTurns : selectedRun?.turns ?? [];
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 900, margin: '0 auto' }}>
+    <StudioLayout>
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
-          <Button type="link" onClick={() => navigate('/studio')} style={{ paddingLeft: 0 }}>
-            ← {t('studio.title')}
-          </Button>
           <h2 style={{ margin: 0 }}>
             <AudioOutlined style={{ marginRight: 8 }} />
             {discussion.name}
           </h2>
           <Space style={{ marginTop: 4 }}>
             <Tag color="blue">{t(`studio.format_${discussion.format}`)}</Tag>
-            <Text type="secondary">
-              {discussion.participants.length} {t('studio.participants')}
-            </Text>
+            <Tag color="default">{discussion.participants.length} {t('studio.participants')}</Tag>
           </Space>
         </div>
         <Space>
@@ -237,5 +235,6 @@ export function DiscussionDetail() {
         />
       )}
     </div>
+    </StudioLayout>
   );
 }

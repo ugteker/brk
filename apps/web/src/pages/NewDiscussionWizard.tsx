@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { listAgents, type AgentSummary } from '../api/agents';
 import { createDiscussion, triggerDiscussionRun } from '../api/discussions';
+import { StudioLayout } from '../components/StudioLayout';
 
 type Format = 'free_form' | 'structured' | 'hosted' | 'hybrid';
 type Voice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
@@ -128,11 +129,9 @@ export function NewDiscussionWizard() {
   ];
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 700, margin: '0 auto' }}>
+    <StudioLayout>
+    <div style={{ maxWidth: 700, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
-        <Button type="link" onClick={() => navigate('/studio')} style={{ paddingLeft: 0 }}>
-          ← {t('studio.title')}
-        </Button>
         <h2 style={{ margin: 0 }}>
           <AudioOutlined style={{ marginRight: 8 }} />
           {t('studio.newDiscussion')}
@@ -280,5 +279,6 @@ export function NewDiscussionWizard() {
         </Card>
       )}
     </div>
+    </StudioLayout>
   );
 }
