@@ -1,6 +1,6 @@
-# All-in-one ChatTrader image: API (Fastify/Prisma/SQLite), the built SPA
-# served by nginx, and cloudflared, running as sibling processes in a single
-# container (see deploy/entrypoint.sh for the rationale/trade-offs and
+# All-in-one ChatTrader image: API (Fastify/Prisma/SQLite) and the built SPA
+# served by nginx, running as sibling processes in a single container
+# (see deploy/entrypoint.sh for the rationale/trade-offs and
 # deploy/README.md for the overall architecture). Build from the repo root:
 #   docker build -f Dockerfile .
 #
@@ -65,9 +65,6 @@ COPY --from=web-build /app/web/dist /usr/share/nginx/html
 
 # ---- nginx (static SPA + reverse proxy to the API on 127.0.0.1:3000) ----
 COPY deploy/nginx.conf /etc/nginx/http.d/default.conf
-
-# ---- cloudflared (binary lifted straight from Cloudflare's own image) ----
-COPY --from=cloudflare/cloudflared:latest /usr/local/bin/cloudflared /usr/local/bin/cloudflared
 
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
