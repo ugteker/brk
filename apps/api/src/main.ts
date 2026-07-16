@@ -38,6 +38,8 @@ import { WatchlistRepository } from './modules/watchlist/repository';
 import { WatchlistNotifier } from './modules/watchlist/notifier';
 import { PrismaUsageStore, UsageService } from './modules/usage/budget';
 import { DiscussionRepository } from './modules/discussion/repository';
+import { DiscussionOrchestrator } from './modules/discussion/orchestrator';
+import { SyntheticSourceService } from './modules/discussion/synthetic-source';
 import { logger } from './lib/logger';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
@@ -100,6 +102,17 @@ async function start() {
     crawlConfigRepository,
     siteInspector
   };
+
+  const discussionRepository = new DiscussionRepository(prisma);
+  const syntheticSourceService = new SyntheticSourceService(prisma);
+  const discussionOrchestrator = new DiscussionOrchestrator({
+    discussionRepository,
+    agentRepository,
+    promptRepository,
+    reportRepository,
+    claudeClient,
+    syntheticSource: syntheticSourceService
+  });
 
   await bootstrapAdminAccount(userRepository);
 
@@ -180,8 +193,11 @@ async function start() {
     watchlist: { watchlistRepository },
     usage: { usageService },
     discussion: {
-      discussionRepository: new DiscussionRepository(prisma),
-      // runTrigger wired after orchestrator is created in Task 4/5
+      discussionRepository,
+      runTrigger: {
+        triggerDiscussionRun: (discussionId: string, runId: string) =>
+          discussionOrchestrator.run(discussionId, runId)
+      }
     },
     db: prisma
   });
