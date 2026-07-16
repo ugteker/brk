@@ -268,6 +268,16 @@
       "detailedDesc": "Tiefgreifende Analyse mit vollem Kontext"
     }
   },
+  "reportChat": {
+    "title": "Analyst fragen",
+    "empty": "Stelle eine Rückfrage zu diesem Report — der Analyst antwortet auf Basis des Reports und seiner Quellen.",
+    "placeholder": "z. B. Warum ist die Konfidenz für AAPL so hoch?",
+    "send": "Senden",
+    "thinking": "Der Analyst denkt nach…",
+    "loadFailed": "Chat-Verlauf konnte nicht geladen werden",
+    "askFailed": "Antwort konnte nicht abgerufen werden",
+    "disclaimer": "Antworten basieren auf diesem Report und seinen Quellen. Nur informative Analyse — keine Finanzberatung."
+  },
   "entityActions": {
     "edit": "{{label}} bearbeiten",
     "share": "{{label}} teilen",

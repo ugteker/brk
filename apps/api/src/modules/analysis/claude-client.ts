@@ -10,7 +10,7 @@ export interface ClaudeMessagesClient {
       model: string;
       max_tokens: number;
       system: string;
-      messages: Array<{ role: 'user'; content: string }>;
+      messages: Array<{ role: 'user' | 'assistant'; content: string }>;
     }): Promise<{
       content: Array<{ type: string; text?: string }>;
       stop_reason?: string | null;
@@ -84,6 +84,35 @@ export class ClaudeClient {
 
   constructor(options: { apiKey?: string; client?: ClaudeMessagesClient } = {}) {
     this.client = options.client ?? (new Anthropic({ apiKey: options.apiKey }) as unknown as ClaudeMessagesClient);
+  }
+
+  /**
+   * Plain-text conversational call (no JSON contract) - used by the report Q&A chat where the
+   * user asks free-form follow-up questions about a report and its underlying evidence.
+   */
+  async chat(params: {
+    model: string;
+    system: string;
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  }): Promise<{ text: string; usage?: { inputTokens: number; outputTokens: number } }> {
+    const response = await this.client.messages.create({
+      model: params.model,
+      max_tokens: 2048,
+      system: params.system,
+      messages: params.messages
+    });
+
+    const textBlock = response.content.find((block) => block.type === 'text');
+    if (!textBlock?.text) {
+      throw new Error('Claude response did not contain a text block');
+    }
+
+    return {
+      text: textBlock.text.trim(),
+      usage: response.usage
+        ? { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens }
+        : undefined
+    };
   }
 
   async analyze(request: ClaudeAnalysisRequest): Promise<ClaudeAnalysisResult> {

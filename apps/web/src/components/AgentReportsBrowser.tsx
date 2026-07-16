@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, Empty, Input, Progress, Tag, message } from 'antd';
-import { DownOutlined, MailOutlined, UpOutlined } from '@ant-design/icons';
+import { DownOutlined, MailOutlined, MessageOutlined, UpOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { resendReportNotification, type RunReportDto, type SignalDto } from '../api/agents';
 import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { TradingViewSymbolChart } from './TradingViewSymbolChart';
 import { CharacterReportRenderer } from './CharacterReportRenderer';
+import { ReportChatPanel } from './ReportChatPanel';
 
 interface AgentReportsBrowserProps {
   agentId: string;
@@ -102,6 +103,8 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
   // so re-clicking the same tag collapses it, and clicking a different tag (even on another
   // report) closes whichever chart was previously open.
   const [expandedChartKey, setExpandedChartKey] = useState<string | null>(null);
+  // Only one report's "Ask the analyst" chat is open at a time.
+  const [openChatReportId, setOpenChatReportId] = useState<string | null>(null);
   // Tracks user-overridden symbols (e.g. "AAPL" → "NASDAQ:AAPL") per chart key so the user can
   // fix "This symbol doesn't exist" errors by adding the exchange prefix themselves.
   const [symbolOverrides, setSymbolOverrides] = useState<Record<string, string>>({});
@@ -233,6 +236,18 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                     />
                   </TouchSafeTooltip>
                 ) : null}
+                <TouchSafeTooltip title={t('reportChat.title')}>
+                  <Button
+                    aria-label={t('reportChat.title')}
+                    shape="circle"
+                    icon={<MessageOutlined />}
+                    type={openChatReportId === report.id ? 'primary' : 'default'}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenChatReportId((prev) => (prev === report.id ? null : report.id));
+                    }}
+                  />
+                </TouchSafeTooltip>
                 <TouchSafeTooltip title="Re-send email notification">
                   <Button
                     aria-label="Re-send email notification"
@@ -297,6 +312,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                 </div>
               );
             })}
+            {openChatReportId === report.id ? <ReportChatPanel agentId={agentId} reportId={report.id} /> : null}
             {isExpanded && report.report ? <CharacterReportRenderer report={report.report} /> : null}
           </Card>
         );

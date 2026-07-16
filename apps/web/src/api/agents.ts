@@ -313,6 +313,35 @@ export async function getLatestAgentPrompt(agentId: string): Promise<PromptVersi
   return parseJsonOrThrow(response, 'Failed to load latest agent prompt');
 }
 
+export interface ReportChatMessageDto {
+  id: string;
+  reportId: string;
+  userId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export async function listReportChatMessages(agentId: string, reportId: string): Promise<ReportChatMessageDto[]> {
+  const response = await fetch(`/api/agents/${agentId}/reports/${reportId}/chat`);
+  return parseJsonOrThrow(response, 'Failed to load report chat');
+}
+
+// Asks the agent a follow-up question about a specific report. Returns the two new messages
+// (the persisted question and the analyst's grounded answer).
+export async function askReportQuestion(agentId: string, reportId: string, question: string): Promise<ReportChatMessageDto[]> {
+  const response = await fetch(`/api/agents/${agentId}/reports/${reportId}/chat`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ question })
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.message ?? 'Failed to ask report question');
+  }
+  return response.json();
+}
+
 // Chronological (oldest-first) history of this agent's own reports that contain at least one
 // signal for `symbol` - used by the symbol performance view alongside the TradingView chart.
 export async function listSymbolSignalHistory(agentId: string, symbol: string): Promise<RunReportDto[]> {

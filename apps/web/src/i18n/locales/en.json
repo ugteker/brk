@@ -268,6 +268,16 @@
       "detailedDesc": "In-depth analysis with full context"
     }
   },
+  "reportChat": {
+    "title": "Ask the analyst",
+    "empty": "Ask a follow-up question about this report — the analyst answers grounded in the report and its sources.",
+    "placeholder": "e.g. Why is the confidence for AAPL so high?",
+    "send": "Send",
+    "thinking": "The analyst is thinking…",
+    "loadFailed": "Failed to load chat history",
+    "askFailed": "Failed to get an answer",
+    "disclaimer": "Answers are grounded in this report and its sources. Informational analysis only — not financial advice."
+  },
   "entityActions": {
     "edit": "Edit {{label}}",
     "share": "Share {{label}}",

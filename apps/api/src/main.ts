@@ -33,6 +33,7 @@ import { DomainAccessResolver } from './modules/access/permissions';
 import { SourceRepository } from './modules/source/repository';
 import { PlaybookRepository } from './modules/playbook/repository';
 import { PrismaDigestStore, startDigestLoop } from './modules/playbook/digest';
+import { ReportChatRepository, ReportChatService } from './modules/reports/chat';
 import { logger } from './lib/logger';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
@@ -116,9 +117,18 @@ async function start() {
 
   const manualRunTrigger = new ManualRunTrigger(queue, agentRunner);
 
+  const reportChatService = new ReportChatService({
+    reportRepository,
+    artifactRepository,
+    promptRepository,
+    agentRepository,
+    chatRepository: new ReportChatRepository(prisma),
+    claudeClient
+  });
+
   const app = await buildServer({
     agentRepository,
-    agents: { promptRepository, reportRepository, agentRepository, mailer },
+    agents: { promptRepository, reportRepository, agentRepository, mailer, reportChatService },
     accessResolver,
     runs: { runsRepository },
     auth: { userRepository, googleOAuthClient: new GoogleOAuthHttpClient(), mailer },

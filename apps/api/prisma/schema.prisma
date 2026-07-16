@@ -142,6 +142,17 @@ model AgentSignal {
   report        AgentRunReport @relation(fields: [agentRunReportId], references: [id], onDelete: Restrict)
 }
 
+model ReportChatMessage {
+  id        String   @id @default(cuid())
+  reportId  String
+  userId    String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([reportId, userId, createdAt])
+}
+
 model AgentSourceCursor {
   id                  String    @id @default(cuid())
   agentId             String
