@@ -4,6 +4,7 @@ import { AgentsPage } from './pages/AgentsPage';
 import { AuthPage } from './pages/AuthPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { AppDataProvider } from './context/AppDataContext';
+import { AppShell } from './components/AppShell';
 import { StudioHub } from './pages/StudioHub';
 import { DiscussionDetail } from './pages/DiscussionDetail';
 import { NewDiscussionWizard } from './pages/NewDiscussionWizard';
@@ -25,16 +26,18 @@ function AuthGate() {
 
   return (
     <AppDataProvider>
-      <Routes>
-        <Route path="/" element={<AgentsPage hub="feed" />} />
-        <Route path="/library" element={<AgentsPage hub="sources" />} />
-        <Route path="/agents" element={<AgentsPage hub="agents" />} />
-        <Route path="/playbooks" element={<AgentsPage hub="playbooks" />} />
-        <Route path="/studio" element={<StudioHub />} />
-        <Route path="/studio/new" element={<NewDiscussionWizard />} />
-        <Route path="/studio/:discussionId" element={<DiscussionDetail />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<AgentsPage hub="feed" />} />
+          <Route path="/library" element={<AgentsPage hub="sources" />} />
+          <Route path="/agents" element={<AgentsPage hub="agents" />} />
+          <Route path="/playbooks" element={<AgentsPage hub="playbooks" />} />
+          <Route path="/studio" element={<StudioHub />} />
+          <Route path="/studio/new" element={<NewDiscussionWizard />} />
+          <Route path="/studio/:discussionId" element={<DiscussionDetail />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppShell>
     </AppDataProvider>
   );
 }

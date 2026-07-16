@@ -21,6 +21,14 @@ import {
 
 export type LoadState = 'idle' | 'loading' | 'error';
 
+export interface FailedRunNotice {
+  runId: string;
+  agentId: string;
+  agentName: string;
+  errorMessage: string | null;
+  timestamp: string;
+}
+
 export interface AppDataContextValue {
   agents: AgentSummary[];
   agentsLoadState: LoadState;
@@ -40,6 +48,10 @@ export interface AppDataContextValue {
   setAgents: React.Dispatch<React.SetStateAction<AgentSummary[]>>;
   setSources: React.Dispatch<React.SetStateAction<SourceRecord[]>>;
   setPlaybooks: React.Dispatch<React.SetStateAction<PlaybookRecord[]>>;
+  failedRunNotices: FailedRunNotice[];
+  setFailedRunNotices: React.Dispatch<React.SetStateAction<FailedRunNotice[]>>;
+  bellDismissedIds: Set<string>;
+  setBellDismissedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -65,6 +77,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [marketplaceAgentCount, setMarketplaceAgentCount] = useState(0);
   const [marketplaceSourceCount, setMarketplaceSourceCount] = useState(0);
   const [marketplacePlaybookCount, setMarketplacePlaybookCount] = useState(0);
+  const [failedRunNotices, setFailedRunNotices] = useState<FailedRunNotice[]>([]);
+  const [bellDismissedIds, setBellDismissedIds] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('chattrader:bell:dismissed') ?? '[]')); } catch { return new Set(); }
+  });
   const initialLoadRef = useRef(false);
 
   function isSignInRequiredError(error: unknown): boolean {
@@ -178,7 +194,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     marketplaceAgents, marketplaceSources, marketplacePlaybooks,
     marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
     refreshAgents, refreshSources, refreshPlaybooks,
-    setAgents, setSources, setPlaybooks
+    setAgents, setSources, setPlaybooks,
+    failedRunNotices, setFailedRunNotices,
+    bellDismissedIds, setBellDismissedIds
   };
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

@@ -420,7 +420,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     marketplaceSources, setMarketplaceSources: _setMarketplaceSources,
     marketplacePlaybooks, setMarketplacePlaybooks: _setMarketplacePlaybooks,
     marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
-    refreshAgents: _refreshAgents, refreshSources: _refreshSources, refreshPlaybooks: _refreshPlaybooks
+    refreshAgents: _refreshAgents, refreshSources: _refreshSources, refreshPlaybooks: _refreshPlaybooks,
+    failedRunNotices, setFailedRunNotices,
+    bellDismissedIds
   } = useAppData();
   const [showAdminWorkspace, setShowAdminWorkspace] = useState(false);
   const [showAdminUsers, setShowAdminUsers] = useState(false);
@@ -535,12 +537,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     localStorage.getItem('chattrader:onboarding:dismissed') === '1'
   );
   const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
-  const [failedRunNotices, setFailedRunNotices] = useState<Array<{ runId: string; agentId: string; agentName: string; errorMessage: string | null; timestamp: string }>>([]);
-  const [bellDismissedIds, setBellDismissedIds] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('chattrader:bell:dismissed') ?? '[]')); } catch { return new Set(); }
-  });
-  const [bellOpen, setBellOpen] = useState(false);
-  const [usageModalOpen, setUsageModalOpen] = useState(false);
   const [guidedWizardOpen, setGuidedWizardOpen] = useState(false);
   const [guidedWizardStep, setGuidedWizardStep] = useState(0);
   const [guidedWizardUrl, setGuidedWizardUrl] = useState('');
@@ -1711,207 +1707,61 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }
 
   return (
-    <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
-      <Header style={{ background: 'transparent', height: 'auto', padding: 'clamp(12px, 3vw, 24px) clamp(12px, 3vw, 24px) 0' }}>
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <div style={{ minWidth: 0 }}>
-            <Title
-              level={2}
-              onClick={goToDashboard}
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') goToDashboard();
-              }}
-              style={{
-                margin: 0,
-                whiteSpace: 'nowrap',
-                wordBreak: 'keep-all',
-                overflowWrap: 'normal',
-                fontSize: 'clamp(1.25rem, 5vw, 1.875rem)',
-                cursor: 'pointer'
-              }}
-            >
-              ChatTrader
-            </Title>
-            {isAdmin && (
-              showAdminWorkspace ? (
-                <Tag
-                  color="orange"
-                  icon={<SettingOutlined />}
-                  onClick={goToDashboard}
-                  style={{ cursor: 'pointer', marginLeft: 8, fontSize: 12 }}
-                >
-                  {t('nav.modeAdmin')}
-                </Tag>
-              ) : (
-                <Tag
-                  color="green"
-                  icon={<DashboardOutlined />}
-                  style={{ marginLeft: 8, fontSize: 12 }}
-                >
-                  {t('nav.modeDashboard')}
-                </Tag>
-              )
-            )}
-          </div>
-          <div className="ct-header-actions flex items-center gap-2 flex-wrap justify-end">
-            <WatchlistMenu />
-            <ThemePicker />
-            {/* User / account menu — admins get extra admin entries */}
+    <>
+      {/* Admin toolbar — only visible to admin users, stays in page content */}
+      {isAdmin && (
+        <div className="mx-auto max-w-6xl mb-2 flex flex-wrap items-center gap-2 px-1">
+          <Tag color={showAdminWorkspace ? 'orange' : 'green'} icon={<SettingOutlined />} style={{ fontSize: 12 }}>
+            {showAdminWorkspace ? t('nav.modeAdmin') : t('nav.modeDashboard')}
+          </Tag>
+          <Button
+            size="small"
+            icon={showAdminWorkspace ? <ArrowLeftOutlined /> : <RocketOutlined />}
+            onClick={() => {
+              if (showAdminWorkspace) {
+                setShowAdminWorkspace(false);
+                setShowAdminUsers(false);
+                setActiveHub('sources');
+              } else {
+                setShowAdminWorkspace(true);
+                setActiveHub('agents');
+              }
+            }}
+          >
+            {showAdminWorkspace ? t('common.back') : t('nav.agentsAndPlaybooks')}
+          </Button>
+          {showAdminWorkspace && (
             <Button
               size="small"
-              type="text"
-              onClick={() => i18n.changeLanguage(i18n.language.startsWith('de') ? 'en' : 'de')}
-              title={t('language.switchTo')}
-              style={{ fontWeight: 600, minWidth: 32 }}
+              icon={<TeamOutlined />}
+              onClick={() => { setShowAdminWorkspace(true); setShowAdminUsers(true); }}
             >
-              {t('language.current')}
+              {t('nav.userManagement')}
             </Button>
-            {/* Notifications bell — shows failed run count */}
-            {(() => {
-              const unread = failedRunNotices.filter((n) => !bellDismissedIds.has(n.runId));
-              return (
-                <Popover
-                  open={bellOpen}
-                  onOpenChange={setBellOpen}
-                  trigger="click"
-                  title={
-                    <div className="flex items-center justify-between gap-4">
-                      <span>{t('nav.bellRunFailures')}</span>
-                      {failedRunNotices.length > 0 && (
-                        <Button
-                          size="small"
-                          type="text"
-                          onClick={() => {
-                            const newSet = new Set(failedRunNotices.map((n) => n.runId));
-                            setBellDismissedIds(newSet);
-                            localStorage.setItem('chattrader:bell:dismissed', JSON.stringify([...newSet]));
-                          }}
-                        >
-                          {t('nav.bellClearAll')}
-                        </Button>
-                      )}
-                    </div>
-                  }
-                  content={
-                    <div className="w-72 space-y-2 max-h-80 overflow-y-auto">
-                      {failedRunNotices.length === 0 ? (
-                        <p className="text-xs text-gray-400 py-2 text-center">{t('nav.bellEmpty')}</p>
-                      ) : (
-                        [...failedRunNotices].reverse().map((n) => (
-                          <div key={n.runId} className={`rounded-lg border px-3 py-2 text-xs ${bellDismissedIds.has(n.runId) ? 'opacity-40 border-gray-200' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'}`}>
-                            <p className="font-semibold text-red-700 dark:text-red-300 truncate">{n.agentName}</p>
-                            <p className="text-red-500 dark:text-red-400 truncate">{n.errorMessage ?? 'Run failed'}</p>
-                            {n.timestamp ? <p className="text-gray-400 mt-0.5">{new Date(n.timestamp).toLocaleString()}</p> : null}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  }
-                >
-                  <Badge count={unread.length} size="small">
-                    <Button shape="circle" icon={<BellOutlined />} aria-label={t('nav.bellLabel')} />
-                  </Badge>
-                </Popover>
-              );
-            })()}
-            <Dropdown
-              trigger={['click']}
-              menu={{
-                items: [
-                  ...(user ? [{ key: 'user-label', label: <span className="font-medium">{user.displayName ?? user.email}</span>, disabled: true }] : []),
-                  ...(user ? [{ type: 'divider' as const }] : []),
-                  ...(isAdmin ? [
-                    {
-                      key: 'admin-agents-playbooks',
-                      label: showAdminWorkspace ? t('common.back') : t('nav.agentsAndPlaybooks'),
-                      icon: showAdminWorkspace ? <ArrowLeftOutlined /> : <RocketOutlined />,
-                      onClick: () => {
-                        if (showAdminWorkspace) {
-                          setShowAdminWorkspace(false);
-                          setShowAdminUsers(false);
-                          setActiveHub('sources');
-                        } else {
-                          setShowAdminWorkspace(true);
-                          setActiveHub('agents');
-                        }
-                      }
-                    },
-                    {
-                      key: 'admin-users',
-                      label: t('nav.userManagement'),
-                      icon: <TeamOutlined />,
-                      onClick: () => {
-                        setShowAdminWorkspace(true);
-                        setShowAdminUsers(true);
-                      }
-                    },
-                    {
-                      key: 'admin-onboarding-preview',
-                      label: forceShowOnboarding ? 'Hide onboarding preview' : 'Preview onboarding',
-                      icon: <RobotOutlined />,
-                      onClick: () => {
-                        setForceShowOnboarding((prev) => !prev);
-                        setShowAdminWorkspace(false);
-                        setActiveHub('sources');
-                      }
-                    },
-                    {
-                      key: 'admin-seed-demo',
-                      label: t('admin.seedDemo'),
-                      icon: <DatabaseOutlined />,
-                      onClick: async () => {
-                        try {
-                          await seedDemoData();
-                          message.success(t('admin.seedDemoSuccess'));
-                          await Promise.all([refreshAgents(), refreshSources(), refreshPlaybooks()]);
-                        } catch (err: unknown) {
-                          if (err instanceof Error && err.message === 'already_exists') {
-                            message.info(t('admin.seedDemoAlreadyExists'));
-                          } else {
-                            message.error(t('admin.seedDemoError'));
-                          }
-                        }
-                      }
-                    },
-                    { type: 'divider' as const }
-                  ] : []),
-                  {
-                    key: 'usage-budget',
-                    label: t('usage.menuLabel'),
-                    icon: <DollarOutlined />,
-                    onClick: () => setUsageModalOpen(true)
-                  },
-                  {
-                    key: 'logout',
-                    label: t('nav.logOut'),
-                    icon: <LogoutOutlined />,
-                    onClick: () => logout()
-                  }
-                ]
-              }}
-            >
-              <Button
-                shape="circle"
-                icon={<UserOutlined />}
-                aria-label={t('nav.accountMenu')}
-              />
-            </Dropdown>
-            <UsageBudgetModal open={usageModalOpen} onClose={() => setUsageModalOpen(false)} />
-          </div>
+          )}
+          <Button
+            size="small"
+            icon={<RobotOutlined />}
+            onClick={() => {
+              setForceShowOnboarding((prev) => !prev);
+              setShowAdminWorkspace(false);
+              setActiveHub('sources');
+            }}
+          >
+            {forceShowOnboarding ? 'Hide onboarding preview' : 'Preview onboarding'}
+          </Button>
         </div>
-      </Header>
-      <Content style={{ padding: 'clamp(12px, 3vw, 24px)' }}>
-        {showAdminWorkspace && showAdminUsers ? (
-          <AdminUsersPage onBack={() => setShowAdminUsers(false)} />
-        ) : viewingSymbol && (selectedAgent || executionAgentId) ? (
-          <SymbolPerformancePage
-            agentId={selectedAgent?.id ?? executionAgentId!}
-            symbol={viewingSymbol}
-            onBack={() => setViewingSymbol(null)}
-          />
-        ) : (
-        <div className="mx-auto max-w-6xl space-y-4">
+      )}
+      {showAdminWorkspace && showAdminUsers ? (
+        <AdminUsersPage onBack={() => setShowAdminUsers(false)} />
+      ) : viewingSymbol && (selectedAgent || executionAgentId) ? (
+        <SymbolPerformancePage
+          agentId={selectedAgent?.id ?? executionAgentId!}
+          symbol={viewingSymbol}
+          onBack={() => setViewingSymbol(null)}
+        />
+      ) : (
+      <div className="mx-auto max-w-6xl space-y-4">
           <Tabs
             activeKey={activeHub}
             onChange={(key) => setActiveHub(key as HubKey)}
@@ -3447,7 +3297,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           />
         </div>
         )}
-      </Content>
       <Modal
         title={(() => {
           if (followWizardSourcePreselected) {
@@ -4463,6 +4312,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           </div>
         )}
       </Modal>
-    </Layout>
+    </>
   );
 }

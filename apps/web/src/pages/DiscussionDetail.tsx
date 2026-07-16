@@ -29,7 +29,6 @@ import {
   type DiscussionTurnDto
 } from '../api/discussions';
 import { useDiscussionStream } from '../hooks/useDiscussionStream';
-import { StudioLayout } from '../components/StudioLayout';
 
 const { Text, Paragraph } = Typography;
 
@@ -130,11 +129,9 @@ export function DiscussionDetail() {
 
   if (loading) {
     return (
-      <StudioLayout>
-        <div style={{ padding: 40, textAlign: 'center' }}>
-          <Spin size="large" />
-        </div>
-      </StudioLayout>
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <Spin size="large" />
+      </div>
     );
   }
 
@@ -146,7 +143,6 @@ export function DiscussionDetail() {
     liveRun && liveRun === selectedRunId ? liveTurns : selectedRun?.turns ?? [];
 
   return (
-    <StudioLayout>
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
@@ -235,6 +231,5 @@ export function DiscussionDetail() {
         />
       )}
     </div>
-    </StudioLayout>
   );
 }
