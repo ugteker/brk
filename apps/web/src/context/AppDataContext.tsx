@@ -111,8 +111,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (initialLoadRef.current) return;
     initialLoadRef.current = true;
 
-    let alive = true;
-
     async function initialLoad() {
       try {
         setAgentsLoadState('loading');
@@ -124,8 +122,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           listSources(),
           listPlaybooks()
         ]);
-
-        if (!alive) return;
 
         if (agentsResult.status === 'fulfilled') {
           setAgents(agentsResult.value);
@@ -157,7 +153,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           listMarketplaceSources().catch(() => [] as MarketplaceSourceListItem[]),
           listMarketplacePlaybooks().catch(() => [] as MarketplacePlaybookListItem[])
         ]).then(([mkAgents, mkSources, mkPlaybooks]) => {
-          if (!alive) return;
           setMarketplaceAgents(mkAgents);
           setMarketplaceSources(mkSources);
           setMarketplacePlaybooks(mkPlaybooks);
@@ -166,7 +161,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           setMarketplacePlaybookCount(mkPlaybooks.length);
         }).catch(() => { /* non-fatal */ });
       } catch (error) {
-        if (!alive) return;
         if (isSignInRequiredError(error)) { await logout(); return; }
         setAgentsLoadState('error');
         setSourcesLoadState('error');
@@ -175,7 +169,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
 
     initialLoad();
-    return () => { alive = false; };
   }, []);
 
   const value: AppDataContextValue = {
