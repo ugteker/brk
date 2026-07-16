@@ -6,6 +6,7 @@ import type { Agent } from '../agents/types';
 import type { PromptRepository } from '../prompts/repository';
 import type { ArtifactRepository } from '../artifacts/repository';
 import type { ReportRepository } from '../reports/repository';
+import type { RunReportRecord } from '../reports/types';
 import type { SourceCursorRepositoryLike } from '../crawler/source-cursor-repository';
 import type { RunPhase } from '../runs/run-queue.service';
 import { logger } from '../../lib/logger';
@@ -49,6 +50,11 @@ export interface AgentRunnerDeps {
   // Best-effort mailer for the automatic post-run report notification - if omitted (or if sending
   // fails), the run itself still succeeds; email is a courtesy, not a run precondition.
   mailer?: MailerLike;
+  // Alerts users whose personal watchlist contains a symbol from the new report - independent of
+  // playbook recipients/digest settings. Best-effort: never fails the run.
+  watchlistNotifier?: {
+    notifyForReport(input: { agentId: string; agentName: string; report: RunReportRecord; language?: string }): Promise<void>;
+  };
   // Reports the run's current sub-stage (crawling/analyzing/notifying) so the Runs view can show
   // more than a generic spinner. Best-effort: a failure here must never fail the run itself.
   onPhaseChange?: (agentRunId: string, phase: RunPhase) => Promise<void>;
@@ -215,6 +221,17 @@ export class AgentRunner {
       if (options?.playbookNotificationsEnabled !== false && !digestsDefer) {
         const itemTitles = [...new Set(evidence.map((block) => block.title || block.sourceRef))];
         await sendReportNotification(this.deps.mailer, agent, report, itemTitles, options?.playbookRecipients ?? [], options?.playbookLanguage);
+      }
+
+      // Watchlist alerts fire for every new report - a watchlist follow is the user's own explicit
+      // subscription, so playbook mute/digest settings don't suppress it. Never fails the run.
+      if (this.deps.watchlistNotifier) {
+        await this.deps.watchlistNotifier.notifyForReport({
+          agentId,
+          agentName: agent.name,
+          report,
+          language: options?.playbookLanguage
+        });
       }
 
       return { status: 'succeeded', reportId: report.id };

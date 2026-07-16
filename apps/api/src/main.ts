@@ -34,6 +34,8 @@ import { SourceRepository } from './modules/source/repository';
 import { PlaybookRepository } from './modules/playbook/repository';
 import { PrismaDigestStore, startDigestLoop } from './modules/playbook/digest';
 import { ReportChatRepository, ReportChatService } from './modules/reports/chat';
+import { WatchlistRepository } from './modules/watchlist/repository';
+import { WatchlistNotifier } from './modules/watchlist/notifier';
 import { logger } from './lib/logger';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
@@ -87,6 +89,8 @@ async function start() {
   const crawlConfigRepository = new SourceCrawlConfigRepository(prisma);
   const siteInspector = new SiteInspectorClient({ apiKey: process.env.ANTHROPIC_API_KEY });
   const mailer = new SmtpMailer();
+  const watchlistRepository = new WatchlistRepository(prisma);
+  const watchlistNotifier = new WatchlistNotifier({ watchlistRepository, userRepository, mailer });
   const smartCrawlerDeps = {
     httpGet: defaultHttpGet,
     cursorRepository,
@@ -107,6 +111,7 @@ async function start() {
     claudeClient,
     cursorRepository,
     mailer,
+    watchlistNotifier,
     onPhaseChange: (agentRunId, phase) => queue.setPhase(agentRunId, phase),
     sourceAdapters: {
       web_urls: new WebUrlAdapter(smartCrawlerDeps),
@@ -167,7 +172,8 @@ async function start() {
           ? probeYouTubeSource({ httpGet: youtubeHttpGet, httpPostJson: defaultHttpPostJson }, source, previewLimit)
           : probeSource({ httpGet: defaultHttpGet, siteInspector }, source, previewLimit)
     },
-    runTrigger: manualRunTrigger
+    runTrigger: manualRunTrigger,
+    watchlist: { watchlistRepository }
   });
 
   startSchedulerLoop({ intervalMs: 60_000, queue, runner: agentRunner });

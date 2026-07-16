@@ -268,6 +268,18 @@
       "detailedDesc": "In-depth analysis with full context"
     }
   },
+  "watchlist": {
+    "title": "My watchlist",
+    "empty": "No symbols followed yet",
+    "hint": "Star a symbol on any report to follow it — you'll get an email whenever it appears in a new report.",
+    "follow": "Follow symbol (email alert on new signals)",
+    "unfollow": "Unfollow symbol",
+    "added": "{{symbol}} added to your watchlist",
+    "removed": "{{symbol}} removed from your watchlist",
+    "toggleFailed": "Failed to update watchlist",
+    "loadFailed": "Failed to load watchlist",
+    "removeFailed": "Failed to remove symbol"
+  },
   "reportChat": {
     "title": "Ask the analyst",
     "empty": "Ask a follow-up question about this report — the analyst answers grounded in the report and its sources.",

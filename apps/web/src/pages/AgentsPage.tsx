@@ -38,6 +38,7 @@ import {
 import { AgentForm } from '../components/AgentForm';
 import { AgentStatusCard } from '../components/AgentStatusCard';
 import { ThemePicker } from '../components/ThemePicker';
+import { WatchlistMenu } from '../components/WatchlistMenu';
 import { AgentReportsBrowser } from '../components/AgentReportsBrowser';
 import { AgentRunsBrowser } from '../components/AgentRunsBrowser';
 import { AgentPromptEditor } from '../components/AgentPromptEditor';
@@ -1841,6 +1842,7 @@ export function AgentsPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <WatchlistMenu />
             <ThemePicker />
             {/* User / account menu — admins get extra admin entries */}
             <Button

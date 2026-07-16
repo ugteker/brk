@@ -268,6 +268,18 @@
       "detailedDesc": "Tiefgreifende Analyse mit vollem Kontext"
     }
   },
+  "watchlist": {
+    "title": "Meine Watchlist",
+    "empty": "Noch keine Symbole gefolgt",
+    "hint": "Markiere ein Symbol in einem Report mit dem Stern, um ihm zu folgen — du bekommst eine E-Mail, sobald es in einem neuen Report auftaucht.",
+    "follow": "Symbol folgen (E-Mail-Alarm bei neuen Signalen)",
+    "unfollow": "Symbol nicht mehr folgen",
+    "added": "{{symbol}} zur Watchlist hinzugefügt",
+    "removed": "{{symbol}} von der Watchlist entfernt",
+    "toggleFailed": "Watchlist konnte nicht aktualisiert werden",
+    "loadFailed": "Watchlist konnte nicht geladen werden",
+    "removeFailed": "Symbol konnte nicht entfernt werden"
+  },
   "reportChat": {
     "title": "Analyst fragen",
     "empty": "Stelle eine Rückfrage zu diesem Report — der Analyst antwortet auf Basis des Reports und seiner Quellen.",

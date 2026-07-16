@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, Empty, Input, Progress, Tag, message } from 'antd';
-import { DownOutlined, MailOutlined, MessageOutlined, UpOutlined } from '@ant-design/icons';
+import { DownOutlined, MailOutlined, MessageOutlined, StarFilled, StarOutlined, UpOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { resendReportNotification, type RunReportDto, type SignalDto } from '../api/agents';
 import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { TradingViewSymbolChart } from './TradingViewSymbolChart';
 import { CharacterReportRenderer } from './CharacterReportRenderer';
 import { ReportChatPanel } from './ReportChatPanel';
+import { addToWatchlist, listWatchlist, removeFromWatchlist } from '../api/watchlist';
 
 interface AgentReportsBrowserProps {
   agentId: string;
@@ -105,6 +106,51 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
   const [expandedChartKey, setExpandedChartKey] = useState<string | null>(null);
   // Only one report's "Ask the analyst" chat is open at a time.
   const [openChatReportId, setOpenChatReportId] = useState<string | null>(null);
+  // The user's watched symbols (uppercase). Star toggles on signal tags follow/unfollow a symbol;
+  // followed symbols trigger an email alert whenever they appear in any new report.
+  const [watchedSymbols, setWatchedSymbols] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    listWatchlist()
+      .then((entries) => {
+        if (!cancelled) setWatchedSymbols(new Set(entries.map((entry) => entry.symbol)));
+      })
+      .catch(() => {
+        // Watchlist stars are a progressive enhancement - reports stay fully usable without them.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function onToggleWatch(symbol: string, event: React.MouseEvent) {
+    event.stopPropagation();
+    const normalized = symbol.trim().toUpperCase();
+    const isWatched = watchedSymbols.has(normalized);
+    // Optimistic toggle; reverted on failure.
+    setWatchedSymbols((prev) => {
+      const next = new Set(prev);
+      if (isWatched) { next.delete(normalized); } else { next.add(normalized); }
+      return next;
+    });
+    try {
+      if (isWatched) {
+        await removeFromWatchlist(normalized);
+        message.success(t('watchlist.removed', { symbol: normalized }));
+      } else {
+        await addToWatchlist(normalized);
+        message.success(t('watchlist.added', { symbol: normalized }));
+      }
+    } catch {
+      setWatchedSymbols((prev) => {
+        const next = new Set(prev);
+        if (isWatched) { next.add(normalized); } else { next.delete(normalized); }
+        return next;
+      });
+      message.error(t('watchlist.toggleFailed'));
+    }
+  }
   // Tracks user-overridden symbols (e.g. "AAPL" → "NASDAQ:AAPL") per chart key so the user can
   // fix "This symbol doesn't exist" errors by adding the exchange prefix themselves.
   const [symbolOverrides, setSymbolOverrides] = useState<Record<string, string>>({});
@@ -210,6 +256,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                 <div className="mt-1 flex flex-wrap gap-1">
                   {report.signals.map((signal) => {
                     const chartKey = `${report.id}:${signal.symbol}`;
+                    const isWatched = watchedSymbols.has(signal.symbol.trim().toUpperCase());
                     return (
                       <Tag
                         key={chartKey}
@@ -218,6 +265,16 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                         onClick={(event) => onToggleChart(chartKey, signal.symbol, event)}
                       >
                         {signal.symbol} · {signal.side === 'long' ? 'Long' : 'Short'}
+                        <TouchSafeTooltip title={isWatched ? t('watchlist.unfollow') : t('watchlist.follow')}>
+                          <span
+                            role="button"
+                            aria-label={isWatched ? t('watchlist.unfollow') : t('watchlist.follow')}
+                            style={{ marginLeft: 6, cursor: 'pointer' }}
+                            onClick={(event) => void onToggleWatch(signal.symbol, event)}
+                          >
+                            {isWatched ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
+                          </span>
+                        </TouchSafeTooltip>
                       </Tag>
                     );
                   })}

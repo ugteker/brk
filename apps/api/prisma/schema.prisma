@@ -153,6 +153,16 @@ model ReportChatMessage {
   @@index([reportId, userId, createdAt])
 }
 
+model WatchlistEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  symbol    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, symbol])
+  @@index([symbol])
+}
+
 model AgentSourceCursor {
   id                  String    @id @default(cuid())
   agentId             String
