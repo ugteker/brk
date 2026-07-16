@@ -38,12 +38,12 @@ trap cleanup TERM INT
 # run with the *old* schema from the volume — the Prisma client was compiled
 # from the new schema, causing column-not-found errors at runtime.
 cp /app/api/schema.prisma /app/api/prisma/schema.prisma
-# Sync the SQLite schema against the persisted /app/api/prisma volume before
-# starting the API. Uses `prisma db push` (schema sync, not migration
-# history) to match this repo's own dev-environment convention (see
-# docs/implementation/setup-and-run.md) — on a brand-new volume this creates
-# every table from scratch; on an existing volume it applies any schema
-# changes shipped since the last deploy. Safe to run on every boot.
+# Use an absolute DATABASE_URL so both `prisma db push` and the runtime Prisma
+# Client resolve to the exact same file. Without this, db push resolves
+# file:./dev.db relative to the schema file (/app/api/prisma/dev.db) while the
+# runtime client resolves it relative to CWD (/app/api/dev.db), causing
+# "table does not exist" on every startup despite db push succeeding.
+export DATABASE_URL="file:/app/api/prisma/dev.db"
 echo "[entrypoint] syncing database schema (prisma db push)..."
 (cd /app/api && node_modules/.bin/prisma db push --skip-generate --accept-data-loss)
 
