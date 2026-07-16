@@ -1999,7 +1999,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
               },
               {
                 key: 'sources',
-                label: t('nav.library'),
+                label: <span><DatabaseOutlined /> {t('nav.library')}</span>,
                 children: (
                   <Card
                     className="min-w-0"

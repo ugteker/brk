@@ -56,7 +56,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [agentsLoadState, setAgentsLoadState] = useState<LoadState>('idle');
   const [sources, setSources] = useState<SourceRecord[]>([]);
-  const [sourcesLoadState, setSourcesLoadState] = useState<LoadState>('loading');
+  const [sourcesLoadState, setSourcesLoadState] = useState<LoadState>('idle');
   const [playbooks, setPlaybooks] = useState<PlaybookRecord[]>([]);
   const [playbooksLoadState, setPlaybooksLoadState] = useState<LoadState>('idle');
   const [marketplaceAgents, setMarketplaceAgents] = useState<MarketplaceAgentListItem[]>([]);
@@ -125,12 +125,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           listPlaybooks()
         ]);
 
-        const [mkAgents, mkSources, mkPlaybooks] = await Promise.all([
-          listMarketplaceAgents().catch(() => []),
-          listMarketplaceSources().catch(() => []),
-          listMarketplacePlaybooks().catch(() => [])
-        ]);
-
         if (!alive) return;
 
         if (agentsResult.status === 'fulfilled') {
@@ -157,12 +151,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           setPlaybooksLoadState('error');
         }
 
-        setMarketplaceAgents(mkAgents);
-        setMarketplaceSources(mkSources);
-        setMarketplacePlaybooks(mkPlaybooks);
-        setMarketplaceAgentCount(mkAgents.length);
-        setMarketplaceSourceCount(mkSources.length);
-        setMarketplacePlaybookCount(mkPlaybooks.length);
+        // Load marketplace data separately — don't block main data on this
+        Promise.all([
+          listMarketplaceAgents().catch(() => [] as MarketplaceAgentListItem[]),
+          listMarketplaceSources().catch(() => [] as MarketplaceSourceListItem[]),
+          listMarketplacePlaybooks().catch(() => [] as MarketplacePlaybookListItem[])
+        ]).then(([mkAgents, mkSources, mkPlaybooks]) => {
+          if (!alive) return;
+          setMarketplaceAgents(mkAgents);
+          setMarketplaceSources(mkSources);
+          setMarketplacePlaybooks(mkPlaybooks);
+          setMarketplaceAgentCount(mkAgents.length);
+          setMarketplaceSourceCount(mkSources.length);
+          setMarketplacePlaybookCount(mkPlaybooks.length);
+        }).catch(() => { /* non-fatal */ });
       } catch (error) {
         if (!alive) return;
         if (isSignInRequiredError(error)) { await logout(); return; }
