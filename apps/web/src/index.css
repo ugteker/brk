@@ -68,4 +68,31 @@
   textarea.ant-input {
     font-size: 16px !important;
   }
+
+  /* Modals fill the screen on mobile */
+  .ant-modal {
+    max-width: calc(100vw - 24px) !important;
+    margin: 12px auto !important;
+    top: 12px !important;
+  }
+
+  .ant-modal-body {
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  /* Tabs scrollable on mobile */
+  .ant-tabs-nav-wrap {
+    overflow-x: auto;
+  }
+
+  /* Reduce card body padding */
+  .ant-card-body {
+    padding: 12px !important;
+  }
+
+  /* Header actions wrap on narrow screens */
+  .ct-header-actions {
+    gap: 6px !important;
+  }
 }

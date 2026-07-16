@@ -118,6 +118,14 @@ export class DiscussionRepository {
     return rows.map(mapDiscussion);
   }
 
+  async listScheduledDiscussions(): Promise<Discussion[]> {
+    const rows = await (this.db as any).discussion.findMany({
+      where: { NOT: { scheduleJson: null } },
+      include: { participants: true }
+    });
+    return rows.map(mapDiscussion);
+  }
+
   async updateDiscussion(discussionId: string, input: UpdateDiscussionInput): Promise<Discussion> {
     const data: any = {};
     if (input.name !== undefined) data.name = input.name;

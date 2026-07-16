@@ -81,9 +81,11 @@ export function extractJsonFromResponseText(text: string): string {
 
 export class ClaudeClient {
   private readonly client: ClaudeMessagesClient;
+  readonly messages: ClaudeMessagesClient['messages'];
 
   constructor(options: { apiKey?: string; client?: ClaudeMessagesClient } = {}) {
     this.client = options.client ?? (new Anthropic({ apiKey: options.apiKey }) as unknown as ClaudeMessagesClient);
+    this.messages = this.client.messages;
   }
 
   /**

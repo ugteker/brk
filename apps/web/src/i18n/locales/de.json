@@ -23,6 +23,9 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "feed": "Feed",
+    "feedEmpty": "Noch keine Berichte",
+    "feedEmptyDesc": "Sobald deine Playbooks die erste Analyse durchgeführt haben, erscheinen die Signale hier.",
     "library": "Bibliothek",
     "agents": "Agenten",
     "playbooks": "Playbooks",
@@ -32,7 +35,11 @@
     "logOut": "Abmelden",
     "openAdminArea": "Adminbereich öffnen",
     "modeDashboard": "Dashboard",
-    "modeAdmin": "Admin"
+    "modeAdmin": "Admin",
+    "bellLabel": "Benachrichtigungen",
+    "bellRunFailures": "Fehlgeschlagene Läufe",
+    "bellClearAll": "Alle löschen",
+    "bellEmpty": "Keine Fehler 🎉"
   },
   "language": {
     "switchTo": "Language: English",
@@ -77,7 +84,8 @@
     "tabNameRequired": "Tab-Name darf nicht leer sein",
     "reportSingular": "Bericht",
     "reportPlural": "Berichte",
-    "alreadyWatching": "Beobachtet bereits"
+    "alreadyWatching": "Beobachtet bereits",
+    "youtubeTranscriptNote": "Vollständige Transkripte können für diese Quelle vom Datacenter-IP nicht verfügbar sein — Fallback auf Shownotes."
   },
   "listen": {
     "listen": "Fasse zusammen",
@@ -95,7 +103,8 @@
     "stepSubtitle": "Wähle einen KI-Agenten, der diese Quelle zusammenfasst und Berichte erstellt. Noch kein Agent? Erstelle einen unten.",
     "stepPickSource": "Quelle wählen",
     "stepChooseAgent": "Agent wählen",
-    "stepSetSchedule": "Zeitplan festlegen"
+    "stepSetSchedule": "Zeitplan festlegen",
+    "advancedSettings": "Erweiterte Einstellungen (Zeitplan & Empfänger)"
   },
   "agent": {
     "createNew": "Neuen Analysten erstellen",
@@ -135,6 +144,7 @@
   },
   "schedule": {
     "intro": "Dein Agent scannt diese Quelle automatisch und erstellt Berichte nach dem unten festgelegten Zeitplan. Lege fest, wie oft er laufen und wer die Ergebnisse per E-Mail erhalten soll.",
+    "scheduleLabel": "Zeitplan",
     "mode": "Zeitplan",
     "interval": "Intervall",
     "daily": "Täglich",
@@ -210,7 +220,10 @@
     "emptyDesc": "Der Marktplatz ist aktuell leer. Füge eigene Quellen über die Bibliothek hinzu.",
     "noItems": "Keine Marketplace-Einträge gefunden.",
     "cloneButton": "Klonen",
-    "cloningButton": "Wird geklont…"
+    "cloningButton": "Wird geklont…",
+    "quickStartHeading": "Schnellstart vom Marktplatz",
+    "quickStartDesc": "Folge einem beliebten Playbook, um sofort deinen ersten Bericht zu erhalten.",
+    "followPlaybook": "Folgen"
   },
   "onboarding": {
     "gettingStarted": "Erste Schritte",
@@ -221,6 +234,9 @@
     "step2Desc": "Richte einen KI-Analysten mit Handelspersona und System-Prompt ein.",
     "step3": "Quelle folgen",
     "step3Desc": "Verbinde eine Quelle mit einem Analysten und einem Zeitplan für Berichte.",
+    "step4": "Ersten Bericht erhalten",
+    "step4Desc": "Starte einen manuellen Lauf oder warte auf den Zeitplan — dein erster Signal-Bericht erscheint hier.",
+    "allDone": "🎉 Alles eingerichtet! Berichte kommen planmäßig.",
     "dismiss": "Verstanden, schließen"
   },
   "runs": {
@@ -348,7 +364,27 @@
     "valueProp2": "🤖 Analysten erstellen — KI-Personas mit Handelsphilosophie",
     "valueProp3": "📬 Berichte erhalten — Automatische Signal-Berichte per E-Mail"
   },
+  "guided": {
+    "title": "Dein erster Bericht in 2 Minuten",
+    "step1": "Quelle hinzufügen",
+    "step2": "Persona wählen",
+    "step3": "Starten",
+    "step1Desc": "Füge eine YouTube-Kanal-URL, einen Podcast-Feed oder eine beliebige Website ein, die du verfolgen möchtest.",
+    "step2Desc": "Wähle eine Analysten-Persona — jede hat einen anderen Fokus und Stil.",
+    "step3Desc": "Wir erstellen deine Quelle, deinen Analysten und dein Playbook und starten die erste Analyse jetzt.",
+    "detectSource": "Quelle erkennen",
+    "summarySource": "Quelle",
+    "summaryPersona": "Analyst",
+    "runNow": "Erstellen & jetzt ausführen",
+    "success": "Dein erster Bericht läuft! Schau gleich in den Feed.",
+    "error": "Etwas ist schiefgelaufen. Versuche es erneut oder richte es manuell ein.",
+    "skip": "Überspringen — ich richte es manuell ein"
+  },
   "admin": {
+    "seedDemo": "Demo-Daten einspielen",
+    "seedDemoSuccess": "Demo-Daten eingespielt! Seite neu laden.",
+    "seedDemoAlreadyExists": "Demo-Daten wurden für dieses Konto bereits eingespielt.",
+    "seedDemoError": "Demo-Daten konnten nicht eingespielt werden.",
     "users": {
       "title": "Benutzerverwaltung",
       "loadingUsers": "Benutzer werden geladen…",
@@ -424,5 +460,35 @@
         "summarizer-action-planner":     { "name": "Aktionsplaner",       "tagline": "Wandelt Erkenntnisse in priorisierte Maßnahmen um.", "intro": "Erkenntnisse sind nutzlos, bis sie zu Handlungen werden. Ich verwandle Befunde in nächste Schritte." }
       }
     }
+  },
+  "studio": {
+    "title": "Studio",
+    "newDiscussion": "Neue Diskussion",
+    "emptyTitle": "Starte deine erste Diskussion",
+    "emptyDesc": "Wähle zwei oder mehr Agenten aus und lass sie ihre Erkenntnisse diskutieren. Das Transkript wird als neue Quelle in deiner Bibliothek gespeichert.",
+    "formatLabel": "Diskussionsformat",
+    "format_free_form": "Freie Unterhaltung",
+    "format_structured": "Strukturierte Runden",
+    "format_hosted": "Moderiert (Moderator + Gäste)",
+    "format_hybrid": "Hybrid",
+    "runNow": "Jetzt ausführen",
+    "runAgain": "Erneut ausführen",
+    "renderAudio": "Audio-Podcast rendern",
+    "audioRendering": "Audio wird gerendert…",
+    "transcript": "Transkript",
+    "audioPlayer": "Audio",
+    "noRuns": "Noch keine Läufe — klicke auf \"Jetzt ausführen\" um die erste Diskussion zu starten.",
+    "participants": "Teilnehmer",
+    "wizardStep1": "Agenten wählen",
+    "wizardStep2": "Konfigurieren",
+    "wizardStep3": "Zeitplan",
+    "minParticipants": "Mindestens 2 Agenten auswählen",
+    "voiceLabel": "Stimme",
+    "roleLabel": "Rolle",
+    "roleHost": "Moderator",
+    "roleSpeaker": "Sprecher",
+    "scheduleOptional": "Zeitplan (optional)",
+    "syntheticBadge": "Synthetisch",
+    "discussionSuggestion": "{{agentA}} und {{agentB}} haben beide {{source}} analysiert — Diskussion starten?"
   }
 }

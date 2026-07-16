@@ -64,3 +64,12 @@ export async function deleteUser(userId: string): Promise<void> {
     throw new Error(await parseErrorMessage(response, 'Failed to remove user'));
   }
 }
+
+export async function seedDemoData(): Promise<void> {
+  const response = await fetch('/api/admin/seed-demo', { method: 'POST', credentials: 'same-origin' });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    if (body?.code === 'already_exists') throw new Error('already_exists');
+    throw new Error(await parseErrorMessage(response, 'Failed to seed demo data'));
+  }
+}

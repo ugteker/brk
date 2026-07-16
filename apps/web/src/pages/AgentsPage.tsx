@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Badge, Button, Card, Dropdown, Empty, Input, Layout, Modal, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
+import { Badge, Button, Card, Dropdown, Empty, Input, Layout, Modal, Popover, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
   AudioOutlined,
   AudioMutedOutlined,
+  BellOutlined,
   CheckCircleOutlined,
   DashboardOutlined,
   DollarOutlined,
@@ -48,6 +50,9 @@ import { EpisodePickerModal } from '../components/EpisodePickerModal';
 import { TouchSafeTooltip } from '../components/TouchSafeTooltip';
 import { AdminUsersPage } from './AdminUsersPage';
 import { SymbolPerformancePage } from './SymbolPerformancePage';
+import { seedDemoData } from '../api/admin';
+import { useAgentStream } from '../hooks/useAgentStream';
+import { useAppData } from '../context/AppDataContext';
 import {
   createAgent,
   deleteAgent,
@@ -72,9 +77,6 @@ import {
   cloneMarketplaceAgent,
   cloneMarketplacePlaybook,
   cloneMarketplaceSource,
-  listMarketplaceAgents,
-  listMarketplacePlaybooks,
-  listMarketplaceSources,
   type MarketplaceAgentListItem,
   type MarketplacePlaybookListItem,
   type MarketplaceSourceListItem
@@ -109,11 +111,6 @@ import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PR
 const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 
-// How often to poll for run/report updates while an agent's detail view is open - frequent
-// enough that pending/running runs (from the scheduler or a manual trigger) and newly-completed
-// reports show up promptly without a manual page refresh, without hammering the API.
-const RUNS_POLL_INTERVAL_MS = 4000;
-
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const TIMEZONE_OPTIONS = [
   { value: 'UTC', label: 'UTC' },
@@ -123,7 +120,7 @@ const TIMEZONE_OPTIONS = [
   { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
   { value: 'Asia/Tokyo', label: 'Asia/Tokyo' }
 ];
-type HubKey = 'sources' | 'agents' | 'playbooks';
+type HubKey = 'feed' | 'sources' | 'agents' | 'playbooks';
 type ProbeKind = 'feed' | 'listing_page' | 'single_page' | 'unknown';
 interface LibraryTabRecord {
   id: string;
@@ -150,6 +147,9 @@ function SourceTypeBadge({ type }: { type: string }) {
   if (type === 'youtube_videos') return <YouTubeLogo />;
   if (type === 'podcast_feeds') return (
     <Tag icon={<AudioOutlined />} color="purple" className="m-0">Podcast</Tag>
+  );
+  if (type === 'synthetic_discussion') return (
+    <Tag icon={<AudioOutlined />} color="geekblue" className="m-0">🎙 Synthetic</Tag>
   );
   return <Tag icon={<GlobalOutlined />} className="m-0">Web</Tag>;
 }
@@ -405,9 +405,23 @@ function hasEpisodicSource(agent: AgentSummary): boolean {
   return agent.sources.some((source) => source.type === 'podcast_feeds' || source.type === 'youtube_videos');
 }
 
-export function AgentsPage() {
+export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const { user, isAdmin, logout } = useAuth();
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
+  const {
+    agents, setAgents,
+    sources, setSources,
+    playbooks, setPlaybooks,
+    agentsLoadState: loadState,
+    sourcesLoadState,
+    playbooksLoadState,
+    marketplaceAgents, setMarketplaceAgents: _setMarketplaceAgents,
+    marketplaceSources, setMarketplaceSources: _setMarketplaceSources,
+    marketplacePlaybooks, setMarketplacePlaybooks: _setMarketplacePlaybooks,
+    marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
+    refreshAgents: _refreshAgents, refreshSources: _refreshSources, refreshPlaybooks: _refreshPlaybooks
+  } = useAppData();
   const [showAdminWorkspace, setShowAdminWorkspace] = useState(false);
   const [showAdminUsers, setShowAdminUsers] = useState(false);
   const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
@@ -416,12 +430,8 @@ export function AgentsPage() {
     null
   );
   const [isLoadingEditTarget, setIsLoadingEditTarget] = useState(false);
-  const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [agentsSearch, setAgentsSearch] = useState('');
-  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [reports, setReports] = useState<RunReportDto[]>([]);
-  const [runs, setRuns] = useState<RunDetailDto[]>([]);
   const [prompt, setPrompt] = useState<PromptVersionDto | null>(null);
   const [togglingAgentId, setTogglingAgentId] = useState<string | null>(null);
   const [togglingPlaybookId, setTogglingPlaybookId] = useState<string | null>(null);
@@ -433,9 +443,16 @@ export function AgentsPage() {
   const [activePlaybookTab, setActivePlaybookTab] = useState('reports');
   const [highlightedReportId, setHighlightedReportId] = useState<string | null>(null);
   const [hasAppliedSymbolDeepLink, setHasAppliedSymbolDeepLink] = useState(false);
-  const [activeHub, setActiveHub] = useState<HubKey>('sources');
-  const [sources, setSources] = useState<SourceRecord[]>([]);
-  const [sourcesLoadState, setSourcesLoadState] = useState<'idle' | 'loading' | 'error'>('loading');
+  const [activeHub, setActiveHubState] = useState<HubKey>(initialHub ?? 'feed');
+  const [feedReports, setFeedReports] = useState<Array<RunReportDto & { agentName: string; playbookName: string }>>([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+
+  const HUB_TO_PATH: Record<HubKey, string> = { feed: '/', sources: '/library', agents: '/agents', playbooks: '/playbooks' };
+
+  function setActiveHub(hub: HubKey) {
+    setActiveHubState(hub);
+    navigate(HUB_TO_PATH[hub], { replace: true });
+  }
   const [sourcesSearch, setSourcesSearch] = useState('');
   const [libraryTabs, setLibraryTabs] = useState<LibraryTabRecord[]>([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
   const [activeLibraryTabId, setActiveLibraryTabId] = useState(DEFAULT_LIBRARY_TAB_ID);
@@ -454,8 +471,6 @@ export function AgentsPage() {
   const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [recentlyUpdatedSourceId, setRecentlyUpdatedSourceId] = useState<string | null>(null);
   const updatedHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [playbooks, setPlaybooks] = useState<PlaybookRecord[]>([]);
-  const [playbooksLoadState, setPlaybooksLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [playbooksSearch, setPlaybooksSearch] = useState('');
   const [selectedPlaybookId, setSelectedPlaybookId] = useState<string | null>(null);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
@@ -512,13 +527,7 @@ export function AgentsPage() {
   const [showSourcesMarketplace, setShowSourcesMarketplace] = useState(false);
   const [showPlaybooksMarketplace, setShowPlaybooksMarketplace] = useState(false);
   const [showAgentsMarketplace, setShowAgentsMarketplace] = useState(false);
-  const [marketplaceAgents, setMarketplaceAgents] = useState<MarketplaceAgentListItem[]>([]);
-  const [marketplaceSources, setMarketplaceSources] = useState<MarketplaceSourceListItem[]>([]);
-  const [marketplacePlaybooks, setMarketplacePlaybooks] = useState<MarketplacePlaybookListItem[]>([]);
   const [cloningPublicationId, setCloningPublicationId] = useState<string | null>(null);
-  const [marketplaceAgentCount, setMarketplaceAgentCount] = useState(0);
-  const [marketplaceSourceCount, setMarketplaceSourceCount] = useState(0);
-  const [marketplacePlaybookCount, setMarketplacePlaybookCount] = useState(0);
   const [marketplaceAgentsSearch, setMarketplaceAgentsSearch] = useState('');
   const [marketplacePlaybooksSearch, setMarketplacePlaybooksSearch] = useState('');
   const [accessGrantCount, setAccessGrantCount] = useState(0);
@@ -526,7 +535,23 @@ export function AgentsPage() {
     localStorage.getItem('chattrader:onboarding:dismissed') === '1'
   );
   const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
+  const [failedRunNotices, setFailedRunNotices] = useState<Array<{ runId: string; agentId: string; agentName: string; errorMessage: string | null; timestamp: string }>>([]);
+  const [bellDismissedIds, setBellDismissedIds] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('chattrader:bell:dismissed') ?? '[]')); } catch { return new Set(); }
+  });
+  const [bellOpen, setBellOpen] = useState(false);
   const [usageModalOpen, setUsageModalOpen] = useState(false);
+  const [guidedWizardOpen, setGuidedWizardOpen] = useState(false);
+  const [guidedWizardStep, setGuidedWizardStep] = useState(0);
+  const [guidedWizardUrl, setGuidedWizardUrl] = useState('');
+  const [guidedWizardDetecting, setGuidedWizardDetecting] = useState(false);
+  const [guidedWizardSource, setGuidedWizardSource] = useState<AutoDetectedSource | null>(null);
+  const [guidedWizardPersonaId, setGuidedWizardPersonaId] = useState('finance_expert');
+  const [guidedWizardRunning, setGuidedWizardRunning] = useState(false);
+  const [guidedWizardDismissed, setGuidedWizardDismissed] = useState(() =>
+    localStorage.getItem('chattrader:guided-wizard:dismissed') === '1'
+  );
+  const [wizardShowAdvanced, setWizardShowAdvanced] = useState(false);
 
   /** Set of source IDs the current user already has an active playbook for. */
   const followedSourceIds = useMemo(
@@ -534,9 +559,10 @@ export function AgentsPage() {
     [playbooks]
   );
 
-  function isSignInRequiredError(error: unknown): boolean {
-    return error instanceof Error && /sign in required|unauthenticated/i.test(error.message);
-  }
+  /** Onboarding step completion */
+  const onboardingHasFirstReport = agents.some((a) => (a.reportCount ?? 0) > 0);
+  const onboardingAllDone = sources.length > 0 && agents.length > 0 && playbooks.length > 0 && onboardingHasFirstReport;
+  const onboardingDataLoaded = sourcesLoadState !== 'loading' && loadState !== 'loading' && playbooksLoadState !== 'loading';
 
   function libraryTabsStorageKey(): string {
     return `chattrader:library-tabs:${user?.id ?? 'anonymous'}`;
@@ -611,186 +637,99 @@ export function AgentsPage() {
     setEditingLibraryTabName('');
   }
 
+  // Keep these as wrappers so existing call sites work; actual data management is in AppDataContext
   async function refreshSources() {
-    try {
-      setSourcesLoadState('loading');
-      const response = await listSources();
-      setSources(response);
-      reconcileSourceLibraries(response);
-      setSourcesLoadState('idle');
-    } catch (error) {
-      if (isSignInRequiredError(error)) {
-        await logout();
-        return;
-      }
-      setSourcesLoadState('error');
-    }
+    await _refreshSources();
+    reconcileSourceLibraries(sources);
   }
 
   async function refreshPlaybooks() {
-    try {
-      setPlaybooksLoadState('loading');
-      const response = await listPlaybooks();
-      setPlaybooks(response);
-      setPlaybooksLoadState('idle');
-    } catch (error) {
-      if (isSignInRequiredError(error)) {
-        await logout();
-        return;
-      }
+    return _refreshPlaybooks();
+  }
 
-      useEffect(() => {
-        try {
-          const savedTabs = window.localStorage.getItem(libraryTabsStorageKey());
-          const parsedTabs = savedTabs ? JSON.parse(savedTabs) : null;
-          const normalizedTabs = normalizeLibraryTabs(parsedTabs);
-          setLibraryTabs(normalizedTabs);
-
-          const savedAssignments = window.localStorage.getItem(libraryAssignmentsStorageKey());
-          const parsedAssignments = savedAssignments ? JSON.parse(savedAssignments) : {};
-          if (parsedAssignments && typeof parsedAssignments === 'object') {
-            setSourceLibraryBySourceId(parsedAssignments as Record<string, string>);
-          } else {
-            setSourceLibraryBySourceId({});
-          }
-          setActiveLibraryTabId((current) =>
-            normalizedTabs.some((tab) => tab.id === current) ? current : DEFAULT_LIBRARY_TAB_ID
-          );
-        } catch {
-          setLibraryTabs([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
-          setActiveLibraryTabId(DEFAULT_LIBRARY_TAB_ID);
-          setSourceLibraryBySourceId({});
-        }
-      }, [user?.id]);
-
-      useEffect(() => {
-        try {
-          window.localStorage.setItem(libraryTabsStorageKey(), JSON.stringify(libraryTabs));
-          window.localStorage.setItem(libraryAssignmentsStorageKey(), JSON.stringify(sourceLibraryBySourceId));
-        } catch {
-          // ignore storage failures
-        }
-      }, [libraryTabs, sourceLibraryBySourceId, user?.id]);
-      setPlaybooksLoadState('error');
-    }
+  async function refreshAgents() {
+    return _refreshAgents();
   }
 
   async function refreshMarketplaceCounts() {
+    // Marketplace counts now come from AppDataContext — no-op here
+  }
+
+
+  // Auto-dismiss onboarding checklist once all 4 steps are complete
+  useEffect(() => {
+    if (onboardingAllDone && onboardingDataLoaded && !onboardingDismissed && !forceShowOnboarding) {
+      localStorage.setItem('chattrader:onboarding:dismissed', '1');
+      setOnboardingDismissed(true);
+    }
+  }, [onboardingAllDone, onboardingDataLoaded, onboardingDismissed, forceShowOnboarding]);
+
+  // Open guided first-run wizard for truly new users (nothing set up yet, not dismissed)
+  useEffect(() => {
+    if (!onboardingDataLoaded) return;
+    if (guidedWizardDismissed) return;
+    if (sources.length > 0 || agents.length > 0 || playbooks.length > 0) return;
+    setGuidedWizardOpen(true);
+  }, [onboardingDataLoaded, guidedWizardDismissed, sources.length, agents.length, playbooks.length]);
+
+  // Load library tabs and source assignments from localStorage
+  useEffect(() => {
     try {
-      const [sourceItems, playbookItems, agentItems] = await Promise.all([
-        listMarketplaceSources().catch(() => []),
-        listMarketplacePlaybooks().catch(() => []),
-        listMarketplaceAgents().catch(() => [])
-      ]);
-      setMarketplaceAgentCount(agentItems.length);
-      setMarketplaceSourceCount(sourceItems.length);
-      setMarketplacePlaybookCount(playbookItems.length);
-      setMarketplaceAgents(agentItems);
-      setMarketplaceSources(sourceItems);
-      setMarketplacePlaybooks(playbookItems);
+      const savedTabs = window.localStorage.getItem(libraryTabsStorageKey());
+      const parsedTabs = savedTabs ? JSON.parse(savedTabs) : null;
+      const normalizedTabs = normalizeLibraryTabs(parsedTabs);
+      setLibraryTabs(normalizedTabs);
+      const savedAssignments = window.localStorage.getItem(libraryAssignmentsStorageKey());
+      const parsedAssignments = savedAssignments ? JSON.parse(savedAssignments) : {};
+      if (parsedAssignments && typeof parsedAssignments === 'object') {
+        setSourceLibraryBySourceId(parsedAssignments as Record<string, string>);
+      } else {
+        setSourceLibraryBySourceId({});
+      }
+      setActiveLibraryTabId((current) =>
+        normalizedTabs.some((tab) => tab.id === current) ? current : DEFAULT_LIBRARY_TAB_ID
+      );
     } catch {
-      setMarketplaceAgentCount(0);
-      setMarketplaceSourceCount(0);
-      setMarketplacePlaybookCount(0);
+      setLibraryTabs([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
+      setActiveLibraryTabId(DEFAULT_LIBRARY_TAB_ID);
+      setSourceLibraryBySourceId({});
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
-
-  async function refreshAgents() {
+  // Persist library tabs and source assignments to localStorage
+  useEffect(() => {
     try {
-      setLoadState('loading');
-      const response = await listAgents();
-      setAgents(response);
-      setLoadState('idle');
-    } catch (error) {
-      if (isSignInRequiredError(error)) {
-        await logout();
-        return;
-      }
-      setLoadState('error');
+      window.localStorage.setItem(libraryTabsStorageKey(), JSON.stringify(libraryTabs));
+      window.localStorage.setItem(libraryAssignmentsStorageKey(), JSON.stringify(sourceLibraryBySourceId));
+    } catch {
+      // ignore storage failures
     }
-  }
+  }, [libraryTabs, sourceLibraryBySourceId, user?.id]);
 
+  // Load the reports feed — latest reports across all agents linked to my playbooks
   useEffect(() => {
+    const agentIds = [...new Set(playbooks.map((p) => p.agentId).filter(Boolean))];
+    if (agentIds.length === 0) { setFeedReports([]); return; }
     let alive = true;
-    async function load() {
-      try {
-        setLoadState('loading');
-        const response = await listAgents();
-        if (!alive) return;
-        setAgents(response);
-        setLoadState('idle');
-      } catch {
-        if (!alive) return;
-        setLoadState('error');
-      }
-    }
-
-    load();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    async function loadHubData() {
-      try {
-        setSourcesLoadState('loading');
-        setPlaybooksLoadState('loading');
-        const [sourcesResult, playbooksResult] = await Promise.allSettled([
-          listSources(),
-          listPlaybooks()
-        ]);
-        const [marketplaceSources, marketplacePlaybooks, marketplaceAgents] = await Promise.all([
-          listMarketplaceSources().catch(() => []),
-          listMarketplacePlaybooks().catch(() => []),
-          listMarketplaceAgents().catch(() => [])
-        ]);
-        if (!alive) return;
-        if (sourcesResult.status === 'fulfilled') {
-          setSources(sourcesResult.value);
-          reconcileSourceLibraries(sourcesResult.value);
-          setSourcesLoadState('idle');
-        } else {
-          if (isSignInRequiredError(sourcesResult.reason)) {
-            await logout();
-            return;
-          }
-          setSourcesLoadState('error');
-        }
-
-        if (playbooksResult.status === 'fulfilled') {
-          setPlaybooks(playbooksResult.value);
-          setPlaybooksLoadState('idle');
-        } else {
-          if (isSignInRequiredError(playbooksResult.reason)) {
-            await logout();
-            return;
-          }
-          setPlaybooksLoadState('error');
-        }
-
-        setMarketplaceAgentCount(marketplaceAgents.length);
-        setMarketplaceSourceCount(marketplaceSources.length);
-        setMarketplacePlaybookCount(marketplacePlaybooks.length);
-        setMarketplaceAgents(marketplaceAgents);
-      } catch (error) {
-        if (!alive) return;
-        if (isSignInRequiredError(error)) {
-          await logout();
-          return;
-        }
-        setSourcesLoadState('error');
-        setPlaybooksLoadState('error');
-      }
-    }
-
-    loadHubData();
-    return () => {
-      alive = false;
-    };
-  }, []);
+    setFeedLoading(true);
+    Promise.all(
+      agentIds.map(async (agentId) => {
+        const reps = await listAgentReports(agentId).catch(() => []);
+        const agent = agents.find((a) => a.id === agentId);
+        const agentName = agent?.name ?? agentId;
+        const playbook = playbooks.find((p) => p.agentId === agentId);
+        const playbookName = playbook?.name ?? '';
+        return reps.map((r) => ({ ...r, agentName, playbookName }));
+      })
+    ).then((nested) => {
+      if (!alive) return;
+      const flat = nested.flat().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setFeedReports(flat);
+      setFeedLoading(false);
+    }).catch(() => { if (alive) setFeedLoading(false); });
+    return () => { alive = false; };
+  }, [playbooks, agents]);
 
   // Applies a symbol deep link from a report notification email (?agentId=&symbol=), which opens
   // straight into that agent's SymbolPerformancePage. Runs once agents have loaded (so we can
@@ -830,36 +769,23 @@ export function AgentsPage() {
   const selectedPlaybook = playbooks.find((playbook) => playbook.id === selectedPlaybookId) ?? null;
   const executionAgentId = selectedPlaybook?.agentId ?? null;
 
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // SSE stream — replaces the old 4s polling interval
+  const { runs, setRuns, reports, setReports } = useAgentStream(executionAgentId);
 
+  // Accumulate failed runs into the bell notification centre (driven by SSE updates)
   useEffect(() => {
-    if (!executionAgentId) return;
-    let alive = true;
-
-    function stopPolling() {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-    }
-
-    async function refreshPlaybookExecution() {
-      const [agentReports, agentRuns] = await Promise.all([listAgentReports(executionAgentId), listAgentRuns(executionAgentId)]);
-      if (!alive) return;
-      setReports(agentReports);
-      setRuns(agentRuns);
-      // Stop polling when no runs are active — poll resumes automatically when executionAgentId changes or a manual run is triggered
-      const hasActiveRuns = agentRuns.some((r) => r.status === 'running' || r.status === 'queued');
-      if (!hasActiveRuns) stopPolling();
-    }
-
-    refreshPlaybookExecution();
-    pollIntervalRef.current = setInterval(refreshPlaybookExecution, RUNS_POLL_INTERVAL_MS);
-    return () => {
-      alive = false;
-      stopPolling();
-    };
-  }, [executionAgentId]);
+    const failedRuns = runs.filter((r) => r.status === 'failed');
+    if (failedRuns.length === 0) return;
+    const agentName = agents.find((a) => a.id === executionAgentId)?.name ?? executionAgentId ?? '';
+    setFailedRunNotices((prev) => {
+      const existingIds = new Set(prev.map((n) => n.runId));
+      const newNotices = failedRuns
+        .filter((r) => !existingIds.has(r.id))
+        .map((r) => ({ runId: r.id, agentId: executionAgentId!, agentName, errorMessage: r.errorMessage ?? null, timestamp: r.finishedAt ?? r.startedAt ?? '' }));
+      return newNotices.length > 0 ? [...prev, ...newNotices] : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runs]);
 
   // Load reports + runs for the selected source (merged from all agents analyzing it)
   useEffect(() => {
@@ -947,19 +873,7 @@ export function AgentsPage() {
 
   async function executeRun(agent: AgentSummary, forcedEpisode?: ForcedEpisodeSelection) {
     setRunningAgentId(agent.id);
-    // Re-arm polling for this agent's playbook if it was stopped
-    if (executionAgentId === agent.id && !pollIntervalRef.current) {
-      pollIntervalRef.current = setInterval(async () => {
-        const [agentReports, agentRuns] = await Promise.all([listAgentReports(agent.id), listAgentRuns(agent.id)]);
-        setReports(agentReports);
-        setRuns(agentRuns);
-        const hasActiveRuns = agentRuns.some((r) => r.status === 'running' || r.status === 'queued');
-        if (!hasActiveRuns && pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-        }
-      }, RUNS_POLL_INTERVAL_MS);
-    }
+    // SSE stream drives live updates; no manual polling re-arm needed
     try {
       const result = await runAgentNow(agent.id, forcedEpisode);
       if (result.status === 'failed') {
@@ -969,10 +883,6 @@ export function AgentsPage() {
       } else {
         message.success('Agent run completed');
         setSourceDetailRefreshKey((k) => k + 1);
-      }
-      if (executionAgentId === agent.id) {
-        const [agentReports] = await Promise.all([listAgentReports(agent.id)]);
-        setReports(agentReports);
       }
       await refreshAgents();
     } catch (err) {
@@ -1106,6 +1016,7 @@ export function AgentsPage() {
     setInlineAgentStep(0);
     setInlineAgentValidationError(null);
     setConfirmingUnfollow(false);
+    setWizardShowAdvanced(false);
   }
 
   function openInlineAgentCreate() {
@@ -1272,12 +1183,11 @@ export function AgentsPage() {
           : playbookScheduleModeDraft === 'weekly'
             ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
             : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
-      // In follow mode the schedule draft is never shown/edited, so use the default for new
-      // playbooks; in admin-hub mode use the explicit draft values.
-      const scheduleForNew = followWizardSourcePreselected ? defaultSchedule : explicitSchedule;
+      // In follow mode use advanced draft values if expanded, otherwise defaults.
+      const scheduleForNew = followWizardSourcePreselected && !wizardShowAdvanced ? defaultSchedule : explicitSchedule;
       const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
-      // Recipients for new playbooks in follow mode: default to current user email
-      const recipientsForNew = followWizardSourcePreselected ? (user?.email ? [user.email] : []) : cleanedRecipients;
+      // Recipients for new playbooks: advanced-mode uses draft; streamlined follow mode defaults to current user email.
+      const recipientsForNew = (followWizardSourcePreselected && !wizardShowAdvanced) ? (user?.email ? [user.email] : []) : cleanedRecipients;
       if (editingPlaybookId) {
         // Admin-hub edit mode: update the explicit playbook + diff agent selection
         const agentId = wizardFocusedAgentId ?? playbookAgentIdsDraft[0] ?? '';
@@ -1796,13 +1706,13 @@ export function AgentsPage() {
     setEditingAgent(null);
     setShowAdminWorkspace(false);
     setShowAdminUsers(false);
-    setActiveHub('sources');
+    setActiveHub('feed');
     setSelectedPlaybookId(null);
   }
 
   return (
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
-      <Header style={{ background: 'transparent', height: 'auto', padding: '24px 24px 0' }}>
+      <Header style={{ background: 'transparent', height: 'auto', padding: 'clamp(12px, 3vw, 24px) clamp(12px, 3vw, 24px) 0' }}>
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div style={{ minWidth: 0 }}>
             <Title
@@ -1844,7 +1754,7 @@ export function AgentsPage() {
               )
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="ct-header-actions flex items-center gap-2 flex-wrap justify-end">
             <WatchlistMenu />
             <ThemePicker />
             {/* User / account menu — admins get extra admin entries */}
@@ -1857,6 +1767,54 @@ export function AgentsPage() {
             >
               {t('language.current')}
             </Button>
+            {/* Notifications bell — shows failed run count */}
+            {(() => {
+              const unread = failedRunNotices.filter((n) => !bellDismissedIds.has(n.runId));
+              return (
+                <Popover
+                  open={bellOpen}
+                  onOpenChange={setBellOpen}
+                  trigger="click"
+                  title={
+                    <div className="flex items-center justify-between gap-4">
+                      <span>{t('nav.bellRunFailures')}</span>
+                      {failedRunNotices.length > 0 && (
+                        <Button
+                          size="small"
+                          type="text"
+                          onClick={() => {
+                            const newSet = new Set(failedRunNotices.map((n) => n.runId));
+                            setBellDismissedIds(newSet);
+                            localStorage.setItem('chattrader:bell:dismissed', JSON.stringify([...newSet]));
+                          }}
+                        >
+                          {t('nav.bellClearAll')}
+                        </Button>
+                      )}
+                    </div>
+                  }
+                  content={
+                    <div className="w-72 space-y-2 max-h-80 overflow-y-auto">
+                      {failedRunNotices.length === 0 ? (
+                        <p className="text-xs text-gray-400 py-2 text-center">{t('nav.bellEmpty')}</p>
+                      ) : (
+                        [...failedRunNotices].reverse().map((n) => (
+                          <div key={n.runId} className={`rounded-lg border px-3 py-2 text-xs ${bellDismissedIds.has(n.runId) ? 'opacity-40 border-gray-200' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'}`}>
+                            <p className="font-semibold text-red-700 dark:text-red-300 truncate">{n.agentName}</p>
+                            <p className="text-red-500 dark:text-red-400 truncate">{n.errorMessage ?? 'Run failed'}</p>
+                            {n.timestamp ? <p className="text-gray-400 mt-0.5">{new Date(n.timestamp).toLocaleString()}</p> : null}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  }
+                >
+                  <Badge count={unread.length} size="small">
+                    <Button shape="circle" icon={<BellOutlined />} aria-label={t('nav.bellLabel')} />
+                  </Badge>
+                </Popover>
+              );
+            })()}
             <Dropdown
               trigger={['click']}
               menu={{
@@ -1898,6 +1856,24 @@ export function AgentsPage() {
                         setActiveHub('sources');
                       }
                     },
+                    {
+                      key: 'admin-seed-demo',
+                      label: t('admin.seedDemo'),
+                      icon: <DatabaseOutlined />,
+                      onClick: async () => {
+                        try {
+                          await seedDemoData();
+                          message.success(t('admin.seedDemoSuccess'));
+                          await Promise.all([refreshAgents(), refreshSources(), refreshPlaybooks()]);
+                        } catch (err: unknown) {
+                          if (err instanceof Error && err.message === 'already_exists') {
+                            message.info(t('admin.seedDemoAlreadyExists'));
+                          } else {
+                            message.error(t('admin.seedDemoError'));
+                          }
+                        }
+                      }
+                    },
                     { type: 'divider' as const }
                   ] : []),
                   {
@@ -1925,7 +1901,7 @@ export function AgentsPage() {
           </div>
         </div>
       </Header>
-      <Content style={{ padding: 24 }}>
+      <Content style={{ padding: 'clamp(12px, 3vw, 24px)' }}>
         {showAdminWorkspace && showAdminUsers ? (
           <AdminUsersPage onBack={() => setShowAdminUsers(false)} />
         ) : viewingSymbol && (selectedAgent || executionAgentId) ? (
@@ -1939,18 +1915,98 @@ export function AgentsPage() {
           <Tabs
             activeKey={activeHub}
             onChange={(key) => setActiveHub(key as HubKey)}
-            tabBarStyle={showAdminWorkspace ? undefined : { display: 'none' }}
+            tabBarStyle={showAdminWorkspace ? undefined : undefined}
+            tabBarExtraContent={
+              <Button
+                type="text"
+                icon={<AudioOutlined />}
+                onClick={() => navigate('/studio')}
+                style={{ color: '#722ed1' }}
+              >
+                {t('studio.title')}
+              </Button>
+            }
             items={[
               {
+                key: 'feed',
+                label: <span><FileTextOutlined /> {t('nav.feed')}</span>,
+                children: (
+                  <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}>📊 {t('nav.feed')}</Title>}>
+                    {feedLoading ? (
+                      <div className="space-y-3">
+                        {[1,2,3].map(i => <Skeleton key={i} active paragraph={{ rows: 2 }} />)}
+                      </div>
+                    ) : feedReports.length === 0 ? (
+                      <div className="flex flex-col items-center gap-4 py-12 text-center">
+                        <span className="text-5xl">📊</span>
+                        <div>
+                          <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('nav.feedEmpty')}</p>
+                          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('nav.feedEmptyDesc')}</p>
+                        </div>
+                        <Button type="primary" onClick={() => setActiveHub('sources')}>{t('nav.library')}</Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {feedReports.slice(0, 30).map((report) => {
+                          const signals = report.signals ?? [];
+                          const bullCount = signals.filter((s) => s.side === 'long').length;
+                          const bearCount = signals.filter((s) => s.side === 'short').length;
+                          return (
+                            <div
+                              key={report.id}
+                              className="rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3 hover:border-blue-200 dark:hover:border-blue-700 cursor-pointer transition-colors"
+                              onClick={() => {
+                                const pb = playbooks.find((p) => p.agentId === report.agentId);
+                                if (pb) {
+                                  setSelectedPlaybookId(pb.id);
+                                  setActiveHub('sources');
+                                  setActivePlaybookTab('reports');
+                                  setHighlightedReportId(report.id);
+                                }
+                              }}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">{report.agentName}</span>
+                                    {report.playbookName && <Tag className="m-0 text-xs">{report.playbookName}</Tag>}
+                                  </div>
+                                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{report.summary}</p>
+                                </div>
+                                <div className="flex flex-col items-end gap-1 shrink-0">
+                                  <span className="text-xs text-gray-400">{new Date(report.createdAt).toLocaleDateString()}</span>
+                                  <div className="flex gap-1">
+                                    {bullCount > 0 && <Tag color="green" className="m-0 text-xs">▲ {bullCount}</Tag>}
+                                    {bearCount > 0 && <Tag color="red" className="m-0 text-xs">▼ {bearCount}</Tag>}
+                                  </div>
+                                </div>
+                              </div>
+                              {signals.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {signals.slice(0, 6).map((s, i) => (
+                                    <Tag key={i} color={s.side === 'long' ? 'green' : s.side === 'short' ? 'red' : 'default'} className="m-0 text-xs">{s.symbol}</Tag>
+                                  ))}
+                                  {signals.length > 6 && <Tag className="m-0 text-xs text-gray-400">+{signals.length - 6}</Tag>}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Card>
+                )
+              },
+              {
                 key: 'sources',
-                label: t('nav.dashboard'),
+                label: t('nav.library'),
                 children: (
                   <Card
                     className="min-w-0"
-                    title={<Title level={4} style={{ margin: 0 }}>{t('nav.dashboard')}</Title>}
+                    title={<Title level={4} style={{ margin: 0 }}>{t('nav.library')}</Title>}
                   >
-                   {/* First-run onboarding checklist — shown only when all 3 hubs are empty and not dismissed */}
-                   {(forceShowOnboarding || (!onboardingDismissed && !showAdminWorkspace && sourcesLoadState !== 'loading' && loadState !== 'loading' && playbooksLoadState !== 'loading' && sources.length === 0 && agents.length === 0 && playbooks.length === 0)) ? (
+                   {/* First-run onboarding checklist — shown until all 4 steps complete or dismissed */}
+                   {(forceShowOnboarding || (!onboardingDismissed && !showAdminWorkspace && onboardingDataLoaded && !onboardingAllDone)) ? (
                      <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950 px-5 py-4">
                        <div className="flex items-start justify-between gap-3">
                          <div className="min-w-0">
@@ -1974,6 +2030,7 @@ export function AgentsPage() {
                            { done: sources.length > 0, label: t('onboarding.step1'), desc: t('onboarding.step1Desc'), action: () => { setEditingSource(null); setIsSourceCreateOpen(true); setSourceUrlDraft(''); setAutoDetectedSource(null); } },
                            { done: agents.length > 0, label: t('onboarding.step2'), desc: t('onboarding.step2Desc'), action: () => { setActiveHub('agents'); setShowAdminWorkspace(true); } },
                            { done: playbooks.length > 0, label: t('onboarding.step3'), desc: t('onboarding.step3Desc'), action: () => openPlaybookCreate() },
+                           { done: onboardingHasFirstReport, label: t('onboarding.step4'), desc: t('onboarding.step4Desc'), action: () => setActiveHub('feed') },
                          ].map((step, i) => (
                            <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 ${step.done ? 'opacity-50' : 'bg-white dark:bg-indigo-900'}`}>
                              <span className="text-lg shrink-0">{step.done ? '✅' : '⬜'}</span>
@@ -2594,6 +2651,9 @@ export function AgentsPage() {
                                  <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
                                ) : null}
                              </div>
+                             {source.type === 'youtube_videos' ? (
+                               <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">⚠️ {t('library.youtubeTranscriptNote')}</p>
+                             ) : null}
                            </div>
                          </div>
                          <div className="mt-3 text-xs text-gray-700">
@@ -3233,6 +3293,34 @@ export function AgentsPage() {
                             )}
                           </div>
                         ) : null}
+                        {/* Marketplace quick-start strip — shown when empty and marketplace has items */}
+                        {playbooksLoadState !== 'loading' && filteredPlaybooks.length === 0 && marketplacePlaybooks.length > 0 ? (
+                          <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950 px-5 py-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <CompassOutlined className="text-sky-500" />
+                              <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{t('marketplace.quickStartHeading')}</p>
+                            </div>
+                            <p className="text-xs text-sky-600 dark:text-sky-400 mb-3">{t('marketplace.quickStartDesc')}</p>
+                            <div className="space-y-2">
+                              {marketplacePlaybooks.slice(0, 3).map((item) => (
+                                <div key={item.publicationId} className="flex items-center justify-between gap-3 rounded-lg bg-white dark:bg-sky-900 px-3 py-2">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">{item.title}</p>
+                                    <p className="text-xs text-gray-500 truncate">{item.summary || item.playbook.name}</p>
+                                  </div>
+                                  <Button
+                                    size="small"
+                                    type="primary"
+                                    loading={cloningPublicationId === item.publicationId}
+                                    onClick={() => onCloneMarketplacePlaybook(item.publicationId)}
+                                  >
+                                    {t('marketplace.followPlaybook')}
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="grid gap-3 sm:grid-cols-2">
                           {filteredPlaybooks.map((playbook) => (
                             <Card
@@ -3375,7 +3463,7 @@ export function AgentsPage() {
         onCancel={onCancelPlaybookCreate}
         footer={null}
         destroyOnHidden
-        width={720}
+        width="min(720px, 95vw)"
       >
         <div className="space-y-3">
           {/* Unified steps indicator — morphs between pick-agent path and create-agent path */}
@@ -3470,6 +3558,7 @@ export function AgentsPage() {
             </div>
           ) : null}
           {playbookCreateStep === 1 ? (
+            <>
             <div className="space-y-3">
               {/* Hide agent selection grid when the inline creation sub-wizard is active */}
               {!showInlineAgentCreate ? (
@@ -3802,6 +3891,93 @@ export function AgentsPage() {
                 );
               })() : null}
             </div>
+
+            {/* Advanced settings for follow-source mode (replaces the separate step 2) */}
+            {playbookCreateStep === 1 && followWizardSourcePreselected && !showInlineAgentCreate ? (
+              <div className="border-t pt-3">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  onClick={() => setWizardShowAdvanced((v) => !v)}
+                >
+                  <span>{wizardShowAdvanced ? '▾' : '▸'}</span>
+                  <span>{t('listen.advancedSettings')}</span>
+                </button>
+                {wizardShowAdvanced ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="text-xs text-gray-500 mb-1">{t('schedule.scheduleLabel')}</div>
+                    <Select
+                      aria-label={t('schedule.mode')}
+                      value={playbookScheduleModeDraft}
+                      onChange={(value) => setPlaybookScheduleModeDraft(value as 'interval' | 'daily' | 'weekly')}
+                      options={[
+                        { value: 'interval', label: t('schedule.interval') },
+                        { value: 'daily', label: t('schedule.daily') },
+                        { value: 'weekly', label: t('schedule.weekly') }
+                      ]}
+                    />
+                    {playbookScheduleModeDraft === 'interval' ? (
+                      <Input
+                        aria-label={t('schedule.intervalAriaLabel')}
+                        value={String(playbookIntervalMinutesDraft)}
+                        onChange={(event) => setPlaybookIntervalMinutesDraft(Math.max(15, Number(event.currentTarget.value) || 60))}
+                        placeholder={t('schedule.intervalPlaceholder')}
+                      />
+                    ) : (
+                      <>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <Input
+                            aria-label={t('schedule.dailyTimeAriaLabel')}
+                            value={playbookDailyTimeDraft}
+                            onChange={(event) => setPlaybookDailyTimeDraft(event.currentTarget.value)}
+                            placeholder="HH:mm"
+                          />
+                          <Select
+                            aria-label={t('schedule.timezoneAriaLabel')}
+                            value={playbookTimezoneDraft}
+                            onChange={(value) => setPlaybookTimezoneDraft(value)}
+                            options={TIMEZONE_OPTIONS}
+                            placeholder={t('schedule.timezonePlaceholder')}
+                            showSearch
+                            className="w-full"
+                          />
+                        </div>
+                        {playbookScheduleModeDraft === 'weekly' ? (
+                          <Select
+                            aria-label={t('schedule.daysOfWeekAriaLabel')}
+                            mode="multiple"
+                            value={playbookDaysOfWeekDraft}
+                            onChange={(values) => setPlaybookDaysOfWeekDraft(values as number[])}
+                            options={[
+                              { value: 1, label: t('schedule.days.mon') },
+                              { value: 2, label: t('schedule.days.tue') },
+                              { value: 3, label: t('schedule.days.wed') },
+                              { value: 4, label: t('schedule.days.thu') },
+                              { value: 5, label: t('schedule.days.fri') },
+                              { value: 6, label: t('schedule.days.sat') },
+                              { value: 0, label: t('schedule.days.sun') }
+                            ]}
+                          />
+                        ) : null}
+                      </>
+                    )}
+                    <div className="space-y-1">
+                      <div className="text-xs font-medium text-gray-700 dark:text-gray-300">{t('schedule.recipients')}</div>
+                      <Select
+                        aria-label={t('schedule.recipients')}
+                        mode="tags"
+                        value={playbookRecipientsDraft}
+                        onChange={(values) => setPlaybookRecipientsDraft(values as string[])}
+                        tokenSeparators={[',', ' ']}
+                        placeholder={t('schedule.recipientsPlaceholder')}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            </>
           ) : null}
           {playbookCreateStep === 2 ? (
             <>
@@ -3995,7 +4171,7 @@ export function AgentsPage() {
         onCancel={() => { setIsScheduleEditOpen(false); setScheduleEditPlaybook(null); }}
         footer={null}
         destroyOnHidden
-        width={480}
+        width="min(480px, 95vw)"
       >
         <div className="space-y-4 pt-2">
           <Select
@@ -4090,6 +4266,202 @@ export function AgentsPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Guided first-report wizard — shown to brand-new users with zero setup */}
+      <Modal
+        title={<span className="flex items-center gap-2"><RocketOutlined className="text-blue-500" /> {t('guided.title')}</span>}
+        open={guidedWizardOpen}
+        onCancel={() => {
+          setGuidedWizardOpen(false);
+          localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
+          setGuidedWizardDismissed(true);
+        }}
+        footer={null}
+        destroyOnHidden
+        width="min(600px, 95vw)"
+      >
+        <Steps
+          current={guidedWizardStep}
+          size="small"
+          className="mb-6"
+          items={[
+            { title: t('guided.step1') },
+            { title: t('guided.step2') },
+            { title: t('guided.step3') },
+          ]}
+        />
+
+        {guidedWizardStep === 0 && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step1Desc')}</p>
+            <Input
+              size="large"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={guidedWizardUrl}
+              onChange={(e) => setGuidedWizardUrl(e.currentTarget.value)}
+              prefix={<LinkOutlined />}
+              onPressEnter={async () => {
+                const url = guidedWizardUrl.trim();
+                if (!url) return;
+                setGuidedWizardDetecting(true);
+                try {
+                  const candidates = detectSourceTypeCandidates(url);
+                  let best: AutoDetectedSource | null = null;
+                  let bestScore = -1;
+                  for (const candidate of candidates) {
+                    try {
+                      const probe = await probeSource({ type: candidate, value: url, maxItems: 5 });
+                      const score = probeRankScore(probe as { reachable: boolean; kind: ProbeKind; confidence?: number }, candidate);
+                      if (score > bestScore) { bestScore = score; best = { type: candidate, url, kind: probe.kind, title: probe.title, coverImageUrl: probe.coverImageUrl, itemCount: probe.itemCount, previewItems: (probe.previewItems ?? []).slice(0, 5) }; }
+                      if (probe.reachable && probe.kind !== 'unknown') break;
+                    } catch { /* try next */ }
+                  }
+                  if (!best) { message.error(t('source.probeError')); return; }
+                  setGuidedWizardSource(best);
+                  setGuidedWizardStep(1);
+                } catch { message.error(t('source.probeError')); }
+                finally { setGuidedWizardDetecting(false); }
+              }}
+            />
+            <Button
+              type="primary"
+              block
+              size="large"
+              loading={guidedWizardDetecting}
+              disabled={!guidedWizardUrl.trim()}
+              onClick={async () => {
+                const url = guidedWizardUrl.trim();
+                if (!url) return;
+                setGuidedWizardDetecting(true);
+                try {
+                  const candidates = detectSourceTypeCandidates(url);
+                  let best: AutoDetectedSource | null = null;
+                  let bestScore = -1;
+                  for (const candidate of candidates) {
+                    try {
+                      const probe = await probeSource({ type: candidate, value: url, maxItems: 5 });
+                      const score = probeRankScore(probe as { reachable: boolean; kind: ProbeKind; confidence?: number }, candidate);
+                      if (score > bestScore) { bestScore = score; best = { type: candidate, url, kind: probe.kind, title: probe.title, coverImageUrl: probe.coverImageUrl, itemCount: probe.itemCount, previewItems: (probe.previewItems ?? []).slice(0, 5) }; }
+                      if (probe.reachable && probe.kind !== 'unknown') break;
+                    } catch { /* try next */ }
+                  }
+                  if (!best) { message.error(t('source.probeError')); return; }
+                  setGuidedWizardSource(best);
+                  setGuidedWizardStep(1);
+                } catch { message.error(t('source.probeError')); }
+                finally { setGuidedWizardDetecting(false); }
+              }}
+            >
+              {t('guided.detectSource')}
+            </Button>
+            <Button
+              block
+              onClick={() => {
+                setGuidedWizardOpen(false);
+                localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
+                setGuidedWizardDismissed(true);
+              }}
+            >
+              {t('guided.skip')}
+            </Button>
+          </div>
+        )}
+
+        {guidedWizardStep === 1 && guidedWizardSource && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950 px-4 py-3">
+              <p className="text-sm font-semibold text-green-800 dark:text-green-200">✅ {guidedWizardSource.title ?? guidedWizardUrl}</p>
+              <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">{guidedWizardSource.type}</p>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step2Desc')}</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {PROMPT_PERSONAS.map((persona) => (
+                <div
+                  key={persona.id}
+                  onClick={() => setGuidedWizardPersonaId(persona.id)}
+                  className={`cursor-pointer rounded-lg border-2 px-3 py-2 transition-colors ${guidedWizardPersonaId === persona.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'}`}
+                >
+                  <p className="text-sm font-semibold">{persona.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{persona.description}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => setGuidedWizardStep(0)}>{t('common.back')}</Button>
+              <Button type="primary" block onClick={() => setGuidedWizardStep(2)}>{t('common.next')}</Button>
+            </div>
+          </div>
+        )}
+
+        {guidedWizardStep === 2 && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step3Desc')}</p>
+            <div className="rounded-lg border border-gray-100 dark:border-gray-800 px-4 py-3 space-y-1">
+              <p className="text-xs text-gray-500">{t('guided.summarySource')}: <span className="font-medium text-gray-700 dark:text-gray-200">{guidedWizardSource?.title ?? guidedWizardUrl}</span></p>
+              <p className="text-xs text-gray-500">{t('guided.summaryPersona')}: <span className="font-medium text-gray-700 dark:text-gray-200">{PROMPT_PERSONAS.find(p => p.id === guidedWizardPersonaId)?.name ?? guidedWizardPersonaId}</span></p>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => setGuidedWizardStep(1)}>{t('common.back')}</Button>
+              <Button
+                type="primary"
+                block
+                icon={<CaretRightOutlined />}
+                loading={guidedWizardRunning}
+                onClick={async () => {
+                  setGuidedWizardRunning(true);
+                  try {
+                    // 1. Create source
+                    if (!guidedWizardSource) return;
+                    const newSource = await createSource({
+                      type: guidedWizardSource.type as SourceType,
+                      value: guidedWizardSource.url,
+                      metadata: {
+                        title: guidedWizardSource.title,
+                        coverImageUrl: guidedWizardSource.coverImageUrl ?? null,
+                        itemCount: guidedWizardSource.itemCount,
+                        previewItems: (guidedWizardSource.previewItems ?? []).map((item) => ({ title: item.title, link: item.link ?? undefined, pubDate: item.pubDate }))
+                      }
+                    });
+                    // 2. Create agent
+                    const newAgent = await createAgent({
+                      name: PROMPT_PERSONAS.find(p => p.id === guidedWizardPersonaId)?.name ?? guidedWizardPersonaId,
+                      characterType: guidedWizardPersonaId as import('../api/agents').CharacterType,
+                      preferences: {},
+                    }) as import('../api/agents').AgentSummary;
+                    // 3. Create playbook linking them
+                    await createPlaybook({
+                      name: `${guidedWizardSource.title ?? 'My Source'} — ${newAgent.name}`,
+                      agentId: newAgent.id,
+                      sourceIds: [newSource.id],
+                      recipients: user?.email ? [user.email] : [],
+                      schedule: { mode: 'daily', dailyTime: '08:00', timezone: 'UTC' },
+                      language: 'en',
+                    });
+                    // 4. Refresh data
+                    await Promise.all([refreshAgents()]);
+                    const [newSources, newPlaybooks] = await Promise.all([listSources(), listPlaybooks()]);
+                    setSources(newSources);
+                    setPlaybooks(newPlaybooks);
+                    // 5. Run immediately
+                    await runAgentNow(newAgent.id).catch(() => null);
+                    message.success(t('guided.success'));
+                    setGuidedWizardOpen(false);
+                    localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
+                    setGuidedWizardDismissed(true);
+                    setActiveHub('feed');
+                  } catch (err) {
+                    message.error(err instanceof Error ? err.message : t('guided.error'));
+                  } finally {
+                    setGuidedWizardRunning(false);
+                  }
+                }}
+              >
+                {t('guided.runNow')}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </Layout>
   );

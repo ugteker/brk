@@ -204,6 +204,37 @@ async function start() {
 
   startSchedulerLoop({ intervalMs: 60_000, queue, runner: agentRunner });
   startDigestLoop({ store: new PrismaDigestStore(prisma), mailer });
+
+  // Discussion scheduler: check every 60s for scheduled discussions due to run
+  setInterval(async () => {
+    try {
+      const scheduled = await discussionRepository.listScheduledDiscussions();
+      const now = Date.now();
+      for (const d of scheduled) {
+        if (!d.scheduleJson) continue;
+        let schedule: { mode: string; intervalMinutes?: number; dailyTime?: string; timezone?: string; lastRunAt?: number };
+        try { schedule = JSON.parse(d.scheduleJson); } catch { continue; }
+        const lastRun = schedule.lastRunAt ?? 0;
+        let dueMs = Infinity;
+        if (schedule.mode === 'interval' && schedule.intervalMinutes) {
+          dueMs = lastRun + schedule.intervalMinutes * 60_000;
+        } else if (schedule.mode === 'daily' && schedule.dailyTime) {
+          const [hh, mm] = schedule.dailyTime.split(':').map(Number);
+          const nextRun = new Date();
+          nextRun.setHours(hh, mm, 0, 0);
+          if (nextRun.getTime() <= lastRun) nextRun.setDate(nextRun.getDate() + 1);
+          dueMs = nextRun.getTime();
+        }
+        if (now >= dueMs) {
+          const run = await discussionRepository.createRun(d.id, 'scheduled');
+          await discussionOrchestrator.run(d.id, run.id);
+          const updated = { ...JSON.parse(d.scheduleJson), lastRunAt: now };
+          await discussionRepository.updateDiscussion(d.id, { scheduleJson: JSON.stringify(updated) });
+        }
+      }
+    } catch { /* non-fatal */ }
+  }, 60_000);
+
   await app.listen({ port: 3000, host: '0.0.0.0' });
 }
 
