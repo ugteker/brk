@@ -434,6 +434,17 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [highlightedReportId, setHighlightedReportId] = useState<string | null>(null);
   const [hasAppliedSymbolDeepLink, setHasAppliedSymbolDeepLink] = useState(false);
   const [activeHub, setActiveHubState] = useState<HubKey>(initialHub ?? 'feed');
+
+  // AppShell's nav buttons navigate via <Router> directly (not through setActiveHub below),
+  // and React Router keeps this same AgentsPage instance mounted across "/", "/library",
+  // "/agents", "/playbooks" (same component/route element). Without this sync, activeHub
+  // would only ever reflect its initial mount value and clicking e.g. Library in the shell
+  // would change the URL but never switch the visible panel.
+  useEffect(() => {
+    if (initialHub) {
+      setActiveHubState((prev) => (prev === initialHub ? prev : initialHub));
+    }
+  }, [initialHub]);
   const [feedReports, setFeedReports] = useState<Array<RunReportDto & { agentName: string; playbookName: string }>>([]);
   const [feedLoading, setFeedLoading] = useState(false);
 
