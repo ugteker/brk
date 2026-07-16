@@ -37,6 +37,7 @@ import { ReportChatRepository, ReportChatService } from './modules/reports/chat'
 import { WatchlistRepository } from './modules/watchlist/repository';
 import { WatchlistNotifier } from './modules/watchlist/notifier';
 import { PrismaUsageStore, UsageService } from './modules/usage/budget';
+import { DiscussionRepository } from './modules/discussion/repository';
 import { logger } from './lib/logger';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
@@ -177,7 +178,12 @@ async function start() {
     },
     runTrigger: manualRunTrigger,
     watchlist: { watchlistRepository },
-    usage: { usageService }
+    usage: { usageService },
+    discussion: {
+      discussionRepository: new DiscussionRepository(prisma),
+      // runTrigger wired after orchestrator is created in Task 4/5
+    },
+    db: prisma
   });
 
   startSchedulerLoop({ intervalMs: 60_000, queue, runner: agentRunner });
