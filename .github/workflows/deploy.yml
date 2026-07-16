@@ -58,8 +58,8 @@ jobs:
             export VITE_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             export VITE_BUILD_COMMIT_SHA="$(git rev-parse --short HEAD)"
             docker compose build --no-cache
-            docker compose up -d --remove-orphans
+            docker compose up -d --force-recreate --remove-orphans
             sleep 5
-            docker compose logs chattrader --tail 50 | grep -o 'https://[a-zA-Z0-9.-]*\.trycloudflare\.com' | tail -n 1 || true
+            docker compose logs chattrader --tail 20
         env:
           HETZNER_APP_ENV: ${{ secrets.HETZNER_APP_ENV }}
