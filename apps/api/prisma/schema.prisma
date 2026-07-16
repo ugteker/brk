@@ -209,6 +209,7 @@ model Source {
   playbooks  PlaybookSource[]
   accessGrants AccessGrant[]
   marketplacePublications MarketplacePublication[]
+  items      SourceItem[]
 
   @@unique([ownerUserId, type, value])
 }
@@ -307,4 +308,69 @@ model MarketplacePublication {
 
   @@index([resourceType, resourceId])
   @@index([publisherUserId, status, visibility])
+}
+
+model SourceItem {
+  id          String   @id @default(cuid())
+  sourceId    String
+  title       String
+  content     String
+  link        String
+  publishedAt DateTime
+  createdAt   DateTime @default(now())
+  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+}
+
+model Discussion {
+  id                String   @id @default(cuid())
+  ownerUserId       String
+  name              String
+  description       String   @default("")
+  format            String   @default("free_form")
+  formatConfigJson  String   @default("{}")
+  scheduleJson      String?
+  syntheticSourceId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  participants      DiscussionParticipant[]
+  runs              DiscussionRun[]
+}
+
+model DiscussionParticipant {
+  id             String   @id @default(cuid())
+  discussionId   String
+  agentId        String
+  role           String   @default("speaker")
+  voiceId        String   @default("alloy")
+  speakerOrder   Int      @default(0)
+  discussion     Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  turns          DiscussionTurn[]
+}
+
+model DiscussionRun {
+  id                    String    @id @default(cuid())
+  discussionId          String
+  status                String    @default("pending")
+  triggeredBy           String    @default("manual")
+  errorMessage          String?
+  startedAt             DateTime?
+  completedAt           DateTime?
+  syntheticSourceItemId String?
+  audioUrl              String?
+  createdAt             DateTime  @default(now())
+  discussion            Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  turns                 DiscussionTurn[]
+}
+
+model DiscussionTurn {
+  id               String   @id @default(cuid())
+  discussionRunId  String
+  participantId    String
+  turnIndex        Int
+  segmentLabel     String?
+  content          String
+  audioUrl         String?
+  createdAt        DateTime @default(now())
+  run              DiscussionRun         @relation(fields: [discussionRunId], references: [id], onDelete: Cascade)
+  participant      DiscussionParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
 }
