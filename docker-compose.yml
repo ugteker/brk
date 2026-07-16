@@ -19,6 +19,7 @@ services:
       - .env
     environment:
       NODE_ENV: production
+      DATABASE_URL: "file:/app/api/prisma/dev.db"
     volumes:
       - api-data:/app/api/prisma
     # Published on the host so the server's public IP works directly
