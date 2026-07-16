@@ -36,6 +36,8 @@
     "openAdminArea": "Adminbereich öffnen",
     "modeDashboard": "Dashboard",
     "modeAdmin": "Admin",
+    "adminModeEnable": "Zum Admin-Modus wechseln",
+    "adminModeDisable": "Zum Dashboard-Modus wechseln",
     "bellLabel": "Benachrichtigungen",
     "bellRunFailures": "Fehlgeschlagene Läufe",
     "bellClearAll": "Alle löschen",
@@ -237,7 +239,9 @@
     "step4": "Ersten Bericht erhalten",
     "step4Desc": "Starte einen manuellen Lauf oder warte auf den Zeitplan — dein erster Signal-Bericht erscheint hier.",
     "allDone": "🎉 Alles eingerichtet! Berichte kommen planmäßig.",
-    "dismiss": "Verstanden, schließen"
+    "dismiss": "Verstanden, schließen",
+    "showPreview": "Onboarding-Vorschau",
+    "hidePreview": "Onboarding-Vorschau ausblenden"
   },
   "runs": {
     "noRuns": "Noch kein Verlauf. Der Verlauf erscheint hier, sobald der Zeitplan des Agenten startet (oder du manuell ausführst).",

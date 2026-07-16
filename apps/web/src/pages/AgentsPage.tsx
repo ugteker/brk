@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Badge, Button, Card, Dropdown, Empty, Input, Layout, Modal, Popover, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
+import { Badge, Button, Card, Dropdown, Empty, Input, Modal, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
   AudioOutlined,
   AudioMutedOutlined,
-  BellOutlined,
   CheckCircleOutlined,
-  DashboardOutlined,
-  DollarOutlined,
   LoadingOutlined,
   MailOutlined,
   BulbOutlined,
@@ -24,7 +21,6 @@ import {
   FileTextOutlined,
   GlobalOutlined,
   LinkOutlined,
-  LogoutOutlined,
   PlusCircleOutlined,
   PlusOutlined,
   PauseCircleOutlined,
@@ -33,22 +29,16 @@ import {
   RobotOutlined,
   RocketOutlined,
   SearchOutlined,
-  SettingOutlined,
   TeamOutlined,
-  ToolOutlined,
-  UserOutlined
+  ToolOutlined
 } from '@ant-design/icons';
 import { AgentForm } from '../components/AgentForm';
 import { AgentStatusCard } from '../components/AgentStatusCard';
-import { ThemePicker } from '../components/ThemePicker';
-import { WatchlistMenu } from '../components/WatchlistMenu';
-import { UsageBudgetModal } from '../components/UsageBudgetModal';
 import { AgentReportsBrowser } from '../components/AgentReportsBrowser';
 import { AgentRunsBrowser } from '../components/AgentRunsBrowser';
 import { AgentPromptEditor } from '../components/AgentPromptEditor';
 import { EpisodePickerModal } from '../components/EpisodePickerModal';
 import { TouchSafeTooltip } from '../components/TouchSafeTooltip';
-import { AdminUsersPage } from './AdminUsersPage';
 import { SymbolPerformancePage } from './SymbolPerformancePage';
 import { seedDemoData } from '../api/admin';
 import { useAgentStream } from '../hooks/useAgentStream';
@@ -108,7 +98,6 @@ import { EntityActions } from '../components/EntityActions';
 import { InlineDeleteButton } from '../components/InlineDeleteButton';
 import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID } from '../data/prompt-personas';
 
-const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -422,10 +411,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
     refreshAgents: _refreshAgents, refreshSources: _refreshSources, refreshPlaybooks: _refreshPlaybooks,
     failedRunNotices, setFailedRunNotices,
-    bellDismissedIds
+    bellDismissedIds,
+    forceShowOnboarding
   } = useAppData();
-  const [showAdminWorkspace, setShowAdminWorkspace] = useState(initialHub === 'agents' || initialHub === 'playbooks');
-  const [showAdminUsers, setShowAdminUsers] = useState(false);
   const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
   const [editingAgent, setEditingAgent] = useState<{ detail: AgentDetail; prompt: PromptVersionDto | null } | null>(
@@ -455,6 +443,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setActiveHubState(hub);
     navigate(HUB_TO_PATH[hub], { replace: true });
   }
+  // Derived (not separate state) so navigating via AppShell's Agents/Playbooks nav buttons
+  // always keeps this in sync with the active route — no manual toggle needed.
+  const showAdminWorkspace = activeHub === 'agents' || activeHub === 'playbooks';
   const [sourcesSearch, setSourcesSearch] = useState('');
   const [libraryTabs, setLibraryTabs] = useState<LibraryTabRecord[]>([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
   const [activeLibraryTabId, setActiveLibraryTabId] = useState(DEFAULT_LIBRARY_TAB_ID);
@@ -536,7 +527,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [onboardingDismissed, setOnboardingDismissed] = useState(() =>
     localStorage.getItem('chattrader:onboarding:dismissed') === '1'
   );
-  const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
   const [guidedWizardOpen, setGuidedWizardOpen] = useState(false);
   const [guidedWizardStep, setGuidedWizardStep] = useState(0);
   const [guidedWizardUrl, setGuidedWizardUrl] = useState('');
@@ -1694,67 +1684,19 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   // Resets every overlay/detail view back to the plain agent-list dashboard - used by the
   // clickable app-name header so it works as a "home" link from anywhere (agent detail, wizard,
-  // symbol performance page, admin users page).
+  // symbol performance page).
   function goToDashboard() {
     setSelectedAgentId(null);
     setViewingSymbol(null);
     setIsCreatingAgent(false);
     setEditingAgent(null);
-    setShowAdminWorkspace(false);
-    setShowAdminUsers(false);
     setActiveHub('feed');
     setSelectedPlaybookId(null);
   }
 
   return (
     <>
-      {/* Admin toolbar — only visible to admin users, stays in page content */}
-      {isAdmin && (
-        <div className="mx-auto max-w-6xl mb-2 flex flex-wrap items-center gap-2 px-1">
-          <Tag color={showAdminWorkspace ? 'orange' : 'green'} icon={<SettingOutlined />} style={{ fontSize: 12 }}>
-            {showAdminWorkspace ? t('nav.modeAdmin') : t('nav.modeDashboard')}
-          </Tag>
-          <Button
-            size="small"
-            icon={showAdminWorkspace ? <ArrowLeftOutlined /> : <RocketOutlined />}
-            onClick={() => {
-              if (showAdminWorkspace) {
-                setShowAdminWorkspace(false);
-                setShowAdminUsers(false);
-                setActiveHub('sources');
-              } else {
-                setShowAdminWorkspace(true);
-                setActiveHub('agents');
-              }
-            }}
-          >
-            {showAdminWorkspace ? t('common.back') : t('nav.agentsAndPlaybooks')}
-          </Button>
-          {showAdminWorkspace && (
-            <Button
-              size="small"
-              icon={<TeamOutlined />}
-              onClick={() => { setShowAdminWorkspace(true); setShowAdminUsers(true); }}
-            >
-              {t('nav.userManagement')}
-            </Button>
-          )}
-          <Button
-            size="small"
-            icon={<RobotOutlined />}
-            onClick={() => {
-              setForceShowOnboarding((prev) => !prev);
-              setShowAdminWorkspace(false);
-              setActiveHub('sources');
-            }}
-          >
-            {forceShowOnboarding ? 'Hide onboarding preview' : 'Preview onboarding'}
-          </Button>
-        </div>
-      )}
-      {showAdminWorkspace && showAdminUsers ? (
-        <AdminUsersPage onBack={() => setShowAdminUsers(false)} />
-      ) : viewingSymbol && (selectedAgent || executionAgentId) ? (
+      {viewingSymbol && (selectedAgent || executionAgentId) ? (
         <SymbolPerformancePage
           agentId={selectedAgent?.id ?? executionAgentId!}
           symbol={viewingSymbol}
@@ -1868,7 +1810,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                        <div className="mt-3 space-y-2">
                          {[
                            { done: sources.length > 0, label: t('onboarding.step1'), desc: t('onboarding.step1Desc'), action: () => { setEditingSource(null); setIsSourceCreateOpen(true); setSourceUrlDraft(''); setAutoDetectedSource(null); } },
-                           { done: agents.length > 0, label: t('onboarding.step2'), desc: t('onboarding.step2Desc'), action: () => { setActiveHub('agents'); setShowAdminWorkspace(true); } },
+                           { done: agents.length > 0, label: t('onboarding.step2'), desc: t('onboarding.step2Desc'), action: () => setActiveHub('agents') },
                            { done: playbooks.length > 0, label: t('onboarding.step3'), desc: t('onboarding.step3Desc'), action: () => openPlaybookCreate() },
                            { done: onboardingHasFirstReport, label: t('onboarding.step4'), desc: t('onboarding.step4Desc'), action: () => setActiveHub('feed') },
                          ].map((step, i) => (

@@ -36,6 +36,8 @@
     "openAdminArea": "Open admin area",
     "modeDashboard": "Dashboard",
     "modeAdmin": "Admin",
+    "adminModeEnable": "Switch to admin mode",
+    "adminModeDisable": "Switch to dashboard mode",
     "bellLabel": "Notifications",
     "bellRunFailures": "Run failures",
     "bellClearAll": "Clear all",
@@ -237,7 +239,9 @@
     "step4": "Receive your first report",
     "step4Desc": "Trigger a manual run or wait for the schedule — your first signal report will appear here.",
     "allDone": "🎉 You're all set! Reports will arrive on schedule.",
-    "dismiss": "Got it, dismiss"
+    "dismiss": "Got it, dismiss",
+    "showPreview": "Preview onboarding",
+    "hidePreview": "Hide onboarding preview"
   },
   "runs": {
     "noRuns": "No history yet. Analysis history appears here once the agent's schedule kicks in (or you trigger a manual run).",

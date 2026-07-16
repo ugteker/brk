@@ -52,6 +52,10 @@ export interface AppDataContextValue {
   setFailedRunNotices: React.Dispatch<React.SetStateAction<FailedRunNotice[]>>;
   bellDismissedIds: Set<string>;
   setBellDismissedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  forceShowOnboarding: boolean;
+  setForceShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
+  adminMode: boolean;
+  setAdminMode: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -81,6 +85,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [bellDismissedIds, setBellDismissedIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('chattrader:bell:dismissed') ?? '[]')); } catch { return new Set(); }
   });
+  // In-memory only — resets on refresh, no localStorage (QA/preview tool, not a persisted preference).
+  const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
+  // Admin-only nav visibility toggle (User Management/Agents/Playbooks). Persisted so it survives
+  // reloads, but only ever shown/usable for admin users.
+  const [adminMode, setAdminMode] = useState(() => localStorage.getItem('chattrader:adminMode') === '1');
   const initialLoadRef = useRef(false);
 
   function isSignInRequiredError(error: unknown): boolean {
@@ -187,6 +196,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     initialLoad();
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem('chattrader:adminMode', adminMode ? '1' : '0');
+  }, [adminMode]);
+
   const value: AppDataContextValue = {
     agents, agentsLoadState,
     sources, sourcesLoadState,
@@ -196,7 +209,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     refreshAgents, refreshSources, refreshPlaybooks,
     setAgents, setSources, setPlaybooks,
     failedRunNotices, setFailedRunNotices,
-    bellDismissedIds, setBellDismissedIds
+    bellDismissedIds, setBellDismissedIds,
+    forceShowOnboarding, setForceShowOnboarding,
+    adminMode, setAdminMode
   };
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
