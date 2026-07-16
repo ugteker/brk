@@ -6,6 +6,16 @@
   to { stroke-dashoffset: -40; }
 }
 
+@keyframes robot-pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.3); }
+}
+
+.robot-pulse {
+  animation: robot-pulse 2s ease-in-out infinite;
+  display: inline-block;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

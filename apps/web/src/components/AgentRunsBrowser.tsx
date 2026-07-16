@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Alert, Button, Card, Empty, Progress, Tag, Typography } from 'antd';
 import { DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { artifactDownloadUrl, type RunDetailDto } from '../api/agents';
 import { isHttpUrl } from '../utils/links';
 
@@ -60,6 +61,7 @@ function formatDuration(durationMs: number | null): string {
 }
 
 export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrowserProps) {
+  const { t } = useTranslation();
   const [expandedArtifactIds, setExpandedArtifactIds] = useState<Set<string>>(new Set());
   const [now, setNow] = useState(() => Date.now());
 
@@ -86,7 +88,7 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
   }
 
   if (runs.length === 0) {
-    return <Empty description="No runs yet. Run history appears here once the agent's schedule kicks in (or you trigger a manual run)." />;
+    return <Empty description={t('runs.noRuns')} />;
   }
 
   return (
@@ -97,9 +99,9 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
         <Card key={run.id} size="small" style={{ width: '100%', minWidth: 0 }}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Tag color={STATUS_COLORS[run.status] ?? 'default'}>{STATUS_LABELS[run.status] ?? run.status}</Tag>
+              <Tag color={STATUS_COLORS[run.status] ?? 'default'}>{t(`runs.status.${run.status}`, { defaultValue: run.status })}</Tag>
               <Text type="secondary" className="text-xs">
-                Scheduled {new Date(run.scheduledFor).toLocaleString()}
+                {t('runs.scheduled')} {new Date(run.scheduledFor).toLocaleString()}
               </Text>
               {elapsedMs !== null ? (
                 <span className="flex items-center gap-1">
@@ -111,26 +113,26 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
                     format={() => ''}
                   />
                   <Text type="secondary" className="text-xs">
-                    · Running for {formatDuration(elapsedMs)}
+                    · {t('runs.runningFor')} {formatDuration(elapsedMs)}
                   </Text>
                   {run.phase && PHASE_LABELS[run.phase] ? (
-                    <Tag color="processing">{PHASE_LABELS[run.phase]}</Tag>
+                    <Tag color="processing">{t(`runs.phase.${run.phase}`, { defaultValue: PHASE_LABELS[run.phase] })}</Tag>
                   ) : null}
                 </span>
               ) : (
                 <Text type="secondary" className="text-xs">
-                  · Duration {formatDuration(run.durationMs)}
+                  · {t('runs.duration')} {formatDuration(run.durationMs)}
                 </Text>
               )}
               {run.retryCount > 0 ? (
                 <Text type="secondary" className="text-xs">
-                  · Retry #{run.retryCount}
+                  · {t('runs.retry', { count: run.retryCount })}
                 </Text>
               ) : null}
             </div>
             {run.report ? (
               <Button size="small" onClick={() => onViewReport?.(run.report!.id)}>
-                View report
+                {t('runs.viewReport')}
               </Button>
             ) : null}
           </div>
@@ -141,7 +143,7 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
               showIcon
               style={{ marginTop: 8, wordBreak: 'break-word', overflowWrap: 'anywhere' }}
               message={`Error: ${run.errorCode}`}
-              description={run.errorMessage ? linkifyText(run.errorMessage) : 'No further details are available for this failure.'}
+              description={run.errorMessage ? linkifyText(run.errorMessage) : t('runs.noErrorDetails')}
             />
           ) : run.status === 'succeeded_no_new_content' && run.errorMessage ? (
             // No error occurred, but a warning was collected while crawling (e.g. a manually
@@ -151,7 +153,7 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
               type="warning"
               showIcon
               style={{ marginTop: 8, wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-              message="No content found"
+              message={t('runs.noContentFound')}
               description={linkifyText(run.errorMessage)}
             />
           ) : null}
@@ -177,13 +179,13 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
                       className="mb-2 whitespace-pre-wrap text-xs"
                       ellipsis={isExpanded ? false : { rows: 3 }}
                     >
-                      {artifact.contentPreview || 'No preview available.'}
+                      {artifact.contentPreview || t('runs.noPreview')}
                       {artifact.contentLength > artifact.contentPreview.length ? '…' : ''}
                     </Paragraph>
                     <div className="flex items-center gap-2">
                       {artifact.contentPreview.length > 0 ? (
                         <Button size="small" type="link" style={{ padding: 0 }} onClick={() => toggleArtifact(artifact.id)}>
-                          {isExpanded ? 'Show less' : 'Show more'}
+                        {isExpanded ? t('runs.showLess') : t('runs.showMore')}
                         </Button>
                       ) : null}
                       <Button
@@ -193,7 +195,7 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Download full content ({artifact.contentLength} chars)
+                        {t('runs.downloadContent', { length: artifact.contentLength })}
                       </Button>
                     </div>
                   </Card>

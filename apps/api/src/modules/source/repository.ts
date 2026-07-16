@@ -11,7 +11,7 @@ import type {
   UpdateSourceInput
 } from './types';
 
-type SourceDb = Pick<PrismaClient, 'source' | 'accessGrant' | 'marketplacePublication'>;
+type SourceDb = Pick<PrismaClient, 'source' | 'accessGrant' | 'marketplacePublication' | 'playbookSource' | '$transaction'>;
 
 type SourceRow = {
   id: string;
@@ -150,7 +150,12 @@ export class SourceRepository implements SourceRepositoryLike {
   }
 
   async deleteSource(sourceId: string): Promise<void> {
-    await this.db.source.delete({ where: { id: sourceId } });
+    await this.db.$transaction([
+      this.db.playbookSource.deleteMany({ where: { sourceId } }),
+      this.db.accessGrant.deleteMany({ where: { sourceId } }),
+      this.db.marketplacePublication.deleteMany({ where: { sourceId } }),
+      this.db.source.delete({ where: { id: sourceId } }),
+    ]);
   }
 
   async shareSource(sourceId: string, grantedByUserId: string, input: ShareSourceInput): Promise<void> {

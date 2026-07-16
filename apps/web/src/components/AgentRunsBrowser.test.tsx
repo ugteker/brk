@@ -29,7 +29,7 @@ function createRun(overrides: Partial<RunDetailDto> = {}): RunDetailDto {
 
 it('shows an empty state when there are no runs yet', () => {
   render(<AgentRunsBrowser agentId="agent-1" runs={[]} />);
-  expect(screen.getByText(/no runs yet/i)).toBeInTheDocument();
+  expect(screen.getByText(/no history yet/i)).toBeInTheDocument();
 });
 
 it('renders run status, duration, and scheduled time', () => {

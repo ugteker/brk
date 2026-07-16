@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { UnifiedCharacterReportDto } from '../api/agents';
 import { isHttpUrl } from '../utils/links';
 
@@ -25,13 +26,14 @@ function renderStringList(items: string[]) {
 }
 
 function CharacterSection({ report }: CharacterReportRendererProps) {
+  const { t } = useTranslation();
   const section = report.section;
   if (section.character_type === 'finance_expert') {
     return (
       <div className="space-y-2">
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Market summary</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.marketSummary')}</h6>
         <p className="text-sm">{section.market_summary || '—'}</p>
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Signals</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.signals')}</h6>
         {section.signals.length === 0 ? (
           <p className="text-sm text-gray-500">—</p>
         ) : (
@@ -49,7 +51,7 @@ function CharacterSection({ report }: CharacterReportRendererProps) {
   if (section.character_type === 'teacher') {
     return (
       <div className="space-y-2">
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Lesson explanation</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.lessonExplanation')}</h6>
         <p className="text-sm">{section.lesson_explanation || '—'}</p>
       </div>
     );
@@ -57,7 +59,7 @@ function CharacterSection({ report }: CharacterReportRendererProps) {
   if (section.character_type === 'trainer') {
     return (
       <div className="space-y-2">
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Q&amp;A drill</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.qaDrill')}</h6>
         {section.qa_drill.length === 0 ? (
           <p className="text-sm text-gray-500">—</p>
         ) : (
@@ -76,7 +78,7 @@ function CharacterSection({ report }: CharacterReportRendererProps) {
   if (section.character_type === 'philosopher') {
     return (
       <div className="space-y-2">
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Argument &amp; reflection</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.argumentReflection')}</h6>
         <p className="text-sm">{section.argument_reflection || '—'}</p>
       </div>
     );
@@ -84,35 +86,36 @@ function CharacterSection({ report }: CharacterReportRendererProps) {
   if (section.character_type === 'influencer') {
     return (
       <div className="space-y-2">
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Content angles</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.contentAngles')}</h6>
         {renderStringList(section.content_angles)}
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Hooks</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.hooks')}</h6>
         {renderStringList(section.hooks)}
       </div>
     );
   }
   return (
     <div className="space-y-2">
-      <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Bullet digest</h6>
+      <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.bulletDigest')}</h6>
       {renderStringList(section.bullet_digest)}
     </div>
   );
 }
 
 export function CharacterReportRenderer({ report }: CharacterReportRendererProps) {
+  const { t } = useTranslation();
   return (
     <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3">
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-2">
-          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Summary</h6>
+          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.summary')}</h6>
           <p className="text-sm">{report.common.summary || '—'}</p>
-          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Key takeaways</h6>
+          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.keyTakeaways')}</h6>
           {renderStringList(report.common.key_takeaways)}
         </div>
         <div className="space-y-2">
-          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Sources used</h6>
+          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.sourcesUsed')}</h6>
           {renderStringList(report.common.sources_used)}
-          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Citations</h6>
+          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.citations')}</h6>
           {renderStringList(report.common.citations)}
         </div>
       </div>

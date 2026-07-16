@@ -18,7 +18,8 @@
     "search": "Search",
     "noData": "No data",
     "selected": "Selected",
-    "optional": "optional"
+    "optional": "optional",
+    "editing": "Editing"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -41,7 +42,7 @@
     "failedSources": "Failed to load sources.",
     "noSources": "No sources in this library yet.",
     "browseMarketplace": "Browse marketplace",
-    "backToLibrary": "← Back to library",
+    "backToLibrary": "Back to library",
     "createTab": "Create library tab",
     "renameTab": "Rename active library tab",
     "tabTooltip": "Add library tab",
@@ -57,10 +58,16 @@
     "notYetAnalyzed": "Not yet analyzed",
     "noWorkflowCta": "No analysis workflows for this source yet. Add it to a playbook to start generating reports.",
     "reportsTab": "Reports",
-    "runsTab": "Runs",
+    "runsTab": "History",
     "episodesTab": "Episodes",
     "runAnalysisNow": "Run analysis now",
-    "analysisStarted": "Analysis started"
+    "openLink": "Open link",
+    "analysisStarted": "Analysis started",
+    "expertsWatching": "Your experts watching this",
+    "tabNameRequired": "Tab name cannot be empty",
+    "reportSingular": "report",
+    "reportPlural": "reports",
+    "alreadyWatching": "Already watching"
   },
   "listen": {
     "listen": "Summarize",
@@ -125,7 +132,17 @@
     "recipients": "Email recipients (optional)",
     "recipientsPlaceholder": "Add one or more email addresses",
     "recipientsHint": "Leave empty to skip email delivery. You can add recipients later.",
-    "recipientsLabel": "Recipient emails"
+    "recipientsLabel": "Recipient emails",
+    "intervalPlaceholder": "Interval in minutes",
+    "timezonePlaceholder": "Select timezone",
+    "dailyTimeAriaLabel": "Playbook daily time",
+    "timezoneAriaLabel": "Playbook timezone",
+    "intervalAriaLabel": "Playbook interval minutes",
+    "daysOfWeekAriaLabel": "Playbook days of week",
+    "days": {
+      "mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu",
+      "fri": "Fri", "sat": "Sat", "sun": "Sun"
+    }
   },
   "playbook": {
     "createPlaybook": "Create playbook",
@@ -139,7 +156,16 @@
     "disable": "Disable",
     "runNow": "Run now",
     "pickSourceFirst": "Pick a source first",
-    "pickAgentFirst": "Pick an agent first"
+    "pickAgentFirst": "Pick an agent first",
+    "pause": "Pause",
+    "resume": "Resume",
+    "paused": "Paused",
+    "active": "Active",
+    "createPlaybooks": "{{count}} playbooks created",
+    "schedule": "Schedule & Recipients",
+    "recipients": "Email recipients",
+    "addRecipient": "Add recipient",
+    "scheduleHint": "typical:"
   },
   "source": {
     "noSources": "No sources available.",
@@ -155,6 +181,51 @@
     "noItems": "No marketplace items found.",
     "cloneButton": "Clone",
     "cloningButton": "Cloning…"
+  },
+  "runs": {
+    "noRuns": "No history yet. Analysis history appears here once the agent's schedule kicks in (or you trigger a manual run).",
+    "scheduled": "Scheduled",
+    "runningFor": "Running for",
+    "viewReport": "View report",
+    "noContentFound": "No content found",
+    "noErrorDetails": "No further details are available for this failure.",
+    "noPreview": "No preview available.",
+    "showLess": "Show less",
+    "showMore": "Show more",
+    "downloadContent": "Download full content ({{length}} chars)",
+    "retry": "Retry #{{count}}",
+    "duration": "Duration",
+    "phase": {
+      "crawling": "Crawling sources…",
+      "analyzing": "Analyzing with AI…",
+      "notifying": "Sending notifications…"
+    },
+    "status": {
+      "succeeded_no_new_content": "no new content"
+    }
+  },
+  "report": {
+    "summary": "Summary",
+    "keyTakeaways": "Key takeaways",
+    "sourcesUsed": "Sources used",
+    "citations": "Citations",
+    "marketSummary": "Market summary",
+    "signals": "Signals",
+    "lessonExplanation": "Lesson explanation",
+    "qaDrill": "Q&A drill",
+    "argumentReflection": "Argument & reflection",
+    "contentAngles": "Content angles",
+    "hooks": "Hooks",
+    "bulletDigest": "Bullet digest",
+    "detail": {
+      "label": "Report detail level",
+      "brief": "Brief",
+      "briefDesc": "Key points only, quick read",
+      "standard": "Standard",
+      "standardDesc": "Balanced depth and coverage",
+      "detailed": "Detailed",
+      "detailedDesc": "In-depth analysis with full context"
+    }
   },
   "entityActions": {
     "edit": "Edit {{label}}",

@@ -4,9 +4,11 @@ import { Badge, Button, Card, Dropdown, Empty, Input, Layout, Modal, Select, Ske
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
+  AudioOutlined,
   AudioMutedOutlined,
   CheckCircleOutlined,
   LoadingOutlined,
+  MailOutlined,
   BulbOutlined,
   CaretRightOutlined,
   ClockCircleOutlined,
@@ -15,18 +17,18 @@ import {
   DeleteOutlined,
   EditOutlined,
   FileTextOutlined,
-  LineChartOutlined,
+  GlobalOutlined,
+  LinkOutlined,
   LogoutOutlined,
-  NotificationOutlined,
   PlusCircleOutlined,
   PlusOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
-  ReadOutlined,
+  RobotFilled,
+  RobotOutlined,
   RocketOutlined,
   SearchOutlined,
   TeamOutlined,
-  ThunderboltOutlined,
   ToolOutlined,
   UserOutlined
 } from '@ant-design/icons';
@@ -121,11 +123,29 @@ interface LibraryTabRecord {
   name: string;
 }
 
-const BrainIcon = ({ style }: { style?: CSSProperties }) => (
-  <span role="img" aria-label="brain" className="anticon" style={{ fontSize: '1em', lineHeight: 1, ...style }}>
+const BrainIcon = ({ style, className }: { style?: CSSProperties; className?: string }) => (
+  <span role="img" aria-label="brain" className={`anticon${className ? ` ${className}` : ''}`} style={{ fontSize: '1em', lineHeight: 1, ...style }}>
     🧠
   </span>
 );
+
+const YouTubeLogo = () => (
+  <span className="inline-flex items-center gap-1" style={{ verticalAlign: 'middle' }}>
+    <svg viewBox="0 0 18 15" width="18" height="15" aria-hidden="true">
+      <path d="M17.6 3.2A2.3 2.3 0 0 0 15.9 1.5C14.5 1 9 1 9 1S3.5 1 2.1 1.5A2.3 2.3 0 0 0 .4 3.2C0 4.6 0 7.5 0 7.5s0 2.9.4 4.3c.2.9.9 1.5 1.7 1.7C3.5 14 9 14 9 14s5.5 0 6.9-.5c.9-.2 1.5-.8 1.7-1.7C18 10.4 18 7.5 18 7.5s0-2.9-.4-4.3z" fill="#FF0000"/>
+      <path d="M7 10.5V4.5l5.5 3-5.5 3z" fill="white"/>
+    </svg>
+    <span style={{ fontWeight: 700, fontSize: '0.8em', color: '#282828', letterSpacing: '-0.2px', lineHeight: 1 }} aria-label="YouTube">YouTube</span>
+  </span>
+);
+
+function SourceTypeBadge({ type }: { type: string }) {
+  if (type === 'youtube_videos') return <YouTubeLogo />;
+  if (type === 'podcast_feeds') return (
+    <Tag icon={<AudioOutlined />} color="purple" className="m-0">Podcast</Tag>
+  );
+  return <Tag icon={<GlobalOutlined />} className="m-0">Web</Tag>;
+}
 
 const DEFAULT_LIBRARY_TAB_ID = 'library-default';
 const DEFAULT_LIBRARY_TAB_NAME = 'Library';
@@ -198,21 +218,23 @@ function WizardSelectableCard({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       aria-label={ariaLabel}
       aria-pressed={selected}
       onClick={onClick}
-      className="relative block h-full w-full text-left"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      className="relative block h-full w-full text-left cursor-pointer"
     >
       {selected && (
         <span
           aria-hidden
           className="absolute -top-[11px] right-2.5 z-10 flex h-[26px] w-[26px]
-                     items-center justify-center rounded-full bg-sky-500 text-[13px]
+                     items-center justify-center rounded-full bg-sky-500 text-white text-[13px]
                      shadow-md ring-2 ring-white dark:ring-slate-900"
         >
-          🧠
+          ✓
         </span>
       )}
       <Card
@@ -228,7 +250,7 @@ function WizardSelectableCard({
       >
         {children}
       </Card>
-    </button>
+    </div>
   );
 }
 
@@ -282,22 +304,26 @@ function formatPlaybookSchedule(schedule: PlaybookRecord['schedule']): string {
   return `Weekly ${schedule.dailyTime} on ${days} (${schedule.timezone})`;
 }
 
+const PERSONA_EMOJI_MAP: Record<string, string> = {
+  finance_expert: '📈',
+  teacher:        '🎓',
+  influencer:     '📣',
+  trainer:        '💪',
+  philosopher:    '🦉',
+  summarizer:     '📋',
+};
+
+const PersonaIcon = ({ personaId, style }: { personaId: string; style?: CSSProperties }) => {
+  const emoji = PERSONA_EMOJI_MAP[personaId] ?? '🤖';
+  return (
+    <span role="img" aria-label={personaId} className="anticon" style={{ fontSize: '1em', lineHeight: 1, ...style }}>
+      {emoji}
+    </span>
+  );
+};
+
 function getCharacterIcon(characterType?: AgentSummary['characterType']) {
-  switch (characterType) {
-    case 'finance_expert':
-      return <LineChartOutlined />;
-    case 'teacher':
-      return <ReadOutlined />;
-    case 'trainer':
-      return <ToolOutlined />;
-    case 'philosopher':
-      return <BulbOutlined />;
-    case 'influencer':
-      return <RocketOutlined />;
-    case 'summarizer':
-    default:
-      return <FileTextOutlined />;
-  }
+  return <PersonaIcon personaId={characterType ?? 'summarizer'} />;
 }
 
 function humanizeCharacterType(characterType?: AgentSummary['characterType']): string {
@@ -327,12 +353,12 @@ function getAgentPersonalityLabel(agent: AgentSummary): string {
 }
 
 const PERSONA_ICON_MAP: Record<string, ReactNode> = {
-  finance_expert: <LineChartOutlined />,
-  teacher:        <ReadOutlined />,
-  influencer:     <NotificationOutlined />,
-  trainer:        <ThunderboltOutlined />,
-  philosopher:    <CompassOutlined />,
-  summarizer:     <FileTextOutlined />,
+  finance_expert: <PersonaIcon personaId="finance_expert" />,
+  teacher:        <PersonaIcon personaId="teacher" />,
+  influencer:     <PersonaIcon personaId="influencer" />,
+  trainer:        <PersonaIcon personaId="trainer" />,
+  philosopher:    <PersonaIcon personaId="philosopher" />,
+  summarizer:     <PersonaIcon personaId="summarizer" />,
 };
 
 const PERSONA_COLOR_MAP: Record<string, string> = {
@@ -391,6 +417,7 @@ export function AgentsPage() {
   const [runs, setRuns] = useState<RunDetailDto[]>([]);
   const [prompt, setPrompt] = useState<PromptVersionDto | null>(null);
   const [togglingAgentId, setTogglingAgentId] = useState<string | null>(null);
+  const [togglingPlaybookId, setTogglingPlaybookId] = useState<string | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
   const [runningAgentId, setRunningAgentId] = useState<string | null>(null);
   const [episodePickerAgent, setEpisodePickerAgent] = useState<AgentSummary | null>(null);
@@ -401,7 +428,7 @@ export function AgentsPage() {
   const [hasAppliedSymbolDeepLink, setHasAppliedSymbolDeepLink] = useState(false);
   const [activeHub, setActiveHub] = useState<HubKey>('sources');
   const [sources, setSources] = useState<SourceRecord[]>([]);
-  const [sourcesLoadState, setSourcesLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [sourcesLoadState, setSourcesLoadState] = useState<'idle' | 'loading' | 'error'>('loading');
   const [sourcesSearch, setSourcesSearch] = useState('');
   const [libraryTabs, setLibraryTabs] = useState<LibraryTabRecord[]>([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
   const [activeLibraryTabId, setActiveLibraryTabId] = useState(DEFAULT_LIBRARY_TAB_ID);
@@ -418,6 +445,8 @@ export function AgentsPage() {
   const [autoDetectedSource, setAutoDetectedSource] = useState<AutoDetectedSource | null>(null);
   const detectNonceRef = useRef(0);
   const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [recentlyUpdatedSourceId, setRecentlyUpdatedSourceId] = useState<string | null>(null);
+  const updatedHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playbooks, setPlaybooks] = useState<PlaybookRecord[]>([]);
   const [playbooksLoadState, setPlaybooksLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [playbooksSearch, setPlaybooksSearch] = useState('');
@@ -436,7 +465,13 @@ export function AgentsPage() {
   const [isPlaybookSaving, setIsPlaybookSaving] = useState(false);
   const [confirmingUnfollow, setConfirmingUnfollow] = useState(false);
   const [editingPlaybookId, setEditingPlaybookId] = useState<string | null>(null);
-  const [playbookAgentIdDraft, setPlaybookAgentIdDraft] = useState<string | null>(null);
+  const [playbookAgentIdsDraft, setPlaybookAgentIdsDraft] = useState<string[]>([]);
+  // Tracks which agents already watch the source when the wizard opens — used for save diff
+  // (create new playbooks for additions, delete playbooks for removals, skip unchanged).
+  const [wizardAlreadyLinkedAgentIds, setWizardAlreadyLinkedAgentIds] = useState<string[]>([]);
+  const [wizardAlreadyLinkedPlaybooks, setWizardAlreadyLinkedPlaybooks] = useState<{ agentId: string; playbookId: string }[]>([]);
+  // The agent whose playbook settings are shown in the schedule step (edit mode via ✎ button)
+  const [wizardFocusedAgentId, setWizardFocusedAgentId] = useState<string | null>(null);
   const [playbookSourceIdsDraft, setPlaybookSourceIdsDraft] = useState<string[]>([]);
   const [playbookScheduleModeDraft, setPlaybookScheduleModeDraft] = useState<'interval' | 'daily' | 'weekly'>('daily');
   const [playbookIntervalMinutesDraft, setPlaybookIntervalMinutesDraft] = useState(60);
@@ -444,6 +479,14 @@ export function AgentsPage() {
   const [playbookTimezoneDraft, setPlaybookTimezoneDraft] = useState('UTC');
   const [playbookDaysOfWeekDraft, setPlaybookDaysOfWeekDraft] = useState<number[]>([1]);
   const [playbookRecipientsDraft, setPlaybookRecipientsDraft] = useState<string[]>([]);
+  // Agent picker for manual runs when multiple agents are linked to the same source
+  const [runPickerOpen, setRunPickerOpen] = useState(false);
+  const [runPickerLinked, setRunPickerLinked] = useState<{ playbook: PlaybookRecord; agent: AgentSummary | undefined }[]>([]);
+  const [runPickerEpisode, setRunPickerEpisode] = useState<{ title: string; link: string; pubDate?: string | null } | undefined>(undefined);
+  // Schedule-only edit modal — opened via ✎ on individual playbook cards
+  const [isScheduleEditOpen, setIsScheduleEditOpen] = useState(false);
+  const [scheduleEditPlaybook, setScheduleEditPlaybook] = useState<PlaybookRecord | null>(null);
+  const [isScheduleEditSaving, setIsScheduleEditSaving] = useState(false);
   // Inline agent creation inside the follow wizard (step: pick agent) — full 4-step sub-wizard
   const [showInlineAgentCreate, setShowInlineAgentCreate] = useState(false);
   const [isInlineAgentSaving, setIsInlineAgentSaving] = useState(false);
@@ -457,6 +500,7 @@ export function AgentsPage() {
     () => getPromptCharacter(DEFAULT_PROMPT_PERSONA_ID, DEFAULT_PROMPT_CHARACTER_ID)?.systemPrompt ?? ''
   );
   const [inlineAgentRiskLevel, setInlineAgentRiskLevel] = useState<'low' | 'medium' | 'high'>('medium');
+  const [inlineAgentReportDetailLevel, setInlineAgentReportDetailLevel] = useState<'brief' | 'standard' | 'detailed'>('standard');
   const [inlineAgentValidationError, setInlineAgentValidationError] = useState<string | null>(null);
   const [showSourcesMarketplace, setShowSourcesMarketplace] = useState(false);
   const [showPlaybooksMarketplace, setShowPlaybooksMarketplace] = useState(false);
@@ -547,7 +591,7 @@ export function AgentsPage() {
   function commitEditingLibraryTab(tabId: string) {
     const trimmed = editingLibraryTabName.trim();
     if (!trimmed) {
-      message.warning('Tab name cannot be empty');
+      message.warning(t('library.tabNameRequired'));
       return;
     }
     setLibraryTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, name: trimmed } : tab)));
@@ -826,6 +870,15 @@ export function AgentsPage() {
     return () => { alive = false; };
   }, [selectedSourceId, playbooks, sourceDetailRefreshKey]);
 
+  // While a run is in progress, immediately show the queued run then poll every 5 s so
+  // the Runs tab stays live without requiring a page reload.
+  useEffect(() => {
+    if (!runningAgentId) return;
+    setSourceDetailRefreshKey((k) => k + 1);
+    const id = setInterval(() => setSourceDetailRefreshKey((k) => k + 1), 5000);
+    return () => clearInterval(id);
+  }, [runningAgentId]);
+
   useEffect(() => {
     if (!selectedAgentId) {
       setAccessGrantCount(0);
@@ -959,15 +1012,18 @@ export function AgentsPage() {
 
   function openPlaybookCreate() {
     setEditingPlaybookId(null);
+    setWizardFocusedAgentId(null);
     setPlaybookCreateStep(0);
-    setPlaybookAgentIdDraft(agents[0]?.id ?? null);
+    setPlaybookAgentIdsDraft([]);
+    setWizardAlreadyLinkedAgentIds([]);
+    setWizardAlreadyLinkedPlaybooks([]);
     setPlaybookSourceIdsDraft(sources[0] ? [sources[0].id] : []);
     setPlaybookScheduleModeDraft('daily');
     setPlaybookIntervalMinutesDraft(60);
     setPlaybookDailyTimeDraft('07:30');
     setPlaybookTimezoneDraft('UTC');
     setPlaybookDaysOfWeekDraft([1]);
-    setPlaybookRecipientsDraft([]);
+    setPlaybookRecipientsDraft(user?.email ? [user.email] : []);
     setIsPlaybookCreateOpen(true);
   }
 
@@ -979,36 +1035,23 @@ export function AgentsPage() {
     setFollowWizardSourcePreselected(true);
     setShowInlineAgentCreate(false);
     setInlineAgentName('My Analyst');
-    const existingFollowPlaybook = playbooks.find((playbook) => playbook.sourceIds.includes(source.id));
-    if (existingFollowPlaybook) {
-      setEditingPlaybookId(existingFollowPlaybook.id);
-      // Start at step 1 (Pick agent) because source is pre-selected
-      setPlaybookCreateStep(1);
-      setPlaybookAgentIdDraft(existingFollowPlaybook.agentId);
-      setPlaybookSourceIdsDraft(existingFollowPlaybook.sourceIds);
-      setPlaybookScheduleModeDraft(existingFollowPlaybook.schedule.mode);
-      if (existingFollowPlaybook.schedule.mode === 'interval') {
-        setPlaybookIntervalMinutesDraft(existingFollowPlaybook.schedule.intervalMinutes);
-      } else {
-        setPlaybookDailyTimeDraft(existingFollowPlaybook.schedule.dailyTime);
-        setPlaybookTimezoneDraft(existingFollowPlaybook.schedule.timezone);
-        setPlaybookDaysOfWeekDraft(existingFollowPlaybook.schedule.mode === 'weekly' ? existingFollowPlaybook.schedule.daysOfWeek : [1]);
-      }
-      setPlaybookRecipientsDraft(existingFollowPlaybook.recipients);
-      setIsPlaybookCreateOpen(true);
-      return;
-    }
     setEditingPlaybookId(null);
-    // Start at step 1 (Pick agent) because source is already known from the card
+    setWizardFocusedAgentId(null);
     setPlaybookCreateStep(1);
-    setPlaybookAgentIdDraft(null);
     setPlaybookSourceIdsDraft([source.id]);
     setPlaybookScheduleModeDraft('daily');
     setPlaybookIntervalMinutesDraft(60);
     setPlaybookDailyTimeDraft('07:30');
     setPlaybookTimezoneDraft('UTC');
     setPlaybookDaysOfWeekDraft([1]);
-    setPlaybookRecipientsDraft([]);
+    setPlaybookRecipientsDraft(user?.email ? [user.email] : []);
+    // Pre-select agents that already watch this source; track their playbook IDs for the
+    // save diff (delete removed, create added, skip unchanged).
+    const linkedPbs = playbooks.filter((p) => p.sourceIds.includes(source.id));
+    const alreadyLinkedAgentIds = linkedPbs.map((p) => p.agentId);
+    setWizardAlreadyLinkedAgentIds(alreadyLinkedAgentIds);
+    setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
+    setPlaybookAgentIdsDraft(alreadyLinkedAgentIds);
     setIsPlaybookCreateOpen(true);
     if (agents.length === 0) {
       openInlineAgentCreate();
@@ -1019,6 +1062,8 @@ export function AgentsPage() {
     setIsPlaybookCreateOpen(false);
     setPlaybookCreateStep(0);
     setEditingPlaybookId(null);
+    setWizardFocusedAgentId(null);
+    setWizardAlreadyLinkedPlaybooks([]);
     setFollowWizardSourcePreselected(false);
     setShowInlineAgentCreate(false);
     setInlineAgentStep(0);
@@ -1035,8 +1080,9 @@ export function AgentsPage() {
     setInlineAgentModel('claude-sonnet-4-5');
     setInlineAgentSystemPrompt(getPromptCharacter(DEFAULT_PROMPT_PERSONA_ID, DEFAULT_PROMPT_CHARACTER_ID)?.systemPrompt ?? '');
     setInlineAgentRiskLevel('medium');
+    setInlineAgentReportDetailLevel('standard');
     setInlineAgentValidationError(null);
-    setPlaybookAgentIdDraft(null);
+    setPlaybookAgentIdsDraft([]);
     setShowInlineAgentCreate(true);
   }
 
@@ -1113,6 +1159,7 @@ export function AgentsPage() {
         promptConfig: {
           personality_id: inlineAgentCharacterId,
           personality_label: inlineChar?.name ?? inlineAgentCharacterId,
+          report_detail_level: inlineAgentReportDetailLevel,
           ...(inlineAgentPersonaId === 'finance_expert' ? { risk_level: inlineAgentRiskLevel } : {})
         },
         preferences: inlineAgentPersonaId === 'finance_expert' ? { risk_level: [inlineAgentRiskLevel] } : {}
@@ -1120,15 +1167,11 @@ export function AgentsPage() {
       const newAgent = await createAgent(payload) as AgentSummary;
       await saveAgentPrompt(newAgent.id, { model: inlineAgentModel, systemPrompt: inlineAgentSystemPrompt, enabled: true });
       setAgents((prev) => [...prev, newAgent]);
-      setPlaybookAgentIdDraft(newAgent.id);
+      // Auto-select the new agent in the wizard draft and return to the agent grid
+      setPlaybookAgentIdsDraft((prev) => [...prev, newAgent.id]);
       void inlinePersona;
-      // Auto-create playbook and close modal — schedule was already set in step 2
-      const created = await doCreatePlaybook(newAgent.id);
-      if (!created) {
-        // fallback: let user review schedule and try again
-        setShowInlineAgentCreate(false);
-        setPlaybookCreateStep(2);
-      }
+      setShowInlineAgentCreate(false);
+      // Stay on step 1 so the user sees the newly selected agent and can confirm / pick more
     } catch {
       message.error('Failed to create agent');
     } finally {
@@ -1149,7 +1192,7 @@ export function AgentsPage() {
       message.warning('Pick a source first');
       return;
     }
-    if (playbookCreateStep === 1 && !playbookAgentIdDraft) {
+    if (playbookCreateStep === 1 && playbookAgentIdsDraft.length === 0 && !editingPlaybookId) {
       message.warning('Pick an agent first');
       return;
     }
@@ -1162,37 +1205,17 @@ export function AgentsPage() {
     setPlaybookCreateStep((current) => Math.max(current - 1, minStep));
   }
 
-  async function doCreatePlaybook(agentId: string): Promise<boolean> {
-    if (playbookSourceIdsDraft.length === 0) {
-      message.warning(t('playbook.pickSourceFirst'));
-      return false;
-    }
-    setIsPlaybookSaving(true);
-    try {
-      const schedule =
-        playbookScheduleModeDraft === 'interval'
-          ? { mode: 'interval' as const, intervalMinutes: playbookIntervalMinutesDraft }
-          : playbookScheduleModeDraft === 'weekly'
-            ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
-            : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
-      const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
-      await createPlaybook({ agentId, name: derivePlaybookName(agentId, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule, executionMode: 'latest_only', language: i18n.language.startsWith('de') ? 'de' : 'en' });
-      await refreshPlaybooks();
-      setIsPlaybookCreateOpen(false);
-      setPlaybookCreateStep(0);
-      setEditingPlaybookId(null);
-      setShowInlineAgentCreate(false);
-      return true;
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to create playbook');
-      return false;
-    } finally {
-      setIsPlaybookSaving(false);
-    }
+  function markSourceUpdated(sourceId: string) {
+    if (updatedHighlightTimerRef.current) clearTimeout(updatedHighlightTimerRef.current);
+    setRecentlyUpdatedSourceId(sourceId);
+    updatedHighlightTimerRef.current = setTimeout(() => setRecentlyUpdatedSourceId(null), 4000);
   }
 
   async function onCreatePlaybook() {
-    if (!playbookAgentIdDraft) {
+    // In follow mode, deselecting all agents is valid — it means "remove all" (diff will delete them).
+    // Only block empty selection in admin-hub create mode where you must pick at least one agent.
+    const isRemoveAll = followWizardSourcePreselected && wizardAlreadyLinkedAgentIds.length > 0 && playbookAgentIdsDraft.length === 0;
+    if (!editingPlaybookId && playbookAgentIdsDraft.length === 0 && !isRemoveAll) {
       message.warning(t('playbook.pickAgentFirst'));
       return;
     }
@@ -1202,20 +1225,51 @@ export function AgentsPage() {
     }
     setIsPlaybookSaving(true);
     try {
-      const schedule =
+      const lang = i18n.language.startsWith('de') ? 'de' : 'en';
+      // Default schedule used when the follow-source wizard does not show a schedule step
+      const defaultSchedule = { mode: 'daily' as const, dailyTime: '07:30', timezone: 'UTC' };
+      // Admin-hub create wizard does pass through the schedule step; follow wizard does not
+      const explicitSchedule =
         playbookScheduleModeDraft === 'interval'
           ? { mode: 'interval' as const, intervalMinutes: playbookIntervalMinutesDraft }
           : playbookScheduleModeDraft === 'weekly'
             ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
             : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
+      // In follow mode the schedule draft is never shown/edited, so use the default for new
+      // playbooks; in admin-hub mode use the explicit draft values.
+      const scheduleForNew = followWizardSourcePreselected ? defaultSchedule : explicitSchedule;
       const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
+      // Recipients for new playbooks in follow mode: default to current user email
+      const recipientsForNew = followWizardSourcePreselected ? (user?.email ? [user.email] : []) : cleanedRecipients;
       if (editingPlaybookId) {
-        await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule });
+        // Admin-hub edit mode: update the explicit playbook + diff agent selection
+        const agentId = wizardFocusedAgentId ?? playbookAgentIdsDraft[0] ?? '';
+        await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(agentId, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule: explicitSchedule });
+        // Diff: additions and removals relative to the originally linked set
+        const toCreate = playbookAgentIdsDraft.filter((id) => !wizardAlreadyLinkedAgentIds.includes(id));
+        const toDelete = wizardAlreadyLinkedAgentIds.filter((id) => !playbookAgentIdsDraft.includes(id) && id !== agentId);
+        await Promise.all([
+          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule: explicitSchedule, executionMode: 'latest_only', language: lang })),
+          ...toDelete.map((id) => {
+            const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
+            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
+          })
+        ]);
       } else {
-        await createPlaybook({ agentId: playbookAgentIdDraft, name: derivePlaybookName(playbookAgentIdDraft, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule, executionMode: 'latest_only', language: i18n.language.startsWith('de') ? 'de' : 'en' });
+        // Create mode (follow-source or admin-hub): diff against already-linked
+        const toCreate = playbookAgentIdsDraft.filter((id) => !wizardAlreadyLinkedAgentIds.includes(id));
+        const toDelete = wizardAlreadyLinkedAgentIds.filter((id) => !playbookAgentIdsDraft.includes(id));
+        await Promise.all([
+          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: recipientsForNew, schedule: scheduleForNew, executionMode: 'latest_only', language: lang })),
+          ...toDelete.map((id) => {
+            const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
+            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
+          })
+        ]);
       }
       await refreshPlaybooks();
-      message.success(editingPlaybookId ? t('playbook.updatePlaybook') : t('playbook.createPlaybook'));
+      if (playbookSourceIdsDraft[0]) markSourceUpdated(playbookSourceIdsDraft[0]);
+      message.success(t('playbook.updatePlaybook'));
       setIsPlaybookCreateOpen(false);
       setPlaybookCreateStep(0);
       setEditingPlaybookId(null);
@@ -1296,6 +1350,87 @@ export function AgentsPage() {
       message.success('Source removed');
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to remove source');
+    }
+  }
+
+  function onOpenPlaybookWizard(playbook: PlaybookRecord) {
+    setFollowWizardSourcePreselected(true);
+    setShowInlineAgentCreate(false);
+    setInlineAgentName('My Analyst');
+    setEditingPlaybookId(playbook.id);
+    setWizardFocusedAgentId(playbook.agentId);
+    setPlaybookCreateStep(1);
+    setPlaybookSourceIdsDraft(playbook.sourceIds);
+    setPlaybookScheduleModeDraft(playbook.schedule.mode);
+    if (playbook.schedule.mode === 'interval') {
+      setPlaybookIntervalMinutesDraft(playbook.schedule.intervalMinutes);
+    } else {
+      setPlaybookDailyTimeDraft(playbook.schedule.dailyTime);
+      setPlaybookTimezoneDraft(playbook.schedule.timezone);
+      setPlaybookDaysOfWeekDraft(playbook.schedule.mode === 'weekly' ? playbook.schedule.daysOfWeek : [1]);
+    }
+    setPlaybookRecipientsDraft(playbook.recipients);
+    // Pre-fill detail level from existing agent if available
+    const existingAgent = agents.find((a) => a.id === playbook.agentId);
+    setInlineAgentReportDetailLevel((existingAgent?.promptConfig as { report_detail_level?: 'brief' | 'standard' | 'detailed' } | undefined)?.report_detail_level ?? 'standard');
+    // Pre-select ALL linked agents for this source; track their playbook IDs for the save diff
+    const linkedPbs = playbooks.filter((p) => p.sourceIds.some((sid) => playbook.sourceIds.includes(sid)));
+    const alreadyLinkedAgentIds = linkedPbs.map((p) => p.agentId);
+    setWizardAlreadyLinkedAgentIds(alreadyLinkedAgentIds);
+    setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
+    setPlaybookAgentIdsDraft(alreadyLinkedAgentIds);
+    setIsPlaybookCreateOpen(true);
+  }
+
+  /** Opens the schedule-only edit modal for a specific playbook (from ✎ on expert cards). */
+  function onOpenScheduleEdit(playbook: PlaybookRecord, event?: React.MouseEvent) {
+    event?.stopPropagation();
+    setScheduleEditPlaybook(playbook);
+    setPlaybookScheduleModeDraft(playbook.schedule.mode);
+    if (playbook.schedule.mode === 'interval') {
+      setPlaybookIntervalMinutesDraft(playbook.schedule.intervalMinutes);
+    } else {
+      setPlaybookDailyTimeDraft(playbook.schedule.dailyTime);
+      setPlaybookTimezoneDraft(playbook.schedule.timezone);
+      setPlaybookDaysOfWeekDraft(playbook.schedule.mode === 'weekly' ? playbook.schedule.daysOfWeek : [1]);
+    }
+    setPlaybookRecipientsDraft(playbook.recipients);
+    setIsScheduleEditOpen(true);
+  }
+
+  async function onSaveScheduleEdit() {
+    if (!scheduleEditPlaybook) return;
+    setIsScheduleEditSaving(true);
+    try {
+      const schedule =
+        playbookScheduleModeDraft === 'interval'
+          ? { mode: 'interval' as const, intervalMinutes: playbookIntervalMinutesDraft }
+          : playbookScheduleModeDraft === 'weekly'
+            ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
+            : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
+      const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
+      await updatePlaybook(scheduleEditPlaybook.id, { schedule, recipients: cleanedRecipients });
+      await refreshPlaybooks();
+      message.success(t('playbook.updatePlaybook'));
+      setIsScheduleEditOpen(false);
+      setScheduleEditPlaybook(null);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to update schedule');
+    } finally {
+      setIsScheduleEditSaving(false);
+    }
+  }
+
+  async function onTogglePlaybookEnabled(playbook: PlaybookRecord, event: React.MouseEvent) {
+    event.stopPropagation();
+    setTogglingPlaybookId(playbook.id);
+    try {
+      await updatePlaybook(playbook.id, { enabled: !playbook.enabled });
+      await refreshPlaybooks();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to update playbook');
+    } finally {
+      setTogglingPlaybookId(null);
     }
   }
 
@@ -1496,13 +1631,22 @@ export function AgentsPage() {
     const linked = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
     if (linked.length === 0) return;
 
+    // When multiple agents watch this source, ask the user which one to run
+    if (linked.length > 1) {
+      setRunPickerLinked(linked.map((pb) => ({ playbook: pb, agent: agents.find((a) => a.id === pb.agentId) })));
+      setRunPickerEpisode(episode);
+      setRunPickerOpen(true);
+      return;
+    }
+
     setActiveSourceTab('runs');
 
     const agent = agents.find((a) => a.id === linked[0].agentId);
     if (!agent) {
       try {
+        setSourceDetailRefreshKey((k) => k + 1); // show queued run immediately
         await runPlaybookNow(linked[0].id);
-        setSourceDetailRefreshKey((k) => k + 1);
+        setSourceDetailRefreshKey((k) => k + 1); // refresh again on completion
       } catch (err) {
         message.error(err instanceof Error ? err.message : 'Failed to start analysis');
       }
@@ -1520,6 +1664,35 @@ export function AgentsPage() {
 
     // Run with this specific episode as the forced selection. The backend will create an ad-hoc
     // source config if the library source URL is not already in agent.sources.
+    await executeRun(agent, {
+      sourceType: libSource.type as EpisodeOptionDto['sourceType'],
+      sourceValue: libSource.value,
+      itemLink: episode.link
+    });
+  }
+
+  // Called when user picks a specific agent from the multi-agent run picker modal
+  async function onRunPickerSelect(playbook: PlaybookRecord, agent: AgentSummary | undefined) {
+    setRunPickerOpen(false);
+    const episode = runPickerEpisode;
+    setRunPickerEpisode(undefined);
+    setActiveSourceTab('runs');
+    if (!agent) {
+      try {
+        setSourceDetailRefreshKey((k) => k + 1);
+        await runPlaybookNow(playbook.id);
+        setSourceDetailRefreshKey((k) => k + 1);
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : 'Failed to start analysis');
+      }
+      return;
+    }
+    if (!episode) {
+      await executeRun(agent);
+      return;
+    }
+    const libSource = sources.find((s) => s.id === selectedSourceId);
+    if (!libSource) return;
     await executeRun(agent, {
       sourceType: libSource.type as EpisodeOptionDto['sourceType'],
       sourceValue: libSource.value,
@@ -1842,7 +2015,7 @@ export function AgentsPage() {
                                    <div className="text-sm font-semibold">{getSourceDisplayTitle(src)}</div>
                                    <Text type="secondary" className="text-xs">{item.value}</Text>
                                    <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                                     <Tag>{item.type === 'podcast_feeds' ? 'Podcast' : item.type === 'youtube_videos' ? 'YouTube' : 'Web'}</Tag>
+                                     <SourceTypeBadge type={item.type} />
                                      <Tag>{getSourceKindLabel(src)}</Tag>
                                      {(item.type === 'podcast_feeds' || item.type === 'youtube_videos') ? (
                                        <Tag color="blue">Episodes: {getSourceEpisodeCount(src)}</Tag>
@@ -1872,9 +2045,28 @@ export function AgentsPage() {
                    ) : null}
                    {!showSourcesMarketplace ? (
                    <>
-                   {sourcesLoadState === 'loading' ? <p className="text-sm text-gray-700">{t('library.loadingSources')}</p> : null}
                    {sourcesLoadState === 'error' ? <p className="text-sm text-red-700">{t('library.failedSources')}</p> : null}
-                   {selectedSourceId ? (() => {
+                   {sourcesLoadState === 'loading' ? (
+                     <div className="grid gap-3 sm:grid-cols-2">
+                       {[1, 2, 3, 4].map((i) => (
+                         <Card key={i} size="small" className="min-h-[170px]">
+                           <div className="flex items-start gap-3">
+                             <Skeleton.Avatar active shape="square" size={56} className="shrink-0 rounded-md" />
+                             <div className="flex-1 min-w-0 space-y-2 pt-1">
+                               <Skeleton.Input active size="small" style={{ width: '65%' }} block />
+                               <Skeleton.Input active size="small" style={{ width: '90%' }} block />
+                               <Skeleton.Input active size="small" style={{ width: '50%' }} block />
+                             </div>
+                           </div>
+                           <div className="mt-4 space-y-2">
+                             <Skeleton.Input active size="small" style={{ width: '80%' }} block />
+                             <Skeleton.Input active size="small" style={{ width: '60%' }} block />
+                           </div>
+                         </Card>
+                       ))}
+                     </div>
+                   ) : null}
+                   {sourcesLoadState !== 'loading' && selectedSourceId ? (() => {
                      const selectedSource = sources.find((s) => s.id === selectedSourceId);
                      const linkedPlaybooks = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
                      return selectedSource ? (
@@ -1883,7 +2075,7 @@ export function AgentsPage() {
                          title={
                            <span className="flex items-center gap-2">
                              {getSourceDisplayTitle(selectedSource)}
-                             <Tag>{selectedSource.type === 'podcast_feeds' ? 'Podcast' : selectedSource.type === 'youtube_videos' ? 'YouTube' : 'Web'}</Tag>
+                             <SourceTypeBadge type={selectedSource.type} />
                            </span>
                          }
                          extra={
@@ -1918,16 +2110,124 @@ export function AgentsPage() {
                            </div>
                          }
                        >
-                         {linkedPlaybooks.length === 0 ? (
-                           <Empty
-                             description={
-                               <span className="text-sm text-gray-600">
-                                 {t('library.noWorkflowCta')}
-                               </span>
-                             }
-                           />
-                         ) : (
-                           <Tabs
+                         {(() => {
+                           const coverUrl = getSourceCoverImageUrl(selectedSource);
+                           const episodeCount = getSourceEpisodeCount(selectedSource);
+                           const latestItem = selectedSource.metadata.previewItems[0] ?? null;
+                           let hostname = '';
+                           try { hostname = new URL(selectedSource.value).hostname; } catch { hostname = selectedSource.value; }
+                           return (
+                             <>
+                             <div className="flex gap-3 mb-4 pb-4 border-b border-gray-100">
+                               {coverUrl ? (
+                                 <img src={coverUrl} alt="" className="w-20 h-20 rounded-lg object-cover flex-shrink-0 bg-gray-100" />
+                               ) : (
+                                 <div className="w-20 h-20 rounded-lg flex-shrink-0 bg-gray-100 flex items-center justify-center text-2xl">
+                                   {selectedSource.type === 'youtube_videos' ? '📺' : selectedSource.type === 'podcast_feeds' ? '🎙' : '🌐'}
+                                 </div>
+                               )}
+                               <div className="min-w-0 flex-1">
+                                 <a
+                                   href={selectedSource.value}
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                                   onClick={(e) => e.stopPropagation()}
+                                 >
+                                   {hostname} <LinkOutlined className="text-xs" />
+                                 </a>
+                                 {episodeCount > 0 ? (
+                                   <p className="text-xs text-gray-500 mt-0.5">
+                                     {episodeCount} {selectedSource.type === 'youtube_videos' ? 'videos' : selectedSource.type === 'podcast_feeds' ? 'episodes' : 'pages'}
+                                   </p>
+                                 ) : null}
+                                 {latestItem?.link ? (
+                                   <a
+                                     href={latestItem.link}
+                                     target="_blank"
+                                     rel="noopener noreferrer"
+                                     className="mt-1.5 block text-xs text-gray-700 hover:text-blue-600 hover:underline truncate"
+                                     onClick={(e) => e.stopPropagation()}
+                                   >
+                                     <span className="text-gray-400 mr-1">Latest:</span>
+                                     {latestItem.title}
+                                     {latestItem.pubDate ? <span className="ml-1 text-gray-400">· {new Date(latestItem.pubDate).toLocaleDateString()}</span> : null}
+                                   </a>
+                                 ) : null}
+                               </div>
+                             </div>
+                             {linkedPlaybooks.length > 0 ? (
+                               <div className="mt-3 pt-3 border-t border-gray-100">
+                                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">🤖 {t('library.expertsWatching')}</p>
+                                 <div className="flex flex-col gap-1.5">
+                                   {linkedPlaybooks.map((pb) => {
+                                     const agent = agents.find((a) => a.id === pb.agentId);
+                                     const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
+                                     const characterLabel = agent?.characterType ? humanizeCharacterType(agent.characterType) : null;
+                                     return (
+                                       <div key={pb.id} className={`flex items-start gap-2 text-xs transition-opacity ${pb.enabled ? '' : 'opacity-60'}`}>
+                                         <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                           <div className="flex flex-wrap items-center gap-1.5">
+                                             {characterLabel ? (
+                                               <Tag className="m-0" color={PERSONA_COLOR_MAP[agent?.characterType ?? ''] ?? 'default'} icon={getCharacterIcon(agent?.characterType)}>{characterLabel}</Tag>
+                                             ) : null}
+                                             {agent?.promptConfig?.personality_label ? (
+                                               <Tag className="m-0" color="magenta">{agent.promptConfig.personality_label}</Tag>
+                                             ) : null}
+                                           </div>
+                                           <div className="flex items-center gap-1.5 text-gray-400">
+                                             <span>{formatPlaybookSchedule(pb.schedule)}</span>
+                                             <Tag color={pb.enabled ? 'green' : 'default'} className="m-0 leading-none py-0">{pb.enabled ? t('playbook.active') : t('playbook.paused')}</Tag>
+                                           </div>
+                                           {pb.recipients.length > 0 && (
+                                             <div className="flex flex-wrap gap-1 text-gray-400 mt-0.5">
+                                               <MailOutlined className="opacity-50 mt-0.5" />
+                                               {pb.recipients.slice(0, 2).map((r) => (
+                                                 <span key={r} className="truncate max-w-[120px]">{r}</span>
+                                               ))}
+                                               {pb.recipients.length > 2 && (
+                                                 <span className="text-gray-400">+{pb.recipients.length - 2}</span>
+                                               )}
+                                             </div>
+                                           )}
+                                         </div>
+                                         <TouchSafeTooltip title={pb.enabled ? t('playbook.pause') : t('playbook.resume')}>
+                                           <Button
+                                             size="small"
+                                             shape="circle"
+                                             aria-label={pb.enabled ? `${t('playbook.pause')} playbook` : `${t('playbook.resume')} playbook`}
+                                             icon={pb.enabled ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+                                             loading={togglingPlaybookId === pb.id}
+                                             onClick={(e) => onTogglePlaybookEnabled(pb, e)}
+                                           />
+                                         </TouchSafeTooltip>
+                                         <TouchSafeTooltip title={t('common.edit')}>
+                                           <Button
+                                             size="small"
+                                             shape="circle"
+                                             aria-label={t('common.edit')}
+                                             icon={<EditOutlined />}
+                                          onClick={(e) => { e.stopPropagation(); onOpenScheduleEdit(pb, e); }}
+                                           />
+                                         </TouchSafeTooltip>
+                                         <InlineDeleteButton
+                                           ariaLabel={`Remove ${agents.find((a) => a.id === pb.agentId)?.name ?? 'agent'} from this source`}
+                                           confirmText={t('common.delete')}
+                                           onConfirm={async () => {
+                                             await deletePlaybook(pb.id);
+                                             await refreshPlaybooks();
+                                           }}
+                                         />
+                                       </div>
+                                     );
+                                   })}
+                                 </div>
+                               </div>
+                             ) : null}
+                             </>
+                           );
+                         })()}
+                         <Tabs
                              activeKey={activeSourceTab}
                              onChange={setActiveSourceTab}
                              items={[
@@ -1942,30 +2242,54 @@ export function AgentsPage() {
                                          <Empty description={<span className="text-sm text-gray-500">{t('library.noEpisodes')}</span>} />
                                        ) : (
                                          <ul className="divide-y divide-gray-100">
-                                           {episodes.map((ep) => (
-                                             <li key={ep.link} className="flex items-center gap-3 py-2.5">
-                                               <div className="min-w-0 flex-1">
-                                                 <div className="truncate text-sm font-medium">{ep.title}</div>
-                                                 {ep.pubDate ? (
-                                                   <div className="mt-0.5 text-xs text-gray-400">
-                                                     {new Date(ep.pubDate).toLocaleDateString()}
-                                                   </div>
-                                                 ) : null}
-                                               </div>
-                                               {linkedAgent ? (
-                                                 <TouchSafeTooltip title={t('library.runAnalysisNow')}>
-                                                   <Button
-                                                     size="small"
-                                                     shape="circle"
-                                                     aria-label={t('library.runAnalysisNow')}
-                                                     icon={<CaretRightOutlined />}
-                                                     loading={runningAgentId === linkedAgent.id}
-                                                     onClick={() => void onRunSourceEpisode({ title: ep.title, link: ep.link!, pubDate: ep.pubDate })}
+                                           {episodes.map((ep) => {
+                                             const videoId = selectedSource.type === 'youtube_videos' ? extractYoutubeVideoId(ep.link) : null;
+                                             return (
+                                               <li key={ep.link} className="flex items-center gap-3 py-2.5">
+                                                 {videoId ? (
+                                                   <img
+                                                     src={`https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`}
+                                                     alt=""
+                                                     className="w-16 h-11 rounded object-cover flex-shrink-0 bg-gray-100"
                                                    />
-                                                 </TouchSafeTooltip>
-                                               ) : null}
-                                             </li>
-                                           ))}
+                                                 ) : null}
+                                                 <div className="min-w-0 flex-1">
+                                                   <div className="truncate text-sm font-medium">{ep.title}</div>
+                                                   {ep.pubDate ? (
+                                                     <div className="mt-0.5 text-xs text-gray-400">
+                                                       {new Date(ep.pubDate).toLocaleDateString()}
+                                                     </div>
+                                                   ) : null}
+                                                 </div>
+                                                 {ep.link ? (
+                                                   <TouchSafeTooltip title={t('library.openLink')}>
+                                                     <Button
+                                                       size="small"
+                                                       shape="circle"
+                                                       aria-label={t('library.openLink')}
+                                                       icon={<LinkOutlined />}
+                                                       href={ep.link}
+                                                       target="_blank"
+                                                       rel="noopener noreferrer"
+                                                       onClick={(e) => e.stopPropagation()}
+                                                     />
+                                                   </TouchSafeTooltip>
+                                                 ) : null}
+                                                 {linkedAgent ? (
+                                                   <TouchSafeTooltip title={t('library.runAnalysisNow')}>
+                                                     <Button
+                                                       size="small"
+                                                       shape="circle"
+                                                       aria-label={t('library.runAnalysisNow')}
+                                                       icon={<CaretRightOutlined />}
+                                                       loading={runningAgentId === linkedAgent.id}
+                                                       onClick={() => void onRunSourceEpisode({ title: ep.title, link: ep.link!, pubDate: ep.pubDate })}
+                                                     />
+                                                   </TouchSafeTooltip>
+                                                 ) : null}
+                                               </li>
+                                             );
+                                           })}
                                          </ul>
                                        );
                                      })()
@@ -1981,17 +2305,33 @@ export function AgentsPage() {
                                      ) : null}
                                    </span>
                                  ),
-                                 children: sourceDetailLoading ? (
-                                   <Skeleton active paragraph={{ rows: 4 }} />
+                                 children: linkedPlaybooks.length === 0 ? (
+                                   <Empty
+                                     description={
+                                       <span className="text-sm text-gray-600">{t('library.noWorkflowCta')}</span>
+                                     }
+                                   >
+                                     <Button
+                                       icon={<RobotOutlined />}
+                                       style={{ background: '#e6f4ff', borderColor: '#91caff', color: '#1677ff', fontWeight: 600 }}
+                                       onClick={(event) => onFollowSource(selectedSource, event)}
+                                     >
+                                       {t('listen.listen')}
+                                     </Button>
+                                   </Empty>
+                                 ) : sourceDetailLoading ? (
+                                   <Skeleton active avatar={false} paragraph={{ rows: 4 }} />
                                  ) : (
                                    <AgentReportsBrowser
                                      agentId={linkedPlaybooks[0].agentId}
+                                     agentName={agents.find((a) => a.id === linkedPlaybooks[0].agentId)?.name}
+                                     collapsible
                                      reports={sourceDetailReports}
                                      onSelectSymbol={setViewingSymbol}
                                    />
                                  )
                                },
-                               {
+                               ...(linkedPlaybooks.length > 0 ? [{
                                  key: 'runs',
                                  label: (
                                    <span className="flex items-center gap-1.5">
@@ -2002,54 +2342,38 @@ export function AgentsPage() {
                                    </span>
                                  ),
                                  children: sourceDetailLoading ? (
-                                   <Skeleton active paragraph={{ rows: 4 }} />
+                                   <Skeleton active avatar={false} paragraph={{ rows: 4 }} />
                                  ) : (
                                    <AgentRunsBrowser
                                      agentId={linkedPlaybooks[0].agentId}
                                      runs={sourceDetailRuns}
                                    />
                                  )
-                               }
+                               }] : [])
                              ]}
                            />
-                         )}
                        </Card>
                      ) : null;
-                   })() : (
+                   })() : sourcesLoadState !== 'loading' ? (
                    <div className="grid gap-3 sm:grid-cols-2">
-                     {filteredSources.map((source) => (
+                     {filteredSources.map((source) => {
+                       const isRecentlyUpdated = recentlyUpdatedSourceId === source.id;
+                       const linkedForCard = playbooks.filter((p) => p.sourceIds.includes(source.id));
+                       const cardReportCount = linkedForCard.reduce((sum, pb) => {
+                         const a = agents.find((ag) => ag.id === pb.agentId);
+                         return sum + (a?.reportCount ?? 0);
+                       }, 0);
+                       return (
                        <Card
                          key={source.id}
                          size="small"
                          hoverable
-                         onClick={() => { setSelectedSourceId(source.id); setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports'); }}
-                         style={{ cursor: 'pointer' }}
-                         className="min-h-[170px] transition-shadow"
+                         onClick={() => { setRecentlyUpdatedSourceId(null); setSelectedSourceId(source.id); setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports'); }}
+                         style={{ cursor: 'pointer', outline: isRecentlyUpdated ? '2px solid #1677ff' : undefined, outlineOffset: isRecentlyUpdated ? '2px' : undefined }}
+                         styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1 } }}
+                         className="min-h-[170px] transition-shadow flex flex-col"
                          extra={
-                           <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-                             {/* Listen/Listening toggle — primary action on the card */}
-                             {followedSourceIds.has(source.id) ? (
-                               <Button
-                                 type="default"
-                                 aria-label={t('listen.listeningAriaLabel')}
-                                 size="small"
-                                 icon={<BrainIcon style={{ color: '#fff' }} />}
-                                 style={{ backgroundColor: '#389e0d', borderColor: '#389e0d', color: '#fff' }}
-                                 onClick={(event) => onFollowSource(source, event)}
-                               >
-                                 {t('listen.listening')}
-                               </Button>
-                             ) : (
-                               <Button
-                                 type="default"
-                                 aria-label={t('listen.listenAriaLabel')}
-                                 size="small"
-                                 icon={<BrainIcon />}
-                                 onClick={(event) => onFollowSource(source, event)}
-                               >
-                                 {t('listen.listen')}
-                               </Button>
-                             )}
+                           <div onClick={(event) => event.stopPropagation()}>
                              {/* Edit + Share/Publish — Delete moved into Edit view */}
                              <EntityActions
                                entityLabel="source"
@@ -2068,6 +2392,7 @@ export function AgentsPage() {
                            </div>
                          }
                        >
+                         <div className="flex-1">
                          <div className="grid grid-cols-[56px_1fr] gap-3">
                            {getSourceCoverImageUrl(source) ? (
                              <img
@@ -2084,7 +2409,7 @@ export function AgentsPage() {
                              <div className="text-sm font-semibold">{getSourceDisplayTitle(source)}</div>
                              <Text type="secondary" className="text-xs">{source.value}</Text>
                              <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                               <Tag>{source.type === 'podcast_feeds' ? 'Podcast' : source.type === 'youtube_videos' ? 'YouTube' : 'Web'}</Tag>
+                               <SourceTypeBadge type={source.type} />
                                <Tag>{getSourceKindLabel(source)}</Tag>
                                {(source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
                                  <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
@@ -2106,29 +2431,65 @@ export function AgentsPage() {
                              t('library.noEpisodes')
                            )}
                          </div>
+                         {/* flex-1 content end */}
+                         </div>
                          {(() => {
                            const linked = playbooks.filter((p) => p.sourceIds.includes(source.id));
-                           if (linked.length === 0) return (
-                             <div className="mt-3 border-t border-gray-100 pt-2 text-xs text-gray-400">
-                               {t('library.notInWorkflow')}
-                             </div>
-                           );
-                           const latestRun = linked
-                             .map((p) => p.lastRunAt)
-                             .filter(Boolean)
-                             .sort()
-                             .pop();
+                           const isFollowed = followedSourceIds.has(source.id);
+                           const latestRun = linked.length > 0
+                             ? linked.map((p) => p.lastRunAt).filter(Boolean).sort().pop()
+                             : null;
                            return (
-                             <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-2 text-xs text-gray-500">
-                               <Tag color="cyan" className="m-0">{t('library.analyzingCount', { count: linked.length })}</Tag>
-                               {latestRun
-                                 ? <span>{t('library.lastRun', { date: new Date(latestRun).toLocaleString() })}</span>
-                                 : <span>{t('library.notYetAnalyzed')}</span>}
+                             <div className="mt-3 border-t border-gray-100 pt-2" onClick={(e) => e.stopPropagation()}>
+                               {linked.length > 0 && (
+                                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                                   {linked.map((pb) => {
+                                     const agent = agents.find((a) => a.id === pb.agentId);
+                                     const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
+                                     const label = agent?.characterType ? humanizeCharacterType(agent.characterType) : (agent?.name ?? pb.name);
+                                     return (
+                                       <Tag key={pb.id} color={PERSONA_COLOR_MAP[agent?.characterType ?? ''] ?? 'cyan'} className="m-0 flex items-center gap-1">
+                                         {emoji} {label}
+                                       </Tag>
+                                     );
+                                   })}
+                                   {cardReportCount > 0 ? (
+                                     <Tag color="purple" icon={<FileTextOutlined />} className="m-0">
+                                       {cardReportCount} {cardReportCount === 1 ? t('library.reportSingular') : t('library.reportPlural')}
+                                     </Tag>
+                                   ) : null}
+                                   {latestRun
+                                     ? <span className="text-gray-400">{t('library.lastRun', { date: new Date(latestRun).toLocaleString() })}</span>
+                                     : <span className="text-gray-400">{t('library.notYetAnalyzed')}</span>}
+                                 </div>
+                               )}
+                               {isFollowed ? (
+                                 <Button
+                                   block
+                                   aria-label={t('listen.listeningAriaLabel')}
+                                   icon={<RobotFilled className="robot-pulse" />}
+                                   style={{ background: '#1677ff', borderColor: '#1677ff', color: '#fff', fontWeight: 600 }}
+                                   onClick={(event) => onFollowSource(source, event)}
+                                 >
+                                   {t('listen.listening')}
+                                 </Button>
+                               ) : (
+                                 <Button
+                                   block
+                                   aria-label={t('listen.listenAriaLabel')}
+                                   icon={<RobotOutlined />}
+                                   style={{ background: '#e6f4ff', borderColor: '#91caff', color: '#1677ff', fontWeight: 600 }}
+                                   onClick={(event) => onFollowSource(source, event)}
+                                 >
+                                   {t('listen.listen')}
+                                 </Button>
+                               )}
                              </div>
                            );
                          })()}
                        </Card>
-                     ))}
+                       );
+                     })}
                      <GhostCreateCard
                        ariaLabel="Create new source"
                        onClick={() => {
@@ -2142,7 +2503,7 @@ export function AgentsPage() {
                        sub="URL detect + metadata preview"
                      />
                    </div>
-                   )}
+                   ) : null}
                    </>
                    ) : null}
                    <Modal
@@ -2203,10 +2564,12 @@ export function AgentsPage() {
                        />
                        {isSourceDetecting ? (
                          <Card size="small">
-                           <div className="flex gap-3">
-                             <Skeleton.Image active className="!h-16 !w-16 shrink-0 rounded-md" />
-                             <div className="flex-1 min-w-0">
-                               <Skeleton active title={{ width: '60%' }} paragraph={{ rows: 2 }} />
+                           <div className="flex items-start gap-3">
+                             <Skeleton.Avatar active shape="square" size={64} className="shrink-0 rounded-md" />
+                             <div className="flex-1 min-w-0 space-y-2 pt-1">
+                               <Skeleton.Input active size="small" style={{ width: '60%' }} block />
+                               <Skeleton.Input active size="small" style={{ width: '85%' }} block />
+                               <Skeleton.Input active size="small" style={{ width: '45%' }} block />
                              </div>
                            </div>
                          </Card>
@@ -2516,7 +2879,14 @@ export function AgentsPage() {
                     {selectedPlaybook ? (
                       <Card
                         size="small"
-                        title={selectedPlaybook.name}
+                        title={
+                          <span className="flex items-center gap-2">
+                            {selectedPlaybook.name}
+                            {runningAgentId === selectedPlaybook.agentId ? (
+                              <Tag color="processing" icon={<LoadingOutlined spin />} className="m-0">Running</Tag>
+                            ) : null}
+                          </span>
+                        }
                         extra={
                           <div className="flex items-center gap-2">
                             {executionAgent ? (
@@ -2565,7 +2935,7 @@ export function AgentsPage() {
                             },
                             {
                               key: 'runs',
-                              label: 'Runs',
+                              label: t('library.runsTab'),
                               children: (
                                 <AgentRunsBrowser agentId={selectedPlaybook.agentId} runs={runs} onViewReport={onViewReport} />
                               )
@@ -2607,10 +2977,11 @@ export function AgentsPage() {
                                     defaultPublishTitle={playbook.name}
                                   />
                                   {playbook.ownerUserId === user?.id ? (
-                                    <TouchSafeTooltip title={playbook.enabled ? 'Pause playbook' : 'Resume playbook'}>
+                                    <TouchSafeTooltip title={playbook.enabled ? t('playbook.pause') : t('playbook.resume')}>
                                       <Button
-                                        aria-label={playbook.enabled ? 'Pause playbook' : 'Resume playbook'}
+                                        aria-label={playbook.enabled ? `${t('playbook.pause')} playbook` : `${t('playbook.resume')} playbook`}
                                         shape="circle"
+                                        loading={togglingPlaybookId === playbook.id}
                                         icon={playbook.enabled ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
                                         onClick={(event) => onTogglePlaybookEnabled(playbook, event)}
                                       />
@@ -2621,7 +2992,13 @@ export function AgentsPage() {
                             >
                               <div className="text-sm font-semibold">{playbook.name}</div>
                               <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                                {playbook.enabled ? <Tag color="success">Active</Tag> : <Tag color="default">Paused</Tag>}
+                                {runningAgentId === playbook.agentId ? (
+                                  <Tag color="processing" icon={<LoadingOutlined spin />}>Running</Tag>
+                                ) : playbook.enabled ? (
+                                  <Tag color="success">{t('playbook.active')}</Tag>
+                                ) : (
+                                  <Tag color="default">{t('playbook.paused')}</Tag>
+                                )}
                                 <Tag>Sources: {playbook.sourceIds.length}</Tag>
                                 <Tag>Recipients: {playbook.recipients.length}</Tag>
                                 <Tag icon={<ClockCircleOutlined />}>Schedule: {formatPlaybookSchedule(playbook.schedule)}</Tag>
@@ -2659,7 +3036,7 @@ export function AgentsPage() {
                           prefix={<SearchOutlined />}
                           allowClear
                         />
-                        {filteredMarketplacePlaybooks.length === 0 ? <Empty description={marketplacePlaybooksSearch ? 'No matching playbooks.' : 'No marketplace playbooks available.'} /> : null}
+                        {filteredMarketplacePlaybooks.length === 0 ? <Empty description={marketplacePlaybooksSearch ? t('marketplace.noItems') : t('marketplace.noItems')} /> : null}
                         {filteredMarketplacePlaybooks.map((item) => (
                           <Card key={item.publicationId} size="small">
                             <div className="flex items-center justify-between gap-3">
@@ -2672,7 +3049,7 @@ export function AgentsPage() {
                                 loading={cloningPublicationId === item.publicationId}
                                 onClick={() => onCloneMarketplacePlaybook(item.publicationId)}
                               >
-                                Clone
+                                {cloningPublicationId === item.publicationId ? t('marketplace.cloningButton') : t('marketplace.cloneButton')}
                               </Button>
                             </div>
                           </Card>
@@ -2769,7 +3146,7 @@ export function AgentsPage() {
                           {source.value}
                         </Text>
                         <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                          <Tag>{source.type === 'podcast_feeds' ? 'Podcast' : source.type === 'youtube_videos' ? 'YouTube' : 'Web'}</Tag>
+                          <SourceTypeBadge type={source.type} />
                           <Tag>{getSourceKindLabel(source)}</Tag>
                           {(source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
                             <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
@@ -2805,11 +3182,20 @@ export function AgentsPage() {
               {!showInlineAgentCreate ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 {agents.map((agent) => {
-                  const selected = playbookAgentIdDraft === agent.id;
-                  const anySelected = playbookAgentIdDraft !== null;
+                  const selected = playbookAgentIdsDraft.includes(agent.id);
+                  const anySelected = playbookAgentIdsDraft.length > 0;
+                  const isFocused = wizardFocusedAgentId === agent.id;
                   const { intro, icon, characterLabel, personalityLabel, personaId } = getAgentCardDisplay(agent, t);
                   const iconBgClass = PERSONA_ICON_BG_MAP[personaId] ?? PERSONA_ICON_BG_MAP['summarizer'];
                   const tagColor = PERSONA_COLOR_MAP[personaId] ?? 'default';
+
+                  const linkedPlaybookEntry = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === agent.id);
+                  // If this agent is already linked to the current source, show that playbook's schedule.
+                  // Otherwise fall back to any playbook the agent owns (as a hint of their typical schedule).
+                  const linkedPlaybook = linkedPlaybookEntry
+                    ? playbooks.find((p) => p.id === linkedPlaybookEntry.playbookId)
+                    : playbooks.find((p) => p.agentId === agent.id);
+                  const linkedToThisSource = Boolean(linkedPlaybookEntry);
 
                   return (
                     <div
@@ -2820,7 +3206,10 @@ export function AgentsPage() {
                       ariaLabel={`Select agent ${agent.name}`}
                       selected={selected}
                       onClick={() => {
-                        setPlaybookAgentIdDraft(agent.id);
+                        // Always toggle — works in both create and edit modes
+                        setPlaybookAgentIdsDraft((prev) =>
+                          prev.includes(agent.id) ? prev.filter((id) => id !== agent.id) : [...prev, agent.id]
+                        );
                         setShowInlineAgentCreate(false);
                       }}
                     >
@@ -2835,27 +3224,53 @@ export function AgentsPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <InlineDeleteButton
-                              ariaLabel={`Delete agent ${agent.name}`}
-                              confirmText={t('common.delete')}
-                              onConfirm={async () => {
-                                await deleteAgent(agent.id);
-                                if (playbookAgentIdDraft === agent.id) setPlaybookAgentIdDraft(null);
-                                const refreshed = await listAgents();
-                                setAgents(refreshed);
-                              }}
-                            />
+                          {isFocused ? (
+                            <Tag color="blue" className="m-0 text-xs">{t('common.editing') || 'Editing'}</Tag>
+                          ) : (
+                            <InlineDeleteButton
+                                ariaLabel={`Delete agent ${agent.name}`}
+                                confirmText={t('common.delete')}
+                                onConfirm={async () => {
+                                  await deleteAgent(agent.id);
+                                  setPlaybookAgentIdsDraft((prev) => prev.filter((id) => id !== agent.id));
+                                  setWizardAlreadyLinkedAgentIds((prev) => prev.filter((id) => id !== agent.id));
+                                  setWizardAlreadyLinkedPlaybooks((prev) => prev.filter((p) => p.agentId !== agent.id));
+                                  await refreshPlaybooks();
+                                  const refreshed = await listAgents();
+                                  setAgents(refreshed);
+                                }}
+                              />
+                          )}
                         </div>
                       </div>
                       {/* Row 2: character + personality identity tags */}
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         <Tag color={tagColor}>{characterLabel}</Tag>
-                        <Tag>{personalityLabel}</Tag>
+                        <Tag color="magenta">{personalityLabel}</Tag>
                       </div>
                       {/* Row 3: greeting intro — quoted and italic */}
                       <p className="mt-2 text-xs italic text-gray-500 dark:text-gray-400 leading-relaxed">
                         &ldquo;{intro}&rdquo;
                       </p>
+                      {/* Row 4: schedule + recipients — current source if linked, otherwise from agent's other playbooks as a hint */}
+                      {linkedPlaybook && (
+                        <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                          {!linkedToThisSource && (
+                            <span className="w-full text-gray-300 dark:text-gray-600 italic">{t('playbook.scheduleHint') || 'typical:'}</span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <ClockCircleOutlined />
+                            {formatPlaybookSchedule(linkedPlaybook.schedule)}
+                          </span>
+                          {linkedPlaybook.recipients.length > 0 && (
+                            <span className="flex items-center gap-1">
+                              <MailOutlined />
+                              {linkedPlaybook.recipients.slice(0, 2).join(', ')}
+                              {linkedPlaybook.recipients.length > 2 && ` +${linkedPlaybook.recipients.length - 2}`}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </WizardSelectableCard>
                     </div>
                   );
@@ -2909,7 +3324,7 @@ export function AgentsPage() {
                               aria-label={`Inline character ${t(`personas.${persona.id}.name`)}`}
                             >
                               {inlineAgentPersonaId === persona.id ? (
-                                <span className="absolute top-1 right-1 text-base leading-none"><BrainIcon /></span>
+                                <span className="absolute top-1 right-1 text-sm leading-none text-blue-500"><RobotFilled /></span>
                               ) : null}
                               <p className="font-medium text-sm">{t(`personas.${persona.id}.name`)}</p>
                               <p className="text-xs text-gray-500">{t(`personas.${persona.id}.tagline`)}</p>
@@ -2942,7 +3357,7 @@ export function AgentsPage() {
                               aria-label={`Inline personality ${t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}`}
                             >
                               {inlineAgentCharacterId === char.id ? (
-                                <span className="absolute top-1 right-1 text-base leading-none"><BrainIcon /></span>
+                                <span className="absolute top-1 right-1 text-sm leading-none text-violet-500"><RobotFilled /></span>
                               ) : null}
                               <p className="font-medium text-sm">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}</p>
                               <p className="text-xs text-gray-500">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.tagline`)}</p>
@@ -2950,6 +3365,28 @@ export function AgentsPage() {
                           ))}
                         </div>
                         <div className="border-t pt-3 space-y-3">
+                          {/* Report detail level picker */}
+                          <div>
+                            <p className="mb-2 text-xs text-gray-500">{t('report.detail.label')}</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              {([
+                                { id: 'brief' as const, label: t('report.detail.brief'), desc: t('report.detail.briefDesc'), icon: '⚡' },
+                                { id: 'standard' as const, label: t('report.detail.standard'), desc: t('report.detail.standardDesc'), icon: '📊' },
+                                { id: 'detailed' as const, label: t('report.detail.detailed'), desc: t('report.detail.detailedDesc'), icon: '🔬' },
+                              ]).map((opt) => (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  onClick={() => setInlineAgentReportDetailLevel(opt.id)}
+                                  className={`relative rounded-md border p-3 text-left transition ${inlineAgentReportDetailLevel === opt.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                                >
+                                  <div className="text-base mb-1">{opt.icon}</div>
+                                  <p className="font-medium text-sm">{opt.label}</p>
+                                  <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           {inlineAgentPersonaId === 'finance_expert' ? (
                             <div>
                               <p className="mb-1 text-xs text-gray-500">{t('agent.riskLevel')}</p>
@@ -3011,41 +3448,41 @@ export function AgentsPage() {
                         />
                         {playbookScheduleModeDraft === 'interval' ? (
                           <Input
-                            aria-label="Playbook interval minutes"
+                            aria-label={t('schedule.intervalAriaLabel')}
                             value={String(playbookIntervalMinutesDraft)}
                             onChange={(event) => setPlaybookIntervalMinutesDraft(Math.max(15, Number(event.currentTarget.value) || 60))}
-                            placeholder="Interval in minutes"
+                            placeholder={t('schedule.intervalPlaceholder')}
                           />
                         ) : (
                           <div className="space-y-2">
                             <div className="grid gap-2 md:grid-cols-2">
                               <Input
-                                aria-label="Playbook daily time"
+                                aria-label={t('schedule.dailyTimeAriaLabel')}
                                 value={playbookDailyTimeDraft}
                                 onChange={(event) => setPlaybookDailyTimeDraft(event.currentTarget.value)}
                                 placeholder="HH:mm"
                               />
                               <Select
-                                aria-label="Playbook timezone"
+                                aria-label={t('schedule.timezoneAriaLabel')}
                                 value={playbookTimezoneDraft}
                                 onChange={(value) => setPlaybookTimezoneDraft(value)}
                                 options={TIMEZONE_OPTIONS}
-                                placeholder="Select timezone"
+                                placeholder={t('schedule.timezonePlaceholder')}
                                 showSearch
                                 className="w-full"
                               />
                             </div>
                             {playbookScheduleModeDraft === 'weekly' ? (
                               <Select
-                                aria-label="Playbook days of week"
+                                aria-label={t('schedule.daysOfWeekAriaLabel')}
                                 mode="multiple"
                                 value={playbookDaysOfWeekDraft}
                                 onChange={(values) => setPlaybookDaysOfWeekDraft(values as number[])}
                                 options={[
-                                  { value: 1, label: 'Mon' }, { value: 2, label: 'Tue' },
-                                  { value: 3, label: 'Wed' }, { value: 4, label: 'Thu' },
-                                  { value: 5, label: 'Fri' }, { value: 6, label: 'Sat' },
-                                  { value: 0, label: 'Sun' }
+                                  { value: 1, label: t('schedule.days.mon') }, { value: 2, label: t('schedule.days.tue') },
+                                  { value: 3, label: t('schedule.days.wed') }, { value: 4, label: t('schedule.days.thu') },
+                                  { value: 5, label: t('schedule.days.fri') }, { value: 6, label: t('schedule.days.sat') },
+                                  { value: 0, label: t('schedule.days.sun') }
                                 ]}
                                 className="w-full"
                               />
@@ -3087,44 +3524,44 @@ export function AgentsPage() {
               />
               {playbookScheduleModeDraft === 'interval' ? (
                 <Input
-                  aria-label="Playbook interval minutes"
+                  aria-label={t('schedule.intervalAriaLabel')}
                   value={String(playbookIntervalMinutesDraft)}
                   onChange={(event) => setPlaybookIntervalMinutesDraft(Math.max(15, Number(event.currentTarget.value) || 60))}
-                  placeholder="Interval minutes"
+                  placeholder={t('schedule.intervalPlaceholder')}
                 />
               ) : (
                 <>
                   <div className="grid gap-3 md:grid-cols-2">
                     <Input
-                      aria-label="Playbook daily time"
+                      aria-label={t('schedule.dailyTimeAriaLabel')}
                       value={playbookDailyTimeDraft}
                       onChange={(event) => setPlaybookDailyTimeDraft(event.currentTarget.value)}
                       placeholder="HH:mm"
                     />
                     <Select
-                      aria-label="Playbook timezone"
+                      aria-label={t('schedule.timezoneAriaLabel')}
                       value={playbookTimezoneDraft}
                       onChange={(value) => setPlaybookTimezoneDraft(value)}
                       options={TIMEZONE_OPTIONS}
-                      placeholder="Select timezone"
+                      placeholder={t('schedule.timezonePlaceholder')}
                       showSearch
                       className="w-full"
                     />
                   </div>
                   {playbookScheduleModeDraft === 'weekly' ? (
                     <Select
-                      aria-label="Playbook days of week"
+                      aria-label={t('schedule.daysOfWeekAriaLabel')}
                       mode="multiple"
                       value={playbookDaysOfWeekDraft}
                       onChange={(values) => setPlaybookDaysOfWeekDraft(values as number[])}
                       options={[
-                        { value: 1, label: 'Mon' },
-                        { value: 2, label: 'Tue' },
-                        { value: 3, label: 'Wed' },
-                        { value: 4, label: 'Thu' },
-                        { value: 5, label: 'Fri' },
-                        { value: 6, label: 'Sat' },
-                        { value: 0, label: 'Sun' }
+                        { value: 1, label: t('schedule.days.mon') },
+                        { value: 2, label: t('schedule.days.tue') },
+                        { value: 3, label: t('schedule.days.wed') },
+                        { value: 4, label: t('schedule.days.thu') },
+                        { value: 5, label: t('schedule.days.fri') },
+                        { value: 6, label: t('schedule.days.sat') },
+                        { value: 0, label: t('schedule.days.sun') }
                       ]}
                     />
                   ) : null}
@@ -3194,6 +3631,14 @@ export function AgentsPage() {
                     {t('agent.create')}
                 </Button>
               )
+            ) : playbookCreateStep < 2 && !followWizardSourcePreselected ? (
+              <Button type="primary" onClick={onNextPlaybookCreateStep}>
+                  {t('common.next')}
+              </Button>
+            ) : playbookCreateStep === 1 && followWizardSourcePreselected ? (
+              <Button type="primary" loading={isPlaybookSaving} onClick={() => void onCreatePlaybook()}>
+                  {t('common.save')}
+              </Button>
             ) : playbookCreateStep < 2 ? (
               <Button type="primary" onClick={onNextPlaybookCreateStep}>
                   {t('common.next')}
@@ -3214,6 +3659,145 @@ export function AgentsPage() {
         onSelectEpisode={onSelectEpisodeFromPicker}
         onCancel={closeEpisodePicker}
       />
+      {/* Agent picker: shown when multiple agents watch the same source and user clicks ▶ */}
+      <Modal
+        title="Which agent should run?"
+        open={runPickerOpen}
+        onCancel={() => setRunPickerOpen(false)}
+        footer={null}
+        destroyOnHidden
+      >
+        <div className="space-y-2 py-1">
+          {runPickerLinked.map(({ playbook, agent }) => {
+            const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
+            const characterLabel = agent?.characterType ? humanizeCharacterType(agent.characterType) : null;
+            const tagColor = PERSONA_COLOR_MAP[agent?.characterType ?? ''] ?? 'default';
+            return (
+              <Button
+                key={playbook.id}
+                block
+                size="large"
+                className="text-left h-auto py-3"
+                onClick={() => void onRunPickerSelect(playbook, agent)}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{emoji}</span>
+                  <div className="flex flex-col items-start gap-0.5 min-w-0">
+                    <span className="font-semibold text-sm">{agent?.name ?? playbook.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      {characterLabel ? <Tag color={tagColor} className="m-0 text-xs">{characterLabel}</Tag> : null}
+                      {agent?.promptConfig?.personality_label ? <Tag color="magenta" className="m-0 text-xs">{agent.promptConfig.personality_label}</Tag> : null}
+                    </div>
+                  </div>
+                </div>
+              </Button>
+            );
+          })}
+        </div>
+      </Modal>
+      {/* Schedule-only edit modal — opened via ✎ on individual playbook cards in the detail panel */}
+      <Modal
+        title={scheduleEditPlaybook ? `${agents.find((a) => a.id === scheduleEditPlaybook.agentId)?.name ?? t('common.edit')} — ${t('playbook.schedule')}` : t('common.edit')}
+        open={isScheduleEditOpen}
+        onCancel={() => { setIsScheduleEditOpen(false); setScheduleEditPlaybook(null); }}
+        footer={null}
+        destroyOnHidden
+        width={480}
+      >
+        <div className="space-y-4 pt-2">
+          <Select
+            aria-label={t('schedule.mode')}
+            value={playbookScheduleModeDraft}
+            onChange={(value) => setPlaybookScheduleModeDraft(value as 'interval' | 'daily' | 'weekly')}
+            options={[
+              { value: 'interval', label: t('schedule.interval') },
+              { value: 'daily', label: t('schedule.daily') },
+              { value: 'weekly', label: t('schedule.weekly') }
+            ]}
+            className="w-full"
+          />
+          {playbookScheduleModeDraft === 'interval' ? (
+            <Input
+              aria-label={t('schedule.intervalAriaLabel')}
+              value={String(playbookIntervalMinutesDraft)}
+              onChange={(event) => setPlaybookIntervalMinutesDraft(Math.max(15, Number(event.currentTarget.value) || 60))}
+              placeholder={t('schedule.intervalPlaceholder')}
+            />
+          ) : (
+            <>
+              <div className="grid gap-3 grid-cols-2">
+                <Input
+                  aria-label={t('schedule.dailyTimeAriaLabel')}
+                  value={playbookDailyTimeDraft}
+                  onChange={(event) => setPlaybookDailyTimeDraft(event.currentTarget.value)}
+                  placeholder="HH:mm"
+                />
+                <Select
+                  aria-label={t('schedule.timezoneAriaLabel')}
+                  value={playbookTimezoneDraft}
+                  onChange={(value) => setPlaybookTimezoneDraft(value)}
+                  options={TIMEZONE_OPTIONS}
+                  placeholder={t('schedule.timezonePlaceholder')}
+                  showSearch
+                  className="w-full"
+                />
+              </div>
+              {playbookScheduleModeDraft === 'weekly' && (
+                <Select
+                  aria-label={t('schedule.daysOfWeekAriaLabel')}
+                  mode="multiple"
+                  value={playbookDaysOfWeekDraft}
+                  onChange={(values) => setPlaybookDaysOfWeekDraft(values as number[])}
+                  options={[
+                    { value: 1, label: t('schedule.days.mon') },
+                    { value: 2, label: t('schedule.days.tue') },
+                    { value: 3, label: t('schedule.days.wed') },
+                    { value: 4, label: t('schedule.days.thu') },
+                    { value: 5, label: t('schedule.days.fri') },
+                    { value: 6, label: t('schedule.days.sat') },
+                    { value: 0, label: t('schedule.days.sun') }
+                  ]}
+                  className="w-full"
+                />
+              )}
+            </>
+          )}
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t('playbook.recipients')}</p>
+            {playbookRecipientsDraft.map((recipient, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <Input
+                  value={recipient}
+                  onChange={(e) => {
+                    const updated = [...playbookRecipientsDraft];
+                    updated[index] = e.target.value;
+                    setPlaybookRecipientsDraft(updated);
+                  }}
+                  placeholder="email@example.com"
+                />
+                <Button
+                  size="small"
+                  danger
+                  onClick={() => setPlaybookRecipientsDraft((prev) => prev.filter((_, i) => i !== index))}
+                >
+                  ✕
+                </Button>
+              </div>
+            ))}
+            <Button size="small" onClick={() => setPlaybookRecipientsDraft((prev) => [...prev, ''])}>
+              + {t('playbook.addRecipient')}
+            </Button>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+            <Button onClick={() => { setIsScheduleEditOpen(false); setScheduleEditPlaybook(null); }}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="primary" loading={isScheduleEditSaving} onClick={() => void onSaveScheduleEdit()}>
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </Layout>
   );
 }

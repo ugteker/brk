@@ -18,7 +18,8 @@
     "search": "Suchen",
     "noData": "Keine Daten",
     "selected": "Ausgewählt",
-    "optional": "optional"
+    "optional": "optional",
+    "editing": "Wird bearbeitet"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -41,7 +42,7 @@
     "failedSources": "Quellen konnten nicht geladen werden.",
     "noSources": "Diese Bibliothek enthält noch keine Quellen.",
     "browseMarketplace": "Marketplace durchsuchen",
-    "backToLibrary": "← Zurück zur Bibliothek",
+    "backToLibrary": "Zurück zur Bibliothek",
     "createTab": "Bibliotheks-Tab erstellen",
     "renameTab": "Aktiven Bibliotheks-Tab umbenennen",
     "tabTooltip": "Tab hinzufügen",
@@ -57,14 +58,20 @@
     "notYetAnalyzed": "Noch nicht analysiert",
     "noWorkflowCta": "Noch kein Analyse-Workflow für diese Quelle. Füge sie einem Playbook hinzu, um Berichte zu erstellen.",
     "reportsTab": "Berichte",
-    "runsTab": "Läufe",
+    "runsTab": "Verlauf",
     "episodesTab": "Episoden",
     "runAnalysisNow": "Analyse jetzt starten",
-    "analysisStarted": "Analyse gestartet"
+    "openLink": "Link öffnen",
+    "analysisStarted": "Analyse gestartet",
+    "expertsWatching": "Deine Experten beobachten dies",
+    "tabNameRequired": "Tab-Name darf nicht leer sein",
+    "reportSingular": "Bericht",
+    "reportPlural": "Berichte",
+    "alreadyWatching": "Beobachtet bereits"
   },
   "listen": {
-    "listen": "Fasse zusammen!",
-    "listening": "Fasse zusammen!",
+    "listen": "Fasse zusammen",
+    "listening": "Wird zusammengefasst",
     "listenAriaLabel": "Diese Quelle zusammenfassen",
     "listeningAriaLabel": "Fasst diese Quelle zusammen",
     "stopListening": "Nicht mehr zusammenfassen",
@@ -125,7 +132,17 @@
     "recipients": "E-Mail-Empfänger (optional)",
     "recipientsPlaceholder": "Eine oder mehrere E-Mail-Adressen eingeben",
     "recipientsHint": "Leer lassen, um keine E-Mails zu senden. Empfänger können später hinzugefügt werden.",
-    "recipientsLabel": "Empfänger-E-Mails"
+    "recipientsLabel": "Empfänger-E-Mails",
+    "intervalPlaceholder": "Intervall in Minuten",
+    "timezonePlaceholder": "Zeitzone auswählen",
+    "dailyTimeAriaLabel": "Planungsuhrzeit",
+    "timezoneAriaLabel": "Zeitzone des Playbooks",
+    "intervalAriaLabel": "Intervall in Minuten",
+    "daysOfWeekAriaLabel": "Wochentage",
+    "days": {
+      "mon": "Mo", "tue": "Di", "wed": "Mi", "thu": "Do",
+      "fri": "Fr", "sat": "Sa", "sun": "So"
+    }
   },
   "playbook": {
     "createPlaybook": "Playbook erstellen",
@@ -139,7 +156,16 @@
     "disable": "Deaktivieren",
     "runNow": "Jetzt ausführen",
     "pickSourceFirst": "Zuerst eine Quelle auswählen",
-    "pickAgentFirst": "Zuerst einen Agenten auswählen"
+    "pickAgentFirst": "Zuerst einen Agenten auswählen",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "paused": "Pausiert",
+    "active": "Aktiv",
+    "createPlaybooks": "{{count}} Playbooks erstellt",
+    "schedule": "Zeitplan & Empfänger",
+    "recipients": "E-Mail-Empfänger",
+    "addRecipient": "Empfänger hinzufügen",
+    "scheduleHint": "typisch:"
   },
   "source": {
     "noSources": "Keine Quellen verfügbar.",
@@ -155,6 +181,51 @@
     "noItems": "Keine Marketplace-Einträge gefunden.",
     "cloneButton": "Klonen",
     "cloningButton": "Wird geklont…"
+  },
+  "runs": {
+    "noRuns": "Noch kein Verlauf. Der Verlauf erscheint hier, sobald der Zeitplan des Agenten startet (oder du manuell ausführst).",
+    "scheduled": "Geplant",
+    "runningFor": "Läuft seit",
+    "viewReport": "Bericht anzeigen",
+    "noContentFound": "Kein Inhalt gefunden",
+    "noErrorDetails": "Für diesen Fehler sind keine weiteren Details verfügbar.",
+    "noPreview": "Keine Vorschau verfügbar.",
+    "showLess": "Weniger anzeigen",
+    "showMore": "Mehr anzeigen",
+    "downloadContent": "Vollständigen Inhalt herunterladen ({{length}} Zeichen)",
+    "retry": "Versuch #{{count}}",
+    "duration": "Dauer",
+    "phase": {
+      "crawling": "Quellen werden abgerufen…",
+      "analyzing": "KI-Analyse läuft…",
+      "notifying": "Benachrichtigungen werden gesendet…"
+    },
+    "status": {
+      "succeeded_no_new_content": "kein neuer Inhalt"
+    }
+  },
+  "report": {
+    "summary": "Zusammenfassung",
+    "keyTakeaways": "Wesentliche Erkenntnisse",
+    "sourcesUsed": "Verwendete Quellen",
+    "citations": "Quellenangaben",
+    "marketSummary": "Marktzusammenfassung",
+    "signals": "Signale",
+    "lessonExplanation": "Lektionserklärung",
+    "qaDrill": "Q&A-Übung",
+    "argumentReflection": "Argument & Reflexion",
+    "contentAngles": "Content-Winkel",
+    "hooks": "Hooks",
+    "bulletDigest": "Stichwort-Zusammenfassung",
+    "detail": {
+      "label": "Detailgrad des Berichts",
+      "brief": "Kurz",
+      "briefDesc": "Nur wesentliche Punkte, schnell lesbar",
+      "standard": "Standard",
+      "standardDesc": "Ausgewogene Tiefe und Abdeckung",
+      "detailed": "Ausführlich",
+      "detailedDesc": "Tiefgreifende Analyse mit vollem Kontext"
+    }
   },
   "entityActions": {
     "edit": "{{label}} bearbeiten",

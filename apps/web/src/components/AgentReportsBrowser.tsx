@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, Empty, Progress, Tag, message } from 'antd';
-import { MailOutlined } from '@ant-design/icons';
+import { Button, Card, Empty, Input, Progress, Tag, message } from 'antd';
+import { DownOutlined, MailOutlined, UpOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { resendReportNotification, type RunReportDto, type SignalDto } from '../api/agents';
 import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { TradingViewSymbolChart } from './TradingViewSymbolChart';
@@ -8,11 +9,22 @@ import { CharacterReportRenderer } from './CharacterReportRenderer';
 
 interface AgentReportsBrowserProps {
   agentId: string;
+  agentName?: string;
   reports: RunReportDto[];
+  collapsible?: boolean;
   onSelectReport?: (report: RunReportDto) => void;
   onSelectSymbol?: (symbol: string) => void;
   highlightedReportId?: string | null;
 }
+
+const CHARACTER_LABELS: Record<string, { emoji: string; label: string }> = {
+  finance_expert: { emoji: '📈', label: 'Finance Expert' },
+  teacher:        { emoji: '🎓', label: 'Teacher' },
+  influencer:     { emoji: '📣', label: 'Influencer' },
+  trainer:        { emoji: '💪', label: 'Trainer' },
+  philosopher:    { emoji: '🦉', label: 'Philosopher' },
+  summarizer:     { emoji: '📋', label: 'Summarizer' },
+};
 
 const HEADLINE_MAX_LENGTH = 80;
 const TOKEN_FORMATTER = new Intl.NumberFormat('de-DE');
@@ -79,13 +91,21 @@ export function computeAiTotals(reports: RunReportDto[]): AiTotals {
   return { reportCountWithUsage, totalInputTokens, totalOutputTokens, totalEstimatedCostUsd, hasAnyCost };
 }
 
-export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelectSymbol, highlightedReportId }: AgentReportsBrowserProps) {
+export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, onSelectReport, onSelectSymbol, highlightedReportId }: AgentReportsBrowserProps) {
+  const { t } = useTranslation();
   const highlightedRef = useRef<HTMLDivElement | null>(null);
   const [sendingReportId, setSendingReportId] = useState<string | null>(null);
+  const [expandedReportIds, setExpandedReportIds] = useState<Set<string>>(() =>
+    collapsible && reports.length === 1 ? new Set([reports[0].id]) : new Set()
+  );
   // Only one inline chart is shown at a time across the whole list; keyed by `${reportId}:${symbol}`
   // so re-clicking the same tag collapses it, and clicking a different tag (even on another
   // report) closes whichever chart was previously open.
   const [expandedChartKey, setExpandedChartKey] = useState<string | null>(null);
+  // Tracks user-overridden symbols (e.g. "AAPL" → "NASDAQ:AAPL") per chart key so the user can
+  // fix "This symbol doesn't exist" errors by adding the exchange prefix themselves.
+  const [symbolOverrides, setSymbolOverrides] = useState<Record<string, string>>({});
+  const [symbolInputDraft, setSymbolInputDraft] = useState<Record<string, string>>({});
 
   const aiTotals = useMemo(() => computeAiTotals(reports), [reports]);
 
@@ -97,9 +117,29 @@ export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelect
     }
   }, [highlightedReportId]);
 
-  function onToggleChart(key: string, event: React.MouseEvent) {
+  function onToggleChart(key: string, symbol: string, event: React.MouseEvent) {
     event.stopPropagation();
-    setExpandedChartKey((prev) => (prev === key ? null : key));
+    setExpandedChartKey((prev) => {
+      if (prev === key) return null;
+      // Initialise the input draft with whatever symbol we have (override or original)
+      setSymbolInputDraft((d) => ({ ...d, [key]: symbolOverrides[key] ?? symbol }));
+      return key;
+    });
+  }
+
+  function onApplySymbolOverride(key: string) {
+    const draft = (symbolInputDraft[key] ?? '').trim();
+    if (!draft) return;
+    setSymbolOverrides((prev) => ({ ...prev, [key]: draft }));
+  }
+
+  function onToggleExpand(reportId: string, event: React.MouseEvent) {
+    event.stopPropagation();
+    setExpandedReportIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(reportId)) { next.delete(reportId); } else { next.add(reportId); }
+      return next;
+    });
   }
 
   async function onResendNotification(reportId: string, event: React.MouseEvent) {
@@ -131,6 +171,10 @@ export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelect
       {reports.map((report) => {
         const confidence = averageSignalConfidence(report.signals);
         const isHighlighted = report.id === highlightedReportId;
+        const isExpanded = !collapsible || expandedReportIds.has(report.id);
+        const characterType = report.report?.section?.character_type;
+        const personaEmoji = characterType ? (CHARACTER_LABELS[characterType]?.emoji ?? '🤖') : null;
+        const personaLabel = characterType ? t(`personas.${characterType}.name`, { defaultValue: CHARACTER_LABELS[characterType]?.label ?? characterType }) : null;
         return (
           <Card
             key={report.id}
@@ -146,8 +190,16 @@ export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelect
             onClick={() => onSelectReport?.(report)}
           >
             <div className="flex items-center justify-between gap-3">
-              <div className="flex-1">
-                <p className="text-xs text-gray-500">{new Date(report.createdAt).toLocaleString()}</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  {personaLabel ? (
+                    <Tag color="blue" className="m-0">{personaEmoji} {personaLabel}</Tag>
+                  ) : null}
+                  {agentName ? (
+                    <span className="text-xs font-medium text-gray-600">{agentName}</span>
+                  ) : null}
+                  <span className="text-xs text-gray-400">{new Date(report.createdAt).toLocaleString()}</span>
+                </div>
                 <h4 className="text-base font-semibold">{deriveReportHeadline(report.summary)}</h4>
                 <p className="text-xs text-gray-400" data-testid={`ai-stats-${report.id}`}>
                   {formatReportAiStats(report)}
@@ -160,7 +212,7 @@ export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelect
                         key={chartKey}
                         color={signal.side === 'long' ? 'green' : 'red'}
                         style={{ cursor: 'pointer' }}
-                        onClick={(event) => onToggleChart(chartKey, event)}
+                        onClick={(event) => onToggleChart(chartKey, signal.symbol, event)}
                       >
                         {signal.symbol} · {signal.side === 'long' ? 'Long' : 'Short'}
                       </Tag>
@@ -169,7 +221,18 @@ export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelect
                   {report.needsHumanReview ? <Tag color="gold">Needs review</Tag> : null}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {collapsible ? (
+                  <TouchSafeTooltip title={isExpanded ? 'Collapse' : 'Expand'}>
+                    <Button
+                      aria-label={isExpanded ? 'Collapse report' : 'Expand report'}
+                      shape="circle"
+                      size="small"
+                      icon={isExpanded ? <UpOutlined /> : <DownOutlined />}
+                      onClick={(event) => onToggleExpand(report.id, event)}
+                    />
+                  </TouchSafeTooltip>
+                ) : null}
                 <TouchSafeTooltip title="Re-send email notification">
                   <Button
                     aria-label="Re-send email notification"
@@ -191,13 +254,13 @@ export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelect
                 </div>
               </div>
             </div>
-            {report.report ? <CharacterReportRenderer report={report.report} /> : null}
             {report.signals.map((signal) => {
               const chartKey = `${report.id}:${signal.symbol}`;
               if (expandedChartKey !== chartKey) return null;
+              const displaySymbol = symbolOverrides[chartKey] ?? signal.symbol;
               return (
                 <div key={chartKey} className="mt-3" onClick={(event) => event.stopPropagation()}>
-                  <div className="mb-1 flex items-center justify-between">
+                  <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-medium">{signal.symbol} · Weekly line chart</span>
                     <div className="flex items-center gap-2">
                       {onSelectSymbol ? (
@@ -205,15 +268,36 @@ export function AgentReportsBrowser({ agentId, reports, onSelectReport, onSelect
                           View full performance
                         </Button>
                       ) : null}
-                      <Button size="small" onClick={(event) => onToggleChart(chartKey, event)}>
+                      <Button size="small" onClick={(event) => onToggleChart(chartKey, signal.symbol, event)}>
                         Close
                       </Button>
                     </div>
                   </div>
-                  <TradingViewSymbolChart symbol={signal.symbol} interval="W" style="2" height={640} />
+                  {/* Symbol search input — lets users fix "symbol not found" by adding exchange prefix */}
+                  <div className="mb-2 flex items-center gap-2">
+                    <Input
+                      size="small"
+                      style={{ maxWidth: 220 }}
+                      placeholder="e.g. NASDAQ:AAPL, XETR:BMW"
+                      value={symbolInputDraft[chartKey] ?? displaySymbol}
+                      onChange={(e) => setSymbolInputDraft((d) => ({ ...d, [chartKey]: e.target.value }))}
+                      onPressEnter={() => onApplySymbolOverride(chartKey)}
+                      addonAfter={
+                        <span
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => onApplySymbolOverride(chartKey)}
+                        >
+                          ↵
+                        </span>
+                      }
+                    />
+                    <span className="text-xs text-gray-400">If the chart shows "symbol not found", add the exchange prefix and press Enter</span>
+                  </div>
+                  <TradingViewSymbolChart symbol={displaySymbol} interval="W" style="2" height={640} />
                 </div>
               );
             })}
+            {isExpanded && report.report ? <CharacterReportRenderer report={report.report} /> : null}
           </Card>
         );
       })}
