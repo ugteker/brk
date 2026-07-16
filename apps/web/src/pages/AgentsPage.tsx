@@ -424,7 +424,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     failedRunNotices, setFailedRunNotices,
     bellDismissedIds
   } = useAppData();
-  const [showAdminWorkspace, setShowAdminWorkspace] = useState(false);
+  const [showAdminWorkspace, setShowAdminWorkspace] = useState(initialHub === 'agents' || initialHub === 'playbooks');
   const [showAdminUsers, setShowAdminUsers] = useState(false);
   const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
@@ -1765,17 +1765,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           <Tabs
             activeKey={activeHub}
             onChange={(key) => setActiveHub(key as HubKey)}
-            tabBarStyle={showAdminWorkspace ? undefined : undefined}
-            tabBarExtraContent={
-              <Button
-                type="text"
-                icon={<AudioOutlined />}
-                onClick={() => navigate('/studio')}
-                style={{ color: '#722ed1' }}
-              >
-                {t('studio.title')}
-              </Button>
-            }
+            renderTabBar={() => <></>}
             items={[
               {
                 key: 'feed',
