@@ -71,9 +71,15 @@
   box-shadow: 0 8px 28px rgba(114, 46, 209, 0.14);
 }
 
+/* Page-level route transition — replayed on every navigation via key change */
+.ct-page-enter {
+  animation: ct-slide-in-up 0.22s ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ct-animate-enter,
-  .ct-animate-fade {
+  .ct-animate-fade,
+  .ct-page-enter {
     animation: none;
     opacity: 1;
     transform: none;
