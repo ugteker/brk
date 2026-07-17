@@ -7,7 +7,7 @@ interface CharacterReportRendererProps {
 }
 
 function renderStringList(items: string[]) {
-  if (items.length === 0) return <p className="text-sm text-gray-500">—</p>;
+  if (items.length === 0) return <p className="text-sm text-muted-foreground">—</p>;
   return (
     <ul className="list-disc space-y-1 pl-5 text-sm">
       {items.map((item) => (
@@ -31,11 +31,11 @@ function CharacterSection({ report }: CharacterReportRendererProps) {
   if (section.character_type === 'finance_expert') {
     return (
       <div className="space-y-2">
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.marketSummary')}</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.marketSummary')}</h6>
         <p className="text-sm">{section.market_summary || '—'}</p>
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.signals')}</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.signals')}</h6>
         {section.signals.length === 0 ? (
-          <p className="text-sm text-gray-500">—</p>
+          <p className="text-sm text-muted-foreground">—</p>
         ) : (
           <ul className="list-disc space-y-1 pl-5 text-sm">
             {section.signals.map((signal) => (
@@ -51,7 +51,7 @@ function CharacterSection({ report }: CharacterReportRendererProps) {
   if (section.character_type === 'teacher') {
     return (
       <div className="space-y-2">
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.lessonExplanation')}</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.lessonExplanation')}</h6>
         <p className="text-sm">{section.lesson_explanation || '—'}</p>
       </div>
     );
@@ -59,9 +59,9 @@ function CharacterSection({ report }: CharacterReportRendererProps) {
   if (section.character_type === 'trainer') {
     return (
       <div className="space-y-2">
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.qaDrill')}</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.qaDrill')}</h6>
         {section.qa_drill.length === 0 ? (
-          <p className="text-sm text-gray-500">—</p>
+          <p className="text-sm text-muted-foreground">—</p>
         ) : (
           <ul className="space-y-1 text-sm">
             {section.qa_drill.map((qa, index) => (
@@ -78,7 +78,7 @@ function CharacterSection({ report }: CharacterReportRendererProps) {
   if (section.character_type === 'philosopher') {
     return (
       <div className="space-y-2">
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.argumentReflection')}</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.argumentReflection')}</h6>
         <p className="text-sm">{section.argument_reflection || '—'}</p>
       </div>
     );
@@ -86,16 +86,16 @@ function CharacterSection({ report }: CharacterReportRendererProps) {
   if (section.character_type === 'influencer') {
     return (
       <div className="space-y-2">
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.contentAngles')}</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.contentAngles')}</h6>
         {renderStringList(section.content_angles)}
-        <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.hooks')}</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.hooks')}</h6>
         {renderStringList(section.hooks)}
       </div>
     );
   }
   return (
     <div className="space-y-2">
-      <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.bulletDigest')}</h6>
+      <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.bulletDigest')}</h6>
       {renderStringList(section.bullet_digest)}
     </div>
   );
@@ -104,22 +104,22 @@ function CharacterSection({ report }: CharacterReportRendererProps) {
 export function CharacterReportRenderer({ report }: CharacterReportRendererProps) {
   const { t } = useTranslation();
   return (
-    <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+    <div className="mt-3 rounded-md border border-border bg-muted/40 p-3">
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-2">
-          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.summary')}</h6>
+          <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.summary')}</h6>
           <p className="text-sm">{report.common.summary || '—'}</p>
-          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.keyTakeaways')}</h6>
+          <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.keyTakeaways')}</h6>
           {renderStringList(report.common.key_takeaways)}
         </div>
         <div className="space-y-2">
-          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.sourcesUsed')}</h6>
+          <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.sourcesUsed')}</h6>
           {renderStringList(report.common.sources_used)}
-          <h6 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('report.citations')}</h6>
+          <h6 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('report.citations')}</h6>
           {renderStringList(report.common.citations)}
         </div>
       </div>
-      <div className="mt-3 border-t border-gray-200 pt-3">
+      <div className="mt-3 border-t border-border pt-3">
         <CharacterSection report={report} />
       </div>
     </div>

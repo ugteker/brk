@@ -20,7 +20,22 @@ function ThemedApp() {
       locale={antdLocale}
       theme={{
         algorithm: theme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-        token: { colorPrimary: '#722ed1', borderRadius: 8 }
+        token: {
+          colorPrimary: '#722ed1',
+          borderRadius: 8,
+          ...(theme === 'dark' ? {
+            // Align Ant Design dark surfaces with our CSS variable palette
+            colorBgBase:         'hsl(225, 28%, 8%)',
+            colorBgContainer:    'hsl(225, 24%, 12%)',
+            colorBgElevated:     'hsl(225, 22%, 16%)',
+            colorBgLayout:       'hsl(225, 28%, 8%)',
+            colorBorder:         'hsl(225, 18%, 24%)',
+            colorBorderSecondary:'hsl(225, 18%, 22%)',
+            colorText:           'hsl(220, 18%, 90%)',
+            colorTextSecondary:  'hsl(220, 14%, 60%)',
+            colorTextTertiary:   'hsl(220, 12%, 45%)',
+          } : {})
+        }
       }}
     >
       <App />
