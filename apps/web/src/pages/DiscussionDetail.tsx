@@ -41,7 +41,7 @@ function TurnBubble({ turn, participantIndex }: { turn: DiscussionTurnDto; parti
       <Avatar style={{ background: color, flexShrink: 0 }} size={32} icon={<UserOutlined />} />
       <Card
         size="small"
-        style={{ flex: 1, borderLeft: `3px solid ${color}` }}
+        style={{ flex: 1, background: `${color}12`, border: 'none' }}
         bodyStyle={{ padding: '8px 12px' }}
       >
         {turn.segmentLabel && (

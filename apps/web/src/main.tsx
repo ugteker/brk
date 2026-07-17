@@ -20,7 +20,7 @@ function ThemedApp() {
       locale={antdLocale}
       theme={{
         algorithm: theme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-        token: { colorPrimary: '#1677ff', borderRadius: 8 }
+        token: { colorPrimary: '#722ed1', borderRadius: 8 }
       }}
     >
       <App />
