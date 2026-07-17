@@ -26,7 +26,8 @@ import {
   triggerDiscussionRun,
   type DiscussionDto,
   type DiscussionRunDto,
-  type DiscussionTurnDto
+  type DiscussionTurnDto,
+  type ParticipantEvidenceSnapshotDto
 } from '../api/discussions';
 import { useDiscussionStream } from '../hooks/useDiscussionStream';
 
@@ -54,6 +55,69 @@ function TurnBubble({ turn, participantIndex }: { turn: DiscussionTurnDto; parti
           <audio src={turn.audioUrl} controls style={{ width: '100%', marginTop: 8, height: 28 }} />
         )}
       </Card>
+    </div>
+  );
+}
+
+function EvidencePanel({
+  evidenceSnapshot,
+  participantIndexMap
+}: {
+  evidenceSnapshot: ParticipantEvidenceSnapshotDto[] | null;
+  agenda: string;
+  participantIndexMap: Record<string, number>;
+}) {
+  const { t } = useTranslation();
+
+  if (!evidenceSnapshot) {
+    return <Text type="secondary">{t('studio.evidenceLegacyRun')}</Text>;
+  }
+
+  return (
+    <div>
+      {evidenceSnapshot.map((p) => (
+        <Card key={p.participantId} size="small" style={{ marginBottom: 12 }}>
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Space>
+              <Avatar size={24} icon={<UserOutlined />} />
+              <strong>
+                {t('studio.participants')} {(participantIndexMap[p.participantId] ?? 0) + 1}
+              </strong>
+              <Tag color={p.origin === 'explicit' ? 'blue' : 'default'}>
+                {p.origin === 'explicit' ? t('studio.evidenceOriginExplicit') : t('studio.evidenceOriginFallback')}
+              </Tag>
+            </Space>
+            <div>
+              <Text type="secondary">{t('studio.evidenceReportsLabel')}: </Text>
+              {p.reportIds.map((id) => (
+                <Tag key={id}>{id}</Tag>
+              ))}
+            </div>
+            {p.sourceItemIds.length > 0 && (
+              <div>
+                <Text type="secondary">{t('studio.evidenceSourceItemsLabel')}: </Text>
+                {p.sourceItemIds.map((id) => (
+                  <Tag key={id} color="green">
+                    {id}
+                  </Tag>
+                ))}
+              </div>
+            )}
+            {p.transcriptWarnings.length > 0 && (
+              <div>
+                <Text type="warning">{t('studio.evidenceWarningsLabel')}: </Text>
+                <ul style={{ margin: '4px 0 0 0', paddingLeft: 20 }}>
+                  {p.transcriptWarnings.map((w) => (
+                    <li key={w}>
+                      <Text type="warning">{w}</Text>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Space>
+        </Card>
+      ))}
     </div>
   );
 }
@@ -225,6 +289,23 @@ export function DiscussionDetail() {
                 <audio src={selectedRun.audioUrl} controls style={{ width: '100%' }} />
               ) : (
                 <Text type="secondary">No audio yet. Click &quot;{t('studio.renderAudio')}&quot; to generate a podcast.</Text>
+              )
+            },
+            {
+              key: 'evidence',
+              label: t('studio.evidencePanel'),
+              children: (
+                <div>
+                  <Card size="small" style={{ marginBottom: 12 }}>
+                    <Text strong>{t('studio.evidenceAgendaLabel')}: </Text>
+                    <Text>{discussion.description || t('studio.evidenceNoAgenda')}</Text>
+                  </Card>
+                  <EvidencePanel
+                    evidenceSnapshot={selectedRun?.evidenceSnapshot?.participants ?? null}
+                    agenda={selectedRun?.evidenceSnapshot?.agenda ?? ''}
+                    participantIndexMap={participantIndexMap}
+                  />
+                </div>
               )
             }
           ]}

@@ -14,7 +14,7 @@ import {
 import { AudioOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { listAgents, type AgentSummary } from '../api/agents';
+import { listAgents, listAgentReports, type AgentSummary, type RunReportDto } from '../api/agents';
 import { createDiscussion, triggerDiscussionRun } from '../api/discussions';
 import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
 
@@ -22,12 +22,15 @@ type Format = 'free_form' | 'structured' | 'hosted' | 'hybrid';
 type Voice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 
 const VOICES: Voice[] = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+const LATEST_REPORT_FALLBACK_LIMIT = 3;
 
 interface ParticipantConfig {
   agentId: string;
   role: 'speaker' | 'host';
   voiceId: Voice;
   speakerOrder: number;
+  /** Explicit report IDs picked for this participant; empty means "use latest reports". */
+  reportIds: string[];
 }
 
 export function NewDiscussionWizard() {
@@ -47,6 +50,11 @@ export function NewDiscussionWizard() {
   const [format, setFormat] = useState<Format>('free_form');
   const [participants, setParticipants] = useState<ParticipantConfig[]>([]);
   const [totalTurnTarget, setTotalTurnTarget] = useState(12);
+
+  // Material step state: per-agent report options and the shared questions/topics agenda.
+  const [reportsByAgent, setReportsByAgent] = useState<Record<string, RunReportDto[]>>({});
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [agenda, setAgenda] = useState('');
 
   // Step 3 state
   const [runNow, setRunNow] = useState(true);
@@ -69,7 +77,8 @@ export function NewDiscussionWizard() {
       agentId,
       role: (format === 'hosted' && i === 0 ? 'host' : 'speaker') as 'host' | 'speaker',
       voiceId: VOICES[i % VOICES.length],
-      speakerOrder: i
+      speakerOrder: i,
+      reportIds: []
     }));
   }
 
@@ -85,6 +94,23 @@ export function NewDiscussionWizard() {
       .join(' × ');
     setDiscussionName(names);
     setCurrentStep(1);
+  }
+
+  function goToMaterialStep() {
+    setCurrentStep(2);
+    setLoadingReports(true);
+    Promise.all(
+      participants.map(async (p) => {
+        try {
+          const reports = await listAgentReports(p.agentId);
+          return [p.agentId, reports] as const;
+        } catch {
+          return [p.agentId, []] as const;
+        }
+      })
+    )
+      .then((entries) => setReportsByAgent(Object.fromEntries(entries)))
+      .finally(() => setLoadingReports(false));
   }
 
   function updateParticipant(index: number, field: keyof ParticipantConfig, value: unknown) {
@@ -104,6 +130,7 @@ export function NewDiscussionWizard() {
     try {
       const disc = await createDiscussion({
         name: discussionName.trim(),
+        description: agenda.trim() || undefined,
         format,
         formatConfig: { totalTurnTarget },
         participants
@@ -125,6 +152,7 @@ export function NewDiscussionWizard() {
   const steps = [
     { title: t('studio.wizardStep1') },
     { title: t('studio.wizardStep2') },
+    { title: t('studio.wizardStepMaterial') },
     { title: t('studio.wizardStep3') }
   ];
 
@@ -239,15 +267,67 @@ export function NewDiscussionWizard() {
           </Form>
           <Space>
             <Button onClick={() => setCurrentStep(0)}>{t('common.back')}</Button>
-            <Button type="primary" onClick={() => setCurrentStep(2)}>
+            <Button type="primary" onClick={goToMaterialStep}>
               {t('common.next')}
             </Button>
           </Space>
         </Card>
       )}
 
-      {/* Step 3: Schedule */}
+      {/* Step 3: Material - per-participant report selection + shared agenda */}
       {currentStep === 2 && (
+        <Card>
+          <Form layout="vertical">
+            <p style={{ color: '#888', marginTop: 0 }}>{t('studio.materialStepIntro')}</p>
+            {participants.map((p, i) => {
+              const agent = agents.find((a) => a.id === p.agentId);
+              const reports = reportsByAgent[p.agentId] ?? [];
+              return (
+                <Form.Item
+                  key={p.agentId}
+                  label={t('studio.reportPickerLabel', { agentName: agent?.name ?? p.agentId })}
+                >
+                  <Select
+                    mode="multiple"
+                    allowClear
+                    value={p.reportIds}
+                    onChange={(v) => updateParticipant(i, 'reportIds', v)}
+                    loading={loadingReports}
+                    placeholder={t('studio.reportPickerPlaceholder')}
+                    notFoundContent={loadingReports ? t('studio.reportPickerLoading') : t('studio.reportPickerEmpty')}
+                    options={reports.map((r) => ({
+                      value: r.id,
+                      label: `${new Date(r.createdAt).toLocaleDateString()} — ${r.summary.slice(0, 80)}`
+                    }))}
+                  />
+                  {p.reportIds.length === 0 && (
+                    <div style={{ marginTop: 4, color: '#888', fontSize: 12 }}>
+                      {t('studio.reportPickerFallbackHint', { limit: LATEST_REPORT_FALLBACK_LIMIT })}
+                    </div>
+                  )}
+                </Form.Item>
+              );
+            })}
+            <Form.Item label={t('studio.agendaLabel')}>
+              <Input.TextArea
+                value={agenda}
+                onChange={(e) => setAgenda(e.target.value)}
+                placeholder={t('studio.agendaPlaceholder')}
+                rows={3}
+              />
+            </Form.Item>
+          </Form>
+          <Space>
+            <Button onClick={() => setCurrentStep(1)}>{t('common.back')}</Button>
+            <Button type="primary" onClick={() => setCurrentStep(3)}>
+              {t('common.next')}
+            </Button>
+          </Space>
+        </Card>
+      )}
+
+      {/* Step 4: Schedule */}
+      {currentStep === 3 && (
         <Card>
           <Form layout="vertical">
             <Form.Item>
@@ -270,7 +350,7 @@ export function NewDiscussionWizard() {
             </Form.Item>
           </Form>
           <Space>
-            <Button onClick={() => setCurrentStep(1)}>{t('common.back')}</Button>
+            <Button onClick={() => setCurrentStep(2)}>{t('common.back')}</Button>
             <StudioPrimaryButton loading={submitting} onClick={handleSubmit}>
               {t('studio.newDiscussion')}
             </StudioPrimaryButton>

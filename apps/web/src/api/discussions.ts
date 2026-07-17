@@ -7,6 +7,8 @@ export interface DiscussionParticipantDto {
   role: 'speaker' | 'host';
   voiceId: string;
   speakerOrder: number;
+  /** Explicit report IDs picked for this participant; empty means "use latest reports". */
+  reportIds: string[];
 }
 
 export interface DiscussionDto {
@@ -23,6 +25,22 @@ export interface DiscussionDto {
   participants: DiscussionParticipantDto[];
 }
 
+export type ReportSelectionOrigin = 'explicit' | 'fallback';
+
+export interface ParticipantEvidenceSnapshotDto {
+  participantId: string;
+  agentId: string;
+  reportIds: string[];
+  origin: ReportSelectionOrigin;
+  sourceItemIds: string[];
+  transcriptWarnings: string[];
+}
+
+export interface DiscussionRunEvidenceSnapshotDto {
+  agenda: string;
+  participants: ParticipantEvidenceSnapshotDto[];
+}
+
 export interface DiscussionRunDto {
   id: string;
   discussionId: string;
@@ -35,6 +53,9 @@ export interface DiscussionRunDto {
   audioUrl: string | null;
   createdAt: string;
   turns: DiscussionTurnDto[];
+  /** Null for runs created before evidence snapshots existed, or runs that failed
+   * validation before any resolution was recorded. */
+  evidenceSnapshot: DiscussionRunEvidenceSnapshotDto | null;
 }
 
 export interface DiscussionTurnDto {
@@ -54,7 +75,14 @@ export interface CreateDiscussionPayload {
   format: 'free_form' | 'structured' | 'hosted' | 'hybrid';
   formatConfig?: object;
   scheduleJson?: string;
-  participants: Array<{ agentId: string; role: 'speaker' | 'host'; voiceId: string; speakerOrder: number }>;
+  participants: Array<{
+    agentId: string;
+    role: 'speaker' | 'host';
+    voiceId: string;
+    speakerOrder: number;
+    /** Explicit report IDs for this participant; omitted/empty falls back to latest reports. */
+    reportIds?: string[];
+  }>;
 }
 
 export async function listDiscussions(): Promise<DiscussionDto[]> {

@@ -482,6 +482,7 @@
     "participants": "Participants",
     "wizardStep1": "Pick agents",
     "wizardStep2": "Configure",
+    "wizardStepMaterial": "Material",
     "wizardStep3": "Schedule",
     "minParticipants": "Select at least 2 agents",
     "voiceLabel": "Voice",
@@ -490,6 +491,23 @@
     "roleSpeaker": "Speaker",
     "scheduleOptional": "Schedule (optional)",
     "syntheticBadge": "Synthetic",
-    "discussionSuggestion": "{{agentA}} and {{agentB}} both analysed {{source}} — start a discussion?"
+    "discussionSuggestion": "{{agentA}} and {{agentB}} both analysed {{source}} — start a discussion?",
+    "materialStepIntro": "Pick specific reports for each agent, or leave a agent's selection empty to automatically use their latest reports.",
+    "reportPickerLabel": "Reports for {{agentName}}",
+    "reportPickerPlaceholder": "Use latest reports automatically",
+    "reportPickerFallbackHint": "No reports selected — the latest {{limit}} reports will be used automatically.",
+    "reportPickerLoading": "Loading reports…",
+    "reportPickerEmpty": "No reports yet for this agent — the latest reports will be used once available.",
+    "agendaLabel": "Questions or topics (optional)",
+    "agendaPlaceholder": "e.g. What's the near-term outlook for NVDA, and where do you disagree?",
+    "evidencePanel": "Evidence",
+    "evidenceAgendaLabel": "Agenda",
+    "evidenceNoAgenda": "No agenda was set for this run.",
+    "evidenceOriginExplicit": "Manually selected",
+    "evidenceOriginFallback": "Latest reports",
+    "evidenceReportsLabel": "Reports used",
+    "evidenceSourceItemsLabel": "Source material",
+    "evidenceWarningsLabel": "Warnings",
+    "evidenceLegacyRun": "This run was created before evidence tracking was added — no snapshot is available."
   }
 }

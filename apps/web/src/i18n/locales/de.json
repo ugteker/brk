@@ -482,6 +482,7 @@
     "participants": "Teilnehmer",
     "wizardStep1": "Agenten wählen",
     "wizardStep2": "Konfigurieren",
+    "wizardStepMaterial": "Material",
     "wizardStep3": "Zeitplan",
     "minParticipants": "Mindestens 2 Agenten auswählen",
     "voiceLabel": "Stimme",
@@ -490,6 +491,23 @@
     "roleSpeaker": "Sprecher",
     "scheduleOptional": "Zeitplan (optional)",
     "syntheticBadge": "Synthetisch",
-    "discussionSuggestion": "{{agentA}} und {{agentB}} haben beide {{source}} analysiert — Diskussion starten?"
+    "discussionSuggestion": "{{agentA}} und {{agentB}} haben beide {{source}} analysiert — Diskussion starten?",
+    "materialStepIntro": "Wähle bestimmte Berichte für jeden Agenten aus, oder lasse die Auswahl eines Agenten leer, um automatisch dessen aktuellste Berichte zu verwenden.",
+    "reportPickerLabel": "Berichte für {{agentName}}",
+    "reportPickerPlaceholder": "Aktuellste Berichte automatisch verwenden",
+    "reportPickerFallbackHint": "Keine Berichte ausgewählt — die aktuellsten {{limit}} Berichte werden automatisch verwendet.",
+    "reportPickerLoading": "Berichte werden geladen…",
+    "reportPickerEmpty": "Noch keine Berichte für diesen Agenten — sobald verfügbar, werden die aktuellsten Berichte verwendet.",
+    "agendaLabel": "Fragen oder Themen (optional)",
+    "agendaPlaceholder": "z. B. Wie ist der kurzfristige Ausblick für NVDA, und wo seid ihr uneinig?",
+    "evidencePanel": "Belege",
+    "evidenceAgendaLabel": "Agenda",
+    "evidenceNoAgenda": "Für diesen Lauf wurde keine Agenda festgelegt.",
+    "evidenceOriginExplicit": "Manuell ausgewählt",
+    "evidenceOriginFallback": "Aktuellste Berichte",
+    "evidenceReportsLabel": "Verwendete Berichte",
+    "evidenceSourceItemsLabel": "Quellmaterial",
+    "evidenceWarningsLabel": "Warnungen",
+    "evidenceLegacyRun": "Dieser Lauf wurde erstellt, bevor die Beleg-Erfassung eingeführt wurde — es ist kein Snapshot verfügbar."
   }
 }
