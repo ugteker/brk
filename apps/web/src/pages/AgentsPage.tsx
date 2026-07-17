@@ -1984,7 +1984,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      className="h-14 w-14 rounded-md object-cover"
                                    />
                                  ) : (
-                                   <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
+                                   <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-muted-foreground">
                                      Cover unavailable
                                    </div>
                                  )}
@@ -2000,7 +2000,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    </div>
                                  </div>
                                </div>
-                               <div className="mt-3 text-xs text-gray-700">
+                               <div className="mt-3 text-xs text-muted-foreground">
                                  {item.metadata.previewItems.length > 0 ? (
                                    <>
                                      <div className="mb-1 font-medium">Recent episodes preview</div>
@@ -2397,7 +2397,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          size="small"
                          hoverable
                          onClick={() => { setRecentlyUpdatedSourceId(null); setSelectedSourceId(source.id); setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports'); }}
-                         style={{ cursor: 'pointer', outline: isRecentlyUpdated ? '2px solid #1677ff' : undefined, outlineOffset: isRecentlyUpdated ? '2px' : undefined }}
+                         style={{ cursor: 'pointer', outline: isRecentlyUpdated ? '2px solid #722ed1' : undefined, outlineOffset: isRecentlyUpdated ? '2px' : undefined }}
                          styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1 } }}
                          className="min-h-[170px] transition-shadow flex flex-col"
                          extra={
@@ -2471,9 +2471,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              ? linked.map((p) => p.lastRunAt).filter(Boolean).sort().pop()
                              : null;
                            return (
-                             <div className="mt-3 border-t border-gray-100 pt-2" onClick={(e) => e.stopPropagation()}>
+                             <div className="mt-3 border-t border-border pt-2" onClick={(e) => e.stopPropagation()}>
                                {linked.length > 0 && (
-                                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                                    {linked.map((pb) => {
                                      const agent = agents.find((a) => a.id === pb.agentId);
                                      const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
@@ -2490,8 +2490,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      </Tag>
                                    ) : null}
                                    {latestRun
-                                     ? <span className="text-gray-400">{t('library.lastRun', { date: new Date(latestRun).toLocaleString() })}</span>
-                                     : <span className="text-gray-400">{t('library.notYetAnalyzed')}</span>}
+                                     ? <span className="text-muted-foreground">{t('library.lastRun', { date: new Date(latestRun).toLocaleString() })}</span>
+                                     : <span className="text-muted-foreground">{t('library.notYetAnalyzed')}</span>}
                                  </div>
                                )}
                                {isFollowed ? (
@@ -2499,7 +2499,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    block
                                    aria-label={t('listen.listeningAriaLabel')}
                                    icon={<RobotFilled className="robot-pulse" />}
-                                   style={{ background: '#1677ff', borderColor: '#1677ff', color: '#fff', fontWeight: 600 }}
+                                   style={{ background: '#722ed1', borderColor: '#722ed1', color: '#fff', fontWeight: 600 }}
                                    onClick={(event) => onFollowSource(source, event)}
                                  >
                                    {t('listen.listening')}
@@ -2509,7 +2509,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    block
                                    aria-label={t('listen.listenAriaLabel')}
                                    icon={<RobotOutlined />}
-                                   style={{ background: '#e6f4ff', borderColor: '#91caff', color: '#1677ff', fontWeight: 600 }}
+                                   style={{ background: 'rgba(114,46,209,0.1)', borderColor: 'rgba(114,46,209,0.35)', color: '#9d6fe8', fontWeight: 600 }}
                                    onClick={(event) => onFollowSource(source, event)}
                                  >
                                    {t('listen.listen')}
@@ -2522,11 +2522,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                        );
                      })}
                      {sources.length === 0 ? (
-                       <div className="col-span-full flex flex-col items-center gap-4 rounded-xl border border-dashed border-gray-200 py-12 px-6 text-center dark:border-gray-700">
+                       <div className="col-span-full flex flex-col items-center gap-4 rounded-xl border border-dashed border-border py-12 px-6 text-center">
                          <span className="text-5xl">📚</span>
                          <div>
-                           <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('library.emptyHeadline')}</p>
-                           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('library.emptyDesc')}</p>
+                           <p className="text-base font-semibold text-foreground">{t('library.emptyHeadline')}</p>
+                           <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">{t('library.emptyDesc')}</p>
                          </div>
                          <Button
                            type="primary"
@@ -2541,8 +2541,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          >
                            {t('library.emptyCta')}
                          </Button>
-                         <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-gray-400">
-                           <span className="font-medium text-gray-500">{t('library.howItWorks')}:</span>
+                         <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+                           <span className="font-medium text-foreground">{t('library.howItWorks')}:</span>
                            {[
                              t('library.howStep1'),
                              t('library.howStep2'),
@@ -2550,7 +2550,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            ].map((step, i, arr) => (
                              <span key={step} className="flex items-center gap-1">
                                <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700 dark:bg-sky-950 dark:text-sky-300">{step}</span>
-                               {i < arr.length - 1 ? <span className="text-gray-300">→</span> : null}
+                               {i < arr.length - 1 ? <span className="text-muted-foreground/50">→</span> : null}
                              </span>
                            ))}
                          </div>
