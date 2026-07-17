@@ -54,4 +54,30 @@ export async function ensureSqliteSchemaCompatibility(): Promise<void> {
   if (!userColumnNames.has('monthlyBudgetUsd')) {
     await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN "monthlyBudgetUsd" REAL');
   }
+
+  const discussionParticipantTableRows = await prisma.$queryRawUnsafe<SqliteTableNameRow[]>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'DiscussionParticipant'"
+  );
+  if (discussionParticipantTableRows.length > 0) {
+    const participantColumns = await prisma.$queryRawUnsafe<SqliteTableInfoRow[]>(
+      "PRAGMA table_info('DiscussionParticipant')"
+    );
+    const participantColumnNames = new Set(participantColumns.map((col) => col.name));
+    if (!participantColumnNames.has('reportIdsJson')) {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "DiscussionParticipant" ADD COLUMN "reportIdsJson" TEXT NOT NULL DEFAULT \'[]\''
+      );
+    }
+  }
+
+  const discussionRunTableRows = await prisma.$queryRawUnsafe<SqliteTableNameRow[]>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'DiscussionRun'"
+  );
+  if (discussionRunTableRows.length > 0) {
+    const runColumns = await prisma.$queryRawUnsafe<SqliteTableInfoRow[]>("PRAGMA table_info('DiscussionRun')");
+    const runColumnNames = new Set(runColumns.map((col) => col.name));
+    if (!runColumnNames.has('evidenceSnapshotJson')) {
+      await prisma.$executeRawUnsafe('ALTER TABLE "DiscussionRun" ADD COLUMN "evidenceSnapshotJson" TEXT');
+    }
+  }
 }

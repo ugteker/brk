@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DiscussionRepository } from './repository';
 
-const participantRow = { id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker', voiceId: 'alloy', speakerOrder: 0 };
+const participantRow = { id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker', voiceId: 'alloy', speakerOrder: 0, reportIdsJson: '[]' };
 const discRow = { id: 'd1', ownerUserId: 'u1', name: 'Test', description: '', format: 'free_form', formatConfigJson: '{}', scheduleJson: null, syntheticSourceId: null, createdAt: new Date(), updatedAt: new Date(), participants: [participantRow] };
 const turnRow = { id: 't1', discussionRunId: 'r1', participantId: 'p1', turnIndex: 0, segmentLabel: null, content: 'Hello', audioUrl: null, createdAt: new Date() };
-const runRow = { id: 'r1', discussionId: 'd1', status: 'pending', triggeredBy: 'manual', errorMessage: null, startedAt: null, completedAt: null, syntheticSourceItemId: null, audioUrl: null, createdAt: new Date(), turns: [] };
+const runRow = { id: 'r1', discussionId: 'd1', status: 'pending', triggeredBy: 'manual', errorMessage: null, startedAt: null, completedAt: null, syntheticSourceItemId: null, audioUrl: null, createdAt: new Date(), evidenceSnapshotJson: null, turns: [] };
 
 function makeDb(overrides: any = {}) {
   const tx = {
@@ -12,6 +12,7 @@ function makeDb(overrides: any = {}) {
     discussionParticipant: { create: vi.fn().mockResolvedValue(participantRow) }
   };
   return {
+    tx,
     $transaction: vi.fn().mockImplementation((fn: any) => fn(tx)),
     discussion: {
       findUnique: vi.fn().mockResolvedValue(discRow),
@@ -88,5 +89,69 @@ describe('DiscussionRepository', () => {
     const repo = new DiscussionRepository(db as any);
     await repo.deleteDiscussion('d1');
     expect(db.discussion.delete).toHaveBeenCalledWith({ where: { id: 'd1' } });
+  });
+
+  it('createDiscussion persists per-participant reportIds and getDiscussion parses them back', async () => {
+    const db = makeDb();
+    const repo = new DiscussionRepository(db as any);
+    await repo.createDiscussion('u1', {
+      name: 'Test',
+      format: 'free_form',
+      participants: [
+        { agentId: 'a1', role: 'speaker', voiceId: 'alloy', speakerOrder: 0, reportIds: ['r1', 'r2'] }
+      ]
+    });
+    expect(db.tx.discussionParticipant.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ reportIdsJson: JSON.stringify(['r1', 'r2']) })
+    });
+  });
+
+  it('getDiscussion parses participant reportIdsJson back into reportIds', async () => {
+    const db = makeDb({
+      discussion: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...discRow,
+          participants: [{ ...participantRow, reportIdsJson: JSON.stringify(['r5']) }]
+        })
+      }
+    });
+    const repo = new DiscussionRepository(db as any);
+    const result = await repo.getDiscussion('d1');
+    expect(result!.participants[0].reportIds).toEqual(['r5']);
+  });
+
+  it('getRunWithTurns returns null evidenceSnapshot for legacy runs without a snapshot', async () => {
+    const db = makeDb();
+    const repo = new DiscussionRepository(db as any);
+    const run = await repo.getRunWithTurns('r1');
+    expect(run!.evidenceSnapshot).toBeNull();
+  });
+
+  it('setRunEvidenceSnapshot persists the snapshot as JSON', async () => {
+    const db = makeDb();
+    const repo = new DiscussionRepository(db as any);
+    const snapshot = {
+      agenda: 'Discuss NVDA',
+      participants: [
+        { participantId: 'p1', agentId: 'a1', reportIds: ['r1'], origin: 'explicit' as const, sourceItemIds: ['item-1'], transcriptWarnings: [] }
+      ]
+    };
+    await repo.setRunEvidenceSnapshot('r1', snapshot);
+    expect(db.discussionRun.update).toHaveBeenCalledWith({
+      where: { id: 'r1' },
+      data: { evidenceSnapshotJson: JSON.stringify(snapshot) }
+    });
+  });
+
+  it('getRunWithTurns parses a persisted evidenceSnapshotJson back into an object', async () => {
+    const snapshot = { agenda: 'Topic', participants: [] };
+    const db = makeDb({
+      discussionRun: {
+        findUnique: vi.fn().mockResolvedValue({ ...runRow, evidenceSnapshotJson: JSON.stringify(snapshot), turns: [] })
+      }
+    });
+    const repo = new DiscussionRepository(db as any);
+    const run = await repo.getRunWithTurns('r1');
+    expect(run!.evidenceSnapshot).toEqual(snapshot);
   });
 });

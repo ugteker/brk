@@ -343,6 +343,7 @@ model DiscussionParticipant {
   role           String   @default("speaker")
   voiceId        String   @default("alloy")
   speakerOrder   Int      @default(0)
+  reportIdsJson  String   @default("[]")
   discussion     Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
   turns          DiscussionTurn[]
 }
@@ -357,6 +358,7 @@ model DiscussionRun {
   completedAt           DateTime?
   syntheticSourceItemId String?
   audioUrl              String?
+  evidenceSnapshotJson  String?
   createdAt             DateTime  @default(now())
   discussion            Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
   turns                 DiscussionTurn[]

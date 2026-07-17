@@ -6,7 +6,8 @@ import type {
   DiscussionTurn,
   CreateDiscussionInput,
   UpdateDiscussionInput,
-  DiscussionTrigger
+  DiscussionTrigger,
+  DiscussionRunEvidenceSnapshot
 } from './types';
 
 type DiscussionDb = Pick<
@@ -21,7 +22,8 @@ function mapParticipant(row: any): DiscussionParticipant {
     agentId: row.agentId,
     role: row.role as any,
     voiceId: row.voiceId as any,
-    speakerOrder: row.speakerOrder
+    speakerOrder: row.speakerOrder,
+    reportIds: row.reportIdsJson ? JSON.parse(row.reportIdsJson) : []
   };
 }
 
@@ -50,7 +52,8 @@ function mapRun(row: any): DiscussionRun {
     syntheticSourceItemId: row.syntheticSourceItemId ?? null,
     audioUrl: row.audioUrl ?? null,
     createdAt: row.createdAt,
-    turns: (row.turns ?? []).map(mapTurn)
+    turns: (row.turns ?? []).map(mapTurn),
+    evidenceSnapshot: row.evidenceSnapshotJson ? JSON.parse(row.evidenceSnapshotJson) : null
   };
 }
 
@@ -92,7 +95,8 @@ export class DiscussionRepository {
             agentId: p.agentId,
             role: p.role,
             voiceId: p.voiceId,
-            speakerOrder: p.speakerOrder
+            speakerOrder: p.speakerOrder,
+            reportIdsJson: JSON.stringify(p.reportIds ?? [])
           }
         });
       }
@@ -195,6 +199,17 @@ export class DiscussionRepository {
 
   async updateTurnAudioUrl(turnId: string, audioUrl: string): Promise<void> {
     await (this.db as any).discussionTurn.update({ where: { id: turnId }, data: { audioUrl } });
+  }
+
+  /**
+   * Freezes the resolved report/source-material context used to generate a run's turns, so the
+   * run remains readable later even if reports change or the fallback limit is reconfigured.
+   */
+  async setRunEvidenceSnapshot(runId: string, snapshot: DiscussionRunEvidenceSnapshot): Promise<void> {
+    await (this.db as any).discussionRun.update({
+      where: { id: runId },
+      data: { evidenceSnapshotJson: JSON.stringify(snapshot) }
+    });
   }
 }
 
