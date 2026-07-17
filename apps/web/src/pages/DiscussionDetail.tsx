@@ -291,8 +291,16 @@ export function DiscussionDetail() {
                       <Text type="secondary">Generating…</Text>
                     </div>
                   )}
-                  {displayTurns.length === 0 ? (
-                    <Text type="secondary">{t('studio.noRuns')}</Text>
+                  {displayTurns.length === 0 && !(liveStatus === 'running' && liveRun === selectedRunId) ? (
+                    selectedRun?.status === 'error' ? (
+                      <Text type="danger">
+                        {t('studio.runFailed', { message: selectedRun.errorMessage ?? 'Unknown error' })}
+                      </Text>
+                    ) : selectedRun?.status === 'pending' || selectedRun?.status === 'running' ? (
+                      <Text type="secondary">{t('studio.runPending')}</Text>
+                    ) : (
+                      <Text type="secondary">{t('studio.noRuns')}</Text>
+                    )
                   ) : (
                     <List
                       dataSource={displayTurns}

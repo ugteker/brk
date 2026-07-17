@@ -479,6 +479,8 @@
     "transcript": "Transkript",
     "audioPlayer": "Audio",
     "noRuns": "Noch keine Läufe — klicke auf \"Jetzt ausführen\" um die erste Diskussion zu starten.",
+    "runFailed": "Dieser Lauf ist fehlgeschlagen: {{message}}",
+    "runPending": "Dieser Lauf hat noch keine Redebeiträge erzeugt.",
     "participants": "Teilnehmer",
     "wizardStep1": "Agenten wählen",
     "wizardStep2": "Konfigurieren",

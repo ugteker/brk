@@ -479,6 +479,8 @@
     "transcript": "Transcript",
     "audioPlayer": "Audio",
     "noRuns": "No runs yet — click \"Run now\" to generate the first discussion.",
+    "runFailed": "This run failed: {{message}}",
+    "runPending": "This run hasn't produced any turns yet.",
     "participants": "Participants",
     "wizardStep1": "Pick agents",
     "wizardStep2": "Configure",
