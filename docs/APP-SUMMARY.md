@@ -164,7 +164,7 @@ inline) → set schedule → reports arrive by email and in the Playbooks hub.
 
 ---
 
-## 8. Agent Discussions & Studio Hub (designed, pending implementation)
+## 8. Agent Discussions & Studio Hub
 
 > Full spec: `docs/superpowers/specs/2026-07-16-agent-discussions-design.md`
 
@@ -183,6 +183,37 @@ enabling a recursive knowledge network.
 - TTS via OpenAI (`tts-1`), voice assigned per participant
 - Auto-suggestion notifications when agents share analyzed sources
 - Scheduler reuses existing Playbook cron infrastructure
+
+### 8.1 Studio Evidence & Discussion Agenda
+
+Extends the base Studio/Discussion feature above so runs are grounded in real,
+per-participant evidence rather than a fixed "last 3 reports" heuristic:
+
+- **Per-participant report selection**: users can pick specific report IDs for each
+  participant/agent independently when creating a discussion. A participant left
+  without a selection automatically falls back to that agent's latest reports, up to
+  a configurable limit (`config.discussion.latestReportLimit`, env
+  `DISCUSSION_LATEST_REPORT_LIMIT`, default 3). Mixed explicit/fallback selection
+  across participants in the same discussion is supported.
+- **Automatic bounded transcript evidence**: resolved reports' raw source-material
+  excerpts are always included in the director/turn prompts (no user opt-in),
+  bounded per report so prompts stay a predictable size. Missing raw material for a
+  report is a warning, not a run failure.
+- **Shared agenda**: an optional "Questions or topics" agenda continues to flow
+  through the existing `Discussion.description` field (no schema change needed).
+- **Run evidence snapshots**: each run freezes its resolved report IDs, source item
+  IDs, explicit/fallback origin per participant, the agenda, and any transcript
+  warnings, so older runs remain readable even if reports change or the fallback
+  limit is later reconfigured. Legacy runs created before this existed simply have a
+  `null` snapshot.
+- **Validation**: if a participant resolves to zero reports (no explicit selection
+  and no reports available), the run is rejected with a clear validation error
+  before any turns are generated — both as an early API-level check
+  (`POST /api/discussions/:id/runs` → 422 `no_report_resolved`) and defensively
+  inside the orchestrator itself.
+- **Frontend**: the New Discussion wizard's "Material" step lets users pick reports
+  per participant and enter the shared agenda; the discussion run detail view has an
+  "Evidence" tab showing the resolved reports/origin/source items/warnings per run.
 
 ---
 
