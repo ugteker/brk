@@ -127,7 +127,7 @@ export function StudioHub() {
                 </div>
                 <div className="mt-1.5 flex items-center gap-2">
                   {d.participants.map((p) => (
-                    <Tooltip key={p.id} title={`Agent ${p.agentId.slice(0, 8)}`}>
+                    <Tooltip key={p.id} title={`Speaker ${p.speakerOrder + 1}`}>
                       <span
                         style={{
                           display: 'inline-flex',
@@ -163,7 +163,7 @@ export function StudioHub() {
                   {t('studio.runNow')}
                 </Button>
                 <Popconfirm
-                  title={t('common.delete') + '?'}
+                  title={t('common.confirmDelete', { label: 'discussion' })}
                   onConfirm={(e) => { e?.stopPropagation(); handleDelete(d.id); }}
                   onClick={(e) => e.stopPropagation()}
                 >

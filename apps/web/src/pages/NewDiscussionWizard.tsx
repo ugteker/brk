@@ -130,11 +130,14 @@ export function NewDiscussionWizard() {
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>
           <AudioOutlined style={{ marginRight: 8 }} />
           {t('studio.newDiscussion')}
         </h2>
+        <Button type="text" onClick={() => navigate('/studio')}>
+          {t('common.cancel')}
+        </Button>
       </div>
 
       <Steps current={currentStep} items={steps} style={{ marginBottom: 32 }} />
@@ -154,8 +157,8 @@ export function NewDiscussionWizard() {
                     hoverable
                     style={{
                       cursor: 'pointer',
-                      borderColor: selectedAgentIds.includes(agent.id) ? '#1890ff' : undefined,
-                      background: selectedAgentIds.includes(agent.id) ? '#e6f4ff' : undefined
+                      borderColor: selectedAgentIds.includes(agent.id) ? '#722ed1' : undefined,
+                      background: selectedAgentIds.includes(agent.id) ? 'rgba(114,46,209,0.08)' : undefined
                     }}
                     onClick={() => handleAgentToggle(agent.id, !selectedAgentIds.includes(agent.id))}
                   >
@@ -254,19 +257,6 @@ export function NewDiscussionWizard() {
               <Checkbox checked={runNow} onChange={(e) => setRunNow(e.target.checked)}>
                 {t('studio.runNow')} (run the discussion immediately after creating)
               </Checkbox>
-            </Form.Item>
-            <Form.Item label={t('studio.scheduleOptional')}>
-              <Select
-                defaultValue="none"
-                options={[
-                  { value: 'none', label: 'No recurring schedule' },
-                  { value: 'daily', label: 'Daily' },
-                  { value: 'weekly', label: 'Weekly' }
-                ]}
-              />
-              <div style={{ marginTop: 4, color: '#888', fontSize: 12 }}>
-                Scheduling will be available in a future update.
-              </div>
             </Form.Item>
           </Form>
           <Space>
