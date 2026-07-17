@@ -510,6 +510,10 @@
     "evidenceReportsLabel": "Verwendete Berichte",
     "evidenceSourceItemsLabel": "Quellmaterial",
     "evidenceWarningsLabel": "Warnungen",
-    "evidenceLegacyRun": "Dieser Lauf wurde erstellt, bevor die Beleg-Erfassung eingeführt wurde — es ist kein Snapshot verfügbar."
+    "evidenceLegacyRun": "Dieser Lauf wurde erstellt, bevor die Beleg-Erfassung eingeführt wurde — es ist kein Snapshot verfügbar.",
+    "discussThisReport": "Diesen Bericht diskutieren",
+    "discussThisSource": "Diese Quelle diskutieren",
+    "preselectBanner": "Diskussion wird gestartet über: {{context}}",
+    "startFromScratch": "Von vorne beginnen"
   }
 }

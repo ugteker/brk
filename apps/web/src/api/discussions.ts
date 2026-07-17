@@ -1,5 +1,24 @@
 const BASE = '/api/discussions';
 
+/** A single participant to seed the New Discussion wizard with, used by entry points
+ * that jump into Studio from a specific report or Library source (rather than the
+ * default agent-first flow). */
+export interface DiscussionPreselectEntry {
+  agentId: string;
+  /** Explicit report IDs to seed this participant with; empty falls back like normal. */
+  reportIds: string[];
+}
+
+/** Passed as `location.state.preselect` when navigating to `/studio/new` from a
+ * report card or a Library source detail view, so the wizard can pre-check agents
+ * and pre-fill their report selection instead of starting from a blank slate. */
+export interface DiscussionPreselect {
+  entries: DiscussionPreselectEntry[];
+  /** Short human-readable label shown in the wizard's "Starting a discussion about…"
+   * banner (e.g. a report summary snippet or a source title). */
+  contextLabel?: string;
+}
+
 export interface DiscussionParticipantDto {
   id: string;
   discussionId: string;

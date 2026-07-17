@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Button,
   Card,
   Checkbox,
@@ -13,9 +14,9 @@ import {
 } from 'antd';
 import { AudioOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { listAgents, listAgentReports, type AgentSummary, type RunReportDto } from '../api/agents';
-import { createDiscussion, triggerDiscussionRun } from '../api/discussions';
+import { createDiscussion, triggerDiscussionRun, type DiscussionPreselect } from '../api/discussions';
 import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
 
 type Format = 'free_form' | 'structured' | 'hosted' | 'hybrid';
@@ -36,6 +37,7 @@ interface ParticipantConfig {
 export function NewDiscussionWizard() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -44,6 +46,11 @@ export function NewDiscussionWizard() {
 
   // Step 1 state
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+
+  // Pre-fill support for entry points that jump in from a report or Library source
+  // (rather than the default blank agent-first flow).
+  const [preselectedReportIdsByAgent, setPreselectedReportIdsByAgent] = useState<Record<string, string[]>>({});
+  const [preselectContextLabel, setPreselectContextLabel] = useState<string | null>(null);
 
   // Step 2 state
   const [discussionName, setDiscussionName] = useState('');
@@ -66,6 +73,23 @@ export function NewDiscussionWizard() {
       .finally(() => setLoadingAgents(false));
   }, []);
 
+  useEffect(() => {
+    const preselect = (location.state as { preselect?: DiscussionPreselect } | null)?.preselect;
+    if (preselect && preselect.entries.length > 0) {
+      setSelectedAgentIds(preselect.entries.map((e) => e.agentId));
+      setPreselectedReportIdsByAgent(Object.fromEntries(preselect.entries.map((e) => [e.agentId, e.reportIds])));
+      setPreselectContextLabel(preselect.contextLabel ?? null);
+    }
+    // Only ever applied once, from whatever state the wizard was opened with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function clearPreselect() {
+    setSelectedAgentIds([]);
+    setPreselectedReportIdsByAgent({});
+    setPreselectContextLabel(null);
+  }
+
   function handleAgentToggle(agentId: string, checked: boolean) {
     setSelectedAgentIds((prev) =>
       checked ? [...prev, agentId] : prev.filter((id) => id !== agentId)
@@ -78,7 +102,7 @@ export function NewDiscussionWizard() {
       role: (format === 'hosted' && i === 0 ? 'host' : 'speaker') as 'host' | 'speaker',
       voiceId: VOICES[i % VOICES.length],
       speakerOrder: i,
-      reportIds: []
+      reportIds: preselectedReportIdsByAgent[agentId] ?? []
     }));
   }
 
@@ -173,6 +197,19 @@ export function NewDiscussionWizard() {
       {/* Step 1: Pick agents */}
       {currentStep === 0 && (
         <Card>
+          {preselectContextLabel && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={t('studio.preselectBanner', { context: preselectContextLabel })}
+              action={
+                <Button size="small" type="text" onClick={clearPreselect}>
+                  {t('studio.startFromScratch')}
+                </Button>
+              }
+            />
+          )}
           <Form.Item label={t('studio.wizardStep1')}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {loadingAgents ? (

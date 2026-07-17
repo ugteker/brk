@@ -510,6 +510,10 @@
     "evidenceReportsLabel": "Reports used",
     "evidenceSourceItemsLabel": "Source material",
     "evidenceWarningsLabel": "Warnings",
-    "evidenceLegacyRun": "This run was created before evidence tracking was added — no snapshot is available."
+    "evidenceLegacyRun": "This run was created before evidence tracking was added — no snapshot is available.",
+    "discussThisReport": "Discuss this report",
+    "discussThisSource": "Discuss this source",
+    "preselectBanner": "Starting a discussion about: {{context}}",
+    "startFromScratch": "Start from scratch"
   }
 }
