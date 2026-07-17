@@ -39,6 +39,7 @@ import { AgentRunsBrowser } from '../components/AgentRunsBrowser';
 import { AgentPromptEditor } from '../components/AgentPromptEditor';
 import { EpisodePickerModal } from '../components/EpisodePickerModal';
 import { TouchSafeTooltip } from '../components/TouchSafeTooltip';
+import { ListenActiveButton, ListenIdleButton } from '../components/ListenButtons';
 import { SymbolPerformancePage } from './SymbolPerformancePage';
 import { seedDemoData } from '../api/admin';
 import { useAgentStream } from '../hooks/useAgentStream';
@@ -2339,13 +2340,12 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                        <span className="text-sm text-gray-600">{t('library.noWorkflowCta')}</span>
                                      }
                                    >
-                                     <Button
+                                     <ListenIdleButton
                                        icon={<RobotOutlined />}
-                                       style={{ background: '#e6f4ff', borderColor: '#91caff', color: '#1677ff', fontWeight: 600 }}
                                        onClick={(event) => onFollowSource(selectedSource, event)}
                                      >
                                        {t('listen.listen')}
-                                     </Button>
+                                     </ListenIdleButton>
                                    </Empty>
                                  ) : sourceDetailLoading ? (
                                    <Skeleton active avatar={false} paragraph={{ rows: 4 }} />
@@ -2495,25 +2495,23 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  </div>
                                )}
                                {isFollowed ? (
-                                 <Button
+                                 <ListenActiveButton
                                    block
                                    aria-label={t('listen.listeningAriaLabel')}
                                    icon={<RobotFilled className="robot-pulse" />}
-                                   style={{ background: '#1677ff', borderColor: '#1677ff', color: '#fff', fontWeight: 600 }}
                                    onClick={(event) => onFollowSource(source, event)}
                                  >
                                    {t('listen.listening')}
-                                 </Button>
+                                 </ListenActiveButton>
                                ) : (
-                                 <Button
+                                 <ListenIdleButton
                                    block
                                    aria-label={t('listen.listenAriaLabel')}
                                    icon={<RobotOutlined />}
-                                   style={{ background: '#e6f4ff', borderColor: '#91caff', color: '#1677ff', fontWeight: 600 }}
                                    onClick={(event) => onFollowSource(source, event)}
                                  >
                                    {t('listen.listen')}
-                                 </Button>
+                                 </ListenIdleButton>
                                )}
                              </div>
                            );
