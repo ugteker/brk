@@ -233,7 +233,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                     key={persona.id}
                     type="button"
                     onClick={() => onPersonaChange(persona.id)}
-                    className={`rounded-md border p-3 text-left text-foreground transition ${personaId === persona.id ? 'border-[#722ed1] bg-violet-100 dark:bg-[#2d1a4a]' : 'bg-card border-border hover:border-[#9d6fe8]'}`}
+                    className={`rounded-md border-2 p-3 text-left text-foreground transition-all ${personaId === persona.id ? 'border-[#722ed1] bg-card shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'bg-card border-border hover:border-[#9d6fe8]'}`}
                     aria-label={`Character ${persona.name}`}
                   >
                     <p className="font-semibold">{persona.name}</p>
@@ -251,7 +251,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                     key={character.id}
                     type="button"
                     onClick={() => onCharacterChange(character.id)}
-                    className={`rounded-md border p-3 text-left text-foreground transition ${characterId === character.id ? 'border-[#722ed1] bg-violet-100 dark:bg-[#2d1a4a]' : 'bg-card border-border hover:border-[#9d6fe8]'}`}
+                    className={`rounded-md border-2 p-3 text-left text-foreground transition-all ${characterId === character.id ? 'border-[#722ed1] bg-card shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'bg-card border-border hover:border-[#9d6fe8]'}`}
                     aria-label={`Personality ${character.name}`}
                   >
                     <p className="font-semibold">{character.name}</p>
