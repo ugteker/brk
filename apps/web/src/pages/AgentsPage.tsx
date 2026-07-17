@@ -2344,7 +2344,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    >
                                      <Button
                                        icon={<RobotOutlined />}
-                                       style={{ background: '#e6f4ff', borderColor: '#91caff', color: '#1677ff', fontWeight: 600 }}
+                                       style={{ background: 'rgba(114,46,209,0.12)', borderColor: 'rgba(114,46,209,0.4)', color: '#9d6fe8', fontWeight: 600 }}
                                        onClick={(event) => onFollowSource(selectedSource, event)}
                                      >
                                        {t('listen.listen')}
