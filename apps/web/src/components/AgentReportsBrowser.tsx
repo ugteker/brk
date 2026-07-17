@@ -4,6 +4,7 @@ import { AudioOutlined, DownOutlined, MailOutlined, MessageOutlined, StarFilled,
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { resendReportNotification, type RunReportDto, type SignalDto } from '../api/agents';
+import { getCharacterTypeColor } from '../data/character-types';
 import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { TradingViewSymbolChart } from './TradingViewSymbolChart';
 import { CharacterReportRenderer } from './CharacterReportRenderer';
@@ -20,6 +21,8 @@ interface AgentReportsBrowserProps {
   highlightedReportId?: string | null;
 }
 
+// Emoji/label only - pill color now comes from the shared getCharacterTypeColor() so it
+// stays in sync with the Agents hub instead of drifting into its own local map.
 const CHARACTER_LABELS: Record<string, { emoji: string; label: string }> = {
   finance_expert: { emoji: '📈', label: 'Finance Expert' },
   teacher:        { emoji: '🎓', label: 'Teacher' },
@@ -27,15 +30,6 @@ const CHARACTER_LABELS: Record<string, { emoji: string; label: string }> = {
   trainer:        { emoji: '💪', label: 'Trainer' },
   philosopher:    { emoji: '🦉', label: 'Philosopher' },
   summarizer:     { emoji: '📋', label: 'Summarizer' },
-};
-
-const CHARACTER_TAG_COLORS: Record<string, string> = {
-  finance_expert: 'purple',
-  teacher:        'cyan',
-  influencer:     'magenta',
-  trainer:        'orange',
-  philosopher:    'geekblue',
-  summarizer:     'default',
 };
 
 const HEADLINE_MAX_LENGTH = 80;
@@ -265,7 +259,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   {personaLabel ? (
-                    <Tag color={characterType ? (CHARACTER_TAG_COLORS[characterType] ?? 'default') : 'default'} className="m-0">{personaEmoji} {personaLabel}</Tag>
+                    <Tag color={getCharacterTypeColor(characterType)} className="m-0">{personaEmoji} {personaLabel}</Tag>
                   ) : null}
                   {agentName ? (
                     <span className="text-xs font-medium text-muted-foreground">{agentName}</span>

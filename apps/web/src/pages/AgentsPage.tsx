@@ -65,6 +65,7 @@ import {
 import { getLatestAgentPrompt, listAgentReports, type PromptVersionDto, type RunReportDto } from '../api/agents';
 import { grantAgentAccess, listAgentAccessGrants } from '../api/access';
 import type { DiscussionPreselect } from '../api/discussions';
+import { getCharacterTypeColor, getCharacterTypeEmoji } from '../data/character-types';
 import {
   cloneMarketplaceAgent,
   cloneMarketplacePlaybook,
@@ -302,17 +303,8 @@ function formatPlaybookSchedule(schedule: PlaybookRecord['schedule']): string {
   return `Weekly ${schedule.dailyTime} on ${days} (${schedule.timezone})`;
 }
 
-const PERSONA_EMOJI_MAP: Record<string, string> = {
-  finance_expert: '📈',
-  teacher:        '🎓',
-  influencer:     '📣',
-  trainer:        '💪',
-  philosopher:    '🦉',
-  summarizer:     '📋',
-};
-
 const PersonaIcon = ({ personaId, style }: { personaId: string; style?: CSSProperties }) => {
-  const emoji = PERSONA_EMOJI_MAP[personaId] ?? '🤖';
+  const emoji = getCharacterTypeEmoji(personaId);
   return (
     <span role="img" aria-label={personaId} className="anticon" style={{ fontSize: '1em', lineHeight: 1, ...style }}>
       {emoji}
@@ -357,15 +349,6 @@ const PERSONA_ICON_MAP: Record<string, ReactNode> = {
   trainer:        <PersonaIcon personaId="trainer" />,
   philosopher:    <PersonaIcon personaId="philosopher" />,
   summarizer:     <PersonaIcon personaId="summarizer" />,
-};
-
-const PERSONA_COLOR_MAP: Record<string, string> = {
-  finance_expert: 'blue',
-  teacher:        'purple',
-  influencer:     'orange',
-  trainer:        'volcano',
-  philosopher:    'cyan',
-  summarizer:     'default',
 };
 
 const PERSONA_ICON_BG_MAP: Record<string, string> = {
@@ -2174,14 +2157,13 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  <div className="flex flex-col gap-1.5">
                                    {linkedPlaybooks.map((pb) => {
                                      const agent = agents.find((a) => a.id === pb.agentId);
-                                     const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
                                      const characterLabel = agent?.characterType ? humanizeCharacterType(agent.characterType) : null;
                                      return (
                                        <div key={pb.id} className={`flex items-start gap-2 text-xs transition-opacity ${pb.enabled ? '' : 'opacity-60'}`}>
                                          <div className="flex flex-col gap-1 flex-1 min-w-0">
                                            <div className="flex flex-wrap items-center gap-1.5">
                                              {characterLabel ? (
-                                               <Tag className="m-0" color={PERSONA_COLOR_MAP[agent?.characterType ?? ''] ?? 'default'} icon={getCharacterIcon(agent?.characterType)}>{characterLabel}</Tag>
+                                               <Tag className="m-0" color={getCharacterTypeColor(agent?.characterType)} icon={getCharacterIcon(agent?.characterType)}>{characterLabel}</Tag>
                                              ) : null}
                                              {agent?.promptConfig?.personality_label ? (
                                                <Tag className="m-0" color="magenta">{agent.promptConfig.personality_label}</Tag>
@@ -2508,10 +2490,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                                    {linked.map((pb) => {
                                      const agent = agents.find((a) => a.id === pb.agentId);
-                                     const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
+                                     const emoji = getCharacterTypeEmoji(agent?.characterType);
                                      const label = agent?.characterType ? humanizeCharacterType(agent.characterType) : (agent?.name ?? pb.name);
                                      return (
-                                       <Tag key={pb.id} color={PERSONA_COLOR_MAP[agent?.characterType ?? ''] ?? 'cyan'} className="m-0 flex items-center gap-1">
+                                       <Tag key={pb.id} color={getCharacterTypeColor(agent?.characterType)} className="m-0 flex items-center gap-1">
                                          {emoji} {label}
                                        </Tag>
                                      );
@@ -3392,7 +3374,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                   const isFocused = wizardFocusedAgentId === agent.id;
                   const { intro, icon, characterLabel, personalityLabel, personaId } = getAgentCardDisplay(agent, t);
                   const iconBgClass = PERSONA_ICON_BG_MAP[personaId] ?? PERSONA_ICON_BG_MAP['summarizer'];
-                  const tagColor = PERSONA_COLOR_MAP[personaId] ?? 'default';
+                  const tagColor = getCharacterTypeColor(personaId);
 
                   const linkedPlaybookEntry = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === agent.id);
                   // If this agent is already linked to the current source, show that playbook's schedule.
@@ -3961,9 +3943,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       >
         <div className="space-y-2 py-1">
           {runPickerLinked.map(({ playbook, agent }) => {
-            const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
+            const emoji = getCharacterTypeEmoji(agent?.characterType);
             const characterLabel = agent?.characterType ? humanizeCharacterType(agent.characterType) : null;
-            const tagColor = PERSONA_COLOR_MAP[agent?.characterType ?? ''] ?? 'default';
+            const tagColor = getCharacterTypeColor(agent?.characterType);
             return (
               <Button
                 key={playbook.id}
