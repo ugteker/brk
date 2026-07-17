@@ -2095,11 +2095,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            try { hostname = new URL(selectedSource.value).hostname; } catch { hostname = selectedSource.value; }
                            return (
                              <>
-                             <div className="flex gap-3 mb-4 pb-4 border-b border-gray-100">
+                             <div className="flex gap-3 mb-4 pb-4 border-b border-border">
                                {coverUrl ? (
-                                 <img src={coverUrl} alt="" className="w-20 h-20 rounded-lg object-cover flex-shrink-0 bg-gray-100" />
+                                 <img src={coverUrl} alt="" className="w-20 h-20 rounded-lg object-cover flex-shrink-0 bg-muted" />
                                ) : (
-                                 <div className="w-20 h-20 rounded-lg flex-shrink-0 bg-gray-100 flex items-center justify-center text-2xl">
+                                 <div className="w-20 h-20 rounded-lg flex-shrink-0 bg-muted flex items-center justify-center text-2xl">
                                    {selectedSource.type === 'youtube_videos' ? '📺' : selectedSource.type === 'podcast_feeds' ? '🎙' : '🌐'}
                                  </div>
                                )}
@@ -2108,13 +2108,13 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    href={selectedSource.value}
                                    target="_blank"
                                    rel="noopener noreferrer"
-                                   className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                                   className="text-sm text-[#9d6fe8] hover:underline flex items-center gap-1"
                                    onClick={(e) => e.stopPropagation()}
                                  >
                                    {hostname} <LinkOutlined className="text-xs" />
                                  </a>
                                  {episodeCount > 0 ? (
-                                   <p className="text-xs text-gray-500 mt-0.5">
+                                   <p className="text-xs text-muted-foreground mt-0.5">
                                      {episodeCount} {selectedSource.type === 'youtube_videos' ? 'videos' : selectedSource.type === 'podcast_feeds' ? 'episodes' : 'pages'}
                                    </p>
                                  ) : null}
@@ -2123,19 +2123,19 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      href={latestItem.link}
                                      target="_blank"
                                      rel="noopener noreferrer"
-                                     className="mt-1.5 block text-xs text-gray-700 hover:text-blue-600 hover:underline truncate"
+                                     className="mt-1.5 block text-xs text-foreground hover:text-[#9d6fe8] hover:underline truncate"
                                      onClick={(e) => e.stopPropagation()}
                                    >
-                                     <span className="text-gray-400 mr-1">Latest:</span>
+                                     <span className="text-muted-foreground mr-1">Latest:</span>
                                      {latestItem.title}
-                                     {latestItem.pubDate ? <span className="ml-1 text-gray-400">· {new Date(latestItem.pubDate).toLocaleDateString()}</span> : null}
+                                     {latestItem.pubDate ? <span className="ml-1 text-muted-foreground">· {new Date(latestItem.pubDate).toLocaleDateString()}</span> : null}
                                    </a>
                                  ) : null}
                                </div>
                              </div>
                              {linkedPlaybooks.length > 0 ? (
-                               <div className="mt-3 pt-3 border-t border-gray-100">
-                                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">🤖 {t('library.expertsWatching')}</p>
+                               <div className="mt-3 pt-3 border-t border-border">
+                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">🤖 {t('library.expertsWatching')}</p>
                                  <div className="flex flex-col gap-1.5">
                                    {linkedPlaybooks.map((pb) => {
                                      const agent = agents.find((a) => a.id === pb.agentId);
@@ -2152,12 +2152,12 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                <Tag className="m-0" color="magenta">{agent.promptConfig.personality_label}</Tag>
                                              ) : null}
                                            </div>
-                                           <div className="flex items-center gap-1.5 text-gray-400">
+                                           <div className="flex items-center gap-1.5 text-muted-foreground">
                                              <span>{formatPlaybookSchedule(pb.schedule)}</span>
                                              <Tag color={pb.enabled ? 'green' : 'default'} className="m-0 leading-none py-0">{pb.enabled ? t('playbook.active') : t('playbook.paused')}</Tag>
                                            </div>
                                            {pb.recipients.length > 0 && (
-                                             <div className="flex flex-wrap gap-1 text-gray-400 mt-0.5">
+                                             <div className="flex flex-wrap gap-1 text-muted-foreground mt-0.5">
                                                <MailOutlined className="opacity-50 mt-0.5" />
                                                {pb.recipients.slice(0, 2).map((r) => (
                                                  <span key={r} className="truncate max-w-[120px]">{r}</span>
@@ -2267,9 +2267,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                        const episodes = selectedSource.metadata.previewItems.filter((item) => Boolean(item.link));
                                        const linkedAgent = agents.find((a) => a.id === linkedPlaybooks[0]?.agentId);
                                        return episodes.length === 0 ? (
-                                         <Empty description={<span className="text-sm text-gray-500">{t('library.noEpisodes')}</span>} />
+                                         <Empty description={<span className="text-sm text-muted-foreground">{t('library.noEpisodes')}</span>} />
                                        ) : (
-                                         <ul className="divide-y divide-gray-100">
+                                         <ul className="divide-y divide-border">
                                            {episodes.map((ep) => {
                                              const videoId = selectedSource.type === 'youtube_videos' ? extractYoutubeVideoId(ep.link) : null;
                                              return (
@@ -2278,13 +2278,13 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                    <img
                                                      src={`https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`}
                                                      alt=""
-                                                     className="w-16 h-11 rounded object-cover flex-shrink-0 bg-gray-100"
+                                                     className="w-16 h-11 rounded object-cover flex-shrink-0 bg-muted"
                                                    />
                                                  ) : null}
                                                  <div className="min-w-0 flex-1">
                                                    <div className="truncate text-sm font-medium">{ep.title}</div>
                                                    {ep.pubDate ? (
-                                                     <div className="mt-0.5 text-xs text-gray-400">
+                                                     <div className="mt-0.5 text-xs text-muted-foreground">
                                                        {new Date(ep.pubDate).toLocaleDateString()}
                                                      </div>
                                                    ) : null}
