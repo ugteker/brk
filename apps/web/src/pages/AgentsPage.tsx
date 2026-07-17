@@ -3483,7 +3483,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           onChange={(e) => setInlineAgentName(e.currentTarget.value)}
                         />
                         {/* Character section */}
-                        <div className="flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+                        <div className="flex items-center gap-2 rounded-md bg-[rgba(114,46,209,0.12)] px-3 py-2 text-sm font-medium text-[#9d6fe8]">
                           <BulbOutlined />
                           {t('agent.chooseCharacter')}
                         </div>
@@ -3493,14 +3493,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                               key={persona.id}
                               type="button"
                               onClick={() => onInlineAgentPersonaChange(persona.id)}
-                              className={`relative rounded-md border p-3 text-left transition ${inlineAgentPersonaId === persona.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              className={`relative rounded-md border-2 p-3 text-left text-foreground transition-all !bg-card ${inlineAgentPersonaId === persona.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                               aria-label={`Inline character ${t(`personas.${persona.id}.name`)}`}
                             >
                               {inlineAgentPersonaId === persona.id ? (
-                                <span className="absolute top-1 right-1 text-sm leading-none text-blue-500"><RobotFilled /></span>
+                                <span className="absolute top-1 right-1 text-sm leading-none text-[#9d6fe8]"><RobotFilled /></span>
                               ) : null}
-                              <p className="font-medium text-sm">{t(`personas.${persona.id}.name`)}</p>
-                              <p className="text-xs text-gray-500">{t(`personas.${persona.id}.tagline`)}</p>
+                              <p className="font-semibold text-sm">{t(`personas.${persona.id}.name`)}</p>
+                              <p className="text-xs text-muted-foreground">{t(`personas.${persona.id}.tagline`)}</p>
                             </button>
                           ))}
                         </div>
@@ -3511,14 +3511,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                     {inlineAgentStep === 1 ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">{t('agent.character')}:</span>
-                          <Tag color="blue">{inlinePersonaLabel}</Tag>
+                          <span className="text-xs text-muted-foreground">{t('agent.character')}:</span>
+                          <Tag color="purple">{inlinePersonaLabel}</Tag>
                         </div>
                         {/* Personality section */}
-                        <div className="flex items-center gap-2 rounded-md bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">
+                        <div className="flex items-center gap-2 rounded-md bg-[rgba(114,46,209,0.12)] px-3 py-2 text-sm font-medium text-[#9d6fe8]">
                           <ToolOutlined />
                           {t('agent.choosePersonality')}
-                          <span className="ml-1 font-normal text-violet-500">{t('agent.forCharacter', { character: inlinePersonaLabel })}</span>
+                          <span className="ml-1 font-normal text-muted-foreground">{t('agent.forCharacter', { character: inlinePersonaLabel })}</span>
                         </div>
                         <div className="grid gap-2 md:grid-cols-3">
                           {inlineChars.map((char) => (
@@ -3526,21 +3526,21 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                               key={char.id}
                               type="button"
                               onClick={() => onInlineAgentCharacterChange(char.id)}
-                              className={`relative rounded-md border p-3 text-left transition ${inlineAgentCharacterId === char.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              className={`relative rounded-md border-2 p-3 text-left text-foreground transition-all !bg-card ${inlineAgentCharacterId === char.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                               aria-label={`Inline personality ${t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}`}
                             >
                               {inlineAgentCharacterId === char.id ? (
-                                <span className="absolute top-1 right-1 text-sm leading-none text-violet-500"><RobotFilled /></span>
+                                <span className="absolute top-1 right-1 text-sm leading-none text-[#9d6fe8]"><RobotFilled /></span>
                               ) : null}
-                              <p className="font-medium text-sm">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}</p>
-                              <p className="text-xs text-gray-500">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.tagline`)}</p>
+                              <p className="font-semibold text-sm">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}</p>
+                              <p className="text-xs text-muted-foreground">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.tagline`)}</p>
                             </button>
                           ))}
                         </div>
                         <div className="border-t pt-3 space-y-3">
                           {/* Report detail level picker */}
                           <div>
-                            <p className="mb-2 text-xs text-gray-500">{t('report.detail.label')}</p>
+                            <p className="mb-2 text-xs text-muted-foreground">{t('report.detail.label')}</p>
                             <div className="grid grid-cols-3 gap-2">
                               {([
                                 { id: 'brief' as const, label: t('report.detail.brief'), desc: t('report.detail.briefDesc'), icon: '⚡' },
@@ -3551,18 +3551,18 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                   key={opt.id}
                                   type="button"
                                   onClick={() => setInlineAgentReportDetailLevel(opt.id)}
-                                  className={`relative rounded-md border p-3 text-left transition ${inlineAgentReportDetailLevel === opt.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                                  className={`relative rounded-md border-2 p-3 text-left text-foreground transition-all !bg-card ${inlineAgentReportDetailLevel === opt.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                                 >
                                   <div className="text-base mb-1">{opt.icon}</div>
-                                  <p className="font-medium text-sm">{opt.label}</p>
-                                  <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                                  <p className="font-semibold text-sm">{opt.label}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">{opt.desc}</p>
                                 </button>
                               ))}
                             </div>
                           </div>
                           {inlineAgentPersonaId === 'finance_expert' ? (
                             <div>
-                              <p className="mb-1 text-xs text-gray-500">{t('agent.riskLevel')}</p>
+                              <p className="mb-1 text-xs text-muted-foreground">{t('agent.riskLevel')}</p>
                               <Select
                                   aria-label={t('agent.riskLevel')}
                                 value={inlineAgentRiskLevel}
@@ -3577,7 +3577,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             </div>
                           ) : null}
                           <div>
-                            <p className="mb-1 text-xs text-gray-500">{t('agent.model')}</p>
+                            <p className="mb-1 text-xs text-muted-foreground">{t('agent.model')}</p>
                             <Select
                               aria-label={t('agent.model')}
                               value={inlineAgentModel}
@@ -3590,7 +3590,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             />
                           </div>
                           <div>
-                            <p className="mb-1 text-xs text-gray-500">{t('agent.systemPrompt')}</p>
+                            <p className="mb-1 text-xs text-muted-foreground">{t('agent.systemPrompt')}</p>
                             <Input.TextArea
                               aria-label={t('agent.systemPrompt')}
                               rows={5}
@@ -4171,10 +4171,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 <div
                   key={persona.id}
                   onClick={() => setGuidedWizardPersonaId(persona.id)}
-                  className={`cursor-pointer rounded-lg border-2 px-3 py-2 transition-colors ${guidedWizardPersonaId === persona.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'}`}
+                  className={`cursor-pointer rounded-lg border-2 px-3 py-2 text-foreground transition-all !bg-card ${guidedWizardPersonaId === persona.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                 >
                   <p className="text-sm font-semibold">{persona.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{persona.description}</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{persona.description}</p>
                 </div>
               ))}
             </div>
