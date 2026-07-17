@@ -35,7 +35,7 @@ interface ParticipantConfig {
 }
 
 export function NewDiscussionWizard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -57,6 +57,9 @@ export function NewDiscussionWizard() {
   const [format, setFormat] = useState<Format>('free_form');
   const [participants, setParticipants] = useState<ParticipantConfig[]>([]);
   const [totalTurnTarget, setTotalTurnTarget] = useState(12);
+  // Defaults to the current UI language, but is independently editable - the discussion
+  // language doesn't have to match the app's display language.
+  const [language, setLanguage] = useState<'en' | 'de'>(i18n.language.startsWith('de') ? 'de' : 'en');
 
   // Material step state: per-agent report options and the shared questions/topics agenda.
   const [reportsByAgent, setReportsByAgent] = useState<Record<string, RunReportDto[]>>({});
@@ -156,7 +159,7 @@ export function NewDiscussionWizard() {
         name: discussionName.trim(),
         description: agenda.trim() || undefined,
         format,
-        formatConfig: { totalTurnTarget },
+        formatConfig: { totalTurnTarget, language },
         participants
       });
 
@@ -275,6 +278,16 @@ export function NewDiscussionWizard() {
                 value={totalTurnTarget}
                 onChange={setTotalTurnTarget}
                 options={[6, 8, 10, 12, 16, 20].map((n) => ({ value: n, label: `${n} turns` }))}
+              />
+            </Form.Item>
+            <Form.Item label={t('studio.languageLabel')}>
+              <Select
+                value={language}
+                onChange={(v) => setLanguage(v as 'en' | 'de')}
+                options={[
+                  { value: 'en', label: t('studio.languageEnglish') },
+                  { value: 'de', label: t('studio.languageGerman') }
+                ]}
               />
             </Form.Item>
             <Form.Item label={t('studio.participants')}>

@@ -12,6 +12,10 @@ export interface DiscussionFormatConfig {
   maxTurnsPerSegment?: number;
   totalTurnTarget?: number;
   hostInstructions?: string;
+  /** Language every participant should respond in for this discussion. Defaults to English
+   * (undefined) when not set - stored in the existing formatConfigJson column, no schema
+   * migration needed. Mirrors the playbookLanguage convention used for single-agent reports. */
+  language?: 'en' | 'de';
 }
 
 export interface DiscussionParticipant {

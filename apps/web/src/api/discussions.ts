@@ -30,13 +30,21 @@ export interface DiscussionParticipantDto {
   reportIds: string[];
 }
 
+export interface DiscussionFormatConfigDto {
+  segments?: string[];
+  totalTurnTarget?: number;
+  hostInstructions?: string;
+  /** Language every participant should respond in. Defaults to English when unset. */
+  language?: 'en' | 'de';
+}
+
 export interface DiscussionDto {
   id: string;
   ownerUserId: string;
   name: string;
   description: string;
   format: 'free_form' | 'structured' | 'hosted' | 'hybrid';
-  formatConfig: { segments?: string[]; totalTurnTarget?: number; hostInstructions?: string };
+  formatConfig: DiscussionFormatConfigDto;
   scheduleJson: string | null;
   syntheticSourceId: string | null;
   createdAt: string;
@@ -92,7 +100,7 @@ export interface CreateDiscussionPayload {
   name: string;
   description?: string;
   format: 'free_form' | 'structured' | 'hosted' | 'hybrid';
-  formatConfig?: object;
+  formatConfig?: DiscussionFormatConfigDto;
   scheduleJson?: string;
   participants: Array<{
     agentId: string;

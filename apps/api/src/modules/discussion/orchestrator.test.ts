@@ -278,4 +278,57 @@ describe('DiscussionOrchestrator', () => {
       expect(system.toLowerCase()).toMatch(/not.*json|no json|instead of json/);
     }
   });
+
+  it('instructs every participant to respond in German when the discussion language is set to de', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion = vi.fn().mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: { totalTurnTarget: 4, language: 'de' }
+    });
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }) } };
+    const orchestrator = makeOrchestrator({ repo, claude });
+
+    await orchestrator.run('d1', 'r1');
+
+    const systemPromptsUsed = claude.messages.create.mock.calls.map((call: any) => call[0].system as string);
+    for (const system of systemPromptsUsed) {
+      expect(system).toMatch(/deutsch/i);
+    }
+  });
+
+  it('does not add a language override when the discussion language is unset (defaults to English)', async () => {
+    vi.clearAllMocks();
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }) } };
+    const orchestrator = makeOrchestrator({ claude });
+
+    await orchestrator.run('d1', 'r1');
+
+    const systemPromptsUsed = claude.messages.create.mock.calls.map((call: any) => call[0].system as string);
+    for (const system of systemPromptsUsed) {
+      expect(system).not.toMatch(/deutsch/i);
+    }
+  });
+
+  it('sanitizes a turn that still comes back as JSON despite the discussion-mode instruction', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    // Even with DISCUSSION_MODE_INSTRUCTION, Claude occasionally falls back to its baked-in
+    // report JSON shape (same behavior already observed for the single-agent pipeline) - the
+    // orchestrator must extract readable spoken text rather than persisting the raw JSON blob.
+    const jsonReply = JSON.stringify({
+      common: { summary: "I'd push back - the data center demand story is overstated.", key_takeaways: [], sources_used: [], citations: [] },
+      section: { character_type: 'finance_expert', market_summary: 'Overstated.', signals: [] }
+    });
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: jsonReply }] }) } };
+    const orchestrator = makeOrchestrator({ repo, claude });
+
+    await orchestrator.run('d1', 'r1');
+
+    const savedTexts = repo.createTurn.mock.calls.map((call: any) => call[3] as string);
+    for (const text of savedTexts) {
+      expect(text).toBe("I'd push back - the data center demand story is overstated.");
+      expect(text).not.toContain('{');
+    }
+  });
 });

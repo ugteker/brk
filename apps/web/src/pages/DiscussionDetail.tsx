@@ -31,6 +31,7 @@ import {
   type DiscussionTurnDto
 } from '../api/discussions';
 import { useDiscussionStream } from '../hooks/useDiscussionStream';
+import { useAppData } from '../context/AppDataContext';
 
 const { Text, Paragraph } = Typography;
 
@@ -43,22 +44,37 @@ const FORMAT_COLORS: Record<string, string> = {
 
 const SPEAKER_COLORS = ['#1890ff', '#52c41a', '#fa8c16', '#722ed1', '#eb2f96', '#13c2c2'];
 
-function TurnBubble({ turn, participantIndex }: { turn: DiscussionTurnDto; participantIndex: number }) {
+function TurnBubble({ turn, participantIndex, agentName }: { turn: DiscussionTurnDto; participantIndex: number; agentName: string }) {
   const color = SPEAKER_COLORS[participantIndex % SPEAKER_COLORS.length];
+  // Alternate sides by participant index for a natural back-and-forth chat feel, instead of
+  // every turn (regardless of speaker) always appearing flush-left in one undifferentiated
+  // column - which is what made longer/denser turns look like one unreadable frame.
+  const isReversed = participantIndex % 2 === 1;
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
+    <div
+      style={{
+        display: 'flex',
+        gap: 10,
+        alignItems: 'flex-start',
+        marginBottom: 16,
+        flexDirection: isReversed ? 'row-reverse' : 'row'
+      }}
+    >
       <Avatar style={{ background: color, flexShrink: 0 }} size={32} icon={<UserOutlined />} />
       <Card
         size="small"
-        style={{ flex: 1, background: `${color}12`, border: 'none' }}
+        style={{ maxWidth: '80%', background: `${color}12`, border: 'none' }}
         bodyStyle={{ padding: '8px 12px' }}
       >
-        {turn.segmentLabel && (
-          <Tag color="default" style={{ marginBottom: 4, fontSize: 11 }}>
-            {turn.segmentLabel}
-          </Tag>
-        )}
-        <Paragraph style={{ margin: 0 }}>{turn.content}</Paragraph>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <strong style={{ fontSize: 12, color }}>{agentName}</strong>
+          {turn.segmentLabel && (
+            <Tag color="default" style={{ margin: 0, fontSize: 11 }}>
+              {turn.segmentLabel}
+            </Tag>
+          )}
+        </div>
+        <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{turn.content}</Paragraph>
         {turn.audioUrl && (
           <audio src={turn.audioUrl} controls style={{ width: '100%', marginTop: 8, height: 28 }} />
         )}
@@ -143,6 +159,7 @@ export function DiscussionDetail() {
   const { t } = useTranslation();
   const { discussionId } = useParams<{ discussionId: string }>();
   const navigate = useNavigate();
+  const { agents } = useAppData();
 
   const [discussion, setDiscussion] = useState<DiscussionDto | null>(null);
   const [runs, setRuns] = useState<DiscussionRunDto[]>([]);
@@ -220,6 +237,9 @@ export function DiscussionDetail() {
   if (!discussion) return null;
 
   const participantIndexMap = Object.fromEntries(discussion.participants.map((p, i) => [p.id, i]));
+  const participantAgentNameMap = Object.fromEntries(
+    discussion.participants.map((p) => [p.id, agents.find((a) => a.id === p.agentId)?.name ?? p.agentId])
+  );
   const selectedRun = runs.find((r) => r.id === selectedRunId);
   const displayTurns: DiscussionTurnDto[] =
     liveRun && liveRun === selectedRunId ? liveTurns : selectedRun?.turns ?? [];
@@ -309,6 +329,7 @@ export function DiscussionDetail() {
                           key={turn.id}
                           turn={turn}
                           participantIndex={participantIndexMap[turn.participantId] ?? 0}
+                          agentName={participantAgentNameMap[turn.participantId] ?? 'Agent'}
                         />
                       )}
                     />

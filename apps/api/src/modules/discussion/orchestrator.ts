@@ -3,6 +3,7 @@ import type { DiscussionRepositoryLike } from './repository';
 import type { Discussion, DiscussionParticipant, DiscussionFormat, ParticipantEvidenceSnapshot } from './types';
 import { resolveParticipantReports, type ReportResolutionRepo } from './report-resolution';
 import { buildTranscriptEvidence, type EvidenceArtifactRepo } from './evidence';
+import { sanitizeDiscussionTurnText } from './sanitize-turn-text';
 import { logger } from '../../lib/logger';
 
 export interface OrchestratorAgentRepo {
@@ -71,6 +72,13 @@ const DISCUSSION_MODE_INSTRUCTION =
   "Respond only with natural, conversational spoken language for your turn - not JSON, not " +
   "markdown, no headers or bullet lists, no code fences. Just speak naturally in character.";
 
+/** Per-discussion language override (mirrors the playbookLanguage/buildEffectiveSystemPrompt
+ * convention used for single-agent reports) - only 'de' needs an explicit instruction since
+ * English is the default when unset. */
+const DISCUSSION_LANGUAGE_INSTRUCTIONS: Partial<Record<'en' | 'de', string>> = {
+  de: 'WICHTIG: Antworte in diesem Redebeitrag auf Deutsch.'
+};
+
 export class DiscussionOrchestrator {
   constructor(private readonly deps: DiscussionOrchestratorDeps) {}
 
@@ -129,10 +137,17 @@ export class DiscussionOrchestrator {
           artifactRepository
         );
 
+        const languageInstruction = DISCUSSION_LANGUAGE_INSTRUCTIONS[discussion.formatConfig.language ?? 'en'];
+        const systemPromptSections = [
+          promptVersion?.systemPrompt ?? `You are an AI analyst named ${agent?.name ?? 'Agent'}.`,
+          DISCUSSION_MODE_INSTRUCTION,
+          ...(languageInstruction ? [languageInstruction] : [])
+        ];
+
         contexts.push({
           participant: p,
           agentName: agent?.name ?? `Agent-${p.agentId.slice(0, 6)}`,
-          systemPrompt: `${promptVersion?.systemPrompt ?? `You are an AI analyst named ${agent?.name ?? 'Agent'}.`}\n\n${DISCUSSION_MODE_INSTRUCTION}`,
+          systemPrompt: systemPromptSections.join('\n\n'),
           model: promptVersion?.model ?? DISCUSSION_FALLBACK_MODEL,
           recentReportsSummary,
           transcriptExcerpt: evidence.excerptText
@@ -184,7 +199,8 @@ export class DiscussionOrchestrator {
           messages
         });
 
-        const text = response.content.find((c) => c.type === 'text')?.text ?? '';
+        const rawText = response.content.find((c) => c.type === 'text')?.text ?? '';
+        const text = sanitizeDiscussionTurnText(rawText);
         await discussionRepository.createTurn(runId, ctx.participant.id, turnIndex, text, segment);
 
         conversationHistory.push({ role: 'user', content: userPrompt });
