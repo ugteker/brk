@@ -355,6 +355,10 @@ export interface RunArtifactPreviewDto {
   fidelity: string;
   contentPreview: string;
   contentLength: number;
+  /** Human-readable episode/item title (e.g. a podcast episode or YouTube video title), when
+   * available. Null for sources with no such title (e.g. a plain web page) - the UI falls back
+   * to showing the raw sourceRef URL in that case. */
+  title: string | null;
 }
 
 export interface RunReportSummaryDto {

@@ -96,7 +96,8 @@ it('shows an artifact preview with a download button', () => {
               sourceRef: 'https://example.com/blog',
               fidelity: 'high',
               contentPreview: 'This is a preview of the crawled content.',
-              contentLength: 4000
+              contentLength: 4000,
+              title: null
             }
           ]
         })
@@ -111,6 +112,32 @@ it('shows an artifact preview with a download button', () => {
   expect(sourceLink).toHaveAttribute('target', '_blank');
   const downloadLink = screen.getByRole('link', { name: /download full content \(4000 chars\)/i });
   expect(downloadLink).toHaveAttribute('href', '/api/agents/agent-1/runs/run-1/artifacts/artifact-1/download');
+});
+
+it('shows the episode/item title (not the raw URL) when the artifact has one, still linking to the source', () => {
+  render(
+    <AgentRunsBrowser
+      agentId="agent-1"
+      runs={[
+        createRun({
+          artifacts: [
+            {
+              id: 'artifact-1',
+              sourceRef: 'https://example.com/podcast/ep-42',
+              fidelity: 'high',
+              contentPreview: 'Transcript preview.',
+              contentLength: 1200,
+              title: 'Episode 42: Fed Rate Decision'
+            }
+          ]
+        })
+      ]}
+    />
+  );
+
+  const link = screen.getByRole('link', { name: 'Episode 42: Fed Rate Decision' });
+  expect(link).toHaveAttribute('href', 'https://example.com/podcast/ep-42');
+  expect(screen.queryByText('https://example.com/podcast/ep-42')).not.toBeInTheDocument();
 });
 
 it('calls onViewReport when the View report button is clicked', () => {

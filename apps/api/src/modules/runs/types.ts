@@ -11,6 +11,10 @@ export interface RunArtifactPreview {
   fidelity: string;
   contentPreview: string;
   contentLength: number;
+  /** Human-readable episode/item title from the underlying EvidenceBlock, when the source
+   * adapter had one available (e.g. a podcast episode or YouTube video title). Null when the
+   * source has no such title (e.g. a plain web page), so the UI can fall back to the raw URL. */
+  title: string | null;
 }
 
 export interface RunDetailRecord {

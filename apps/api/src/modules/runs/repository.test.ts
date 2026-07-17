@@ -132,6 +132,64 @@ describe('RunsRepository', () => {
     expect(result[0]?.durationMs).toBeNull();
   });
 
+  it('exposes the human-readable episode/item title from an artifact\'s evidence payload', async () => {
+    const runs: FakeRunRow[] = [
+      {
+        id: 'run-1',
+        agentId: 'agent-1',
+        status: 'succeeded',
+        scheduledFor: new Date('2026-07-10T09:00:00.000Z'),
+        startedAt: new Date('2026-07-10T09:00:00.000Z'),
+        finishedAt: new Date('2026-07-10T09:00:05.000Z'),
+        errorCode: null,
+        errorMessage: null,
+        retryCount: 0
+      }
+    ];
+    const artifacts: FakeArtifactRow[] = [
+      {
+        id: 'artifact-1',
+        agentId: 'agent-1',
+        agentRunId: 'run-1',
+        sourceRef: 'https://example.com/podcast/ep-42',
+        payloadJson: JSON.stringify({ content: 'transcript text', title: 'Episode 42: Fed Rate Decision' }),
+        fidelity: 'high'
+      }
+    ];
+    const repo = new RunsRepository(createFakeDb(runs, artifacts, []) as never);
+    const result = await repo.listRunDetailsForAgent('agent-1');
+    expect(result[0]?.artifacts[0]?.title).toBe('Episode 42: Fed Rate Decision');
+  });
+
+  it('falls back to a null title when the evidence payload has no title (e.g. plain web page)', async () => {
+    const runs: FakeRunRow[] = [
+      {
+        id: 'run-1',
+        agentId: 'agent-1',
+        status: 'succeeded',
+        scheduledFor: new Date('2026-07-10T09:00:00.000Z'),
+        startedAt: new Date('2026-07-10T09:00:00.000Z'),
+        finishedAt: new Date('2026-07-10T09:00:05.000Z'),
+        errorCode: null,
+        errorMessage: null,
+        retryCount: 0
+      }
+    ];
+    const artifacts: FakeArtifactRow[] = [
+      {
+        id: 'artifact-1',
+        agentId: 'agent-1',
+        agentRunId: 'run-1',
+        sourceRef: 'https://example.com/blog',
+        payloadJson: JSON.stringify({ content: 'x'.repeat(400) }),
+        fidelity: 'high'
+      }
+    ];
+    const repo = new RunsRepository(createFakeDb(runs, artifacts, []) as never);
+    const result = await repo.listRunDetailsForAgent('agent-1');
+    expect(result[0]?.artifacts[0]?.title).toBeNull();
+  });
+
   it('gets the full content of a single artifact scoped to its agent and run', async () => {
     const runs: FakeRunRow[] = [
       {

@@ -168,10 +168,10 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
                       <FileTextOutlined />{' '}
                       {isHttpUrl(artifact.sourceRef) ? (
                         <a href={artifact.sourceRef} target="_blank" rel="noreferrer" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {artifact.sourceRef}
+                          {artifact.title ?? artifact.sourceRef}
                         </a>
                       ) : (
-                        artifact.sourceRef
+                        artifact.title ?? artifact.sourceRef
                       )}
                     </span>
                   }>
