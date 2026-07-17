@@ -62,7 +62,11 @@ export class ReportRepository {
           }))
         }
       },
-      include: { signals: true }
+      // agent must be included here - toRecord() below derives characterType from
+      // row.agent?.characterType, and without it this always fell back to 'finance_expert'
+      // and threw a ReportShapeValidationError for any non-finance_expert agent, even though
+      // the row above had already been durably saved.
+      include: { signals: true, agent: { select: { characterType: true } } }
     });
 
     return this.toRecord(created as unknown as ReportRow);
