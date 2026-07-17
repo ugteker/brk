@@ -216,7 +216,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
           <Alert
             type="warning"
             showIcon
-            title={validationError}
+            message={validationError}
             className="rounded-md"
           />
         )}
@@ -233,16 +233,16 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                     key={persona.id}
                     type="button"
                     onClick={() => onPersonaChange(persona.id)}
-                    className={`rounded-md border p-3 text-left transition ${personaId === persona.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                    className={`rounded-md border p-3 text-left transition ${personaId === persona.id ? 'border-[#722ed1] bg-[rgba(114,46,209,0.08)]' : 'border-border hover:border-[#9d6fe8]'}`}
                     aria-label={`Character ${persona.name}`}
                   >
                     <p className="font-medium">{persona.name}</p>
-                    <p className="text-xs text-gray-600">{persona.tagline}</p>
+                    <p className="text-xs text-muted-foreground">{persona.tagline}</p>
                     <Tag className="mt-2">Characters: {persona.characters.length}</Tag>
                   </button>
                 ))}
               </div>
-              <Paragraph className="!mb-2 mt-4 text-xs text-gray-500">
+              <Paragraph className="!mb-2 mt-4 text-xs text-muted-foreground">
                 Personalities for {selectedPersonaLabel}
               </Paragraph>
               <div className="grid gap-2 md:grid-cols-3">
@@ -251,11 +251,11 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                     key={character.id}
                     type="button"
                     onClick={() => onCharacterChange(character.id)}
-                    className={`rounded-md border p-3 text-left transition ${characterId === character.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                    className={`rounded-md border p-3 text-left transition ${characterId === character.id ? 'border-[#722ed1] bg-[rgba(114,46,209,0.08)]' : 'border-border hover:border-[#9d6fe8]'}`}
                     aria-label={`Personality ${character.name}`}
                   >
                     <p className="font-medium">{character.name}</p>
-                    <p className="text-xs text-gray-600">{character.tagline}</p>
+                    <p className="text-xs text-muted-foreground">{character.tagline}</p>
                     <Tag className="mt-2">Risk: {character.riskLevel}</Tag>
                   </button>
                 ))}
@@ -307,13 +307,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                         ]}
                       />
                     </Form.Item>
-                  ) : (
-                    <Form.Item label="Risk level">
-                      <Paragraph className="!mb-0 text-xs text-gray-500">
-                        Risk level is only used for Finance Expert personality.
-                      </Paragraph>
-                    </Form.Item>
-                  )}
+                  ) : null}
                 </div>
 
                 <Form.Item label="Model">
@@ -348,15 +342,15 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
               </Paragraph>
               <div className="mb-3 grid gap-3 lg:grid-cols-2">
                 <Card size="small" title="Prompt preview">
-                  <Paragraph className="mb-2 text-xs text-gray-500">
+                  <Paragraph className="mb-2 text-xs text-muted-foreground">
                     Character: <Tag>{selectedPersonaLabel}</Tag> Personality: <Tag>{selectedCharacterLabel}</Tag> Model: <Tag>{model}</Tag>
                   </Paragraph>
-                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-gray-50 p-3 text-xs">
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-3 text-xs">
                     {systemPrompt}
                   </pre>
                 </Card>
                 <Card size="small" title="Report shape preview">
-                  <pre className="overflow-auto whitespace-pre-wrap rounded bg-gray-50 p-3 text-xs">{`{
+                  <pre className="overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-3 text-xs">{`{
   "agent": "${name.trim() || 'Unnamed Agent'}",
   "character": "${personaId}",
   "personality": "${characterId}",
@@ -388,7 +382,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
           )}
         </div>
 
-        <div className="sticky bottom-0 z-10 -mx-4 flex justify-between border-t border-gray-200 bg-background px-4 py-3 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
+        <div className="sticky bottom-0 z-10 -mx-4 flex justify-between border-t border-border bg-background px-4 py-3 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
           <div className="flex gap-2">
             <Button onClick={backStep} disabled={currentStep === 0}>Back</Button>
             <Button onClick={onCancel}>Cancel</Button>
