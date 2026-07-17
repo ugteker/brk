@@ -36,9 +36,10 @@
     "adminModeEnable": "Switch to admin mode",
     "adminModeDisable": "Switch to dashboard mode",
     "bellLabel": "Notifications",
-    "bellRunFailures": "Run failures",
+    "bellTitle": "Notifications",
     "bellClearAll": "Clear all",
-    "bellEmpty": "No failures 🎉"
+    "bellEmpty": "Nothing new 🎉",
+    "bellNewReport": "New report"
   },
   "language": {
     "switchTo": "Sprache: Deutsch",

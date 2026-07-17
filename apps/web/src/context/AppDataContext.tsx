@@ -29,6 +29,14 @@ export interface FailedRunNotice {
   timestamp: string;
 }
 
+export interface NewReportNotice {
+  reportId: string;
+  agentId: string;
+  agentName: string;
+  summary: string;
+  timestamp: string;
+}
+
 export interface AppDataContextValue {
   agents: AgentSummary[];
   agentsLoadState: LoadState;
@@ -50,6 +58,8 @@ export interface AppDataContextValue {
   setPlaybooks: React.Dispatch<React.SetStateAction<PlaybookRecord[]>>;
   failedRunNotices: FailedRunNotice[];
   setFailedRunNotices: React.Dispatch<React.SetStateAction<FailedRunNotice[]>>;
+  newReportNotices: NewReportNotice[];
+  setNewReportNotices: React.Dispatch<React.SetStateAction<NewReportNotice[]>>;
   bellDismissedIds: Set<string>;
   setBellDismissedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   forceShowOnboarding: boolean;
@@ -82,6 +92,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [marketplaceSourceCount, setMarketplaceSourceCount] = useState(0);
   const [marketplacePlaybookCount, setMarketplacePlaybookCount] = useState(0);
   const [failedRunNotices, setFailedRunNotices] = useState<FailedRunNotice[]>([]);
+  const [newReportNotices, setNewReportNotices] = useState<NewReportNotice[]>([]);
   const [bellDismissedIds, setBellDismissedIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('chattrader:bell:dismissed') ?? '[]')); } catch { return new Set(); }
   });
@@ -209,6 +220,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     refreshAgents, refreshSources, refreshPlaybooks,
     setAgents, setSources, setPlaybooks,
     failedRunNotices, setFailedRunNotices,
+    newReportNotices, setNewReportNotices,
     bellDismissedIds, setBellDismissedIds,
     forceShowOnboarding, setForceShowOnboarding,
     adminMode, setAdminMode

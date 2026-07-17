@@ -396,6 +396,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
     refreshAgents: _refreshAgents, refreshSources: _refreshSources, refreshPlaybooks: _refreshPlaybooks,
     failedRunNotices, setFailedRunNotices,
+    newReportNotices, setNewReportNotices,
     bellDismissedIds,
     forceShowOnboarding
   } = useAppData();
@@ -767,6 +768,21 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runs]);
+
+  // Accumulate newly-created reports into the bell notification centre too (driven by the
+  // same SSE stream), so users don't have to keep an agent selected/open to notice new output.
+  useEffect(() => {
+    if (reports.length === 0) return;
+    const agentName = agents.find((a) => a.id === executionAgentId)?.name ?? executionAgentId ?? '';
+    setNewReportNotices((prev) => {
+      const existingIds = new Set(prev.map((n) => n.reportId));
+      const newNotices = reports
+        .filter((r) => !existingIds.has(r.id))
+        .map((r) => ({ reportId: r.id, agentId: executionAgentId!, agentName, summary: r.summary, timestamp: r.createdAt }));
+      return newNotices.length > 0 ? [...prev, ...newNotices] : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reports]);
 
   // Load reports + runs for the selected source (merged from all agents analyzing it)
   useEffect(() => {

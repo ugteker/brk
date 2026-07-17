@@ -127,6 +127,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { theme, toggleTheme } = useTheme();
   const {
     failedRunNotices,
+    newReportNotices,
     bellDismissedIds,
     setBellDismissedIds,
     refreshAgents, refreshSources, refreshPlaybooks,
@@ -148,7 +149,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   const current = activeKey(pathname);
-  const unread = failedRunNotices.filter((n) => !bellDismissedIds.has(n.runId));
+  type BellNotice = { id: string; kind: 'run_failed' | 'new_report'; agentName: string; message: string; timestamp: string };
+  const combinedNotices: BellNotice[] = [
+    ...failedRunNotices.map((n) => ({ id: n.runId, kind: 'run_failed' as const, agentName: n.agentName, message: n.errorMessage ?? 'Run failed', timestamp: n.timestamp })),
+    ...newReportNotices.map((n) => ({ id: n.reportId, kind: 'new_report' as const, agentName: n.agentName, message: n.summary, timestamp: n.timestamp }))
+  ].sort((a, b) => (Date.parse(a.timestamp) || 0) - (Date.parse(b.timestamp) || 0));
+  const unread = combinedNotices.filter((n) => !bellDismissedIds.has(n.id));
   const navItems = [...COMMON_NAV_ITEMS, ...(isAdmin && adminMode ? ADMIN_NAV_ITEMS : [])];
 
   const userMenuItems = [
@@ -277,13 +283,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               trigger="click"
               title={
                 <div className="flex items-center justify-between gap-4">
-                  <span>{t('nav.bellRunFailures')}</span>
-                  {failedRunNotices.length > 0 && (
+                  <span>{t('nav.bellTitle')}</span>
+                  {combinedNotices.length > 0 && (
                     <Button
                       size="small"
                       type="text"
                       onClick={() => {
-                        const newSet = new Set(failedRunNotices.map((n) => n.runId));
+                        const newSet = new Set(combinedNotices.map((n) => n.id));
                         setBellDismissedIds(newSet);
                         localStorage.setItem('chattrader:bell:dismissed', JSON.stringify([...newSet]));
                       }}
@@ -295,16 +301,26 @@ export function AppShell({ children }: { children: ReactNode }) {
               }
               content={
                 <div className="w-72 space-y-2 max-h-80 overflow-y-auto">
-                  {failedRunNotices.length === 0 ? (
+                  {combinedNotices.length === 0 ? (
                     <p className="text-xs text-gray-400 py-2 text-center">{t('nav.bellEmpty')}</p>
                   ) : (
-                    [...failedRunNotices].reverse().map((n) => (
+                    [...combinedNotices].reverse().map((n) => (
                       <div
-                        key={n.runId}
-                        className={`rounded-lg border px-3 py-2 text-xs ${bellDismissedIds.has(n.runId) ? 'opacity-40 border-gray-200' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'}`}
+                        key={n.id}
+                        className={`rounded-lg border px-3 py-2 text-xs ${
+                          bellDismissedIds.has(n.id)
+                            ? 'opacity-40 border-gray-200'
+                            : n.kind === 'run_failed'
+                              ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'
+                              : 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950'
+                        }`}
                       >
-                        <p className="font-semibold text-red-700 dark:text-red-300 truncate">{n.agentName}</p>
-                        <p className="text-red-500 dark:text-red-400 truncate">{n.errorMessage ?? 'Run failed'}</p>
+                        <p className={`font-semibold truncate ${n.kind === 'run_failed' ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}>
+                          {n.agentName}
+                        </p>
+                        <p className={`truncate ${n.kind === 'run_failed' ? 'text-red-500 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                          {n.kind === 'new_report' ? `${t('nav.bellNewReport')}: ` : ''}{n.message}
+                        </p>
                         {n.timestamp ? <p className="text-gray-400 mt-0.5">{new Date(n.timestamp).toLocaleString()}</p> : null}
                       </div>
                     ))
@@ -312,7 +328,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </div>
               }
             >
-              <TouchSafeTooltip title={t('nav.bellRunFailures')}>
+              <TouchSafeTooltip title={t('nav.bellTitle')}>
                 <Badge count={unread.length} size="small" className={unread.length > 0 ? 'ct-bell-badge-alert' : undefined}>
                   <Button shape="circle" icon={<BellOutlined />} aria-label={t('nav.bellLabel')} style={circleActionStyle} />
                 </Badge>

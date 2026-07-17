@@ -36,9 +36,10 @@
     "adminModeEnable": "Zum Admin-Modus wechseln",
     "adminModeDisable": "Zum Dashboard-Modus wechseln",
     "bellLabel": "Benachrichtigungen",
-    "bellRunFailures": "Fehlgeschlagene Läufe",
+    "bellTitle": "Benachrichtigungen",
     "bellClearAll": "Alle löschen",
-    "bellEmpty": "Keine Fehler 🎉"
+    "bellEmpty": "Nichts Neues 🎉",
+    "bellNewReport": "Neuer Bericht"
   },
   "language": {
     "switchTo": "Language: English",
