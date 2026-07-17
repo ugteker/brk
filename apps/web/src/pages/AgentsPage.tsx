@@ -2118,6 +2118,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      {episodeCount} {selectedSource.type === 'youtube_videos' ? 'videos' : selectedSource.type === 'podcast_feeds' ? 'episodes' : 'pages'}
                                    </p>
                                  ) : null}
+                                 {selectedSource.type === 'youtube_videos' ? (
+                                   <p className="text-xs text-muted-foreground mt-0.5">{t('library.youtubeTranscriptNote')}</p>
+                                 ) : null}
                                  {latestItem?.link ? (
                                    <a
                                      href={latestItem.link}
@@ -2443,9 +2446,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
                                ) : null}
                              </div>
-                             {source.type === 'youtube_videos' ? (
-                               <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">⚠️ {t('library.youtubeTranscriptNote')}</p>
-                             ) : null}
                            </div>
                          </div>
                          <div className="mt-3 text-xs text-gray-700">
