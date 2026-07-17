@@ -47,7 +47,11 @@ const mockAgentRepo = {
 };
 
 const mockPromptRepo = {
-  getLatestPromptVersion: vi.fn().mockResolvedValue({ systemPrompt: 'You are an analyst.' })
+  getLatestPromptVersion: vi.fn().mockImplementation(async (agentId: string) =>
+    agentId === 'a2'
+      ? { systemPrompt: 'You are Bear, a bearish analyst.', model: 'claude-opus-4-1' }
+      : { systemPrompt: 'You are Bull, a bullish analyst.', model: 'claude-sonnet-4-5' }
+  )
 };
 
 function makeMockReportRepo() {
@@ -90,11 +94,11 @@ const mockSyntheticSource = {
   ensureSyntheticSource: vi.fn().mockResolvedValue(undefined)
 };
 
-function makeOrchestrator(overrides: { claude?: any; reportRepo?: any; repo?: any } = {}) {
+function makeOrchestrator(overrides: { claude?: any; reportRepo?: any; repo?: any; promptRepo?: any } = {}) {
   return new DiscussionOrchestrator({
     discussionRepository: overrides.repo ?? makeMockRepo(),
     agentRepository: mockAgentRepo as any,
-    promptRepository: mockPromptRepo as any,
+    promptRepository: overrides.promptRepo ?? (mockPromptRepo as any),
     reportRepository: overrides.reportRepo ?? makeMockReportRepo(),
     artifactRepository: makeMockArtifactRepo() as any,
     claudeClient: overrides.claude ?? mockClaude as any,
@@ -219,5 +223,31 @@ describe('DiscussionOrchestrator', () => {
     const lastCall = repo.updateRun.mock.calls.at(-1)!;
     expect(lastCall[1].status).toBe('error');
     expect(lastCall[1].errorMessage).toMatch(/no report/i);
+  });
+
+  it("calls Claude with each participant's own configured model, not a single hardcoded model", async () => {
+    vi.clearAllMocks();
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }) } };
+    const orchestrator = makeOrchestrator({ claude });
+
+    await orchestrator.run('d1', 'r1');
+
+    const modelsUsed = claude.messages.create.mock.calls.map((call: any) => call[0].model);
+    // formatConfig.totalTurnTarget = 4, round-robin over [a1 (Bull), a2 (Bear)]
+    expect(modelsUsed).toEqual(['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-sonnet-4-5', 'claude-opus-4-1']);
+    // Guard against regressing back to the retired hardcoded model that caused a 404 in production.
+    expect(modelsUsed).not.toContain('claude-3-5-sonnet-20241022');
+  });
+
+  it('falls back to the default discussion model when a participant has no prompt version yet', async () => {
+    vi.clearAllMocks();
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }) } };
+    const noPromptRepo = { getLatestPromptVersion: vi.fn().mockResolvedValue(null) };
+    const orchestrator = makeOrchestrator({ claude, promptRepo: noPromptRepo });
+
+    await orchestrator.run('d1', 'r1');
+
+    const modelsUsed = claude.messages.create.mock.calls.map((call: any) => call[0].model);
+    expect(modelsUsed.every((m: string) => m === 'claude-sonnet-4-5')).toBe(true);
   });
 });

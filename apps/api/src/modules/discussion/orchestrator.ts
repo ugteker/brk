@@ -10,7 +10,7 @@ export interface OrchestratorAgentRepo {
 }
 
 export interface OrchestratorPromptRepo {
-  getLatestPromptVersion(agentId: string): Promise<{ systemPrompt: string } | null>;
+  getLatestPromptVersion(agentId: string): Promise<{ systemPrompt: string; model: string } | null>;
 }
 
 export interface OrchestratorReportRepo extends ReportResolutionRepo {
@@ -41,9 +41,18 @@ interface ParticipantContext {
   participant: DiscussionParticipant;
   agentName: string;
   systemPrompt: string;
+  /** This participant's own configured model (their agent's latest prompt version),
+   * falling back to DISCUSSION_FALLBACK_MODEL if they have no prompt version yet.
+   * Each participant speaks using their own model, not one shared hardcoded model. */
+  model: string;
   recentReportsSummary: string;
   transcriptExcerpt: string;
 }
+
+/** Used only when a participant's agent has no prompt version yet (so no configured
+ * model to fall back to) - kept in sync with the default model used elsewhere in the
+ * codebase (agent prompt defaults, site inspection, report Q&A chat). */
+const DISCUSSION_FALLBACK_MODEL = 'claude-sonnet-4-5';
 
 export class DiscussionOrchestrator {
   constructor(private readonly deps: DiscussionOrchestratorDeps) {}
@@ -107,6 +116,7 @@ export class DiscussionOrchestrator {
           participant: p,
           agentName: agent?.name ?? `Agent-${p.agentId.slice(0, 6)}`,
           systemPrompt: promptVersion?.systemPrompt ?? `You are an AI analyst named ${agent?.name ?? 'Agent'}.`,
+          model: promptVersion?.model ?? DISCUSSION_FALLBACK_MODEL,
           recentReportsSummary,
           transcriptExcerpt: evidence.excerptText
         });
@@ -151,7 +161,7 @@ export class DiscussionOrchestrator {
         ];
 
         const response = await claudeClient.messages.create({
-          model: 'claude-3-5-sonnet-20241022',
+          model: ctx.model,
           max_tokens: 400,
           system: ctx.systemPrompt,
           messages
