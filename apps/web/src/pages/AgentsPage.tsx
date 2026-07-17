@@ -1724,7 +1724,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 key: 'feed',
                 label: <span><FileTextOutlined /> {t('nav.feed')}</span>,
                 children: (
-                  <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}>📊 {t('nav.feed')}</Title>}>
+                  <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}><FileTextOutlined /> {t('nav.feed')}</Title>}>
                     {feedLoading ? (
                       <div className="space-y-3">
                         {[1,2,3].map(i => <Skeleton key={i} active paragraph={{ rows: 2 }} />)}
@@ -1796,7 +1796,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 children: (
                   <Card
                     className="min-w-0"
-                    title={<Title level={4} style={{ margin: 0 }}>{t('nav.library')}</Title>}
+                    title={<Title level={4} style={{ margin: 0 }}><DatabaseOutlined /> {t('nav.library')}</Title>}
                   >
                    {/* First-run onboarding checklist — shown until all 4 steps complete or dismissed */}
                    {(forceShowOnboarding || (!onboardingDismissed && !showAdminWorkspace && onboardingDataLoaded && !onboardingAllDone)) ? (
