@@ -250,4 +250,32 @@ describe('DiscussionOrchestrator', () => {
     const modelsUsed = claude.messages.create.mock.calls.map((call: any) => call[0].model);
     expect(modelsUsed.every((m: string) => m === 'claude-sonnet-4-5')).toBe(true);
   });
+
+  it('overrides a persona system prompt that instructs JSON-only output with a natural-language discussion instruction', async () => {
+    vi.clearAllMocks();
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }) } };
+    // Mirrors the real baked-in persona template (prompt-personas.ts's nonFinancePrompt()),
+    // which tells Claude to "generate a clear, practical response in the requested JSON shape" -
+    // reusing this verbatim for a live discussion turn is exactly what caused turns to come back
+    // as JSON instead of spoken dialogue.
+    const jsonInstructingPromptRepo = {
+      getLatestPromptVersion: vi.fn().mockResolvedValue({
+        systemPrompt: 'You are a teacher operating as an educator.\n\nUse the provided source evidence to generate a clear, practical response in the requested JSON shape.',
+        model: 'claude-sonnet-4-5'
+      })
+    };
+    const orchestrator = makeOrchestrator({ claude, promptRepo: jsonInstructingPromptRepo });
+
+    await orchestrator.run('d1', 'r1');
+
+    const systemPromptsUsed = claude.messages.create.mock.calls.map((call: any) => call[0].system as string);
+    for (const system of systemPromptsUsed) {
+      // The base persona instructions are still present (persona/character is preserved)...
+      expect(system).toContain('You are a teacher operating as an educator.');
+      // ...but every turn's system prompt also carries an explicit override telling Claude this
+      // is a live spoken conversation, not a JSON report.
+      expect(system.toLowerCase()).toContain('json');
+      expect(system.toLowerCase()).toMatch(/not.*json|no json|instead of json/);
+    }
+  });
 });

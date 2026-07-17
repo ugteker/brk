@@ -54,6 +54,23 @@ interface ParticipantContext {
  * codebase (agent prompt defaults, site inspection, report Q&A chat). */
 const DISCUSSION_FALLBACK_MODEL = 'claude-sonnet-4-5';
 
+/**
+ * Appended to every participant's persona system prompt before each discussion turn.
+ *
+ * Agent persona prompts (see apps/web/src/data/prompt-personas.ts's nonFinancePrompt()
+ * template, already baked into existing saved AgentPromptVersion rows) are written for the
+ * single-agent report pipeline and explicitly instruct Claude to "generate a clear, practical
+ * response in the requested JSON shape". Reusing that stored prompt verbatim for a live
+ * discussion turn caused Claude to keep obeying its own system prompt and respond with JSON
+ * instead of spoken dialogue. This override runs *after* the persona instructions (so the
+ * character/persona itself is preserved) and explicitly tells Claude this is a different
+ * context, regardless of what any given agent's saved prompt happens to say.
+ */
+const DISCUSSION_MODE_INSTRUCTION =
+  "You are now speaking live in a multi-agent discussion, not writing a structured report. " +
+  "Respond only with natural, conversational spoken language for your turn - not JSON, not " +
+  "markdown, no headers or bullet lists, no code fences. Just speak naturally in character.";
+
 export class DiscussionOrchestrator {
   constructor(private readonly deps: DiscussionOrchestratorDeps) {}
 
@@ -115,7 +132,7 @@ export class DiscussionOrchestrator {
         contexts.push({
           participant: p,
           agentName: agent?.name ?? `Agent-${p.agentId.slice(0, 6)}`,
-          systemPrompt: promptVersion?.systemPrompt ?? `You are an AI analyst named ${agent?.name ?? 'Agent'}.`,
+          systemPrompt: `${promptVersion?.systemPrompt ?? `You are an AI analyst named ${agent?.name ?? 'Agent'}.`}\n\n${DISCUSSION_MODE_INSTRUCTION}`,
           model: promptVersion?.model ?? DISCUSSION_FALLBACK_MODEL,
           recentReportsSummary,
           transcriptExcerpt: evidence.excerptText
