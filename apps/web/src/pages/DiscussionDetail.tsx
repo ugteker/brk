@@ -44,8 +44,53 @@ const FORMAT_COLORS: Record<string, string> = {
 
 const SPEAKER_COLORS = ['#1890ff', '#52c41a', '#fa8c16', '#722ed1', '#eb2f96', '#13c2c2'];
 
+/** Client-side mirror of the backend sanitizeDiscussionTurnText logic.
+ * Applied when rendering stored turns so that any historical JSON blobs (produced before
+ * the backend sanitizer handled all shapes) are shown as readable prose in the UI. */
+function sanitizeTurnContent(raw: string): string {
+  const trimmed = raw.trim();
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const candidate = fenceMatch ? fenceMatch[1].trim() : trimmed;
+  let parsed: unknown;
+  try { parsed = JSON.parse(candidate); } catch { return trimmed; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return trimmed;
+
+  const obj = parsed as Record<string, unknown>;
+  const knownFields = ['content', 'text', 'message', 'response', 'dialogue', 'speech', 'summary'];
+  for (const k of knownFields) {
+    if (typeof obj[k] === 'string' && (obj[k] as string).trim().length > 0) return (obj[k] as string).trim();
+  }
+  const common = obj.common;
+  if (common && typeof common === 'object' && !Array.isArray(common)) {
+    const s = (common as Record<string, unknown>)['summary'];
+    if (typeof s === 'string' && s.trim().length > 0) return s.trim();
+  }
+  const section = obj.section;
+  if (section && typeof section === 'object' && !Array.isArray(section)) {
+    for (const k of ['market_summary', 'lesson_explanation', 'argument_reflection']) {
+      const s = (section as Record<string, unknown>)[k];
+      if (typeof s === 'string' && s.trim().length > 0) return (s as string).trim();
+    }
+  }
+  // Deep walk: collect all prose-like strings (≥30 chars, ≥4 words)
+  const prose: string[] = [];
+  function walk(v: unknown): void {
+    if (typeof v === 'string') {
+      const t = v.trim();
+      if (t.length >= 30 && t.split(/\s+/).length >= 4) prose.push(t);
+    } else if (Array.isArray(v)) { v.forEach(walk); }
+    else if (v && typeof v === 'object') { Object.values(v as Record<string, unknown>).forEach(walk); }
+  }
+  walk(obj);
+  if (prose.length > 0) {
+    return [...new Set(prose)].sort((a, b) => b.length - a.length).slice(0, 5).join('\n\n');
+  }
+  return trimmed;
+}
+
 function TurnBubble({ turn, participantIndex, agentName }: { turn: DiscussionTurnDto; participantIndex: number; agentName: string }) {
   const color = SPEAKER_COLORS[participantIndex % SPEAKER_COLORS.length];
+  const displayContent = sanitizeTurnContent(turn.content);
   // Alternate sides by participant index for a natural back-and-forth chat feel, instead of
   // every turn (regardless of speaker) always appearing flush-left in one undifferentiated
   // column - which is what made longer/denser turns look like one unreadable frame.
@@ -74,7 +119,7 @@ function TurnBubble({ turn, participantIndex, agentName }: { turn: DiscussionTur
             </Tag>
           )}
         </div>
-        <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{turn.content}</Paragraph>
+        <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{displayContent}</Paragraph>
         {turn.audioUrl && (
           <audio src={turn.audioUrl} controls style={{ width: '100%', marginTop: 8, height: 28 }} />
         )}

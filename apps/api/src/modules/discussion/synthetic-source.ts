@@ -7,7 +7,12 @@ type SyntheticSourceDb = Pick<PrismaClient, 'source' | 'sourceItem' | 'discussio
 export class SyntheticSourceService implements OrchestratorSyntheticSource {
   constructor(private readonly db: SyntheticSourceDb) {}
 
-  async ensureSyntheticSource(discussion: Discussion, runId: string, transcript: string): Promise<void> {
+  async ensureSyntheticSource(
+    discussion: Discussion,
+    runId: string,
+    transcript: string,
+    participantNames: string[]
+  ): Promise<void> {
     let sourceId = discussion.syntheticSourceId;
 
     if (!sourceId) {
@@ -23,7 +28,12 @@ export class SyntheticSourceService implements OrchestratorSyntheticSource {
             ownerUserId: discussion.ownerUserId,
             type: 'synthetic_discussion',
             value: sourceValue,
-            configJson: JSON.stringify({ discussionId: discussion.id, name: discussion.name })
+            configJson: JSON.stringify({
+              discussionId: discussion.id,
+              name: discussion.name,
+              participants: participantNames,
+              libraryCard: { title: discussion.name }
+            })
           }
         });
         sourceId = source.id;
@@ -32,6 +42,8 @@ export class SyntheticSourceService implements OrchestratorSyntheticSource {
         where: { id: discussion.id },
         data: { syntheticSourceId: sourceId }
       });
+    } else {
+      // Participants and title were stored at creation time; no re-fetch needed on subsequent runs.
     }
 
     const episodeTitle = `${discussion.name} — ${new Date().toISOString().slice(0, 10)}`;

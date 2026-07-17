@@ -30,10 +30,15 @@ describe('SyntheticSourceService', () => {
   it('creates source and episode on first run', async () => {
     const db = makeDb(false);
     const svc = new SyntheticSourceService(db as any);
-    await svc.ensureSyntheticSource(baseDiscussion, 'r1', 'Agent A: hello\nAgent B: world');
+    await svc.ensureSyntheticSource(baseDiscussion, 'r1', 'Agent A: hello\nAgent B: world', ['Agent A', 'Agent B']);
     expect(db.source.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ type: 'synthetic_discussion' })
     }));
+    // Config should embed participants and libraryCard title for the library card
+    const createdConfigJson = db.source.create.mock.calls[0][0].data.configJson as string;
+    const cfg = JSON.parse(createdConfigJson);
+    expect(cfg.participants).toEqual(['Agent A', 'Agent B']);
+    expect(cfg.libraryCard?.title).toBe('Bull vs Bear');
     expect(db.sourceItem.create).toHaveBeenCalled();
     expect(db.discussionRun.update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { syntheticSourceItemId: 'si1' } });
   });
@@ -41,7 +46,7 @@ describe('SyntheticSourceService', () => {
   it('reuses existing source if already exists', async () => {
     const db = makeDb(true);
     const svc = new SyntheticSourceService(db as any);
-    await svc.ensureSyntheticSource(baseDiscussion, 'r1', 'hello');
+    await svc.ensureSyntheticSource(baseDiscussion, 'r1', 'hello', ['Agent A']);
     expect(db.source.create).not.toHaveBeenCalled();
     expect(db.sourceItem.create).toHaveBeenCalled();
   });
@@ -50,7 +55,7 @@ describe('SyntheticSourceService', () => {
     const db = makeDb(false);
     const svc = new SyntheticSourceService(db as any);
     const disc = { ...baseDiscussion, syntheticSourceId: 'already-s1' };
-    await svc.ensureSyntheticSource(disc, 'r2', 'transcript');
+    await svc.ensureSyntheticSource(disc, 'r2', 'transcript', ['Agent A']);
     expect(db.source.findFirst).not.toHaveBeenCalled();
     expect(db.source.create).not.toHaveBeenCalled();
     expect(db.sourceItem.create).toHaveBeenCalled();

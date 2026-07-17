@@ -1488,12 +1488,23 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   function getSourceDisplayTitle(source: SourceRecord): string {
     if (source.metadata.title?.trim()) return source.metadata.title;
+    // Synthetic discussions store the name in config (for sources created before libraryCard.title was set)
+    if (source.type === 'synthetic_discussion' && typeof source.config.name === 'string' && source.config.name.trim()) {
+      return source.config.name.trim();
+    }
     try {
       const url = new URL(source.value);
       return url.hostname;
     } catch {
       return source.value;
     }
+  }
+
+  function getSourceSpeakers(source: SourceRecord): string[] {
+    if (source.type !== 'synthetic_discussion') return [];
+    const p = source.config.participants;
+    if (Array.isArray(p)) return p.filter((n): n is string => typeof n === 'string');
+    return [];
   }
 
   function getSourceCoverImageUrl(source: SourceRecord): string | null {
@@ -1506,6 +1517,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   function getSourceKindLabel(source: SourceRecord): string {
     if (source.type === 'youtube_videos' || source.type === 'podcast_feeds') return 'Playlist';
+    if (source.type === 'synthetic_discussion') return 'Discussion';
     return 'Page';
   }
 
@@ -2461,18 +2473,33 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                alt={`${getSourceDisplayTitle(source)} cover`}
                                className="h-14 w-14 rounded-md object-cover"
                              />
+                           ) : source.type === 'synthetic_discussion' ? (
+                             <div className="flex h-14 w-14 items-center justify-center rounded-md bg-geekblue-50 border border-blue-200 text-3xl select-none dark:bg-blue-950 dark:border-blue-800">
+                               🎙
+                             </div>
                            ) : (
                              <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
                                Cover unavailable
                              </div>
                            )}
                            <div className="min-w-0">
-                             <div className="text-sm font-semibold">{getSourceDisplayTitle(source)}</div>
-                             <Text type="secondary" className="text-xs">{source.value}</Text>
+                             <div className="text-sm font-semibold leading-snug">{getSourceDisplayTitle(source)}</div>
+                             {source.type !== 'synthetic_discussion' && (
+                               <Text type="secondary" className="text-xs">{source.value}</Text>
+                             )}
+                             {source.type === 'synthetic_discussion' && getSourceSpeakers(source).length > 0 && (
+                               <div className="mt-0.5 flex flex-wrap gap-1">
+                                 {getSourceSpeakers(source).map((name) => (
+                                   <Tag key={name} style={{ margin: 0, fontSize: 11 }}>👤 {name}</Tag>
+                                 ))}
+                               </div>
+                             )}
                              <div className="mt-1 flex flex-wrap gap-1 text-xs">
                                <SourceTypeBadge type={source.type} />
                                <Tag>{getSourceKindLabel(source)}</Tag>
-                               {(source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
+                               {source.type === 'synthetic_discussion' ? (
+                                 <Tag color="geekblue">Runs: {getSourceEpisodeCount(source)}</Tag>
+                               ) : (source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
                                  <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
                                ) : null}
                              </div>
@@ -2481,7 +2508,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          <div className="mt-3 text-xs">
                            {source.metadata.previewItems.length > 0 ? (
                              <>
-                               <div className="mb-1 font-medium text-muted-foreground">{t('library.recentEpisodes')}</div>
+                               <div className="mb-1 font-medium text-muted-foreground">
+                                 {source.type === 'synthetic_discussion' ? t('library.recentRuns') : t('library.recentEpisodes')}
+                               </div>
                                <ul className="list-inside list-disc space-y-1 text-foreground">
                                  {source.metadata.previewItems.slice(0, 3).map((item) => (
                                    <li key={`${source.id}:${item.link ?? item.title}`}>{item.title}</li>
@@ -2489,7 +2518,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                </ul>
                              </>
                            ) : (
-                             <span className="text-muted-foreground">{t('library.noEpisodes')}</span>
+                             <span className="text-muted-foreground">
+                               {source.type === 'synthetic_discussion' ? t('library.noRuns') : t('library.noEpisodes')}
+                             </span>
                            )}
                          </div>
                          {/* flex-1 content end */}

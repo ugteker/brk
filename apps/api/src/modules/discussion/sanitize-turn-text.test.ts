@@ -48,4 +48,26 @@ describe('sanitizeDiscussionTurnText', () => {
     const raw = '```\n' + JSON.stringify({ text: 'Spoken text here.' }) + '\n```';
     expect(sanitizeDiscussionTurnText(raw)).toBe('Spoken text here.');
   });
+
+  it('deep-walks an arbitrary analysis JSON shape (e.g. trend_analysis) and extracts prose strings', () => {
+    const raw = JSON.stringify({
+      trend_analysis: {
+        primary_observation: 'Violent sector rotation in US markets is the dominant theme this week.',
+        key_movements: [
+          {
+            paradox: 'ASML strong earnings drove sector peers sharply lower despite the beat.',
+            uncertainty: 'Duration and depth of the rotation remain unclear at this stage.'
+          }
+        ],
+        strategic_positioning: {
+          evidence_source: 'Report discussion of Deutsche retail investor behavior and ETF flows.'
+        }
+      }
+    });
+    const result = sanitizeDiscussionTurnText(raw);
+    // All four prose strings should appear in the output (joined with double newlines)
+    expect(result).toContain('Violent sector rotation in US markets');
+    expect(result).toContain('ASML strong earnings drove sector peers');
+    expect(result).not.toContain('"trend_analysis"');
+  });
 });

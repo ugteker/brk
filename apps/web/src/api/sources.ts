@@ -1,4 +1,4 @@
-export type SourceType = 'web_urls' | 'podcast_feeds' | 'youtube_videos';
+export type SourceType = 'web_urls' | 'podcast_feeds' | 'youtube_videos' | 'synthetic_discussion';
 export type SourceStatus = 'active' | 'disabled';
 export type SourceSharePermission = 'read' | 'update' | 'delete' | '*';
 export type PublicationVisibility = 'public' | 'private';

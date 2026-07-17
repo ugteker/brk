@@ -22,7 +22,12 @@ export interface OrchestratorReportRepo extends ReportResolutionRepo {
 export type OrchestratorArtifactRepo = EvidenceArtifactRepo;
 
 export interface OrchestratorSyntheticSource {
-  ensureSyntheticSource(discussion: Discussion, runId: string, transcript: string): Promise<void>;
+  ensureSyntheticSource(
+    discussion: Discussion,
+    runId: string,
+    transcript: string,
+    participantNames: string[]
+  ): Promise<void>;
 }
 
 export interface DiscussionOrchestratorDeps {
@@ -216,7 +221,7 @@ export class DiscussionOrchestrator {
             return `${ctx?.agentName ?? 'Agent'}: ${t.content}`;
           })
           .join('\n\n');
-        await syntheticSource.ensureSyntheticSource(discussion, runId, transcript);
+        await syntheticSource.ensureSyntheticSource(discussion, runId, transcript, contexts.map((c) => c.agentName));
       }
 
       await discussionRepository.updateRun(runId, { status: 'done', completedAt: new Date() });
