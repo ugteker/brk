@@ -1,6 +1,6 @@
 import { Spin } from 'antd';
 import type { ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AgentsPage } from './pages/AgentsPage';
 import { AuthPage } from './pages/AuthPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
@@ -25,6 +25,25 @@ function AdminUsersRoute() {
   return <AdminUsersPage onBack={() => navigate('/')} />;
 }
 
+function AnimatedRoutes() {
+  const location = useLocation();
+  return (
+    <div key={location.pathname} className="ct-page-enter">
+      <Routes>
+        <Route path="/" element={<AgentsPage hub="feed" />} />
+        <Route path="/library" element={<AgentsPage hub="sources" />} />
+        <Route path="/agents" element={<RequireAdmin><AgentsPage hub="agents" /></RequireAdmin>} />
+        <Route path="/playbooks" element={<RequireAdmin><AgentsPage hub="playbooks" /></RequireAdmin>} />
+        <Route path="/admin/users" element={<RequireAdmin><AdminUsersRoute /></RequireAdmin>} />
+        <Route path="/studio" element={<StudioHub />} />
+        <Route path="/studio/new" element={<NewDiscussionWizard />} />
+        <Route path="/studio/:discussionId" element={<DiscussionDetail />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </div>
+  );
+}
+
 function AuthGate() {
   const { status } = useAuth();
 
@@ -43,17 +62,7 @@ function AuthGate() {
   return (
     <AppDataProvider>
       <AppShell>
-        <Routes>
-          <Route path="/" element={<AgentsPage hub="feed" />} />
-          <Route path="/library" element={<AgentsPage hub="sources" />} />
-          <Route path="/agents" element={<RequireAdmin><AgentsPage hub="agents" /></RequireAdmin>} />
-          <Route path="/playbooks" element={<RequireAdmin><AgentsPage hub="playbooks" /></RequireAdmin>} />
-          <Route path="/admin/users" element={<RequireAdmin><AdminUsersRoute /></RequireAdmin>} />
-          <Route path="/studio" element={<StudioHub />} />
-          <Route path="/studio/new" element={<NewDiscussionWizard />} />
-          <Route path="/studio/:discussionId" element={<DiscussionDetail />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <AnimatedRoutes />
       </AppShell>
     </AppDataProvider>
   );

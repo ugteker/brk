@@ -13,12 +13,13 @@ import {
   message
 } from 'antd';
 import {
+  ArrowLeftOutlined,
   AudioOutlined,
   PlayCircleOutlined,
   UserOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   getDiscussion,
   listDiscussionRuns,
@@ -33,6 +34,13 @@ import { useDiscussionStream } from '../hooks/useDiscussionStream';
 
 const { Text, Paragraph } = Typography;
 
+const FORMAT_COLORS: Record<string, string> = {
+  free_form: 'blue',
+  structured: 'purple',
+  hosted: 'orange',
+  hybrid: 'geekblue'
+};
+
 const SPEAKER_COLORS = ['#1890ff', '#52c41a', '#fa8c16', '#722ed1', '#eb2f96', '#13c2c2'];
 
 function TurnBubble({ turn, participantIndex }: { turn: DiscussionTurnDto; participantIndex: number }) {
@@ -42,7 +50,7 @@ function TurnBubble({ turn, participantIndex }: { turn: DiscussionTurnDto; parti
       <Avatar style={{ background: color, flexShrink: 0 }} size={32} icon={<UserOutlined />} />
       <Card
         size="small"
-        style={{ flex: 1, borderLeft: `3px solid ${color}` }}
+        style={{ flex: 1, background: `${color}12`, border: 'none' }}
         bodyStyle={{ padding: '8px 12px' }}
       >
         {turn.segmentLabel && (
@@ -134,6 +142,7 @@ function EvidencePanel({
 export function DiscussionDetail() {
   const { t } = useTranslation();
   const { discussionId } = useParams<{ discussionId: string }>();
+  const navigate = useNavigate();
 
   const [discussion, setDiscussion] = useState<DiscussionDto | null>(null);
   const [runs, setRuns] = useState<DiscussionRunDto[]>([]);
@@ -219,12 +228,20 @@ export function DiscussionDetail() {
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
+          <Button
+            type="text"
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate('/studio')}
+            style={{ marginBottom: 8, paddingLeft: 0 }}
+          >
+            {t('studio.title')}
+          </Button>
           <h2 style={{ margin: 0 }}>
             <AudioOutlined style={{ marginRight: 8 }} />
             {discussion.name}
           </h2>
           <Space style={{ marginTop: 4 }}>
-            <Tag color="blue">{t(`studio.format_${discussion.format}`)}</Tag>
+            <Tag color={FORMAT_COLORS[discussion.format] ?? 'default'}>{t(`studio.format_${discussion.format}`)}</Tag>
             <Tag color="default">{discussion.participants.length} {t('studio.participants')}</Tag>
           </Space>
         </div>

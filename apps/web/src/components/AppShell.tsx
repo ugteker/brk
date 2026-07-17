@@ -6,8 +6,11 @@ import {
   DashboardOutlined,
   DollarOutlined,
   FileTextOutlined,
+  GlobalOutlined,
   LogoutOutlined,
+  MoonOutlined,
   RobotOutlined,
+  SunOutlined,
   TeamOutlined,
   UserOutlined
 } from '@ant-design/icons';
@@ -17,7 +20,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { useTheme } from '../theme/ThemeContext';
-import { ThemePicker } from './ThemePicker';
 import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { WatchlistMenu } from './WatchlistMenu';
 import { UsageBudgetModal } from './UsageBudgetModal';
@@ -122,7 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { user, isAdmin, logout } = useAuth();
-  const { theme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const {
     failedRunNotices,
     bellDismissedIds,
@@ -152,6 +154,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const userMenuItems = [
     ...(user ? [{ key: 'user-label', label: <span className="font-medium">{user.displayName ?? user.email}</span>, disabled: true }] : []),
     ...(user ? [{ type: 'divider' as const }] : []),
+    {
+      key: 'theme-toggle',
+      label: theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
+      icon: theme === 'dark' ? <SunOutlined /> : <MoonOutlined />,
+      onClick: () => toggleTheme()
+    },
+    {
+      key: 'language-toggle',
+      label: i18n.language.startsWith('de') ? 'Switch to English' : 'Auf Deutsch wechseln',
+      icon: <GlobalOutlined />,
+      onClick: () => i18n.changeLanguage(i18n.language.startsWith('de') ? 'en' : 'de')
+    },
+    { type: 'divider' as const },
     ...(isAdmin ? [
       {
         key: 'admin-mode-toggle',
@@ -251,20 +266,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
 
-          {/* Right actions */}
+          {/* Right actions — kept to 3 icons; theme & language moved to user menu */}
           <div className="ct-header-actions flex items-center gap-2 flex-wrap justify-end" style={actionClusterStyle}>
             <WatchlistMenu />
-            <ThemePicker />
-            <TouchSafeTooltip title={t('language.switchTo')}>
-              <Button
-                size="small"
-                type="text"
-                onClick={() => i18n.changeLanguage(i18n.language.startsWith('de') ? 'en' : 'de')}
-                style={{ fontWeight: 600, minWidth: 32, borderRadius: 999, ...circleActionStyle }}
-              >
-                {t('language.current')}
-              </Button>
-            </TouchSafeTooltip>
 
             {/* Bell */}
             <Popover

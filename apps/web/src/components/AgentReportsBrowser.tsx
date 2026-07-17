@@ -28,6 +28,15 @@ const CHARACTER_LABELS: Record<string, { emoji: string; label: string }> = {
   summarizer:     { emoji: '📋', label: 'Summarizer' },
 };
 
+const CHARACTER_TAG_COLORS: Record<string, string> = {
+  finance_expert: 'purple',
+  teacher:        'cyan',
+  influencer:     'magenta',
+  trainer:        'orange',
+  philosopher:    'geekblue',
+  summarizer:     'default',
+};
+
 const HEADLINE_MAX_LENGTH = 80;
 const TOKEN_FORMATTER = new Intl.NumberFormat('de-DE');
 
@@ -211,7 +220,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
   return (
     <div className="space-y-3">
       {aiTotals.reportCountWithUsage > 0 || aiTotals.hasAnyCost ? (
-        <p className="text-xs text-gray-500" data-testid="ai-totals">
+        <p className="text-xs text-muted-foreground" data-testid="ai-totals">
           Total AI usage across {reports.length} report{reports.length === 1 ? '' : 's'}:{' '}
           {formatTokenCount(aiTotals.totalInputTokens)} in / {formatTokenCount(aiTotals.totalOutputTokens)} out tokens
           {aiTotals.hasAnyCost ? ` · ~$${aiTotals.totalEstimatedCostUsd.toFixed(4)} (est.)` : ''}
@@ -232,7 +241,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
             style={{
               width: '100%',
               cursor: onSelectReport ? 'pointer' : 'default',
-              boxShadow: isHighlighted ? '0 0 0 2px #1677ff' : undefined,
+              boxShadow: isHighlighted ? '0 0 0 2px #722ed1' : undefined,
               transition: 'box-shadow 0.3s ease'
             }}
             hoverable={Boolean(onSelectReport)}
@@ -242,15 +251,15 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   {personaLabel ? (
-                    <Tag color="blue" className="m-0">{personaEmoji} {personaLabel}</Tag>
+                    <Tag color={characterType ? (CHARACTER_TAG_COLORS[characterType] ?? 'default') : 'default'} className="m-0">{personaEmoji} {personaLabel}</Tag>
                   ) : null}
                   {agentName ? (
-                    <span className="text-xs font-medium text-gray-600">{agentName}</span>
+                    <span className="text-xs font-medium text-muted-foreground">{agentName}</span>
                   ) : null}
-                  <span className="text-xs text-gray-400">{new Date(report.createdAt).toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground/80">{new Date(report.createdAt).toLocaleString()}</span>
                 </div>
                 <h4 className="text-base font-semibold">{deriveReportHeadline(report.summary)}</h4>
-                <p className="text-xs text-gray-400" data-testid={`ai-stats-${report.id}`}>
+                <p className="text-xs text-muted-foreground/80" data-testid={`ai-stats-${report.id}`}>
                   {formatReportAiStats(report)}
                 </p>
                 <div className="mt-1 flex flex-wrap gap-1">
@@ -322,7 +331,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                     strokeColor={confidenceColor(confidence)}
                     format={(percent) => `${percent}%`}
                   />
-                  <span className="mt-1 text-xs text-gray-500">Confidence</span>
+                  <span className="mt-1 text-xs text-muted-foreground">Confidence</span>
                 </div>
               </div>
             </div>
@@ -363,7 +372,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                         </span>
                       }
                     />
-                    <span className="text-xs text-gray-400">If the chart shows "symbol not found", add the exchange prefix and press Enter</span>
+                    <span className="text-xs text-muted-foreground/80">If the chart shows "symbol not found", add the exchange prefix and press Enter</span>
                   </div>
                   <TradingViewSymbolChart symbol={displaySymbol} interval="W" style="2" height={640} />
                 </div>

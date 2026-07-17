@@ -129,7 +129,7 @@ const YouTubeLogo = () => (
       <path d="M17.6 3.2A2.3 2.3 0 0 0 15.9 1.5C14.5 1 9 1 9 1S3.5 1 2.1 1.5A2.3 2.3 0 0 0 .4 3.2C0 4.6 0 7.5 0 7.5s0 2.9.4 4.3c.2.9.9 1.5 1.7 1.7C3.5 14 9 14 9 14s5.5 0 6.9-.5c.9-.2 1.5-.8 1.7-1.7C18 10.4 18 7.5 18 7.5s0-2.9-.4-4.3z" fill="#FF0000"/>
       <path d="M7 10.5V4.5l5.5 3-5.5 3z" fill="white"/>
     </svg>
-    <span style={{ fontWeight: 700, fontSize: '0.8em', color: '#282828', letterSpacing: '-0.2px', lineHeight: 1 }} aria-label="YouTube">YouTube</span>
+    <span style={{ fontWeight: 700, fontSize: '0.8em', letterSpacing: '-0.2px', lineHeight: 1 }} aria-label="YouTube">YouTube</span>
   </span>
 );
 
@@ -1985,7 +1985,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      className="h-14 w-14 rounded-md object-cover"
                                    />
                                  ) : (
-                                   <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
+                                   <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-muted-foreground">
                                      Cover unavailable
                                    </div>
                                  )}
@@ -2001,7 +2001,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    </div>
                                  </div>
                                </div>
-                               <div className="mt-3 text-xs text-gray-700">
+                               <div className="mt-3 text-xs text-muted-foreground">
                                  {item.metadata.previewItems.length > 0 ? (
                                    <>
                                      <div className="mb-1 font-medium">Recent episodes preview</div>
@@ -2096,11 +2096,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            try { hostname = new URL(selectedSource.value).hostname; } catch { hostname = selectedSource.value; }
                            return (
                              <>
-                             <div className="flex gap-3 mb-4 pb-4 border-b border-gray-100">
+                             <div className="flex gap-3 mb-4 pb-4 border-b border-border">
                                {coverUrl ? (
-                                 <img src={coverUrl} alt="" className="w-20 h-20 rounded-lg object-cover flex-shrink-0 bg-gray-100" />
+                                 <img src={coverUrl} alt="" className="w-20 h-20 rounded-lg object-cover flex-shrink-0 bg-muted" />
                                ) : (
-                                 <div className="w-20 h-20 rounded-lg flex-shrink-0 bg-gray-100 flex items-center justify-center text-2xl">
+                                 <div className="w-20 h-20 rounded-lg flex-shrink-0 bg-muted flex items-center justify-center text-2xl">
                                    {selectedSource.type === 'youtube_videos' ? '📺' : selectedSource.type === 'podcast_feeds' ? '🎙' : '🌐'}
                                  </div>
                                )}
@@ -2109,34 +2109,37 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    href={selectedSource.value}
                                    target="_blank"
                                    rel="noopener noreferrer"
-                                   className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                                   className="text-sm text-[#9d6fe8] hover:underline flex items-center gap-1"
                                    onClick={(e) => e.stopPropagation()}
                                  >
                                    {hostname} <LinkOutlined className="text-xs" />
                                  </a>
                                  {episodeCount > 0 ? (
-                                   <p className="text-xs text-gray-500 mt-0.5">
+                                   <p className="text-xs text-muted-foreground mt-0.5">
                                      {episodeCount} {selectedSource.type === 'youtube_videos' ? 'videos' : selectedSource.type === 'podcast_feeds' ? 'episodes' : 'pages'}
                                    </p>
+                                 ) : null}
+                                 {selectedSource.type === 'youtube_videos' ? (
+                                   <p className="text-xs text-muted-foreground mt-0.5">{t('library.youtubeTranscriptNote')}</p>
                                  ) : null}
                                  {latestItem?.link ? (
                                    <a
                                      href={latestItem.link}
                                      target="_blank"
                                      rel="noopener noreferrer"
-                                     className="mt-1.5 block text-xs text-gray-700 hover:text-blue-600 hover:underline truncate"
+                                     className="mt-1.5 block text-xs text-foreground hover:text-[#9d6fe8] hover:underline truncate"
                                      onClick={(e) => e.stopPropagation()}
                                    >
-                                     <span className="text-gray-400 mr-1">Latest:</span>
+                                     <span className="text-muted-foreground mr-1">Latest:</span>
                                      {latestItem.title}
-                                     {latestItem.pubDate ? <span className="ml-1 text-gray-400">· {new Date(latestItem.pubDate).toLocaleDateString()}</span> : null}
+                                     {latestItem.pubDate ? <span className="ml-1 text-muted-foreground">· {new Date(latestItem.pubDate).toLocaleDateString()}</span> : null}
                                    </a>
                                  ) : null}
                                </div>
                              </div>
                              {linkedPlaybooks.length > 0 ? (
-                               <div className="mt-3 pt-3 border-t border-gray-100">
-                                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">🤖 {t('library.expertsWatching')}</p>
+                               <div className="mt-3 pt-3 border-t border-border">
+                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">🤖 {t('library.expertsWatching')}</p>
                                  <div className="flex flex-col gap-1.5">
                                    {linkedPlaybooks.map((pb) => {
                                      const agent = agents.find((a) => a.id === pb.agentId);
@@ -2153,12 +2156,12 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                <Tag className="m-0" color="magenta">{agent.promptConfig.personality_label}</Tag>
                                              ) : null}
                                            </div>
-                                           <div className="flex items-center gap-1.5 text-gray-400">
+                                           <div className="flex items-center gap-1.5 text-muted-foreground">
                                              <span>{formatPlaybookSchedule(pb.schedule)}</span>
                                              <Tag color={pb.enabled ? 'green' : 'default'} className="m-0 leading-none py-0">{pb.enabled ? t('playbook.active') : t('playbook.paused')}</Tag>
                                            </div>
                                            {pb.recipients.length > 0 && (
-                                             <div className="flex flex-wrap gap-1 text-gray-400 mt-0.5">
+                                             <div className="flex flex-wrap gap-1 text-muted-foreground mt-0.5">
                                                <MailOutlined className="opacity-50 mt-0.5" />
                                                {pb.recipients.slice(0, 2).map((r) => (
                                                  <span key={r} className="truncate max-w-[120px]">{r}</span>
@@ -2268,9 +2271,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                        const episodes = selectedSource.metadata.previewItems.filter((item) => Boolean(item.link));
                                        const linkedAgent = agents.find((a) => a.id === linkedPlaybooks[0]?.agentId);
                                        return episodes.length === 0 ? (
-                                         <Empty description={<span className="text-sm text-gray-500">{t('library.noEpisodes')}</span>} />
+                                         <Empty description={<span className="text-sm text-muted-foreground">{t('library.noEpisodes')}</span>} />
                                        ) : (
-                                         <ul className="divide-y divide-gray-100">
+                                         <ul className="divide-y divide-border">
                                            {episodes.map((ep) => {
                                              const videoId = selectedSource.type === 'youtube_videos' ? extractYoutubeVideoId(ep.link) : null;
                                              return (
@@ -2279,13 +2282,13 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                    <img
                                                      src={`https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`}
                                                      alt=""
-                                                     className="w-16 h-11 rounded object-cover flex-shrink-0 bg-gray-100"
+                                                     className="w-16 h-11 rounded object-cover flex-shrink-0 bg-muted"
                                                    />
                                                  ) : null}
                                                  <div className="min-w-0 flex-1">
                                                    <div className="truncate text-sm font-medium">{ep.title}</div>
                                                    {ep.pubDate ? (
-                                                     <div className="mt-0.5 text-xs text-gray-400">
+                                                     <div className="mt-0.5 text-xs text-muted-foreground">
                                                        {new Date(ep.pubDate).toLocaleDateString()}
                                                      </div>
                                                    ) : null}
@@ -2342,6 +2345,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    >
                                      <ListenIdleButton
                                        icon={<RobotOutlined />}
+                                       style={{ background: 'rgba(114,46,209,0.12)', borderColor: 'rgba(114,46,209,0.4)', color: '#9d6fe8', fontWeight: 600 }}
                                        onClick={(event) => onFollowSource(selectedSource, event)}
                                      >
                                        {t('listen.listen')}
@@ -2397,7 +2401,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          size="small"
                          hoverable
                          onClick={() => { setRecentlyUpdatedSourceId(null); setSelectedSourceId(source.id); setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports'); }}
-                         style={{ cursor: 'pointer', outline: isRecentlyUpdated ? '2px solid #1677ff' : undefined, outlineOffset: isRecentlyUpdated ? '2px' : undefined }}
+                         style={{ cursor: 'pointer', outline: isRecentlyUpdated ? '2px solid #722ed1' : undefined, outlineOffset: isRecentlyUpdated ? '2px' : undefined }}
                          styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1 } }}
                          className="min-h-[170px] transition-shadow flex flex-col"
                          extra={
@@ -2443,23 +2447,20 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
                                ) : null}
                              </div>
-                             {source.type === 'youtube_videos' ? (
-                               <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">⚠️ {t('library.youtubeTranscriptNote')}</p>
-                             ) : null}
                            </div>
                          </div>
-                         <div className="mt-3 text-xs text-gray-700">
+                         <div className="mt-3 text-xs">
                            {source.metadata.previewItems.length > 0 ? (
                              <>
-                               <div className="mb-1 font-medium">{t('library.recentEpisodes')}</div>
-                               <ul className="list-inside list-disc space-y-1">
+                               <div className="mb-1 font-medium text-muted-foreground">{t('library.recentEpisodes')}</div>
+                               <ul className="list-inside list-disc space-y-1 text-foreground">
                                  {source.metadata.previewItems.slice(0, 3).map((item) => (
                                    <li key={`${source.id}:${item.link ?? item.title}`}>{item.title}</li>
                                  ))}
                                </ul>
                              </>
                            ) : (
-                             t('library.noEpisodes')
+                             <span className="text-muted-foreground">{t('library.noEpisodes')}</span>
                            )}
                          </div>
                          {/* flex-1 content end */}
@@ -2471,9 +2472,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              ? linked.map((p) => p.lastRunAt).filter(Boolean).sort().pop()
                              : null;
                            return (
-                             <div className="mt-3 border-t border-gray-100 pt-2" onClick={(e) => e.stopPropagation()}>
+                             <div className="mt-3 border-t border-border pt-2" onClick={(e) => e.stopPropagation()}>
                                {linked.length > 0 && (
-                                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                                    {linked.map((pb) => {
                                      const agent = agents.find((a) => a.id === pb.agentId);
                                      const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
@@ -2490,8 +2491,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      </Tag>
                                    ) : null}
                                    {latestRun
-                                     ? <span className="text-gray-400">{t('library.lastRun', { date: new Date(latestRun).toLocaleString() })}</span>
-                                     : <span className="text-gray-400">{t('library.notYetAnalyzed')}</span>}
+                                     ? <span className="text-muted-foreground">{t('library.lastRun', { date: new Date(latestRun).toLocaleString() })}</span>
+                                     : <span className="text-muted-foreground">{t('library.notYetAnalyzed')}</span>}
                                  </div>
                                )}
                                {isFollowed ? (
@@ -2499,6 +2500,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    block
                                    aria-label={t('listen.listeningAriaLabel')}
                                    icon={<RobotFilled className="robot-pulse" />}
+                                   style={{ background: '#722ed1', borderColor: '#722ed1', color: '#fff', fontWeight: 600 }}
                                    onClick={(event) => onFollowSource(source, event)}
                                  >
                                    {t('listen.listening')}
@@ -2508,6 +2510,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    block
                                    aria-label={t('listen.listenAriaLabel')}
                                    icon={<RobotOutlined />}
+                                   style={{ background: 'rgba(114,46,209,0.1)', borderColor: 'rgba(114,46,209,0.35)', color: '#9d6fe8', fontWeight: 600 }}
                                    onClick={(event) => onFollowSource(source, event)}
                                  >
                                    {t('listen.listen')}
@@ -2520,11 +2523,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                        );
                      })}
                      {sources.length === 0 ? (
-                       <div className="col-span-full flex flex-col items-center gap-4 rounded-xl border border-dashed border-gray-200 py-12 px-6 text-center dark:border-gray-700">
+                       <div className="col-span-full flex flex-col items-center gap-4 rounded-xl border border-dashed border-border py-12 px-6 text-center">
                          <span className="text-5xl">📚</span>
                          <div>
-                           <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('library.emptyHeadline')}</p>
-                           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('library.emptyDesc')}</p>
+                           <p className="text-base font-semibold text-foreground">{t('library.emptyHeadline')}</p>
+                           <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">{t('library.emptyDesc')}</p>
                          </div>
                          <Button
                            type="primary"
@@ -2539,8 +2542,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          >
                            {t('library.emptyCta')}
                          </Button>
-                         <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-gray-400">
-                           <span className="font-medium text-gray-500">{t('library.howItWorks')}:</span>
+                         <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+                           <span className="font-medium text-foreground">{t('library.howItWorks')}:</span>
                            {[
                              t('library.howStep1'),
                              t('library.howStep2'),
@@ -2548,7 +2551,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            ].map((step, i, arr) => (
                              <span key={step} className="flex items-center gap-1">
                                <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700 dark:bg-sky-950 dark:text-sky-300">{step}</span>
-                               {i < arr.length - 1 ? <span className="text-gray-300">→</span> : null}
+                               {i < arr.length - 1 ? <span className="text-muted-foreground/50">→</span> : null}
                              </span>
                            ))}
                          </div>
@@ -3481,7 +3484,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           onChange={(e) => setInlineAgentName(e.currentTarget.value)}
                         />
                         {/* Character section */}
-                        <div className="flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+                        <div className="flex items-center gap-2 rounded-md bg-[rgba(114,46,209,0.12)] px-3 py-2 text-sm font-medium text-[#9d6fe8]">
                           <BulbOutlined />
                           {t('agent.chooseCharacter')}
                         </div>
@@ -3491,14 +3494,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                               key={persona.id}
                               type="button"
                               onClick={() => onInlineAgentPersonaChange(persona.id)}
-                              className={`relative rounded-md border p-3 text-left transition ${inlineAgentPersonaId === persona.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              className={`relative rounded-md border-2 p-3 text-left text-foreground transition-all !bg-card ${inlineAgentPersonaId === persona.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                               aria-label={`Inline character ${t(`personas.${persona.id}.name`)}`}
                             >
                               {inlineAgentPersonaId === persona.id ? (
-                                <span className="absolute top-1 right-1 text-sm leading-none text-blue-500"><RobotFilled /></span>
+                                <span className="absolute top-1 right-1 text-sm leading-none text-[#9d6fe8]"><RobotFilled /></span>
                               ) : null}
-                              <p className="font-medium text-sm">{t(`personas.${persona.id}.name`)}</p>
-                              <p className="text-xs text-gray-500">{t(`personas.${persona.id}.tagline`)}</p>
+                              <p className="font-semibold text-sm">{t(`personas.${persona.id}.name`)}</p>
+                              <p className="text-xs text-muted-foreground">{t(`personas.${persona.id}.tagline`)}</p>
                             </button>
                           ))}
                         </div>
@@ -3509,14 +3512,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                     {inlineAgentStep === 1 ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">{t('agent.character')}:</span>
-                          <Tag color="blue">{inlinePersonaLabel}</Tag>
+                          <span className="text-xs text-muted-foreground">{t('agent.character')}:</span>
+                          <Tag color="purple">{inlinePersonaLabel}</Tag>
                         </div>
                         {/* Personality section */}
-                        <div className="flex items-center gap-2 rounded-md bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">
+                        <div className="flex items-center gap-2 rounded-md bg-[rgba(114,46,209,0.12)] px-3 py-2 text-sm font-medium text-[#9d6fe8]">
                           <ToolOutlined />
                           {t('agent.choosePersonality')}
-                          <span className="ml-1 font-normal text-violet-500">{t('agent.forCharacter', { character: inlinePersonaLabel })}</span>
+                          <span className="ml-1 font-normal text-muted-foreground">{t('agent.forCharacter', { character: inlinePersonaLabel })}</span>
                         </div>
                         <div className="grid gap-2 md:grid-cols-3">
                           {inlineChars.map((char) => (
@@ -3524,21 +3527,21 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                               key={char.id}
                               type="button"
                               onClick={() => onInlineAgentCharacterChange(char.id)}
-                              className={`relative rounded-md border p-3 text-left transition ${inlineAgentCharacterId === char.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              className={`relative rounded-md border-2 p-3 text-left text-foreground transition-all !bg-card ${inlineAgentCharacterId === char.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                               aria-label={`Inline personality ${t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}`}
                             >
                               {inlineAgentCharacterId === char.id ? (
-                                <span className="absolute top-1 right-1 text-sm leading-none text-violet-500"><RobotFilled /></span>
+                                <span className="absolute top-1 right-1 text-sm leading-none text-[#9d6fe8]"><RobotFilled /></span>
                               ) : null}
-                              <p className="font-medium text-sm">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}</p>
-                              <p className="text-xs text-gray-500">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.tagline`)}</p>
+                              <p className="font-semibold text-sm">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}</p>
+                              <p className="text-xs text-muted-foreground">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.tagline`)}</p>
                             </button>
                           ))}
                         </div>
                         <div className="border-t pt-3 space-y-3">
                           {/* Report detail level picker */}
                           <div>
-                            <p className="mb-2 text-xs text-gray-500">{t('report.detail.label')}</p>
+                            <p className="mb-2 text-xs text-muted-foreground">{t('report.detail.label')}</p>
                             <div className="grid grid-cols-3 gap-2">
                               {([
                                 { id: 'brief' as const, label: t('report.detail.brief'), desc: t('report.detail.briefDesc'), icon: '⚡' },
@@ -3549,18 +3552,18 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                   key={opt.id}
                                   type="button"
                                   onClick={() => setInlineAgentReportDetailLevel(opt.id)}
-                                  className={`relative rounded-md border p-3 text-left transition ${inlineAgentReportDetailLevel === opt.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                                  className={`relative rounded-md border-2 p-3 text-left text-foreground transition-all !bg-card ${inlineAgentReportDetailLevel === opt.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                                 >
                                   <div className="text-base mb-1">{opt.icon}</div>
-                                  <p className="font-medium text-sm">{opt.label}</p>
-                                  <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                                  <p className="font-semibold text-sm">{opt.label}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">{opt.desc}</p>
                                 </button>
                               ))}
                             </div>
                           </div>
                           {inlineAgentPersonaId === 'finance_expert' ? (
                             <div>
-                              <p className="mb-1 text-xs text-gray-500">{t('agent.riskLevel')}</p>
+                              <p className="mb-1 text-xs text-muted-foreground">{t('agent.riskLevel')}</p>
                               <Select
                                   aria-label={t('agent.riskLevel')}
                                 value={inlineAgentRiskLevel}
@@ -3575,7 +3578,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             </div>
                           ) : null}
                           <div>
-                            <p className="mb-1 text-xs text-gray-500">{t('agent.model')}</p>
+                            <p className="mb-1 text-xs text-muted-foreground">{t('agent.model')}</p>
                             <Select
                               aria-label={t('agent.model')}
                               value={inlineAgentModel}
@@ -3588,7 +3591,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             />
                           </div>
                           <div>
-                            <p className="mb-1 text-xs text-gray-500">{t('agent.systemPrompt')}</p>
+                            <p className="mb-1 text-xs text-muted-foreground">{t('agent.systemPrompt')}</p>
                             <Input.TextArea
                               aria-label={t('agent.systemPrompt')}
                               rows={5}
@@ -4169,10 +4172,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 <div
                   key={persona.id}
                   onClick={() => setGuidedWizardPersonaId(persona.id)}
-                  className={`cursor-pointer rounded-lg border-2 px-3 py-2 transition-colors ${guidedWizardPersonaId === persona.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'}`}
+                  className={`cursor-pointer rounded-lg border-2 px-3 py-2 text-foreground transition-all !bg-card ${guidedWizardPersonaId === persona.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                 >
                   <p className="text-sm font-semibold">{persona.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{persona.description}</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{persona.description}</p>
                 </div>
               ))}
             </div>

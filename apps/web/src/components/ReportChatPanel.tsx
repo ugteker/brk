@@ -72,7 +72,7 @@ export function ReportChatPanel({ agentId, reportId }: ReportChatPanelProps) {
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3" onClick={(event) => event.stopPropagation()}>
+    <div className="mt-3 rounded-lg border border-border bg-muted/40 p-3" onClick={(event) => event.stopPropagation()}>
       <p className="mb-2 text-sm font-medium">{t('reportChat.title')}</p>
       <div ref={scrollRef} className="max-h-72 space-y-2 overflow-y-auto pr-1">
         {loading ? (
@@ -86,7 +86,9 @@ export function ReportChatPanel({ agentId, reportId }: ReportChatPanelProps) {
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div
                 className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${
-                  msg.role === 'user' ? 'bg-blue-500 text-white' : 'border border-gray-200 bg-white text-gray-800'
+                  msg.role === 'user'
+                    ? 'bg-[#722ed1] text-white'
+                    : 'border border-border bg-card text-foreground'
                 }`}
               >
                 {msg.content}
@@ -96,7 +98,7 @@ export function ReportChatPanel({ agentId, reportId }: ReportChatPanelProps) {
         )}
         {asking ? (
           <div className="flex justify-start">
-            <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-400">
+            <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
               <Spin size="small" className="mr-2" />
               {t('reportChat.thinking')}
             </div>
