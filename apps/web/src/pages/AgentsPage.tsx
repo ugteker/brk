@@ -2448,18 +2448,18 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              </div>
                            </div>
                          </div>
-                         <div className="mt-3 text-xs text-gray-700">
+                         <div className="mt-3 text-xs">
                            {source.metadata.previewItems.length > 0 ? (
                              <>
-                               <div className="mb-1 font-medium">{t('library.recentEpisodes')}</div>
-                               <ul className="list-inside list-disc space-y-1">
+                               <div className="mb-1 font-medium text-muted-foreground">{t('library.recentEpisodes')}</div>
+                               <ul className="list-inside list-disc space-y-1 text-foreground">
                                  {source.metadata.previewItems.slice(0, 3).map((item) => (
                                    <li key={`${source.id}:${item.link ?? item.title}`}>{item.title}</li>
                                  ))}
                                </ul>
                              </>
                            ) : (
-                             t('library.noEpisodes')
+                             <span className="text-muted-foreground">{t('library.noEpisodes')}</span>
                            )}
                          </div>
                          {/* flex-1 content end */}
