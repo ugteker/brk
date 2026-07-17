@@ -64,6 +64,7 @@ import {
 } from '../api/agents';
 import { getLatestAgentPrompt, listAgentReports, type PromptVersionDto, type RunReportDto } from '../api/agents';
 import { grantAgentAccess, listAgentAccessGrants } from '../api/access';
+import type { DiscussionPreselect } from '../api/discussions';
 import {
   cloneMarketplaceAgent,
   cloneMarketplacePlaybook,
@@ -1263,6 +1264,26 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
   }
 
+  /** Groups this source's merged report list (sourceDetailReports) by agent, taking
+   * each agent's latest report (first occurrence, since already sorted newest-first)
+   * as the explicit pick, and jumps into the Studio wizard pre-seeded with them. */
+  function onDiscussSource(source: SourceRecord) {
+    const latestReportByAgent = new Map<string, RunReportDto>();
+    for (const report of sourceDetailReports) {
+      if (!latestReportByAgent.has(report.agentId)) {
+        latestReportByAgent.set(report.agentId, report);
+      }
+    }
+    const preselect: DiscussionPreselect = {
+      entries: Array.from(latestReportByAgent.entries()).map(([agentId, report]) => ({
+        agentId,
+        reportIds: [report.id]
+      })),
+      contextLabel: getSourceDisplayTitle(source)
+    };
+    navigate('/studio/new', { state: { preselect } });
+  }
+
   async function onEditSource(source: SourceRecord) {
     setEditingSource(source);
     setSourceUrlDraft(source.value);
@@ -2066,6 +2087,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    loading={runningAgentId === linkedPlaybooks[0]?.agentId}
                                    icon={<CaretRightOutlined />}
                                    onClick={() => void onRunSourceEpisode(undefined)}
+                                 />
+                               </TouchSafeTooltip>
+                             ) : null}
+                             {sourceDetailReports.length > 0 ? (
+                               <TouchSafeTooltip title={t('studio.discussThisSource')}>
+                                 <Button
+                                   aria-label={t('studio.discussThisSource')}
+                                   shape="circle"
+                                   icon={<AudioOutlined />}
+                                   onClick={() => onDiscussSource(selectedSource)}
                                  />
                                </TouchSafeTooltip>
                              ) : null}
