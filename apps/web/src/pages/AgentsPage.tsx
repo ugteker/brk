@@ -128,7 +128,7 @@ const YouTubeLogo = () => (
       <path d="M17.6 3.2A2.3 2.3 0 0 0 15.9 1.5C14.5 1 9 1 9 1S3.5 1 2.1 1.5A2.3 2.3 0 0 0 .4 3.2C0 4.6 0 7.5 0 7.5s0 2.9.4 4.3c.2.9.9 1.5 1.7 1.7C3.5 14 9 14 9 14s5.5 0 6.9-.5c.9-.2 1.5-.8 1.7-1.7C18 10.4 18 7.5 18 7.5s0-2.9-.4-4.3z" fill="#FF0000"/>
       <path d="M7 10.5V4.5l5.5 3-5.5 3z" fill="white"/>
     </svg>
-    <span style={{ fontWeight: 700, fontSize: '0.8em', color: '#282828', letterSpacing: '-0.2px', lineHeight: 1 }} aria-label="YouTube">YouTube</span>
+    <span style={{ fontWeight: 700, fontSize: '0.8em', letterSpacing: '-0.2px', lineHeight: 1 }} aria-label="YouTube">YouTube</span>
   </span>
 );
 

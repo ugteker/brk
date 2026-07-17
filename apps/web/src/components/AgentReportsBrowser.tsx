@@ -28,6 +28,15 @@ const CHARACTER_LABELS: Record<string, { emoji: string; label: string }> = {
   summarizer:     { emoji: '📋', label: 'Summarizer' },
 };
 
+const CHARACTER_TAG_COLORS: Record<string, string> = {
+  finance_expert: 'purple',
+  teacher:        'cyan',
+  influencer:     'magenta',
+  trainer:        'orange',
+  philosopher:    'geekblue',
+  summarizer:     'default',
+};
+
 const HEADLINE_MAX_LENGTH = 80;
 const TOKEN_FORMATTER = new Intl.NumberFormat('de-DE');
 
@@ -242,7 +251,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   {personaLabel ? (
-                    <Tag color="blue" className="m-0">{personaEmoji} {personaLabel}</Tag>
+                    <Tag color={characterType ? (CHARACTER_TAG_COLORS[characterType] ?? 'default') : 'default'} className="m-0">{personaEmoji} {personaLabel}</Tag>
                   ) : null}
                   {agentName ? (
                     <span className="text-xs font-medium text-muted-foreground">{agentName}</span>
