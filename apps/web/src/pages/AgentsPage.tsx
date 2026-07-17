@@ -144,7 +144,7 @@ function SourceTypeBadge({ type }: { type: string }) {
 }
 
 const DEFAULT_LIBRARY_TAB_ID = 'library-default';
-const DEFAULT_LIBRARY_TAB_NAME = 'Library';
+const DEFAULT_LIBRARY_TAB_NAME = 'My Collection';
 
 interface AutoDetectedSource {
   type: SourceType;
@@ -605,7 +605,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }
 
   function startEditingLibraryTab(tab: LibraryTabRecord) {
-    if (tab.id === DEFAULT_LIBRARY_TAB_ID) return;
     setEditingLibraryTabId(tab.id);
     setEditingLibraryTabName(tab.name);
   }
@@ -1884,7 +1883,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            ) : (
                              <span className="inline-flex items-center gap-1">
                                {tab.name}
-                               {tab.id !== DEFAULT_LIBRARY_TAB_ID && tab.id === activeLibraryTabId ? (
+                               {tab.id === activeLibraryTabId ? (
                                  <button
                                    type="button"
                                    aria-label={t('library.renameTab')}

@@ -16,6 +16,16 @@
   display: inline-block;
 }
 
+@keyframes bell-alert-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+/* Draws attention to the notification bell while there are unread run-failure notices. */
+.ct-bell-badge-alert .ant-badge-count {
+  animation: bell-alert-pulse 1.6s ease-in-out infinite;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

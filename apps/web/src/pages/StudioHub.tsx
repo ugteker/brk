@@ -4,6 +4,7 @@ import { AudioOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { deleteDiscussion, listDiscussions, triggerDiscussionRun, type DiscussionDto } from '../api/discussions';
+import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
 
 const { Title } = Typography;
 
@@ -65,9 +66,9 @@ export function StudioHub() {
         title={<Title level={4} style={{ margin: 0 }}><AudioOutlined /> {t('studio.title')}</Title>}
         extra={
           discussions.length > 0 ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/studio/new')}>
+            <StudioPrimaryButton icon={<PlusOutlined />} onClick={() => navigate('/studio/new')}>
               {t('studio.newDiscussion')}
-            </Button>
+            </StudioPrimaryButton>
           ) : null
         }
       >
@@ -82,9 +83,9 @@ export function StudioHub() {
             }
             style={{ marginTop: 48, marginBottom: 48 }}
           >
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/studio/new')}>
+            <StudioPrimaryButton icon={<PlusOutlined />} onClick={() => navigate('/studio/new')}>
               {t('studio.newDiscussion')}
-            </Button>
+            </StudioPrimaryButton>
           </Empty>
         ) : (
           <div

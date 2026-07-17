@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { listAgents, type AgentSummary } from '../api/agents';
 import { createDiscussion, triggerDiscussionRun } from '../api/discussions';
+import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
 
 type Format = 'free_form' | 'structured' | 'hosted' | 'hybrid';
 type Voice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
@@ -270,9 +271,9 @@ export function NewDiscussionWizard() {
           </Form>
           <Space>
             <Button onClick={() => setCurrentStep(1)}>{t('common.back')}</Button>
-            <Button type="primary" loading={submitting} onClick={handleSubmit}>
+            <StudioPrimaryButton loading={submitting} onClick={handleSubmit}>
               {t('studio.newDiscussion')}
-            </Button>
+            </StudioPrimaryButton>
           </Space>
         </Card>
       )}

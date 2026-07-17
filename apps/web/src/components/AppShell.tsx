@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   AudioOutlined,
   BellOutlined,
@@ -18,6 +18,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemePicker } from './ThemePicker';
+import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { WatchlistMenu } from './WatchlistMenu';
 import { UsageBudgetModal } from './UsageBudgetModal';
 import { seedDemoData } from '../api/admin';
@@ -38,6 +39,74 @@ const ADMIN_NAV_ITEMS = [
   { path: '/agents', key: 'agents', icon: <RobotOutlined />, labelKey: 'nav.agents' },
   { path: '/playbooks', key: 'playbooks', icon: <DashboardOutlined />, labelKey: 'nav.playbooks' }
 ];
+
+function headerStyle(theme: 'light' | 'dark', isScrolled: boolean): CSSProperties {
+  return {
+    position: 'sticky',
+    top: 0,
+    zIndex: 20,
+    background: theme === 'dark' ? 'rgba(18,18,24,0.68)' : 'rgba(255,255,255,0.72)',
+    backdropFilter: 'blur(18px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+    borderBottom: theme === 'dark' ? '1px solid rgba(179,127,235,0.35)' : '1px solid rgba(114,46,209,0.28)',
+    boxShadow: isScrolled
+      ? theme === 'dark'
+        ? '0 8px 24px rgba(0,0,0,0.5)'
+        : '0 8px 24px rgba(15,23,42,0.10)'
+      : theme === 'dark'
+        ? '0 4px 16px rgba(0,0,0,0.3)'
+        : '0 2px 10px rgba(15,23,42,0.06)',
+    height: 'auto',
+    padding: 'clamp(12px, 3vw, 24px) clamp(12px, 3vw, 24px)',
+    transition: 'box-shadow 0.25s ease, background 0.25s ease'
+  };
+}
+
+const navRailStyle = (theme: 'light' | 'dark'): CSSProperties => ({
+  display: 'flex',
+  gap: 6,
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  padding: 6,
+  borderRadius: 999,
+  background: theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.035)'
+});
+
+function navButtonStyle(isActive: boolean, isStudio: boolean, theme: 'light' | 'dark'): CSSProperties {
+  const studioActiveShadow = '0 2px 8px rgba(114,46,209,0.4), 0 0 0 1px rgba(114,46,209,0.2)';
+  const defaultActiveShadow =
+    theme === 'dark'
+      ? '0 2px 8px rgba(24,144,255,0.45), 0 0 0 1px rgba(24,144,255,0.25)'
+      : '0 2px 8px rgba(24,144,255,0.35), 0 0 0 1px rgba(24,144,255,0.15)';
+
+  return {
+    fontWeight: isActive ? 600 : 400,
+    borderRadius: 999,
+    paddingLeft: 16,
+    paddingRight: 16,
+    boxShadow: isActive ? (isStudio ? studioActiveShadow : defaultActiveShadow) : 'none',
+    transition: 'background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease',
+    ...(isStudio
+      ? isActive
+        ? { background: '#722ed1', borderColor: '#722ed1' }
+        : theme === 'dark'
+          ? { color: '#b37feb', background: 'rgba(114,46,209,0.16)' }
+          : { color: '#722ed1', background: '#f9f0ff' }
+      : {})
+  };
+}
+
+const actionClusterStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '4px 6px',
+  borderRadius: 999
+};
+
+const circleActionStyle: CSSProperties = {
+  transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+};
 
 function activeKey(pathname: string): string {
   if (pathname.startsWith('/studio')) return 'studio';
@@ -65,6 +134,16 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const [bellOpen, setBellOpen] = useState(false);
   const [usageModalOpen, setUsageModalOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    function handleScroll() {
+      setIsScrolled(window.scrollY > 4);
+    }
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const current = activeKey(pathname);
   const unread = failedRunNotices.filter((n) => !bellDismissedIds.has(n.runId));
@@ -125,15 +204,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
-      <Header
-        style={{
-          background: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
-          borderBottom: theme === 'dark' ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          height: 'auto',
-          padding: 'clamp(12px, 3vw, 24px) clamp(12px, 3vw, 24px)'
-        }}
-      >
+      <Header style={headerStyle(theme, isScrolled)}>
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 flex-wrap">
           {/* Logo */}
           <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -146,20 +217,22 @@ export function AppShell({ children }: { children: ReactNode }) {
                 margin: 0,
                 whiteSpace: 'nowrap',
                 fontSize: 'clamp(1.25rem, 5vw, 1.875rem)',
-                cursor: 'pointer'
+                letterSpacing: '-0.01em',
+                cursor: 'pointer',
+                transition: 'opacity 0.15s ease'
               }}
             >
               ChatTrader
             </Title>
             {isAdmin && adminMode && (
-              <Tag color="orange" icon={<TeamOutlined />} style={{ fontSize: 12 }}>
+              <Tag color="orange" icon={<TeamOutlined />} style={{ fontSize: 12, borderRadius: 999 }}>
                 {t('nav.modeAdmin')}
               </Tag>
             )}
           </div>
 
           {/* Nav */}
-          <nav style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          <nav style={navRailStyle(theme)}>
             {navItems.map((item) => {
               const isActive = current === item.key;
               const isStudio = item.key === 'studio';
@@ -169,17 +242,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                   type={isActive ? 'primary' : 'text'}
                   icon={item.icon}
                   onClick={() => navigate(item.path)}
-                  size="small"
-                  style={{
-                    fontWeight: isActive ? 600 : 400,
-                    ...(isStudio
-                      ? isActive
-                        ? { background: '#722ed1', borderColor: '#722ed1' }
-                        : theme === 'dark'
-                          ? { color: '#b37feb', background: 'rgba(114,46,209,0.16)' }
-                          : { color: '#722ed1', background: '#f9f0ff' }
-                      : {})
-                  }}
+                  size="middle"
+                  style={navButtonStyle(isActive, isStudio, theme)}
                 >
                   {t(item.labelKey)}
                 </Button>
@@ -188,18 +252,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           {/* Right actions */}
-          <div className="ct-header-actions flex items-center gap-2 flex-wrap justify-end">
+          <div className="ct-header-actions flex items-center gap-2 flex-wrap justify-end" style={actionClusterStyle}>
             <WatchlistMenu />
             <ThemePicker />
-            <Button
-              size="small"
-              type="text"
-              onClick={() => i18n.changeLanguage(i18n.language.startsWith('de') ? 'en' : 'de')}
-              title={t('language.switchTo')}
-              style={{ fontWeight: 600, minWidth: 32 }}
-            >
-              {t('language.current')}
-            </Button>
+            <TouchSafeTooltip title={t('language.switchTo')}>
+              <Button
+                size="small"
+                type="text"
+                onClick={() => i18n.changeLanguage(i18n.language.startsWith('de') ? 'en' : 'de')}
+                style={{ fontWeight: 600, minWidth: 32, borderRadius: 999, ...circleActionStyle }}
+              >
+                {t('language.current')}
+              </Button>
+            </TouchSafeTooltip>
 
             {/* Bell */}
             <Popover
@@ -243,14 +308,18 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </div>
               }
             >
-              <Badge count={unread.length} size="small">
-                <Button shape="circle" icon={<BellOutlined />} aria-label={t('nav.bellLabel')} />
-              </Badge>
+              <TouchSafeTooltip title={t('nav.bellRunFailures')}>
+                <Badge count={unread.length} size="small" className={unread.length > 0 ? 'ct-bell-badge-alert' : undefined}>
+                  <Button shape="circle" icon={<BellOutlined />} aria-label={t('nav.bellLabel')} style={circleActionStyle} />
+                </Badge>
+              </TouchSafeTooltip>
             </Popover>
 
             {/* User menu */}
             <Dropdown trigger={['click']} menu={{ items: userMenuItems }}>
-              <Button shape="circle" icon={<UserOutlined />} aria-label={t('nav.accountMenu')} />
+              <TouchSafeTooltip title={t('nav.accountMenu')}>
+                <Button shape="circle" icon={<UserOutlined />} aria-label={t('nav.accountMenu')} style={circleActionStyle} />
+              </TouchSafeTooltip>
             </Dropdown>
 
             <UsageBudgetModal open={usageModalOpen} onClose={() => setUsageModalOpen(false)} />
