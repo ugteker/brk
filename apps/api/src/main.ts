@@ -110,8 +110,10 @@ async function start() {
     agentRepository,
     promptRepository,
     reportRepository,
+    artifactRepository,
     claudeClient,
-    syntheticSource: syntheticSourceService
+    syntheticSource: syntheticSourceService,
+    latestReportLimit: config.discussion.latestReportLimit
   });
 
   await bootstrapAdminAccount(userRepository);
@@ -197,7 +199,9 @@ async function start() {
       runTrigger: {
         triggerDiscussionRun: (discussionId: string, runId: string) =>
           discussionOrchestrator.run(discussionId, runId)
-      }
+      },
+      reportRepository,
+      latestReportLimit: config.discussion.latestReportLimit
     },
     db: prisma
   });

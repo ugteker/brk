@@ -33,11 +33,14 @@ function mockRepo(overrides: Partial<DiscussionRepositoryLike> = {}): Discussion
   } as any;
 }
 
-async function buildApp(repoOverrides: Partial<DiscussionRepositoryLike> = {}) {
+async function buildApp(
+  repoOverrides: Partial<DiscussionRepositoryLike> = {},
+  extraDeps: { reportRepository?: any; latestReportLimit?: number } = {}
+) {
   const app = Fastify();
   await app.register(cookie);
   app.addHook('onRequest', async (req) => { req.userId = 'u1'; req.userRole = 'user'; });
-  await registerDiscussionRoutes(app, { discussionRepository: mockRepo(repoOverrides) });
+  await registerDiscussionRoutes(app, { discussionRepository: mockRepo(repoOverrides), ...extraDeps });
   return app;
 }
 
@@ -107,5 +110,35 @@ describe('Discussion routes', () => {
     });
     const res = await app.inject({ method: 'POST', url: '/api/discussions/d1/runs/r1/audio' });
     expect(res.statusCode).toBe(501);
+  });
+
+  it('POST /api/discussions/:id/runs returns 422 when a participant resolves no reports', async () => {
+    const discWithParticipant = {
+      ...discRow,
+      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, reportIds: [] }]
+    };
+    const reportRepository = {
+      listReportsForAgent: vi.fn().mockResolvedValue([]),
+      getReportById: vi.fn().mockResolvedValue(null)
+    };
+    const app = await buildApp({ getDiscussion: vi.fn().mockResolvedValue(discWithParticipant) }, { reportRepository });
+    const res = await app.inject({ method: 'POST', url: '/api/discussions/d1/runs', payload: {} });
+    expect(res.statusCode).toBe(422);
+    const body = JSON.parse(res.body);
+    expect(body.code).toBe('no_report_resolved');
+  });
+
+  it('POST /api/discussions/:id/runs returns 202 when every participant resolves at least one report', async () => {
+    const discWithParticipant = {
+      ...discRow,
+      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, reportIds: [] }]
+    };
+    const reportRepository = {
+      listReportsForAgent: vi.fn().mockResolvedValue([{ id: 'r1', agentId: 'a1', agentRunId: 'run1', createdAt: new Date() }]),
+      getReportById: vi.fn().mockResolvedValue(null)
+    };
+    const app = await buildApp({ getDiscussion: vi.fn().mockResolvedValue(discWithParticipant) }, { reportRepository });
+    const res = await app.inject({ method: 'POST', url: '/api/discussions/d1/runs', payload: {} });
+    expect(res.statusCode).toBe(202);
   });
 });

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { DiscussionRepositoryLike } from './repository';
 import type { CreateDiscussionInput, UpdateDiscussionInput, DiscussionTrigger } from './types';
+import { resolveParticipantReports, type ReportResolutionRepo } from './report-resolution';
 
 export interface DiscussionRunTriggerLike {
   triggerDiscussionRun(discussionId: string, runId: string): Promise<void>;
@@ -19,6 +20,12 @@ export interface DiscussionRoutesDeps {
   runTrigger?: DiscussionRunTriggerLike;
   ttsClient?: DiscussionTtsLike;
   ttsStorage?: DiscussionTtsStorageLike;
+  /** When provided, POST /runs validates that every participant resolves at least one report
+   * (explicit selection or latest-N fallback) before creating the run, rejecting with 422
+   * otherwise. Omitted in older wiring/tests, in which case only the async orchestrator's own
+   * validation applies. */
+  reportRepository?: ReportResolutionRepo;
+  latestReportLimit?: number;
 }
 
 export async function registerDiscussionRoutes(app: FastifyInstance, deps: DiscussionRoutesDeps) {
@@ -88,6 +95,23 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     if (!discussion || discussion.ownerUserId !== req.userId) {
       return reply.status(404).send({ code: 'not_found', message: 'Discussion not found' });
     }
+
+    if (deps.reportRepository) {
+      const resolution = await resolveParticipantReports(
+        discussion.participants.map((p) => ({ id: p.id, agentId: p.agentId, reportIds: p.reportIds })),
+        deps.reportRepository,
+        deps.latestReportLimit ?? 3
+      );
+      if (resolution.errors.length > 0) {
+        return reply.status(422).send({
+          code: 'no_report_resolved',
+          message: `Cannot start discussion - no reports resolved for: ${resolution.errors
+            .map((e) => `agent ${e.agentId}`)
+            .join(', ')}`
+        });
+      }
+    }
+
     const trigger: DiscussionTrigger = (req.body as any)?.triggeredBy ?? 'manual';
     const run = await deps.discussionRepository.createRun(id, trigger);
     deps.runTrigger?.triggerDiscussionRun(id, run.id).catch(() => {});

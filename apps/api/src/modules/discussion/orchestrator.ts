@@ -1,6 +1,8 @@
 import type { ClaudeMessagesClient } from '../analysis/claude-client';
 import type { DiscussionRepositoryLike } from './repository';
-import type { Discussion, DiscussionParticipant, DiscussionFormat } from './types';
+import type { Discussion, DiscussionParticipant, DiscussionFormat, ParticipantEvidenceSnapshot } from './types';
+import { resolveParticipantReports, type ReportResolutionRepo } from './report-resolution';
+import { buildTranscriptEvidence, type EvidenceArtifactRepo } from './evidence';
 import { logger } from '../../lib/logger';
 
 export interface OrchestratorAgentRepo {
@@ -11,9 +13,12 @@ export interface OrchestratorPromptRepo {
   getLatestPromptVersion(agentId: string): Promise<{ systemPrompt: string } | null>;
 }
 
-export interface OrchestratorReportRepo {
-  listReportsForAgent(agentId: string): Promise<Array<{ summary: string; createdAt: Date }>>;
+export interface OrchestratorReportRepo extends ReportResolutionRepo {
+  listReportsForAgent(agentId: string): Promise<Array<{ id: string; agentId: string; agentRunId: string; summary: string; createdAt: Date }>>;
+  getReportById(reportId: string): Promise<{ id: string; agentId: string; agentRunId: string; summary: string } | null>;
 }
+
+export type OrchestratorArtifactRepo = EvidenceArtifactRepo;
 
 export interface OrchestratorSyntheticSource {
   ensureSyntheticSource(discussion: Discussion, runId: string, transcript: string): Promise<void>;
@@ -24,8 +29,12 @@ export interface DiscussionOrchestratorDeps {
   agentRepository: OrchestratorAgentRepo;
   promptRepository: OrchestratorPromptRepo;
   reportRepository: OrchestratorReportRepo;
+  artifactRepository: OrchestratorArtifactRepo;
   claudeClient: ClaudeMessagesClient;
   syntheticSource: OrchestratorSyntheticSource;
+  /** Number of an agent's most recent reports to fall back to when a participant has no
+   * explicit report selection. Defaults to 3 (mirrors config.discussion.latestReportLimit). */
+  latestReportLimit?: number;
 }
 
 interface ParticipantContext {
@@ -33,13 +42,23 @@ interface ParticipantContext {
   agentName: string;
   systemPrompt: string;
   recentReportsSummary: string;
+  transcriptExcerpt: string;
 }
 
 export class DiscussionOrchestrator {
   constructor(private readonly deps: DiscussionOrchestratorDeps) {}
 
   async run(discussionId: string, runId: string): Promise<void> {
-    const { discussionRepository, agentRepository, promptRepository, reportRepository, claudeClient, syntheticSource } = this.deps;
+    const {
+      discussionRepository,
+      agentRepository,
+      promptRepository,
+      reportRepository,
+      artifactRepository,
+      claudeClient,
+      syntheticSource
+    } = this.deps;
+    const latestReportLimit = this.deps.latestReportLimit ?? 3;
 
     await discussionRepository.updateRun(runId, { status: 'running', startedAt: new Date() });
 
@@ -47,22 +66,65 @@ export class DiscussionOrchestrator {
       const discussion = await discussionRepository.getDiscussion(discussionId);
       if (!discussion) throw new Error(`Discussion ${discussionId} not found`);
 
+      const orderedParticipants = discussion.participants.sort((a, b) => a.speakerOrder - b.speakerOrder);
+
+      const resolution = await resolveParticipantReports(
+        orderedParticipants.map((p) => ({ id: p.id, agentId: p.agentId, reportIds: p.reportIds })),
+        reportRepository,
+        latestReportLimit
+      );
+
+      if (resolution.errors.length > 0) {
+        const message = `Cannot start discussion - no reports resolved for: ${resolution.errors
+          .map((e) => `agent ${e.agentId}`)
+          .join(', ')}`;
+        await discussionRepository.updateRun(runId, { status: 'error', errorMessage: message, completedAt: new Date() });
+        return;
+      }
+
       const contexts: ParticipantContext[] = [];
-      for (const p of discussion.participants.sort((a, b) => a.speakerOrder - b.speakerOrder)) {
+      const evidenceParticipants: ParticipantEvidenceSnapshot[] = [];
+
+      for (const p of orderedParticipants) {
+        const resolvedForParticipant = resolution.resolved.find((r) => r.participantId === p.id)!;
         const agent = await agentRepository.getAgent(p.agentId);
         const promptVersion = await promptRepository.getLatestPromptVersion(p.agentId);
-        const reports = await reportRepository.listReportsForAgent(p.agentId);
-        const recent = reports.slice(0, 3);
-        const recentReportsSummary = recent.length
-          ? recent.map((r, i) => `Report ${i + 1}: ${r.summary}`).join('\n')
+
+        const reportRecords = (
+          await Promise.all(resolvedForParticipant.reportIds.map((id) => reportRepository.getReportById(id)))
+        ).filter((r): r is { id: string; agentId: string; agentRunId: string; summary: string } => r !== null);
+
+        const recentReportsSummary = reportRecords.length
+          ? reportRecords.map((r, i) => `Report ${i + 1}: ${r.summary}`).join('\n')
           : 'No recent reports yet.';
+
+        const evidence = await buildTranscriptEvidence(
+          reportRecords.map((r) => ({ id: r.id, agentRunId: r.agentRunId })),
+          artifactRepository
+        );
+
         contexts.push({
           participant: p,
           agentName: agent?.name ?? `Agent-${p.agentId.slice(0, 6)}`,
           systemPrompt: promptVersion?.systemPrompt ?? `You are an AI analyst named ${agent?.name ?? 'Agent'}.`,
-          recentReportsSummary
+          recentReportsSummary,
+          transcriptExcerpt: evidence.excerptText
+        });
+
+        evidenceParticipants.push({
+          participantId: p.id,
+          agentId: p.agentId,
+          reportIds: resolvedForParticipant.reportIds,
+          origin: resolvedForParticipant.origin,
+          sourceItemIds: evidence.sourceItemIds,
+          transcriptWarnings: evidence.warnings
         });
       }
+
+      await discussionRepository.setRunEvidenceSnapshot(runId, {
+        agenda: discussion.description,
+        participants: evidenceParticipants
+      });
 
       const totalTurns = discussion.formatConfig.totalTurnTarget ?? 12;
       const conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
@@ -75,10 +137,13 @@ export class DiscussionOrchestrator {
         const segment = segments ? segments[Math.min(segmentIdx, segments.length - 1)] : null;
 
         const directorPrefix = this.buildDirectorContext(discussion, contexts, segment);
+        const evidenceSuffix = ctx.transcriptExcerpt
+          ? `\n\nRelevant source material excerpts:\n${ctx.transcriptExcerpt}`
+          : '';
         const userPrompt =
           conversationHistory.length === 0
-            ? `${directorPrefix}\n\nYou are speaking first. Begin the discussion as ${ctx.agentName}. Draw on your recent analysis:\n${ctx.recentReportsSummary}`
-            : `${directorPrefix}\n\nIt's ${ctx.agentName}'s turn${segment ? ` (segment: ${segment})` : ''}. Respond to what was just said, staying in character. Your recent analysis:\n${ctx.recentReportsSummary}`;
+            ? `${directorPrefix}\n\nYou are speaking first. Begin the discussion as ${ctx.agentName}. Draw on your recent analysis:\n${ctx.recentReportsSummary}${evidenceSuffix}`
+            : `${directorPrefix}\n\nIt's ${ctx.agentName}'s turn${segment ? ` (segment: ${segment})` : ''}. Respond to what was just said, staying in character. Your recent analysis:\n${ctx.recentReportsSummary}${evidenceSuffix}`;
 
         const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
           ...conversationHistory,
