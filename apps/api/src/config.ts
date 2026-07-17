@@ -68,6 +68,14 @@ export const config = {
   },
   get appBaseUrl() {
     return process.env.APP_BASE_URL ?? 'http://localhost:4173';
+  },
+  discussion: {
+    // Number of an agent's most recent reports to fall back to for a Studio discussion
+    // participant when the user didn't explicitly pick report IDs for that participant.
+    get latestReportLimit() {
+      const raw = Number(process.env.DISCUSSION_LATEST_REPORT_LIMIT ?? '3');
+      return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 3;
+    }
   }
 };
 
