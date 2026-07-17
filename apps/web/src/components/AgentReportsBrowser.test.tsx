@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+
 import { AgentReportsBrowser } from './AgentReportsBrowser';
 import * as agentsApi from '../api/agents';
 import type { RunReportDto } from '../api/agents';
@@ -51,8 +53,13 @@ function withCharacterReport(
   return { ...base, report: payload } as RunReportDto;
 }
 
+function LocationDisplay() {
+  const location = useLocation();
+  return <div data-testid="location-display">{`${location.pathname}|${JSON.stringify(location.state)}`}</div>;
+}
+
 it('renders each report with symbol badges, a date, a headline, and a confidence indicator', () => {
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport()]} /></MemoryRouter>);
 
   expect(screen.getByText(/AAPL · Long/i)).toBeInTheDocument();
   expect(screen.getByText(/AAPL guidance was strong this quarter/i)).toBeInTheDocument();
@@ -60,7 +67,7 @@ it('renders each report with symbol badges, a date, a headline, and a confidence
 });
 
 it('shows a per-report AI stats row with model, version, tokens, and estimated cost', () => {
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport()]} /></MemoryRouter>);
 
   expect(screen.getByTestId('ai-stats-report-1').textContent).toBe(
     'Claude claude-sonnet-4-5 · v1 · 1.000 in / 200 out · ~$0.0060 (est.)'
@@ -72,7 +79,7 @@ it('keeps AI token separators in German style even if runtime locale would use c
     return String(Number(this)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   });
 
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport()]} /></MemoryRouter>);
 
   expect(screen.getByTestId('ai-stats-report-1').textContent).toBe(
     'Claude claude-sonnet-4-5 · v1 · 1.000 in / 200 out · ~$0.0060 (est.)'
@@ -92,7 +99,7 @@ it('falls back to "n/a" in the AI stats row for reports saved before this featur
     outputTokens: null,
     estimatedCostUsd: null
   });
-  render(<AgentReportsBrowser agentId="agent-1" reports={[legacyReport]} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[legacyReport]} /></MemoryRouter>);
 
   expect(screen.getByTestId('ai-stats-report-1').textContent).toBe('Claude n/a · v n/a · n/a in / n/a out · n/a');
 });
@@ -102,7 +109,7 @@ it('shows an agent-level running total of AI usage/cost across all reports', () 
     createReport({ id: 'report-1', inputTokens: 1000, outputTokens: 200, estimatedCostUsd: 0.006 }),
     createReport({ id: 'report-2', inputTokens: 500, outputTokens: 100, estimatedCostUsd: 0.003 })
   ];
-  render(<AgentReportsBrowser agentId="agent-1" reports={reports} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={reports} /></MemoryRouter>);
 
   expect(screen.getByTestId('ai-totals').textContent).toBe(
     'Total AI usage across 2 reports: 1.500 in / 300 out tokens · ~$0.0090 (est.)'
@@ -113,37 +120,35 @@ it('omits the agent-level AI totals line when no report has any usage data', () 
   const reports = [
     createReport({ model: null, promptVersionNumber: null, inputTokens: null, outputTokens: null, estimatedCostUsd: null })
   ];
-  render(<AgentReportsBrowser agentId="agent-1" reports={reports} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={reports} /></MemoryRouter>);
 
   expect(screen.queryByTestId('ai-totals')).not.toBeInTheDocument();
 });
 
 it('truncates long summaries into a short headline', () => {
   const longSummary = 'A'.repeat(120);
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport({ summary: longSummary })]} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport({ summary: longSummary })]} /></MemoryRouter>);
 
   expect(screen.getByText(/A{60,}\.\.\./)).toBeInTheDocument();
 });
 
 it('shows a short badge with a red tag for short signals', () => {
-  render(
-    <AgentReportsBrowser
+  render(<MemoryRouter><AgentReportsBrowser
       agentId="agent-1"
       reports={[createReport({ signals: [{ symbol: 'TSLA', side: 'short', confidence: 55, rationale: 'weak demand', citations: [] }] })]}
-    />
-  );
+    /></MemoryRouter>);
 
   expect(screen.getByText(/TSLA · Short/i)).toBeInTheDocument();
 });
 
 it('shows an empty state when there are no reports yet', () => {
-  render(<AgentReportsBrowser agentId="agent-1" reports={[]} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[]} /></MemoryRouter>);
   expect(screen.getByText(/no reports yet/i)).toBeInTheDocument();
 });
 
 it('invokes onSelectReport when a report card is clicked', () => {
   const onSelectReport = vi.fn();
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} onSelectReport={onSelectReport} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport()]} onSelectReport={onSelectReport} /></MemoryRouter>);
 
   fireEvent.click(screen.getByText(/AAPL guidance was strong this quarter/i));
   expect(onSelectReport).toHaveBeenCalledWith(expect.objectContaining({ id: 'report-1' }));
@@ -153,19 +158,17 @@ it('scrolls the highlighted report into view when highlightedReportId is set', (
   const scrollIntoViewMock = vi.fn();
   window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
 
-  render(
-    <AgentReportsBrowser
+  render(<MemoryRouter><AgentReportsBrowser
       agentId="agent-1"
       reports={[createReport({ id: 'report-1' }), createReport({ id: 'report-2', summary: 'Second report' })]}
       highlightedReportId="report-2"
-    />
-  );
+    /></MemoryRouter>);
 
   expect(scrollIntoViewMock).toHaveBeenCalled();
 });
 
 it('renders a re-send email notification button for each report', () => {
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport()]} /></MemoryRouter>);
   expect(screen.getByRole('button', { name: /re-send email notification/i })).toBeInTheDocument();
 });
 
@@ -175,7 +178,7 @@ it('calls resendReportNotification with the correct agent/report ids and shows a
     .spyOn(agentsApi, 'resendReportNotification')
     .mockResolvedValue({ status: 'sent', recipientCount: 2 });
 
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport({ id: 'report-1' })]} onSelectReport={onSelectReport} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport({ id: 'report-1' })]} onSelectReport={onSelectReport} /></MemoryRouter>);
 
   fireEvent.click(screen.getByRole('button', { name: /re-send email notification/i }));
 
@@ -187,15 +190,38 @@ it('shows an error message when resendReportNotification fails', async () => {
   vi.spyOn(agentsApi, 'resendReportNotification').mockRejectedValue(new Error('no recipients configured'));
   const { message } = await import('antd');
 
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport()]} /></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: /re-send email notification/i }));
 
   await waitFor(() => expect(message.error).toHaveBeenCalledWith('no recipients configured'));
 });
 
+it('navigates to /studio/new with a preselected agent+report when "Discuss this report" is clicked', () => {
+  render(
+    <MemoryRouter initialEntries={['/agents']}>
+      <Routes>
+        <Route
+          path="/agents"
+          element={<AgentReportsBrowser agentId="agent-1" reports={[createReport({ id: 'report-1', summary: 'AAPL guidance was strong this quarter.' })]} />}
+        />
+        <Route path="/studio/new" element={<LocationDisplay />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: /discuss this report/i }));
+
+  const display = screen.getByTestId('location-display');
+  const [pathname, stateJson] = display.textContent!.split('|');
+  expect(pathname).toBe('/studio/new');
+  const state = JSON.parse(stateJson);
+  expect(state.preselect.entries).toEqual([{ agentId: 'agent-1', reportIds: ['report-1'] }]);
+  expect(state.preselect.contextLabel).toContain('AAPL guidance was strong this quarter');
+});
+
 it('toggles an inline weekly line chart when a symbol tag is clicked, without triggering onSelectReport', () => {
   const onSelectReport = vi.fn();
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} onSelectReport={onSelectReport} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport()]} onSelectReport={onSelectReport} /></MemoryRouter>);
 
   expect(screen.queryByTestId('tradingview-symbol-chart')).not.toBeInTheDocument();
 
@@ -221,7 +247,7 @@ it('only shows one inline chart at a time, closing the previous one when a diffe
       signals: [{ symbol: 'TSLA', side: 'short', confidence: 55, rationale: 'r2', citations: [] }]
     })
   ];
-  render(<AgentReportsBrowser agentId="agent-1" reports={reports} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={reports} /></MemoryRouter>);
 
   fireEvent.click(screen.getByText(/AAPL · Long/i));
   expect(screen.getAllByTestId('tradingview-symbol-chart')).toHaveLength(1);
@@ -235,7 +261,7 @@ it('only shows one inline chart at a time, closing the previous one when a diffe
 
 it('shows a "View full performance" link that calls onSelectSymbol when the inline chart is open', () => {
   const onSelectSymbol = vi.fn();
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} onSelectSymbol={onSelectSymbol} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport()]} onSelectSymbol={onSelectSymbol} /></MemoryRouter>);
 
   fireEvent.click(screen.getByText(/AAPL · Long/i));
   fireEvent.click(screen.getByRole('button', { name: /view full performance/i }));
@@ -244,7 +270,7 @@ it('shows a "View full performance" link that calls onSelectSymbol when the inli
 });
 
 it('does not show a "View full performance" link when onSelectSymbol is not provided', () => {
-  render(<AgentReportsBrowser agentId="agent-1" reports={[createReport()]} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={[createReport()]} /></MemoryRouter>);
 
   fireEvent.click(screen.getByText(/AAPL · Long/i));
 
@@ -274,7 +300,7 @@ it('renders common report fields for every character template', () => {
     withCharacterReport(createReport({ id: 'r6' }), { common, section: { character_type: 'summarizer', bullet_digest: ['Digest line'] } })
   ];
 
-  render(<AgentReportsBrowser agentId="agent-1" reports={reports} />);
+  render(<MemoryRouter><AgentReportsBrowser agentId="agent-1" reports={reports} /></MemoryRouter>);
 
   expect(screen.getAllByText('Summary')).toHaveLength(6);
   expect(screen.getAllByText('Key takeaways')).toHaveLength(6);
@@ -291,27 +317,22 @@ it('switches character template sections based on report.report.section.characte
     sources_used: ['https://example.com/source'],
     citations: ['https://example.com/citation']
   };
-  const { rerender } = render(
-    <AgentReportsBrowser
+  const { rerender } = render(<MemoryRouter><AgentReportsBrowser
       agentId="agent-1"
       reports={[withCharacterReport(base, { common, section: { character_type: 'finance_expert', market_summary: 'Bullish week', signals: base.signals } })]}
-    />
-  );
+    /></MemoryRouter>);
   expect(screen.getByText('Market summary')).toBeInTheDocument();
   expect(screen.getByText('Bullish week')).toBeInTheDocument();
   expect(screen.getByText('Signals')).toBeInTheDocument();
 
-  rerender(
-    <AgentReportsBrowser
+  rerender(<MemoryRouter><AgentReportsBrowser
       agentId="agent-1"
       reports={[withCharacterReport(base, { common, section: { character_type: 'teacher', lesson_explanation: 'Supply vs demand explained' } })]}
-    />
-  );
+    /></MemoryRouter>);
   expect(screen.getByText('Lesson explanation')).toBeInTheDocument();
   expect(screen.getByText('Supply vs demand explained')).toBeInTheDocument();
 
-  rerender(
-    <AgentReportsBrowser
+  rerender(<MemoryRouter><AgentReportsBrowser
       agentId="agent-1"
       reports={[
         withCharacterReport(base, {
@@ -319,23 +340,19 @@ it('switches character template sections based on report.report.section.characte
           section: { character_type: 'trainer', qa_drill: [{ question: 'Q1', answer: 'A1' }] }
         })
       ]}
-    />
-  );
+    /></MemoryRouter>);
   expect(screen.getByText('Q&A drill')).toBeInTheDocument();
   expect(screen.getByText('Q1')).toBeInTheDocument();
   expect(screen.getByText('A1')).toBeInTheDocument();
 
-  rerender(
-    <AgentReportsBrowser
+  rerender(<MemoryRouter><AgentReportsBrowser
       agentId="agent-1"
       reports={[withCharacterReport(base, { common, section: { character_type: 'philosopher', argument_reflection: 'Conviction under uncertainty' } })]}
-    />
-  );
+    /></MemoryRouter>);
   expect(screen.getByText('Argument & reflection')).toBeInTheDocument();
   expect(screen.getByText('Conviction under uncertainty')).toBeInTheDocument();
 
-  rerender(
-    <AgentReportsBrowser
+  rerender(<MemoryRouter><AgentReportsBrowser
       agentId="agent-1"
       reports={[
         withCharacterReport(base, {
@@ -343,19 +360,16 @@ it('switches character template sections based on report.report.section.characte
           section: { character_type: 'influencer', content_angles: ['Thread angle'], hooks: ['Hook text'] }
         })
       ]}
-    />
-  );
+    /></MemoryRouter>);
   expect(screen.getByText('Content angles')).toBeInTheDocument();
   expect(screen.getByText('Hooks')).toBeInTheDocument();
   expect(screen.getByText('Thread angle')).toBeInTheDocument();
   expect(screen.getByText('Hook text')).toBeInTheDocument();
 
-  rerender(
-    <AgentReportsBrowser
+  rerender(<MemoryRouter><AgentReportsBrowser
       agentId="agent-1"
       reports={[withCharacterReport(base, { common, section: { character_type: 'summarizer', bullet_digest: ['Digest bullet'] } })]}
-    />
-  );
+    /></MemoryRouter>);
   expect(screen.getByText('Bullet digest')).toBeInTheDocument();
   expect(screen.getByText('Digest bullet')).toBeInTheDocument();
 });
