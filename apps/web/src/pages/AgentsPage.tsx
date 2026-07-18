@@ -2467,6 +2467,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            return agent ? { playbook, agent } : null;
                          })
                          .filter((link): link is { playbook: PlaybookRecord; agent: AgentSummary } => Boolean(link));
+                       const cardAgentIds = new Set(cardAgentLinks.map(({ agent }) => agent.id));
+                       const cardReports = feedReports.filter((report) => cardAgentIds.has(report.agentId));
+                       const latestCardReport = cardReports[0];
                        const coverImageUrl = getSourceCoverImageUrl(source);
                        return (
                        <Card
@@ -2541,6 +2544,45 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                {source.type === 'synthetic_discussion' ? t('library.noRuns') : t('library.noEpisodes')}
                              </span>
                            )}
+                         </div>
+                         <div className="mt-4" onClick={(event) => event.stopPropagation()}>
+                           <Button
+                             type="text"
+                             block
+                             className={`h-auto rounded-lg border px-3 py-2 text-left ${
+                               latestCardReport
+                                 ? 'border-violet-200 bg-violet-50/70 hover:!border-violet-300 hover:!bg-violet-100/70 dark:border-violet-500/30 dark:bg-violet-950/30 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/50'
+                                 : 'border-dashed border-border bg-muted/30 hover:!border-violet-300 hover:!bg-violet-50/50 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/30'
+                             }`}
+                             aria-label={latestCardReport ? t('library.openReports', { count: cardReports.length }) : t('library.noReportsYet')}
+                             onClick={() => {
+                               setRecentlyUpdatedSourceId(null);
+                               setSelectedSourceId(source.id);
+                               setActiveSourceTab('reports');
+                             }}
+                           >
+                             <span className="flex items-center gap-2">
+                               <CheckCircleOutlined
+                                 className={latestCardReport ? 'text-emerald-500 dark:text-emerald-400' : 'text-muted-foreground'}
+                               />
+                               <span className="min-w-0 flex-1">
+                                 <span className="block text-xs font-semibold text-foreground">
+                                   {latestCardReport ? t('library.reportsAvailable', { count: cardReports.length }) : t('library.noReportsYet')}
+                                 </span>
+                                 <span className="block truncate text-[11px] text-muted-foreground">
+                                   {latestCardReport
+                                     ? t('library.latestReportAt', {
+                                         date: new Date(latestCardReport.createdAt).toLocaleDateString(i18n.language, {
+                                           day: 'numeric',
+                                           month: 'short'
+                                         })
+                                       })
+                                     : t('library.reportsWillAppearHere')}
+                                 </span>
+                               </span>
+                               {latestCardReport ? <span className="text-base text-violet-500 dark:text-violet-300">›</span> : null}
+                             </span>
+                           </Button>
                          </div>
                          <div className="mt-6 border-t border-border pt-4" onClick={(event) => event.stopPropagation()}>
                            <div className="mb-2 text-xs font-medium text-muted-foreground">{t('library.agentFollowLabel')}</div>
