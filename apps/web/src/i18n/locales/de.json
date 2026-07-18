@@ -5,6 +5,7 @@
     "cancel": "Abbrechen",
     "save": "Speichern",
     "delete": "Löschen",
+    "remove": "Entfernen",
     "edit": "Bearbeiten",
     "create": "Erstellen",
     "update": "Aktualisieren",
@@ -87,7 +88,17 @@
     "reportSingular": "Bericht",
     "reportPlural": "Berichte",
     "alreadyWatching": "Beobachtet bereits",
-    "youtubeTranscriptNote": "Vollständige Transkripte können für diese Quelle vom Datacenter-IP nicht verfügbar sein — Fallback auf Shownotes."
+    "youtubeTranscriptNote": "Vollständige Transkripte können für diese Quelle vom Datacenter-IP nicht verfügbar sein — Fallback auf Shownotes.",
+    "agentFollowLabel": "Agenten folgen",
+    "recentItems": "Neueste Inhalte",
+    "manageSource": "Quelle verwalten",
+    "addAgent": "Agent hinzufügen",
+    "coverUnavailable": "Cover nicht verfügbar",
+    "removeAgentFromSource": "Agent von dieser Quelle entfernen",
+    "removeAgentConfirm": "{{name}} von dieser Quelle entfernen?",
+    "removeAgentConfirmDescription": "Der Agent bleibt erhalten und wird nicht gelöscht.",
+    "agentRemovedFromSource": "Agent wurde von dieser Quelle entfernt.",
+    "removeAgentFromSourceFailed": "Agent konnte nicht von dieser Quelle entfernt werden."
   },
   "listen": {
     "listen": "Fasse zusammen",
@@ -241,7 +252,8 @@
     "allDone": "🎉 Alles eingerichtet! Berichte kommen planmäßig.",
     "dismiss": "Verstanden, schließen",
     "showPreview": "Onboarding-Vorschau",
-    "hidePreview": "Onboarding-Vorschau ausblenden"
+    "hidePreview": "Onboarding-Vorschau ausblenden",
+    "showWizardPreview": "Einrichtungsassistent starten"
   },
   "runs": {
     "noRuns": "Noch kein Verlauf. Der Verlauf erscheint hier, sobald der Zeitplan des Agenten startet (oder du manuell ausführst).",
@@ -383,6 +395,8 @@
     "success": "Dein erster Bericht läuft! Schau gleich in den Feed.",
     "error": "Etwas ist schiefgelaufen. Versuche es erneut oder richte es manuell ein.",
     "skip": "Überspringen — ich richte es manuell ein"
+    ,"suggestedSource": "Mit Lanz & Precht starten"
+    ,"suggestedSourceDescription": "Vorgeschlagene Podcast-Quelle"
   },
   "admin": {
     "seedDemo": "Demo-Daten einspielen",

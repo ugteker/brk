@@ -64,6 +64,8 @@ export interface AppDataContextValue {
   setBellDismissedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   forceShowOnboarding: boolean;
   setForceShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
+  forceShowGuidedWizard: boolean;
+  setForceShowGuidedWizard: React.Dispatch<React.SetStateAction<boolean>>;
   adminMode: boolean;
   setAdminMode: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -98,6 +100,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   });
   // In-memory only — resets on refresh, no localStorage (QA/preview tool, not a persisted preference).
   const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
+  const [forceShowGuidedWizard, setForceShowGuidedWizard] = useState(false);
   // Admin-only nav visibility toggle (User Management/Agents/Playbooks). Persisted so it survives
   // reloads, but only ever shown/usable for admin users.
   const [adminMode, setAdminMode] = useState(() => localStorage.getItem('chattrader:adminMode') === '1');
@@ -222,7 +225,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     failedRunNotices, setFailedRunNotices,
     newReportNotices, setNewReportNotices,
     bellDismissedIds, setBellDismissedIds,
-    forceShowOnboarding, setForceShowOnboarding,
+    forceShowOnboarding, setForceShowOnboarding, forceShowGuidedWizard, setForceShowGuidedWizard,
     adminMode, setAdminMode
   };
 

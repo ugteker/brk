@@ -10,6 +10,7 @@ import {
   LogoutOutlined,
   MoonOutlined,
   RobotOutlined,
+  RocketOutlined,
   SunOutlined,
   TeamOutlined,
   UserOutlined
@@ -131,7 +132,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     bellDismissedIds,
     setBellDismissedIds,
     refreshAgents, refreshSources, refreshPlaybooks,
-    forceShowOnboarding, setForceShowOnboarding,
+    forceShowOnboarding, setForceShowOnboarding, setForceShowGuidedWizard,
     adminMode, setAdminMode
   } = useAppData();
 
@@ -186,6 +187,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         icon: <RobotOutlined />,
         onClick: () => {
           setForceShowOnboarding((prev) => !prev);
+          navigate('/library');
+        }
+      },
+      {
+        key: 'admin-start-guided-wizard',
+        label: t('onboarding.showWizardPreview'),
+        icon: <RocketOutlined />,
+        onClick: () => {
+          setForceShowGuidedWizard(true);
           navigate('/library');
         }
       },

@@ -5,6 +5,7 @@
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete",
+    "remove": "Remove",
     "edit": "Edit",
     "create": "Create",
     "update": "Update",
@@ -87,7 +88,17 @@
     "reportSingular": "report",
     "reportPlural": "reports",
     "alreadyWatching": "Already watching",
-    "youtubeTranscriptNote": "Full transcripts may be unavailable for this source when running from a datacenter IP — show notes only as fallback."
+    "youtubeTranscriptNote": "Full transcripts may be unavailable for this source when running from a datacenter IP — show notes only as fallback.",
+    "agentFollowLabel": "Agents follow",
+    "recentItems": "Latest items",
+    "manageSource": "Manage source",
+    "addAgent": "Add agent",
+    "coverUnavailable": "Cover unavailable",
+    "removeAgentFromSource": "Remove agent from this source",
+    "removeAgentConfirm": "Remove {{name}} from this source?",
+    "removeAgentConfirmDescription": "The agent remains available and is not deleted.",
+    "agentRemovedFromSource": "Agent removed from this source.",
+    "removeAgentFromSourceFailed": "Could not remove the agent from this source."
   },
   "listen": {
     "listen": "Summarize",
@@ -241,7 +252,8 @@
     "allDone": "🎉 You're all set! Reports will arrive on schedule.",
     "dismiss": "Got it, dismiss",
     "showPreview": "Preview onboarding",
-    "hidePreview": "Hide onboarding preview"
+    "hidePreview": "Hide onboarding preview",
+    "showWizardPreview": "Start setup wizard"
   },
   "runs": {
     "noRuns": "No history yet. Analysis history appears here once the agent's schedule kicks in (or you trigger a manual run).",
@@ -383,6 +395,8 @@
     "success": "Your first report is running! Check the Feed in a moment.",
     "error": "Something went wrong. Try again or set up manually.",
     "skip": "Skip — I'll set up manually"
+    ,"suggestedSource": "Start with Lanz & Precht"
+    ,"suggestedSourceDescription": "Suggested podcast source"
   },
   "admin": {
     "seedDemo": "Seed demo data",

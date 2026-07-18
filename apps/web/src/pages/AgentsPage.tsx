@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Badge, Button, Card, Dropdown, Empty, Input, Modal, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
+import { Badge, Button, Card, Dropdown, Empty, Input, Modal, Popconfirm, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
   AudioOutlined,
   AudioMutedOutlined,
   CheckCircleOutlined,
+  CloseOutlined,
   LoadingOutlined,
   MailOutlined,
   BulbOutlined,
@@ -158,6 +159,14 @@ interface AutoDetectedSource {
   itemCount?: number;
   previewItems: Array<{ title: string; link: string | null; pubDate: string | null }>;
 }
+
+const GUIDED_SUGGESTED_SOURCE: AutoDetectedSource = {
+  type: 'youtube_videos',
+  url: 'https://www.youtube.com/playlist?list=PLdPrKDvwrog6nXguUXjQcTIw685Xa6Bg5',
+  kind: 'listing_page',
+  title: 'Lanz & Precht',
+  previewItems: []
+};
 
 function GhostCreateCard({
   ariaLabel,
@@ -398,7 +407,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     failedRunNotices, setFailedRunNotices,
     newReportNotices, setNewReportNotices,
     bellDismissedIds,
-    forceShowOnboarding
+    forceShowOnboarding, forceShowGuidedWizard, setForceShowGuidedWizard
   } = useAppData();
   const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
@@ -525,22 +534,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     localStorage.getItem('chattrader:onboarding:dismissed') === '1'
   );
   const [guidedWizardOpen, setGuidedWizardOpen] = useState(false);
-  const [guidedWizardStep, setGuidedWizardStep] = useState(0);
   const [guidedWizardUrl, setGuidedWizardUrl] = useState('');
   const [guidedWizardDetecting, setGuidedWizardDetecting] = useState(false);
-  const [guidedWizardSource, setGuidedWizardSource] = useState<AutoDetectedSource | null>(null);
+  const [guidedWizardSource, setGuidedWizardSource] = useState<AutoDetectedSource>(GUIDED_SUGGESTED_SOURCE);
   const [guidedWizardPersonaId, setGuidedWizardPersonaId] = useState('finance_expert');
   const [guidedWizardRunning, setGuidedWizardRunning] = useState(false);
   const [guidedWizardDismissed, setGuidedWizardDismissed] = useState(() =>
     localStorage.getItem('chattrader:guided-wizard:dismissed') === '1'
   );
   const [wizardShowAdvanced, setWizardShowAdvanced] = useState(false);
-
-  /** Set of source IDs the current user already has an active playbook for. */
-  const followedSourceIds = useMemo(
-    () => new Set(playbooks.flatMap((pb) => pb.sourceIds)),
-    [playbooks]
-  );
 
   /** Onboarding step completion */
   const onboardingHasFirstReport = agents.some((a) => (a.reportCount ?? 0) > 0);
@@ -649,10 +651,13 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   // Open guided first-run wizard for truly new users (nothing set up yet, not dismissed)
   useEffect(() => {
     if (!onboardingDataLoaded) return;
-    if (guidedWizardDismissed) return;
-    if (sources.length > 0 || agents.length > 0 || playbooks.length > 0) return;
+    if (forceShowGuidedWizard) {
+      setGuidedWizardOpen(true);
+      return;
+    }
+    if (guidedWizardDismissed || sources.length > 0 || agents.length > 0 || playbooks.length > 0) return;
     setGuidedWizardOpen(true);
-  }, [onboardingDataLoaded, guidedWizardDismissed, sources.length, agents.length, playbooks.length]);
+  }, [onboardingDataLoaded, forceShowGuidedWizard, guidedWizardDismissed, sources.length, agents.length, playbooks.length]);
 
   // Load library tabs and source assignments from localStorage
   useEffect(() => {
@@ -937,6 +942,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         setSelectedAgentId(null);
       }
       await refreshAgents();
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Agent not found') {
+        if (selectedAgentId === agent.id) {
+          setSelectedAgentId(null);
+        }
+        await refreshAgents();
+        return;
+      }
+      message.error(error instanceof Error ? error.message : 'Failed to delete agent');
     } finally {
       setDeletingAgentId(null);
     }
@@ -999,6 +1013,21 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setIsPlaybookCreateOpen(true);
     if (agents.length === 0) {
       openInlineAgentCreate();
+    }
+  }
+
+  async function onRemoveAgentFromSource(playbook: PlaybookRecord, sourceId: string) {
+    try {
+      const remainingSourceIds = playbook.sourceIds.filter((id) => id !== sourceId);
+      if (remainingSourceIds.length === 0) {
+        await deletePlaybook(playbook.id);
+      } else {
+        await updatePlaybook(playbook.id, { sourceIds: remainingSourceIds });
+      }
+      await refreshPlaybooks();
+      message.success(t('library.agentRemovedFromSource'));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('library.removeAgentFromSourceFailed'));
     }
   }
 
@@ -2432,10 +2461,13 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                      {filteredSources.map((source) => {
                        const isRecentlyUpdated = recentlyUpdatedSourceId === source.id;
                        const linkedForCard = playbooks.filter((p) => p.sourceIds.includes(source.id));
-                       const cardReportCount = linkedForCard.reduce((sum, pb) => {
-                         const a = agents.find((ag) => ag.id === pb.agentId);
-                         return sum + (a?.reportCount ?? 0);
-                       }, 0);
+                       const cardAgentLinks = linkedForCard
+                         .map((playbook) => {
+                           const agent = agents.find((candidate) => candidate.id === playbook.agentId);
+                           return agent ? { playbook, agent } : null;
+                         })
+                         .filter((link): link is { playbook: PlaybookRecord; agent: AgentSummary } => Boolean(link));
+                       const coverImageUrl = getSourceCoverImageUrl(source);
                        return (
                        <Card
                          key={source.id}
@@ -2443,14 +2475,35 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          hoverable
                          onClick={() => { setRecentlyUpdatedSourceId(null); setSelectedSourceId(source.id); setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports'); }}
                          style={{ cursor: 'pointer', outline: isRecentlyUpdated ? '2px solid #722ed1' : undefined, outlineOffset: isRecentlyUpdated ? '2px' : undefined }}
-                         styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1 } }}
-                         className="min-h-[170px] transition-shadow flex flex-col"
-                         extra={
-                           <div onClick={(event) => event.stopPropagation()}>
-                             {/* Edit + Share/Publish — Delete moved into Edit view */}
+                         styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1, padding: 0 } }}
+                         className="overflow-hidden border border-[rgba(114,46,209,0.18)] shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-[rgba(114,46,209,0.38)] hover:shadow-md dark:border-[rgba(167,139,250,0.30)] dark:hover:border-[rgba(167,139,250,0.55)] flex flex-col"
+                       >
+                         <div className="relative h-44 overflow-hidden bg-slate-900">
+                           {source.type === 'synthetic_discussion' ? (
+                             <div className="relative flex h-full items-center justify-center overflow-hidden bg-gradient-to-br from-[#1e1239] via-[#54239a] to-[#164e78]">
+                               <div aria-hidden="true" className="absolute -left-12 -top-16 h-44 w-44 rounded-full bg-violet-300/30 blur-3xl" />
+                               <div aria-hidden="true" className="absolute -bottom-20 -right-8 h-52 w-52 rounded-full bg-sky-300/25 blur-3xl" />
+                               <div className="relative flex h-24 w-24 items-center justify-center rounded-[1.75rem] border border-white/25 bg-white/15 text-white shadow-xl shadow-violet-950/40 backdrop-blur-sm">
+                                 <AudioOutlined className="text-5xl" />
+                               </div>
+                             </div>
+                           ) : coverImageUrl ? (
+                             <>
+                               <img aria-hidden="true" src={coverImageUrl} className="absolute -inset-4 h-[calc(100%+2rem)] w-[calc(100%+2rem)] object-cover blur-xl opacity-60" />
+                               <img src={coverImageUrl} alt={`${getSourceDisplayTitle(source)} cover`} className="relative h-full w-full object-contain" />
+                             </>
+                           ) : (
+                             <div className="flex h-full items-center justify-center text-sm text-slate-300">{t('library.coverUnavailable')}</div>
+                           )}
+                           <div className="absolute left-3 top-3">
+                             <SourceTypeBadge type={source.type} />
+                           </div>
+                           <div className="absolute right-2 top-2" onClick={(event) => event.stopPropagation()}>
                              <EntityActions
                                entityLabel="source"
                                isOwner={source.ownerUserId === user?.id}
+                               variant="menu"
+                               menuAriaLabel={t('library.manageSource')}
                                onEdit={() => onEditSource(source)}
                                onShare={(payload) =>
                                  shareSource(source.id, {
@@ -2463,57 +2516,23 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                defaultPublishTitle={getSourceDisplayTitle(source)}
                              />
                            </div>
-                         }
-                       >
-                         <div className="flex-1">
-                         <div className="grid grid-cols-[56px_1fr] gap-3">
-                           {getSourceCoverImageUrl(source) ? (
-                             <img
-                               src={getSourceCoverImageUrl(source)!}
-                               alt={`${getSourceDisplayTitle(source)} cover`}
-                               className="h-14 w-14 rounded-md object-cover"
-                             />
-                           ) : source.type === 'synthetic_discussion' ? (
-                             <div className="flex h-14 w-14 items-center justify-center rounded-md bg-geekblue-50 border border-blue-200 text-3xl select-none dark:bg-blue-950 dark:border-blue-800">
-                               🎙
-                             </div>
-                           ) : (
-                             <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
-                               Cover unavailable
-                             </div>
-                           )}
-                           <div className="min-w-0">
-                             <div className="text-sm font-semibold leading-snug">{getSourceDisplayTitle(source)}</div>
-                             {source.type !== 'synthetic_discussion' && (
-                               <Text type="secondary" className="text-xs">{source.value}</Text>
-                             )}
-                             {source.type === 'synthetic_discussion' && getSourceSpeakers(source).length > 0 && (
-                               <div className="mt-0.5 flex flex-wrap gap-1">
-                                 {getSourceSpeakers(source).map((name) => (
-                                   <Tag key={name} style={{ margin: 0, fontSize: 11 }}>👤 {name}</Tag>
-                                 ))}
-                               </div>
-                             )}
-                             <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                               <SourceTypeBadge type={source.type} />
-                               <Tag>{getSourceKindLabel(source)}</Tag>
-                               {source.type === 'synthetic_discussion' ? (
-                                 <Tag color="geekblue">Runs: {getSourceEpisodeCount(source)}</Tag>
-                               ) : (source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
-                                 <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
-                               ) : null}
-                             </div>
-                           </div>
                          </div>
-                         <div className="mt-3 text-xs">
+                         <div className="flex flex-1 flex-col p-4">
+                           <div className="min-w-0">
+                             <div className="text-base font-semibold leading-snug">{getSourceDisplayTitle(source)}</div>
+                             {source.type !== 'synthetic_discussion' && (
+                               <Text type="secondary" className="block truncate text-xs">{source.value}</Text>
+                             )}
+                           </div>
+                         <div className="mt-4 text-xs">
                            {source.metadata.previewItems.length > 0 ? (
                              <>
                                <div className="mb-1 font-medium text-muted-foreground">
-                                 {source.type === 'synthetic_discussion' ? t('library.recentRuns') : t('library.recentEpisodes')}
+                                 {source.type === 'synthetic_discussion' ? t('library.recentRuns') : t('library.recentItems')}
                                </div>
-                               <ul className="list-inside list-disc space-y-1 text-foreground">
-                                 {source.metadata.previewItems.slice(0, 3).map((item) => (
-                                   <li key={`${source.id}:${item.link ?? item.title}`}>{item.title}</li>
+                               <ul className="space-y-1 text-foreground">
+                                 {source.metadata.previewItems.slice(0, 2).map((item) => (
+                                   <li key={`${source.id}:${item.link ?? item.title}`} className="truncate">▶ {item.title}</li>
                                  ))}
                                </ul>
                              </>
@@ -2523,62 +2542,72 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              </span>
                            )}
                          </div>
-                         {/* flex-1 content end */}
-                         </div>
-                         {(() => {
-                           const linked = playbooks.filter((p) => p.sourceIds.includes(source.id));
-                           const isFollowed = followedSourceIds.has(source.id);
-                           const latestRun = linked.length > 0
-                             ? linked.map((p) => p.lastRunAt).filter(Boolean).sort().pop()
-                             : null;
-                           return (
-                             <div className="mt-3 border-t border-border pt-2" onClick={(e) => e.stopPropagation()}>
-                               {linked.length > 0 && (
-                                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                                   {linked.map((pb) => {
-                                     const agent = agents.find((a) => a.id === pb.agentId);
-                                     const emoji = getCharacterTypeEmoji(agent?.characterType);
-                                     const label = agent?.characterType ? humanizeCharacterType(agent.characterType) : (agent?.name ?? pb.name);
-                                     return (
-                                       <Tag key={pb.id} color={getCharacterTypeColor(agent?.characterType)} className="m-0 flex items-center gap-1">
-                                         {emoji} {label}
-                                       </Tag>
-                                     );
-                                   })}
-                                   {cardReportCount > 0 ? (
-                                     <Tag color="purple" icon={<FileTextOutlined />} className="m-0">
-                                       {cardReportCount} {cardReportCount === 1 ? t('library.reportSingular') : t('library.reportPlural')}
-                                     </Tag>
-                                   ) : null}
-                                   {latestRun
-                                     ? <span className="text-muted-foreground">{t('library.lastRun', { date: new Date(latestRun).toLocaleString() })}</span>
-                                     : <span className="text-muted-foreground">{t('library.notYetAnalyzed')}</span>}
-                                 </div>
-                               )}
-                               {isFollowed ? (
-                                 <ListenActiveButton
-                                   block
-                                   aria-label={t('listen.listeningAriaLabel')}
-                                   icon={<RobotFilled className="robot-pulse" />}
-                                   style={{ background: '#722ed1', borderColor: '#722ed1', color: '#fff', fontWeight: 600 }}
+                         <div className="mt-6 border-t border-border pt-4" onClick={(event) => event.stopPropagation()}>
+                           <div className="mb-2 text-xs font-medium text-muted-foreground">{t('library.agentFollowLabel')}</div>
+                           <div className="rounded-lg border border-slate-200/80 bg-slate-50/60 p-3 dark:border-slate-700/80 dark:bg-slate-800/40">
+                             <div className="flex flex-wrap items-start gap-3">
+                               {cardAgentLinks.map(({ agent, playbook }) => {
+                                 const characterLabel = getAgentCharacterLabel(agent);
+                                 const personalityLabel = getAgentPersonalityLabel(agent);
+                                 const canRemove = source.ownerUserId === user?.id;
+                                 return (
+                                   <div key={playbook.id} className="group relative">
+                                     <TouchSafeTooltip
+                                       title={<div><div className="font-medium">{agent.name}</div><div>{humanizeCharacterType(agent.characterType)}</div><div>{personalityLabel}</div></div>}
+                                     >
+                                       <Button
+                                         type="text"
+                                         aria-label={`${agent.name}: ${characterLabel}, ${humanizeCharacterType(agent.characterType)}, ${personalityLabel}`}
+                                         className="h-auto w-12 p-0"
+                                       >
+                                         <span className="flex flex-col items-center gap-1 text-center">
+                                           <span className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${PERSONA_ICON_BG_MAP[agent.characterType ?? 'summarizer']}`}>
+                                             {getCharacterIcon(agent.characterType)}
+                                           </span>
+                                           <span className="w-full truncate text-[10px] leading-tight">{characterLabel}</span>
+                                         </span>
+                                       </Button>
+                                     </TouchSafeTooltip>
+                                     {canRemove ? (
+                                       <TouchSafeTooltip title={t('library.removeAgentFromSource')}>
+                                         <Popconfirm
+                                           title={t('library.removeAgentConfirm', { name: agent.name })}
+                                           description={t('library.removeAgentConfirmDescription')}
+                                           okText={t('common.remove')}
+                                           cancelText={t('common.cancel')}
+                                           onConfirm={() => void onRemoveAgentFromSource(playbook, source.id)}
+                                         >
+                                           <Button
+                                             type="primary"
+                                             danger
+                                             shape="circle"
+                                             size="small"
+                                             aria-label={t('library.removeAgentFromSource')}
+                                             icon={<CloseOutlined />}
+                                             className="absolute -right-1 -top-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                                             onClick={(event) => event.stopPropagation()}
+                                           />
+                                         </Popconfirm>
+                                       </TouchSafeTooltip>
+                                     ) : null}
+                                   </div>
+                                 );
+                               })}
+                               <TouchSafeTooltip title={t('library.addAgent')}>
+                                 <Button
+                                   type="dashed"
+                                   shape="circle"
+                                   size="large"
+                                   aria-label={t('library.addAgent')}
+                                   icon={<PlusOutlined />}
+                                   className="border-2 border-dashed border-sky-400 bg-sky-50 text-sky-700 shadow-sm transition-colors hover:border-sky-500 hover:bg-sky-100 hover:text-sky-800 dark:border-sky-500 dark:bg-sky-950/50 dark:text-sky-300"
                                    onClick={(event) => onFollowSource(source, event)}
-                                 >
-                                   {t('listen.listening')}
-                                 </ListenActiveButton>
-                               ) : (
-                                 <ListenIdleButton
-                                   block
-                                   aria-label={t('listen.listenAriaLabel')}
-                                   icon={<RobotOutlined />}
-                                   style={{ background: 'rgba(114,46,209,0.1)', borderColor: 'rgba(114,46,209,0.35)', color: '#9d6fe8', fontWeight: 600 }}
-                                   onClick={(event) => onFollowSource(source, event)}
-                                 >
-                                   {t('listen.listen')}
-                                 </ListenIdleButton>
-                               )}
+                                 />
+                               </TouchSafeTooltip>
                              </div>
-                           );
-                         })()}
+                           </div>
+                         </div>
+                         </div>
                        </Card>
                        );
                      })}
@@ -3465,13 +3494,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                 ariaLabel={`Delete agent ${agent.name}`}
                                 confirmText={t('common.delete')}
                                 onConfirm={async () => {
-                                  await deleteAgent(agent.id);
                                   setPlaybookAgentIdsDraft((prev) => prev.filter((id) => id !== agent.id));
                                   setWizardAlreadyLinkedAgentIds((prev) => prev.filter((id) => id !== agent.id));
                                   setWizardAlreadyLinkedPlaybooks((prev) => prev.filter((p) => p.agentId !== agent.id));
-                                  await refreshPlaybooks();
-                                  const refreshed = await listAgents();
-                                  setAgents(refreshed);
+                                  setAgents((prev) => prev.filter((candidate) => candidate.id !== agent.id));
                                 }}
                               />
                           )}
@@ -4126,6 +4152,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         open={guidedWizardOpen}
         onCancel={() => {
           setGuidedWizardOpen(false);
+          setForceShowGuidedWizard(false);
           localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
           setGuidedWizardDismissed(true);
         }}
@@ -4133,20 +4160,24 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         destroyOnHidden
         width="min(600px, 95vw)"
       >
-        <Steps
-          current={guidedWizardStep}
-          size="small"
-          className="mb-6"
-          items={[
-            { title: t('guided.step1') },
-            { title: t('guided.step2') },
-            { title: t('guided.step3') },
-          ]}
-        />
-
-        {guidedWizardStep === 0 && (
-          <div className="space-y-4">
+        <div className="space-y-5">
+          <section className="space-y-3">
             <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step1Desc')}</p>
+            <Button
+              block
+              size="large"
+              aria-pressed={guidedWizardSource.url === GUIDED_SUGGESTED_SOURCE.url}
+              className={`h-auto py-3 text-left ${guidedWizardSource.url === GUIDED_SUGGESTED_SOURCE.url
+                ? 'border-[#722ed1] bg-[#f9f0ff] dark:bg-[#2a1645]'
+                : 'border-[#722ed1]/30 bg-[#f9f0ff] hover:!border-[#722ed1] dark:bg-[#2a1645]'}`}
+              onClick={() => {
+                setGuidedWizardUrl('');
+                setGuidedWizardSource(GUIDED_SUGGESTED_SOURCE);
+              }}
+            >
+              <span className="font-semibold">{t('guided.suggestedSource')}</span>
+              <span className="ml-2 text-xs text-muted-foreground">{t('guided.suggestedSourceDescription')}</span>
+            </Button>
             <Input
               size="large"
               placeholder="https://www.youtube.com/watch?v=..."
@@ -4171,7 +4202,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                   }
                   if (!best) { message.error(t('source.probeError')); return; }
                   setGuidedWizardSource(best);
-                  setGuidedWizardStep(1);
                 } catch { message.error(t('source.probeError')); }
                 finally { setGuidedWizardDetecting(false); }
               }}
@@ -4179,7 +4209,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             <Button
               type="primary"
               block
-              size="large"
               loading={guidedWizardDetecting}
               disabled={!guidedWizardUrl.trim()}
               onClick={async () => {
@@ -4200,38 +4229,31 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                   }
                   if (!best) { message.error(t('source.probeError')); return; }
                   setGuidedWizardSource(best);
-                  setGuidedWizardStep(1);
                 } catch { message.error(t('source.probeError')); }
                 finally { setGuidedWizardDetecting(false); }
               }}
             >
               {t('guided.detectSource')}
             </Button>
-            <Button
-              block
-              onClick={() => {
-                setGuidedWizardOpen(false);
-                localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
-                setGuidedWizardDismissed(true);
-              }}
-            >
-              {t('guided.skip')}
-            </Button>
-          </div>
-        )}
+            {guidedWizardSource.url !== GUIDED_SUGGESTED_SOURCE.url && (
+              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
+                <p className="text-sm font-semibold text-green-800 dark:text-green-200">✅ {guidedWizardSource.title ?? guidedWizardSource.url}</p>
+                <p className="mt-0.5 text-xs text-green-600 dark:text-green-400">{guidedWizardSource.type}</p>
+              </div>
+            )}
+          </section>
 
-        {guidedWizardStep === 1 && guidedWizardSource && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950 px-4 py-3">
-              <p className="text-sm font-semibold text-green-800 dark:text-green-200">✅ {guidedWizardSource.title ?? guidedWizardUrl}</p>
-              <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">{guidedWizardSource.type}</p>
-            </div>
+          <section className="space-y-3">
             <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step2Desc')}</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {PROMPT_PERSONAS.map((persona) => (
                 <div
                   key={persona.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={guidedWizardPersonaId === persona.id}
                   onClick={() => setGuidedWizardPersonaId(persona.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setGuidedWizardPersonaId(persona.id); } }}
                   className={`cursor-pointer rounded-lg border-2 px-3 py-2 text-foreground transition-all !bg-card ${guidedWizardPersonaId === persona.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                 >
                   <p className="text-sm font-semibold">{persona.name}</p>
@@ -4239,81 +4261,61 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 </div>
               ))}
             </div>
-            <div className="flex gap-2">
-              <Button onClick={() => setGuidedWizardStep(0)}>{t('common.back')}</Button>
-              <Button type="primary" block onClick={() => setGuidedWizardStep(2)}>{t('common.next')}</Button>
-            </div>
-          </div>
-        )}
+          </section>
 
-        {guidedWizardStep === 2 && (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step3Desc')}</p>
-            <div className="rounded-lg border border-gray-100 dark:border-gray-800 px-4 py-3 space-y-1">
-              <p className="text-xs text-gray-500">{t('guided.summarySource')}: <span className="font-medium text-gray-700 dark:text-gray-200">{guidedWizardSource?.title ?? guidedWizardUrl}</span></p>
-              <p className="text-xs text-gray-500">{t('guided.summaryPersona')}: <span className="font-medium text-gray-700 dark:text-gray-200">{PROMPT_PERSONAS.find(p => p.id === guidedWizardPersonaId)?.name ?? guidedWizardPersonaId}</span></p>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={() => setGuidedWizardStep(1)}>{t('common.back')}</Button>
-              <Button
-                type="primary"
-                block
-                icon={<CaretRightOutlined />}
-                loading={guidedWizardRunning}
-                onClick={async () => {
-                  setGuidedWizardRunning(true);
-                  try {
-                    // 1. Create source
-                    if (!guidedWizardSource) return;
-                    const newSource = await createSource({
-                      type: guidedWizardSource.type as SourceType,
-                      value: guidedWizardSource.url,
-                      metadata: {
-                        title: guidedWizardSource.title,
-                        coverImageUrl: guidedWizardSource.coverImageUrl ?? null,
-                        itemCount: guidedWizardSource.itemCount,
-                        previewItems: (guidedWizardSource.previewItems ?? []).map((item) => ({ title: item.title, link: item.link ?? undefined, pubDate: item.pubDate }))
-                      }
-                    });
-                    // 2. Create agent
-                    const newAgent = await createAgent({
-                      name: PROMPT_PERSONAS.find(p => p.id === guidedWizardPersonaId)?.name ?? guidedWizardPersonaId,
-                      characterType: guidedWizardPersonaId as import('../api/agents').CharacterType,
-                      preferences: {},
-                    }) as import('../api/agents').AgentSummary;
-                    // 3. Create playbook linking them
-                    await createPlaybook({
-                      name: `${guidedWizardSource.title ?? 'My Source'} — ${newAgent.name}`,
-                      agentId: newAgent.id,
-                      sourceIds: [newSource.id],
-                      recipients: user?.email ? [user.email] : [],
-                      schedule: { mode: 'daily', dailyTime: '08:00', timezone: 'UTC' },
-                      language: 'en',
-                    });
-                    // 4. Refresh data
-                    await Promise.all([refreshAgents()]);
-                    const [newSources, newPlaybooks] = await Promise.all([listSources(), listPlaybooks()]);
-                    setSources(newSources);
-                    setPlaybooks(newPlaybooks);
-                    // 5. Run immediately
-                    await runAgentNow(newAgent.id).catch(() => null);
-                    message.success(t('guided.success'));
-                    setGuidedWizardOpen(false);
-                    localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
-                    setGuidedWizardDismissed(true);
-                    setActiveHub('feed');
-                  } catch (err) {
-                    message.error(err instanceof Error ? err.message : t('guided.error'));
-                  } finally {
-                    setGuidedWizardRunning(false);
+          <Button
+            type="primary"
+            block
+            size="large"
+            icon={<CaretRightOutlined />}
+            loading={guidedWizardRunning}
+            onClick={async () => {
+              setGuidedWizardRunning(true);
+              try {
+                const newSource = await createSource({
+                  type: guidedWizardSource.type,
+                  value: guidedWizardSource.url,
+                  metadata: {
+                    title: guidedWizardSource.title,
+                    coverImageUrl: guidedWizardSource.coverImageUrl ?? null,
+                    itemCount: guidedWizardSource.itemCount,
+                    previewItems: guidedWizardSource.previewItems.map((item) => ({ title: item.title, link: item.link ?? undefined, pubDate: item.pubDate }))
                   }
-                }}
-              >
-                {t('guided.runNow')}
-              </Button>
-            </div>
-          </div>
-        )}
+                });
+                const newAgent = await createAgent({
+                  name: PROMPT_PERSONAS.find(p => p.id === guidedWizardPersonaId)?.name ?? guidedWizardPersonaId,
+                  characterType: guidedWizardPersonaId as import('../api/agents').CharacterType,
+                  preferences: {},
+                }) as import('../api/agents').AgentSummary;
+                await createPlaybook({
+                  name: `${guidedWizardSource.title ?? 'My Source'} — ${newAgent.name}`,
+                  agentId: newAgent.id,
+                  sourceIds: [newSource.id],
+                  recipients: user?.email ? [user.email] : [],
+                  schedule: { mode: 'daily', dailyTime: '08:00', timezone: 'UTC' },
+                  language: 'en',
+                });
+                await Promise.all([refreshAgents()]);
+                const [newSources, newPlaybooks] = await Promise.all([listSources(), listPlaybooks()]);
+                setSources(newSources);
+                setPlaybooks(newPlaybooks);
+                await runAgentNow(newAgent.id).catch(() => null);
+                message.success(t('guided.success'));
+                setGuidedWizardOpen(false);
+                setForceShowGuidedWizard(false);
+                localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
+                setGuidedWizardDismissed(true);
+                setActiveHub('feed');
+              } catch (err) {
+                message.error(err instanceof Error ? err.message : t('guided.error'));
+              } finally {
+                setGuidedWizardRunning(false);
+              }
+            }}
+          >
+            {t('guided.runNow')}
+          </Button>
+        </div>
       </Modal>
     </>
   );
