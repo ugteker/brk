@@ -40,13 +40,40 @@ function buildSectionShapeInstructions(characterType: CharacterType): string {
 function buildResponseFormatInstructions(characterType: CharacterType): string {
   return `Respond with ONLY a JSON object matching this shape, no prose outside the JSON:
 {
-  "common": { "summary": string, "key_takeaways": string[], "sources_used": string[], "citations": string[] },
+  "common": {
+    "summary": string,
+    "key_takeaways": string[],
+    "sources_used": string[],
+    "citations": string[],
+    "headline": string,
+    "short_summary": string,
+    "result_type": "insight" | "summary" | "risk" | "recommendation" | "question" | "update",
+    "keywords": string[],
+    "relevance": number,
+    "confidence": number,
+    "evidence": [{ "claim": string, "citations": string[] }],
+    "entities": [{ "name": string, "type": string }],
+    "recommendation": string,
+    "open_questions": string[],
+    "time_horizon": "immediate" | "short_term" | "medium_term" | "long_term" | "unspecified",
+    "tone": "neutral" | "positive" | "cautious" | "critical" | "urgent",
+    "source_references": [{ "label": string, "reference": string }],
+    "novelty": number,
+    "card_presentation": {
+      "emphasis": "standard" | "attention" | "critical" | "positive",
+      "primary_field": "headline" | "short_summary" | "recommendation" | "open_question" | "key_takeaway",
+      "supporting_fields": ("result_type" | "keywords" | "relevance" | "confidence" | "time_horizon" | "entities" | "evidence" | "novelty")[],
+      "hide_when_empty": boolean,
+      "rationale": string
+    }
+  },
   ${buildSectionShapeInstructions(characterType)},
   "sourceWarnings": string[],
   "needsHumanReview": boolean
 }
 
 Do not include "signals" anywhere unless character_type is finance_expert.
+The common "card_presentation" block is declarative advice for the product-owned renderer only. Never return HTML, CSS, JSX, JavaScript, component names, markdown layouts, render code, or arbitrary fields. Choose exactly one primary field and at most three unique supporting fields, prioritizing present useful facts.
 Write "summary" and long text fields tersely: drop filler words, use fragments over full sentences, no pleasantries/hedging. Keep every fact, number, and citation - only cut wordiness.`;
 }
 
