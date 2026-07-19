@@ -72,8 +72,9 @@ function buildResponseFormatInstructions(characterType: CharacterType): string {
   "needsHumanReview": boolean
 }
 
-Do not include "signals" anywhere unless character_type is finance_expert.
+Only finance_expert may include the finance-specific "signals" property (ticker symbol, long/short side, confidence). Other characters may identify meaningful developments in their own section and common fields, but must not emit that property.
 The common "card_presentation" block is declarative advice for the product-owned renderer only. Never return HTML, CSS, JSX, JavaScript, component names, markdown layouts, render code, or arbitrary fields. Choose exactly one primary field and at most three unique supporting fields, prioritizing present useful facts.
+For "source_references", use only titles and HTTP(S) links found in the supplied evidence. For an analyzed podcast episode, video, or article, include that exact item's title and link so the product can link back to it. Never invent or guess a source reference.
 Write "summary" and long text fields tersely: drop filler words, use fragments over full sentences, no pleasantries/hedging. Keep every fact, number, and citation - only cut wordiness.`;
 }
 

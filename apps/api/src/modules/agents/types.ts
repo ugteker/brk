@@ -31,7 +31,7 @@ export type ScheduleInput =
   | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string };
 
 export interface CreateAgentInput {
-  name: string;
+  name?: string;
   description?: string;
   active?: boolean;
   characterType?: CharacterType;

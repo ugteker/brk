@@ -52,7 +52,6 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
   const isEditing = Boolean(agent);
   const [currentStep, setCurrentStep] = useState(0);
   const [maxVisitedStep, setMaxVisitedStep] = useState(0);
-  const [name, setName] = useState(agent?.name ?? 'ChatTrader Agent');
   const [description, setDescription] = useState(agent?.description ?? '');
   const [active, setActive] = useState(agent ? agent.status === 'active' : true);
 
@@ -76,6 +75,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
     getPromptCharacter(DEFAULT_PROMPT_PERSONA_ID, DEFAULT_PROMPT_CHARACTER_ID);
   const selectedPersonaLabel = selectedPersona?.name ?? personaId;
   const selectedCharacterLabel = selectedCharacter?.name ?? characterId;
+  const agentDisplayLabel = `${selectedCharacterLabel} · ${selectedPersonaLabel}`;
 
   function onPersonaChange(nextPersonaId: string) {
     const nextCharacters = getPromptCharactersForPersona(nextPersonaId);
@@ -98,10 +98,6 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
 
   function validateStep(step: number): boolean {
     if (step === 0) {
-      if (!name.trim()) {
-        setValidationError('Give this agent a short name to continue.');
-        return false;
-      }
       if (!personaId) {
         setValidationError('Choose a character to continue.');
         return false;
@@ -155,7 +151,6 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
       setSaveState('saving');
 
       const payload = {
-        name,
         description,
         active,
         characterType: personaId,
@@ -262,13 +257,10 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
               </div>
 
               <Form layout="vertical" className="mt-4">
-                <Form.Item
-                  label="Agent name"
-                  validateStatus={validationError?.toLowerCase().includes('name') ? 'error' : ''}
-                  help={validationError?.toLowerCase().includes('name') ? validationError : undefined}
-                >
-                  <Input aria-label="Agent name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
-                </Form.Item>
+                <div className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-2">
+                  <p className="text-xs text-muted-foreground">Your agent will appear as</p>
+                  <p className="font-medium">{agentDisplayLabel}</p>
+                </div>
                 <Form.Item label="Description" extra="Keep it brief. You can refine behavior in the next step.">
                   <TextArea
                     aria-label="Description"
@@ -351,7 +343,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                 </Card>
                 <Card size="small" title="Report shape preview">
                   <pre className="overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-3 text-xs">{`{
-  "agent": "${name.trim() || 'Unnamed Agent'}",
+  "agent": "${agentDisplayLabel}",
   "character": "${personaId}",
   "personality": "${characterId}",
   "risk_level": ${personaId === 'finance_expert' ? `"${riskLevel}"` : 'null'},
@@ -362,8 +354,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                 </Card>
               </div>
               <Paragraph className="!mb-1">
-                Ready to save <strong>{name.trim() || 'your agent'}</strong> with
-                {' '}<Tag>{selectedPersonaLabel}</Tag> / <Tag>{selectedCharacterLabel}</Tag>.
+                Ready to save <strong>{agentDisplayLabel}</strong>.
               </Paragraph>
               <Paragraph type="secondary" className="!mb-3">
                 You can still go back to tweak character and personality.
@@ -398,7 +389,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
       </div>
 
       <Card className="hidden lg:sticky lg:top-4 lg:block lg:h-fit" title="Live summary">
-        <p className="text-sm">Agent: {name}</p>
+        <p className="text-sm">Agent: {agentDisplayLabel}</p>
         <p className="text-sm">Active: {active ? 'Yes' : 'No'}</p>
         <p className="text-sm">Sources: managed from Sources hub</p>
         <p className="text-sm">Schedule: managed from Playbooks hub</p>

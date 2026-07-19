@@ -135,6 +135,7 @@ export interface RunReportRecord {
   id: string;
   agentId: string;
   agentRunId: string;
+  playbookId: string | null;
   promptVersionId: string;
   summary: string;
   sourceWarnings: string[];

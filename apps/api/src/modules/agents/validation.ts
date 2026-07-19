@@ -29,7 +29,6 @@ export function validateCreateAgentInput(input: CreateAgentInput): ValidationRes
   const promptConfig = input.promptConfig ?? {};
   const sources = input.sources ?? [];
 
-  if (!input.name.trim()) errors.push('name is required');
   if (sources.length > 50) errors.push('sources per agent must be <= 50');
   if ('recipients' in input && input.recipients !== undefined) {
     errors.push('recipients are managed on playbooks');

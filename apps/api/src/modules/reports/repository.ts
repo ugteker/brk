@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { CreateRunReportInput, RunReportRecord, SignalRecord } from './types';
 import { normalizeUnifiedCharacterReport } from './unified-report';
+import { DEFAULT_CHARACTER_TYPE } from '../agents/types';
 
 type ReportDb = Pick<PrismaClient, 'agentRunReport'>;
 
@@ -18,6 +19,7 @@ type ReportRow = {
   createdAt: Date;
   signals: SignalRow[];
   agent?: { characterType: string };
+  agentRun?: { playbookId: string | null };
   model: string | null;
   promptVersionNumber: number | null;
   inputTokens: number | null;
@@ -29,7 +31,7 @@ export class ReportRepository {
   constructor(private readonly db: ReportDb) {}
 
   async saveRunReport(input: CreateRunReportInput): Promise<RunReportRecord> {
-    const characterType = input.characterType ?? 'finance_expert';
+    const characterType = input.characterType ?? DEFAULT_CHARACTER_TYPE;
     const normalizedReport = normalizeUnifiedCharacterReport({
       characterType,
       candidate: input.report,
@@ -66,7 +68,7 @@ export class ReportRepository {
       // row.agent?.characterType, and without it this always fell back to 'finance_expert'
       // and threw a ReportShapeValidationError for any non-finance_expert agent, even though
       // the row above had already been durably saved.
-      include: { signals: true, agent: { select: { characterType: true } } }
+      include: { signals: true, agent: { select: { characterType: true } }, agentRun: { select: { playbookId: true } } }
     });
 
     return this.toRecord(created as unknown as ReportRow);
@@ -76,7 +78,7 @@ export class ReportRepository {
     const latest = await this.db.agentRunReport.findFirst({
       where: { agentId },
       orderBy: { createdAt: 'desc' },
-      include: { signals: true, agent: { select: { characterType: true } } }
+      include: { signals: true, agent: { select: { characterType: true } }, agentRun: { select: { playbookId: true } } }
     });
 
     return latest ? this.toRecord(latest as unknown as ReportRow) : null;
@@ -90,7 +92,7 @@ export class ReportRepository {
   async getReportById(reportId: string): Promise<RunReportRecord | null> {
     const found = await this.db.agentRunReport.findFirst({
       where: { id: reportId },
-      include: { signals: true, agent: { select: { characterType: true } } }
+      include: { signals: true, agent: { select: { characterType: true } }, agentRun: { select: { playbookId: true } } }
     });
 
     return found ? this.toRecord(found as unknown as ReportRow) : null;
@@ -100,7 +102,7 @@ export class ReportRepository {
     const rows = await this.db.agentRunReport.findMany({
       where: { agentId },
       orderBy: { createdAt: 'desc' },
-      include: { signals: true, agent: { select: { characterType: true } } }
+      include: { signals: true, agent: { select: { characterType: true } }, agentRun: { select: { playbookId: true } } }
     });
 
     return rows.map((row: unknown) => this.toRecord(row as ReportRow));
@@ -138,7 +140,9 @@ export class ReportRepository {
         row.agent?.characterType === 'influencer' ||
         row.agent?.characterType === 'summarizer'
           ? row.agent.characterType
-          : 'finance_expert',
+          : signals.length > 0
+            ? 'finance_expert'
+            : DEFAULT_CHARACTER_TYPE,
       candidate: row.reportJson ? (JSON.parse(row.reportJson) as unknown) : undefined,
       legacySummary: row.summary,
       legacySignals: signals
@@ -148,6 +152,7 @@ export class ReportRepository {
       id: row.id,
       agentId: row.agentId,
       agentRunId: row.agentRunId,
+      playbookId: row.agentRun?.playbookId ?? null,
       promptVersionId: row.promptVersionId,
       summary: row.summary,
       sourceWarnings: JSON.parse(row.sourceWarningsJson) as string[],

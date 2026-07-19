@@ -18,6 +18,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { listAgents, listAgentReports, type AgentSummary, type RunReportDto } from '../api/agents';
 import { createDiscussion, triggerDiscussionRun, type DiscussionPreselect } from '../api/discussions';
 import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
+import { getAgentDisplayLabel } from '../utils/agent-label';
 
 type Format = 'free_form' | 'structured' | 'hosted' | 'hybrid';
 type Voice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
@@ -117,7 +118,10 @@ export function NewDiscussionWizard() {
     const p = buildInitialParticipants(selectedAgentIds);
     setParticipants(p);
     const names = selectedAgentIds
-      .map((id) => agents.find((a) => a.id === id)?.name ?? id)
+      .map((id) => {
+        const agent = agents.find((candidate) => candidate.id === id);
+        return agent ? getAgentDisplayLabel(agent) : id;
+      })
       .join(' × ');
     setDiscussionName(names);
     setCurrentStep(1);
@@ -231,7 +235,7 @@ export function NewDiscussionWizard() {
                     onClick={() => handleAgentToggle(agent.id, !selectedAgentIds.includes(agent.id))}
                   >
                     <Checkbox checked={selectedAgentIds.includes(agent.id)} style={{ marginRight: 8 }} />
-                    <strong>{agent.name}</strong>
+                    <strong>{getAgentDisplayLabel(agent)}</strong>
                     {agent.characterType && (
                       <Tag style={{ marginLeft: 6 }} color="default">
                         {agent.characterType}
@@ -296,7 +300,7 @@ export function NewDiscussionWizard() {
                 return (
                   <div key={p.agentId} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                     <strong style={{ minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {agent?.name ?? p.agentId}
+                      {agent ? getAgentDisplayLabel(agent) : p.agentId}
                     </strong>
                     <Select
                       value={p.role}
@@ -338,7 +342,7 @@ export function NewDiscussionWizard() {
               return (
                 <Form.Item
                   key={p.agentId}
-                  label={t('studio.reportPickerLabel', { agentName: agent?.name ?? p.agentId })}
+                  label={t('studio.reportPickerLabel', { agentName: agent ? getAgentDisplayLabel(agent) : p.agentId })}
                 >
                   <Select
                     mode="multiple"

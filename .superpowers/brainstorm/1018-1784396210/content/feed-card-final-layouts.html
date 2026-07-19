@@ -1,0 +1,58 @@
+<style>
+  .feed-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-top:24px}
+  .option{background:#211a2c;border:1px solid #4b3a60;border-radius:18px;padding:16px;color:#f3edff;cursor:pointer}
+  .option:hover{border-color:#a78bfa;box-shadow:0 0 0 3px rgba(167,139,250,.15)}
+  .option h3{margin:0 0 6px;font-size:15px;color:#decfff}.intro{min-height:40px;margin:0 0 14px;color:#b8afc7;font-size:12px;line-height:1.45}
+  .card{border:1px solid #514060;border-radius:15px;padding:14px;background:#2a2136;box-shadow:0 8px 22px rgba(0,0,0,.25)}
+  .meta{display:flex;align-items:center;gap:9px;font-size:10px;color:#b6abc7}.avatar{height:31px;width:31px;display:grid;place-items:center;border-radius:10px;background:linear-gradient(135deg,#9b70dc,#5b3397);font-size:15px}.who{font-weight:800;color:#f1eaff;font-size:11px}.when{margin-left:auto;color:#978ba5}
+  .source{margin-top:3px;color:#b7abc6;font-size:10px}.kind{display:inline-block;padding:3px 6px;border-radius:99px;background:rgba(174,129,255,.17);color:#d9c2ff;font-size:9px;font-weight:800;letter-spacing:.02em}
+  .headline{margin:13px 0 6px;font-weight:850;font-size:16px;line-height:1.28;color:#fff}.summary{margin:0;color:#c8bed4;font-size:12px;line-height:1.5}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:11px}.chip{padding:4px 7px;border-radius:99px;background:#393047;color:#cfc2df;font-size:9px}.chip.hot{background:rgba(252,165,165,.16);color:#fecaca}.chip.good{background:rgba(134,239,172,.13);color:#b7f7c9}.chip.violet{background:rgba(196,181,253,.17);color:#decfff}
+  .fact{margin-top:11px;padding:9px 10px;border-left:3px solid #a78bfa;border-radius:0 9px 9px 0;background:rgba(255,255,255,.045);font-size:11px;line-height:1.43;color:#e5ddec}.fact b{display:block;margin-bottom:3px;color:#cdb8ff;font-size:9px;letter-spacing:.06em;text-transform:uppercase}
+  .footer{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid #493a56;color:#b8adc6;font-size:10px}.open{color:#d7c3ff;font-weight:750}
+  .hero{margin:-14px -14px 12px;padding:12px 14px;background:linear-gradient(100deg,#311a57,#5f32a7 55%,#244a74);border-radius:14px 14px 0 0}.hero small{display:block;color:#ded1ff;margin-top:2px}.score{margin-left:auto;display:grid;place-items:center;width:35px;height:35px;border-radius:50%;background:rgba(160,241,187,.15);border:1px solid rgba(160,241,187,.3);color:#bff6d0;font-size:10px;font-weight:800}
+  .stack{display:grid;gap:8px;margin-top:11px}.mini{padding:8px 9px;border-radius:9px;background:rgba(255,255,255,.045);font-size:10px;color:#ddd4e8}.mini b{display:block;margin-bottom:2px;color:#cdb8ff}
+  @media(max-width:900px){.feed-grid{grid-template-columns:1fr}}
+</style>
+<h2>Feedkarte · finale Richtungen</h2>
+<p class="subtitle">Alle Varianten folgen der Agentenempfehlung aus <code>card_presentation</code>: Sie heben eine Aussage hervor und zeigen höchstens drei ergänzende Fakten. Agent, Quelle und Zeitpunkt bleiben immer sichtbar.</p>
+<div class="feed-grid">
+  <div class="option" data-choice="insight-first" onclick="toggleSelect(this)">
+    <h3>A · Erkenntnis zuerst <span style="color:#a7f3c1">— Empfehlung</span></h3>
+    <p class="intro">Die universelle Standardkarte: Überschrift, eine klare Einordnung und wenige relevante Stichworte. Funktioniert für jede Ergebnisart.</p>
+    <div class="card">
+      <div class="meta"><div class="avatar">⌕</div><div><div class="who">Kontext-Analyst</div><div class="source">Stadtgespräch · Podcast</div></div><div class="when">vor 8 Min.</div></div>
+      <div style="margin-top:12px"><span class="kind">ERKENNTNIS</span></div>
+      <div class="headline">Neue Regeln wirken erst dann, wenn der Alltag einfacher wird.</div>
+      <p class="summary">Die Diskussion zeigt: Akzeptanz entsteht weniger durch Ankündigungen als durch sichtbare Entlastung im täglichen Ablauf.</p>
+      <div class="chips"><span class="chip violet">Gesellschaft</span><span class="chip">Umsetzung</span><span class="chip good">Relevanz 84</span></div>
+      <div class="footer"><span>2 Belege · kurzfristig</span><span class="open">Analyse öffnen ›</span></div>
+    </div>
+  </div>
+  <div class="option" data-choice="guided-focus" onclick="toggleSelect(this)">
+    <h3>B · Geführter Fokus</h3>
+    <p class="intro">Für Empfehlungen, Risiken oder offene Fragen: Die vom Agenten priorisierte Information wird als ruhiger Fokusblock herausgestellt.</p>
+    <div class="card">
+      <div class="meta"><div class="avatar">✦</div><div><div class="who">Strategie-Partner</div><div class="source">Produkt-Rückblick · Website</div></div><div class="when">Heute</div></div>
+      <div style="margin-top:12px"><span class="kind">EMPFEHLUNG</span></div>
+      <div class="headline">Weniger Auswahl schafft schnelleres Vertrauen.</div>
+      <p class="summary">Nutzer suchen Orientierung, nicht mehr Möglichkeiten.</p>
+      <div class="fact"><b>Nächster sinnvoller Schritt</b>Den Einstieg auf drei verständliche Entscheidungen reduzieren.</div>
+      <div class="chips"><span class="chip">Produkt</span><span class="chip good">Vertrauen 91</span><span class="chip violet">mittelfristig</span></div>
+      <div class="footer"><span>3 Quellenreferenzen</span><span class="open">Analyse öffnen ›</span></div>
+    </div>
+  </div>
+  <div class="option" data-choice="source-context" onclick="toggleSelect(this)">
+    <h3>C · Quelle als Kontext</h3>
+    <p class="intro">Für Inhalte, bei denen der Ursprung wichtig ist: Die Quelle rahmt die Analyse stärker, während der Bericht kompakt bleibt.</p>
+    <div class="card">
+      <div class="hero"><b>▶ Tech Review</b><small>Neue Videoanalyse · Research Scout</small></div>
+      <div class="meta"><div class="avatar">◈</div><div><div class="who">Research Scout</div><div class="source">Analysiert vor 12 Minuten</div></div><div class="score">82%</div></div>
+      <div style="margin-top:12px"><span class="kind">UPDATE</span></div>
+      <div class="headline">Ein Thema wird wichtiger als die Produktneuheit selbst.</div>
+      <p class="summary">Die wiederkehrende Nachfrage betrifft Nachvollziehbarkeit, nicht Funktionsumfang.</p>
+      <div class="stack"><div class="mini"><b>Beobachtung</b>Einfach erklärbare Abläufe werden bevorzugt.</div><div class="mini"><b>Offene Frage</b>Welche Zielgruppe profitiert zuerst?</div></div>
+      <div class="footer"><span>Neu · 2 Entitäten</span><span class="open">Analyse öffnen ›</span></div>
+    </div>
+  </div>
+</div>

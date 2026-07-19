@@ -19,6 +19,7 @@ import {
   UserOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { getAgentDisplayLabel } from '../utils/agent-label';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   getDiscussion,
@@ -283,7 +284,10 @@ export function DiscussionDetail() {
 
   const participantIndexMap = Object.fromEntries(discussion.participants.map((p, i) => [p.id, i]));
   const participantAgentNameMap = Object.fromEntries(
-    discussion.participants.map((p) => [p.id, agents.find((a) => a.id === p.agentId)?.name ?? p.agentId])
+    discussion.participants.map((p) => {
+      const agent = agents.find((candidate) => candidate.id === p.agentId);
+      return [p.id, agent ? getAgentDisplayLabel(agent) : p.agentId];
+    })
   );
   const selectedRun = runs.find((r) => r.id === selectedRunId);
   const displayTurns: DiscussionTurnDto[] =

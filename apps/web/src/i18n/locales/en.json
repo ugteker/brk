@@ -105,6 +105,37 @@
     "agentRemovedFromSource": "Agent removed from this source.",
     "removeAgentFromSourceFailed": "Could not remove the agent from this source."
   },
+  "feedCard": {
+    "resultType": {
+      "insight": "Insight",
+      "summary": "Summary",
+      "risk": "Risk",
+      "recommendation": "Recommendation",
+      "question": "Question",
+      "update": "Update"
+    },
+    "relevance": "Relevance {{value}}",
+    "novelty": "New {{value}}",
+    "confidence": {
+      "high": "Confidence: high",
+      "medium": "Confidence: medium"
+    },
+    "timeHorizon": {
+      "immediate": "Immediate",
+      "short_term": "Short term",
+      "medium_term": "Medium term",
+      "long_term": "Long term"
+    },
+    "focus": {
+      "recommendation": "Recommended next step",
+      "risk": "Risk to watch",
+      "openQuestion": "Open question",
+      "keyTakeaway": "Key takeaway"
+    },
+    "evidenceCount": "{{count}} evidence",
+    "episode": "About: {{title}}",
+    "openReport": "Open analysis"
+  },
   "listen": {
     "listen": "Summarize",
     "listening": "Summarizing",

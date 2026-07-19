@@ -101,6 +101,7 @@ import { useAuth } from '../auth/AuthContext';
 import { EntityActions } from '../components/EntityActions';
 import { InlineDeleteButton } from '../components/InlineDeleteButton';
 import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID } from '../data/prompt-personas';
+import { getAgentDisplayLabel } from '../utils/agent-label';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -512,7 +513,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [showInlineAgentCreate, setShowInlineAgentCreate] = useState(false);
   const [isInlineAgentSaving, setIsInlineAgentSaving] = useState(false);
   const [inlineAgentStep, setInlineAgentStep] = useState(0); // 0=character+personality, 1=model+prompt, 2=schedule+recipients
-  const [inlineAgentName, setInlineAgentName] = useState('My Analyst');
   const [inlineAgentDescription, setInlineAgentDescription] = useState('');
   const [inlineAgentPersonaId, setInlineAgentPersonaId] = useState(DEFAULT_PROMPT_PERSONA_ID);
   const [inlineAgentCharacterId, setInlineAgentCharacterId] = useState(DEFAULT_PROMPT_CHARACTER_ID);
@@ -704,10 +704,12 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       agentIds.map(async (agentId) => {
         const reps = await listAgentReports(agentId).catch(() => []);
         const agent = agents.find((a) => a.id === agentId);
-        const agentName = agent?.name ?? agentId;
-        const playbook = playbooks.find((p) => p.agentId === agentId);
-        const playbookName = playbook?.name ?? '';
-        return reps.map((r) => ({ ...r, agentName, playbookName }));
+        const agentName = agent ? getAgentDisplayLabel(agent) : agentId;
+        return reps.map((report) => ({
+          ...report,
+          agentName,
+          playbookName: report.playbookId ? playbooks.find((playbook) => playbook.id === report.playbookId)?.name ?? '' : ''
+        }));
       })
     ).then((nested) => {
       if (!alive) return;
@@ -758,12 +760,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   // SSE stream — replaces the old 4s polling interval
   const { runs, setRuns, reports, setReports } = useAgentStream(executionAgentId);
+  const selectedPlaybookReports = selectedPlaybook
+    ? reports.filter((report) => report.playbookId === selectedPlaybook.id)
+    : reports;
 
   // Accumulate failed runs into the bell notification centre (driven by SSE updates)
   useEffect(() => {
     const failedRuns = runs.filter((r) => r.status === 'failed');
     if (failedRuns.length === 0) return;
-    const agentName = agents.find((a) => a.id === executionAgentId)?.name ?? executionAgentId ?? '';
+    const executionAgent = agents.find((agent) => agent.id === executionAgentId);
+    const agentName = executionAgent ? getAgentDisplayLabel(executionAgent) : executionAgentId ?? '';
     setFailedRunNotices((prev) => {
       const existingIds = new Set(prev.map((n) => n.runId));
       const newNotices = failedRuns
@@ -778,7 +784,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   // same SSE stream), so users don't have to keep an agent selected/open to notice new output.
   useEffect(() => {
     if (reports.length === 0) return;
-    const agentName = agents.find((a) => a.id === executionAgentId)?.name ?? executionAgentId ?? '';
+    const executionAgent = agents.find((agent) => agent.id === executionAgentId);
+    const agentName = executionAgent ? getAgentDisplayLabel(executionAgent) : executionAgentId ?? '';
     setNewReportNotices((prev) => {
       const existingIds = new Set(prev.map((n) => n.reportId));
       const newNotices = reports
@@ -992,7 +999,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     // of tab state. Source is already known so we skip step 0 (Pick source).
     setFollowWizardSourcePreselected(true);
     setShowInlineAgentCreate(false);
-    setInlineAgentName('My Analyst');
     setEditingPlaybookId(null);
     setWizardFocusedAgentId(null);
     setPlaybookCreateStep(1);
@@ -1047,7 +1053,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   function openInlineAgentCreate() {
     setInlineAgentStep(0);
-    setInlineAgentName('My Analyst');
     setInlineAgentDescription('');
     setInlineAgentPersonaId(DEFAULT_PROMPT_PERSONA_ID);
     setInlineAgentCharacterId(DEFAULT_PROMPT_CHARACTER_ID);
@@ -1085,12 +1090,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }
 
   function validateInlineAgentStep(step: number): boolean {
-    if (step === 0) {
-      if (!inlineAgentName.trim()) {
-        setInlineAgentValidationError('Give the agent a name to continue.');
-        return false;
-      }
-    }
     if (step === 1) {
       if (inlineAgentPersonaId === 'finance_expert' && !inlineAgentRiskLevel) {
         setInlineAgentValidationError('Risk level is required for Finance Expert.');
@@ -1116,17 +1115,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }
 
   async function onSaveInlineAgent() {
-    const name = inlineAgentName.trim();
-    if (!name) {
-      setInlineAgentValidationError('Give the agent a name.');
-      return;
-    }
     setIsInlineAgentSaving(true);
     try {
       const inlinePersona = getPromptPersona(inlineAgentPersonaId);
       const inlineChar = getPromptCharacter(inlineAgentPersonaId, inlineAgentCharacterId);
       const payload = {
-        name,
         description: inlineAgentDescription,
         active: true,
         characterType: inlineAgentPersonaId,
@@ -1154,7 +1147,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }
 
   function derivePlaybookName(agentId: string, sourceIds: string[]): string {
-    const agentName = agents.find((agent) => agent.id === agentId)?.name ?? 'Agent';
+    const selectedAgent = agents.find((agent) => agent.id === agentId);
+    const agentName = selectedAgent ? getAgentDisplayLabel(selectedAgent) : 'Agent';
     const primarySourceId = sourceIds[0];
     const primarySource = sources.find((source) => source.id === primarySourceId);
     const sourceTitle = primarySource?.metadata.title ?? primarySource?.value ?? 'Source';
@@ -1494,7 +1488,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const filteredAgents = agents.filter((agent) => {
     if (!normalizedAgentsSearch) return true;
     const sourceValues = agent.sources.map((source) => source.value).join(' ');
-    return `${agent.name} ${sourceValues}`.toLowerCase().includes(normalizedAgentsSearch);
+    return `${getAgentDisplayLabel(agent)} ${sourceValues}`.toLowerCase().includes(normalizedAgentsSearch);
   });
   const filteredPlaybooks = playbooks.filter((playbook) => {
     if (!normalizedPlaybooksSearch) return true;
@@ -1508,7 +1502,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const normalizedMarketplacePlaybooksSearch = marketplacePlaybooksSearch.trim().toLowerCase();
   const filteredMarketplaceAgents = marketplaceAgents.filter((item) => {
     if (!normalizedMarketplaceAgentsSearch) return true;
-    return `${item.title} ${item.summary} ${item.agent.name}`.toLowerCase().includes(normalizedMarketplaceAgentsSearch);
+    return `${item.title} ${item.summary} ${getAgentDisplayLabel(item.agent)}`.toLowerCase().includes(normalizedMarketplaceAgentsSearch);
   });
   const filteredMarketplacePlaybooks = marketplacePlaybooks.filter((item) => {
     if (!normalizedMarketplacePlaybooksSearch) return true;
@@ -1805,45 +1799,193 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           const signals = report.signals ?? [];
                           const bullCount = signals.filter((s) => s.side === 'long').length;
                           const bearCount = signals.filter((s) => s.side === 'short').length;
+                          const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
+                          const source = playbook?.sourceIds.length === 1
+                            ? sources.find((candidate) => candidate.id === playbook.sourceIds[0])
+                            : undefined;
+                          const sourceCoverImageUrl = source ? getSourceCoverImageUrl(source) : null;
+                          const reportAgent = agents.find((agent) => agent.id === report.agentId);
+                          const common = report.report?.common;
+                          const presentation = common?.card_presentation;
+                          const supportingFields = presentation?.supporting_fields ?? [];
+                          const episodeReference = common?.source_references?.find((sourceReference) => {
+                            try {
+                              const url = new URL(sourceReference.reference);
+                              return url.protocol === 'https:' || url.protocol === 'http:';
+                            } catch {
+                              return false;
+                            }
+                          });
+                          const resultType = common?.result_type ?? 'summary';
+                          const fallbackHeadline = common?.headline?.trim() || report.summary;
+                          const primaryText = (() => {
+                            switch (presentation?.primary_field) {
+                              case 'recommendation':
+                                return common?.recommendation?.trim() || fallbackHeadline;
+                              case 'open_question':
+                                return common?.open_questions?.[0]?.trim() || fallbackHeadline;
+                              case 'key_takeaway':
+                                return common?.key_takeaways?.[0]?.trim() || fallbackHeadline;
+                              case 'short_summary':
+                                return common?.short_summary?.trim() || fallbackHeadline;
+                              case 'headline':
+                              default:
+                                return fallbackHeadline;
+                            }
+                          })();
+                          const shortSummary = common?.short_summary?.trim() || report.summary;
+                          const detailText = shortSummary === primaryText ? '' : shortSummary;
+                          const focusContent = (() => {
+                            if (common?.recommendation?.trim()) {
+                              return { label: t('feedCard.focus.recommendation'), text: common.recommendation.trim() };
+                            }
+                            if (resultType === 'risk' && common?.key_takeaways?.[0]?.trim()) {
+                              return { label: t('feedCard.focus.risk'), text: common.key_takeaways[0].trim() };
+                            }
+                            if (common?.open_questions?.[0]?.trim()) {
+                              return { label: t('feedCard.focus.openQuestion'), text: common.open_questions[0].trim() };
+                            }
+                            if (common?.key_takeaways?.[0]?.trim()) {
+                              return { label: t('feedCard.focus.keyTakeaway'), text: common.key_takeaways[0].trim() };
+                            }
+                            const fallbackFocus = common?.short_summary?.trim() || report.summary.trim();
+                            return fallbackFocus
+                              ? { label: t('feedCard.focus.keyTakeaway'), text: fallbackFocus }
+                              : null;
+                          })();
+                          const metadataChips: Array<{ key: string; label: string; className?: string }> = [];
+                          if (supportingFields.includes('relevance') && (common?.relevance ?? 0) > 0) {
+                            metadataChips.push({ key: 'relevance', label: t('feedCard.relevance', { value: common!.relevance }), className: 'bg-violet-100 text-violet-700 dark:bg-violet-950/70 dark:text-violet-200' });
+                          }
+                          if (supportingFields.includes('confidence') && (common?.confidence ?? 0) >= 50) {
+                            const confidenceLevel = common!.confidence >= 70 ? 'high' : 'medium';
+                            metadataChips.push({
+                              key: 'confidence',
+                              label: t(`feedCard.confidence.${confidenceLevel}`),
+                              className: confidenceLevel === 'high'
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200'
+                                : 'bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-200'
+                            });
+                          }
+                          if (supportingFields.includes('time_horizon') && common?.time_horizon && common.time_horizon !== 'unspecified') {
+                            metadataChips.push({ key: 'time_horizon', label: t(`feedCard.timeHorizon.${common.time_horizon}`) });
+                          }
+                          if (supportingFields.includes('keywords')) {
+                            for (const keyword of common?.keywords?.slice(0, 3) ?? []) {
+                              metadataChips.push({ key: `keyword:${keyword}`, label: keyword });
+                            }
+                          }
+                          if (supportingFields.includes('entities')) {
+                            for (const entity of common?.entities?.slice(0, 2) ?? []) {
+                              metadataChips.push({ key: `entity:${entity.name}:${entity.type}`, label: entity.name });
+                            }
+                          }
+                          if (supportingFields.includes('novelty') && (common?.novelty ?? 0) > 0) {
+                            metadataChips.push({ key: 'novelty', label: t('feedCard.novelty', { value: common!.novelty }) });
+                          }
                           return (
-                            <div
+                            <Card
                               key={report.id}
-                              className="rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3 hover:border-blue-200 dark:hover:border-blue-700 cursor-pointer transition-colors"
-                              onClick={() => {
-                                const pb = playbooks.find((p) => p.agentId === report.agentId);
-                                if (pb) {
-                                  setSelectedPlaybookId(pb.id);
-                                  setActiveHub('sources');
+                              size="small"
+                              hoverable={Boolean(playbook)}
+                              className={`overflow-hidden border border-violet-100 bg-white shadow-sm transition-[transform,box-shadow,border-color] dark:border-violet-950 dark:bg-gray-900 ${
+                                playbook ? 'cursor-pointer hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md dark:hover:border-violet-800' : ''
+                              }`}
+                              styles={{ body: { padding: 0 } }}
+                              onClick={playbook
+                                ? () => {
+                                  setSelectedPlaybookId(playbook.id);
+                                  setActiveHub('playbooks');
                                   setActivePlaybookTab('reports');
                                   setHighlightedReportId(report.id);
                                 }
-                              }}
+                                : undefined}
                             >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">{report.agentName}</span>
-                                    {report.playbookName && <Tag className="m-0 text-xs">{report.playbookName}</Tag>}
+                              {sourceCoverImageUrl ? (
+                                <div className="relative h-16 overflow-hidden bg-slate-900">
+                                  <img
+                                    aria-hidden="true"
+                                    src={sourceCoverImageUrl}
+                                    className="absolute -inset-4 h-[calc(100%+2rem)] w-[calc(100%+2rem)] object-cover blur-xl opacity-55"
+                                  />
+                                  <img
+                                    src={sourceCoverImageUrl}
+                                    alt=""
+                                    className="relative h-full w-full object-contain"
+                                  />
+                                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 to-transparent px-3 pb-2 pt-5 text-xs font-semibold text-white">
+                                    {getSourceDisplayTitle(source!)}
                                   </div>
-                                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{report.summary}</p>
                                 </div>
-                                <div className="flex flex-col items-end gap-1 shrink-0">
-                                  <span className="text-xs text-gray-400">{new Date(report.createdAt).toLocaleDateString()}</span>
-                                  <div className="flex gap-1">
-                                    {bullCount > 0 && <Tag color="green" className="m-0 text-xs">▲ {bullCount}</Tag>}
-                                    {bearCount > 0 && <Tag color="red" className="m-0 text-xs">▼ {bearCount}</Tag>}
+                              ) : null}
+                              <div className="p-4">
+                                <div className="flex items-start gap-3">
+                                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${PERSONA_ICON_BG_MAP[reportAgent?.characterType ?? 'summarizer']}`}>
+                                    {getCharacterIcon(reportAgent?.characterType)}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                        {reportAgent ? getAgentCharacterLabel(reportAgent) : report.agentName}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">{source ? getSourceDisplayTitle(source) : report.playbookName}</span>
+                                    </div>
+                                    <span className="text-[11px] text-muted-foreground">{new Date(report.createdAt).toLocaleDateString(i18n.language)}</span>
                                   </div>
+                                </div>
+                                <div className="mt-4">
+                                  <Tag className="m-0 border-violet-200 bg-violet-50 text-[10px] font-semibold tracking-wide text-violet-700 dark:border-violet-800 dark:bg-violet-950/70 dark:text-violet-200">
+                                    {t(`feedCard.resultType.${resultType}`)}
+                                  </Tag>
+                                  <h3 className="mt-2 text-base font-semibold leading-snug text-foreground">{primaryText}</h3>
+                                  {detailText ? <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{detailText}</p> : null}
+                                </div>
+                                {focusContent ? (
+                                  <div className="mt-4 rounded-xl border border-violet-200 border-l-[4px] border-l-violet-500 bg-violet-50 px-4 py-3 dark:border-violet-900 dark:border-l-violet-400 dark:bg-violet-950/40">
+                                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-200">
+                                      {focusContent.label}
+                                    </span>
+                                    <p className="mt-1 text-sm font-medium leading-relaxed text-violet-950 dark:text-violet-100">{focusContent.text}</p>
+                                  </div>
+                                ) : null}
+                                {metadataChips.length > 0 ? (
+                                  <div className="mt-3 flex flex-wrap gap-1.5">
+                                    {metadataChips.slice(0, 3).map((chip) => (
+                                      <Tag key={chip.key} className={`m-0 border-0 text-[11px] ${chip.className ?? 'bg-muted text-muted-foreground'}`}>
+                                        {chip.label}
+                                      </Tag>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {reportAgent?.characterType === 'finance_expert' && signals.length > 0 ? (
+                                  <div className="mt-3 flex flex-wrap gap-1">
+                                    {signals.slice(0, 3).map((signal, index) => (
+                                      <Tag key={`${signal.symbol}:${index}`} color={signal.side === 'long' ? 'green' : 'red'} className="m-0 text-xs">
+                                        {signal.side === 'long' ? '▲' : '▼'} {signal.symbol}
+                                      </Tag>
+                                    ))}
+                                    {signals.length > 3 ? <Tag className="m-0 text-xs text-muted-foreground">+{signals.length - 3}</Tag> : null}
+                                  </div>
+                                ) : null}
+                                {episodeReference ? (
+                                  <div className="mt-3" onClick={(event) => event.stopPropagation()}>
+                                    <Button
+                                      type="text"
+                                      size="small"
+                                      icon={<LinkOutlined />}
+                                      className="h-auto max-w-full px-0 text-left text-xs text-violet-700 hover:!text-violet-900 dark:text-violet-300 dark:hover:!text-violet-100"
+                                      onClick={() => window.open(episodeReference.reference, '_blank', 'noopener,noreferrer')}
+                                    >
+                                      <span className="truncate">{t('feedCard.episode', { title: episodeReference.label })}</span>
+                                    </Button>
+                                  </div>
+                                ) : null}
+                                <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
+                                  <span>{common?.evidence?.length ? t('feedCard.evidenceCount', { count: common.evidence.length }) : t('feedCard.openReport')}</span>
+                                  {playbook ? <span className="font-medium text-violet-600 dark:text-violet-300">{t('feedCard.openReport')} ›</span> : null}
                                 </div>
                               </div>
-                              {signals.length > 0 && (
-                                <div className="mt-2 flex flex-wrap gap-1">
-                                  {signals.slice(0, 6).map((s, i) => (
-                                    <Tag key={i} color={s.side === 'long' ? 'green' : s.side === 'short' ? 'red' : 'default'} className="m-0 text-xs">{s.symbol}</Tag>
-                                  ))}
-                                  {signals.length > 6 && <Tag className="m-0 text-xs text-gray-400">+{signals.length - 6}</Tag>}
-                                </div>
-                              )}
-                            </div>
+                            </Card>
                           );
                         })}
                       </div>
@@ -2313,7 +2455,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                            />
                                          </TouchSafeTooltip>
                                          <InlineDeleteButton
-                                           ariaLabel={`Remove ${agents.find((a) => a.id === pb.agentId)?.name ?? 'agent'} from this source`}
+                                           ariaLabel={`Remove ${(() => {
+                                             const linkedAgent = agents.find((agent) => agent.id === pb.agentId);
+                                             return linkedAgent ? getAgentDisplayLabel(linkedAgent) : 'agent';
+                                           })()} from this source`}
                                            confirmText={t('common.delete')}
                                            onConfirm={async () => {
                                              await deletePlaybook(pb.id);
@@ -2426,7 +2571,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  ) : (
                                    <AgentReportsBrowser
                                      agentId={linkedPlaybooks[0].agentId}
-                                     agentName={agents.find((a) => a.id === linkedPlaybooks[0].agentId)?.name}
+                                     agentName={(() => {
+                                       const linkedAgent = agents.find((agent) => agent.id === linkedPlaybooks[0].agentId);
+                                       return linkedAgent ? getAgentDisplayLabel(linkedAgent) : undefined;
+                                     })()}
                                      collapsible
                                      reports={sourceDetailReports}
                                      onSelectSymbol={setViewingSymbol}
@@ -2595,11 +2743,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  return (
                                    <div key={playbook.id} className="group relative">
                                      <TouchSafeTooltip
-                                       title={<div><div className="font-medium">{agent.name}</div><div>{humanizeCharacterType(agent.characterType)}</div><div>{personalityLabel}</div></div>}
+                                       title={<div><div className="font-medium">{getAgentDisplayLabel(agent)}</div><div>{humanizeCharacterType(agent.characterType)}</div><div>{personalityLabel}</div></div>}
                                      >
                                        <Button
                                          type="text"
-                                         aria-label={`${agent.name}: ${characterLabel}, ${humanizeCharacterType(agent.characterType)}, ${personalityLabel}`}
+                                         aria-label={`${getAgentDisplayLabel(agent)}: ${characterLabel}, ${humanizeCharacterType(agent.characterType)}, ${personalityLabel}`}
                                          className="h-auto w-12 p-0"
                                        >
                                          <span className="flex flex-col items-center gap-1 text-center">
@@ -2613,7 +2761,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      {canRemove ? (
                                        <TouchSafeTooltip title={t('library.removeAgentFromSource')}>
                                          <Popconfirm
-                                           title={t('library.removeAgentConfirm', { name: agent.name })}
+                                           title={t('library.removeAgentConfirm', { name: getAgentDisplayLabel(agent) })}
                                            description={t('library.removeAgentConfirmDescription')}
                                            okText={t('common.remove')}
                                            cancelText={t('common.cancel')}
@@ -2859,7 +3007,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           <span className="flex items-center gap-2">
                             <Badge
                               status={selectedAgent.status === 'disabled' ? 'default' : 'success'}
-                              text={selectedAgent.name}
+                              text={getAgentDisplayLabel(selectedAgent)}
                             />
                             <Tag>Access grants: {accessGrantCount}</Tag>
                           </span>
@@ -2993,7 +3141,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                   <div className="text-sm font-semibold">
                                     <Badge
                                       status={agent.status === 'disabled' ? 'default' : 'success'}
-                                      text={agent.name}
+                                      text={getAgentDisplayLabel(agent)}
                                     />
                                   </div>
                                   <div className="mt-1 flex flex-wrap gap-1 text-xs">
@@ -3015,7 +3163,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                     }
                                     sharePermissions={['read', 'edit', 'delete']}
                                     onPublish={(payload) => publishAgent(agent.id, payload)}
-                                    defaultPublishTitle={agent.name}
+                                    defaultPublishTitle={getAgentDisplayLabel(agent)}
                                   />
                                 </div>
                               </div>
@@ -3066,7 +3214,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="min-w-0">
                                     <div className="truncate text-sm font-semibold">{item.title}</div>
-                                    <div className="truncate text-xs text-gray-600">{item.summary || item.agent.name}</div>
+                                    <div className="truncate text-xs text-gray-600">{item.summary || getAgentDisplayLabel(item.agent)}</div>
                                   </div>
                                   <Button
                                     size="small"
@@ -3164,7 +3312,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                               children: (
                                 <AgentReportsBrowser
                                   agentId={selectedPlaybook.agentId}
-                                  reports={reports}
+                                  reports={selectedPlaybookReports}
                                   highlightedReportId={highlightedReportId}
                                   onSelectSymbol={setViewingSymbol}
                                 />
@@ -3508,7 +3656,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                       className={`transition-opacity ${anySelected && !selected ? 'opacity-40' : 'opacity-100'}`}
                     >
                     <WizardSelectableCard
-                      ariaLabel={`Select agent ${agent.name}`}
+                      ariaLabel={`Select agent ${getAgentDisplayLabel(agent)}`}
                       selected={selected}
                       onClick={() => {
                         // Always toggle — works in both create and edit modes
@@ -3525,7 +3673,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             {icon}
                           </span>
                           <span className="text-sm font-semibold truncate">
-                            <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={agent.name} />
+                            <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={getAgentDisplayLabel(agent)} />
                           </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
@@ -3533,7 +3681,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             <Tag color="blue" className="m-0 text-xs">{t('common.editing') || 'Editing'}</Tag>
                           ) : (
                             <InlineDeleteButton
-                                ariaLabel={`Delete agent ${agent.name}`}
+                                ariaLabel={`Delete agent ${getAgentDisplayLabel(agent)}`}
                                 confirmText={t('common.delete')}
                                 onConfirm={async () => {
                                   setPlaybookAgentIdsDraft((prev) => prev.filter((id) => id !== agent.id));
@@ -3601,16 +3749,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                       <p className="mb-3 text-sm text-red-600">{inlineAgentValidationError}</p>
                     ) : null}
 
-                    {/* Step 0: Name + Character type only */}
+                    {/* Step 0: Character type */}
                     {inlineAgentStep === 0 ? (
                       <div className="space-y-3">
-                        {/* Name first */}
-                        <Input
-                          aria-label={t('agent.namePlaceholder')}
-                          placeholder={t('agent.namePlaceholder')}
-                          value={inlineAgentName}
-                          onChange={(e) => setInlineAgentName(e.currentTarget.value)}
-                        />
                         {/* Character section */}
                         <div className="flex items-center gap-2 rounded-md bg-[rgba(114,46,209,0.12)] px-3 py-2 text-sm font-medium text-[#9d6fe8]">
                           <BulbOutlined />
@@ -4072,7 +4213,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 <div className="flex items-center gap-3">
                   <span className="text-xl">{emoji}</span>
                   <div className="flex flex-col items-start gap-0.5 min-w-0">
-                    <span className="font-semibold text-sm">{agent?.name ?? playbook.name}</span>
+                    <span className="font-semibold text-sm">{agent ? getAgentDisplayLabel(agent) : playbook.name}</span>
                     <div className="flex items-center gap-1.5">
                       {characterLabel ? <Tag color={tagColor} className="m-0 text-xs">{characterLabel}</Tag> : null}
                       {agent?.promptConfig?.personality_label ? <Tag color="magenta" className="m-0 text-xs">{agent.promptConfig.personality_label}</Tag> : null}
@@ -4086,7 +4227,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       </Modal>
       {/* Schedule-only edit modal — opened via ✎ on individual playbook cards in the detail panel */}
       <Modal
-        title={scheduleEditPlaybook ? `${agents.find((a) => a.id === scheduleEditPlaybook.agentId)?.name ?? t('common.edit')} — ${t('playbook.schedule')}` : t('common.edit')}
+        title={scheduleEditPlaybook ? `${(() => {
+          const scheduledAgent = agents.find((agent) => agent.id === scheduleEditPlaybook.agentId);
+          return scheduledAgent ? getAgentDisplayLabel(scheduledAgent) : t('common.edit');
+        })()} — ${t('playbook.schedule')}` : t('common.edit')}
         open={isScheduleEditOpen}
         onCancel={() => { setIsScheduleEditOpen(false); setScheduleEditPlaybook(null); }}
         footer={null}
@@ -4325,12 +4469,12 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                   }
                 });
                 const newAgent = await createAgent({
-                  name: PROMPT_PERSONAS.find(p => p.id === guidedWizardPersonaId)?.name ?? guidedWizardPersonaId,
+
                   characterType: guidedWizardPersonaId as import('../api/agents').CharacterType,
                   preferences: {},
                 }) as import('../api/agents').AgentSummary;
                 await createPlaybook({
-                  name: `${guidedWizardSource.title ?? 'My Source'} — ${newAgent.name}`,
+                  name: `${guidedWizardSource.title ?? 'My Source'} — ${getAgentDisplayLabel(newAgent)}`,
                   agentId: newAgent.id,
                   sourceIds: [newSource.id],
                   recipients: user?.email ? [user.email] : [],

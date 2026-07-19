@@ -47,6 +47,18 @@ function parsePromptConfig(json: string | null | undefined): PromptConfig {
   }
 }
 
+function humanizeCharacterType(characterType: string): string {
+  return characterType
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
+function deriveAgentName(characterType: string, promptConfig: PromptConfig): string {
+  const personality = promptConfig.personality_label?.trim() || promptConfig.personality_id?.trim() || humanizeCharacterType(characterType);
+  return `${personality} · ${humanizeCharacterType(characterType)}`;
+}
+
 function mapAgent(row: any): Agent {
   const sourceRows = (row.sources ?? []) as SourceRow[];
 
@@ -104,13 +116,15 @@ export class AgentRepository {
   }
 
   async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
+    const characterType = input.characterType ?? DEFAULT_CHARACTER_TYPE;
+    const promptConfig = input.promptConfig ?? {};
     const created = await this.db.agent.create({
       data: {
         ownerUserId,
-        name: input.name,
+        name: deriveAgentName(characterType, promptConfig),
         description: input.description ?? '',
-        characterType: input.characterType ?? DEFAULT_CHARACTER_TYPE,
-        promptConfigJson: JSON.stringify(input.promptConfig ?? {}),
+        characterType,
+        promptConfigJson: JSON.stringify(promptConfig),
         status: input.active === false ? 'disabled' : 'active',
         preferencesJson: JSON.stringify(input.preferences ?? {}),
         ...(input.sources && input.sources.length > 0
@@ -176,6 +190,12 @@ export class AgentRepository {
 
   async updateAgent(agentId: string, patch: Partial<CreateAgentInput>): Promise<Agent> {
     const updated = await this.db.$transaction(async (tx: any) => {
+      const existing = await tx.agent.findUnique({ where: { id: agentId } });
+      if (!existing) {
+        throw new Error('not_found');
+      }
+      const characterType = patch.characterType ?? existing.characterType ?? DEFAULT_CHARACTER_TYPE;
+      const promptConfig = patch.promptConfig ?? parsePromptConfig(existing.promptConfigJson);
       if (patch.sources) {
         await tx.agentSource.deleteMany({ where: { agentId } });
         await tx.agentSource.createMany({
@@ -192,10 +212,10 @@ export class AgentRepository {
       return tx.agent.update({
         where: { id: agentId },
         data: {
-          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          name: deriveAgentName(characterType, promptConfig),
           ...(patch.description !== undefined ? { description: patch.description } : {}),
-          ...(patch.characterType !== undefined ? { characterType: patch.characterType } : {}),
-          ...(patch.promptConfig !== undefined ? { promptConfigJson: JSON.stringify(patch.promptConfig) } : {}),
+          characterType,
+          promptConfigJson: JSON.stringify(promptConfig),
           ...(patch.active !== undefined ? { status: patch.active ? 'active' : 'disabled' } : {}),
           ...(patch.preferences !== undefined ? { preferencesJson: JSON.stringify(patch.preferences) } : {})
         },

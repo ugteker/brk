@@ -16,7 +16,7 @@ export interface PromptConfig {
 }
 
 export interface CreateAgentPayload {
-  name: string;
+  name?: string;
   description?: string;
   active?: boolean;
   characterType?: CharacterType;
@@ -294,6 +294,7 @@ export interface RunReportDto {
   id: string;
   agentId: string;
   agentRunId: string;
+  playbookId: string | null;
   promptVersionId: string;
   summary: string;
   sourceWarnings: string[];
