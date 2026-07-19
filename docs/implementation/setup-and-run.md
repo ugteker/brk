@@ -24,8 +24,11 @@ npm install
 ## Anthropic Claude API Setup
 
 ChatTrader runs execute via Playbooks (which select sources + schedule), then send gathered
-evidence plus the selected agent's system prompt to the Anthropic Claude API, which returns
-structured long/short stock signals with confidence scores and citations.
+evidence plus the selected agent's character system prompt to the Anthropic Claude API, which
+returns a structured report shaped by that character (common fields — headline, key takeaways,
+entities, tone, etc. — plus a character-specific section). The report is delivered to the user
+as a notification. The `finance_expert` character additionally returns per-symbol long/short
+signals with confidence scores and citations; other characters do not.
 
 1. Create or retrieve an API key from the Anthropic Console: https://console.anthropic.com/
 2. Set the following environment variables before starting the API:

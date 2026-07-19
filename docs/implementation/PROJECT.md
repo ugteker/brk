@@ -4,21 +4,40 @@
 > It supersedes `scope-and-decisions.md` and `status.md` (kept for history only).
 > Updated automatically after every completed task or new requirement.
 
-Last updated: 2026-07-12 (Renamed app "PodTrader" to "ChatTrader")
+Last updated: 2026-07-19 (Reframed product direction: general-purpose platform, not trading-only)
+
+> ⚠️ **Domain reframing (2026-07-19):** ChatTrader is a **general-purpose
+> content-analysis-and-notification platform**, not a trading app. The project *began*
+> as a trading-only tool (hence the brand name and some legacy finance-specific tables),
+> but its purpose is now: pick up data from a **source** → analyse it with a user-created
+> **agent that has a custom character/personality** → deliver a **report as a
+> notification**. Finance is one of several agent characters. The Product Direction below
+> has been reframed accordingly; the historical task ledger in §2 is left as-is (it
+> records what was true when each task was done). See `docs/APP-SUMMARY.md` for the
+> current framing.
 
 ---
 
 ## 1. Requirements (cumulative, append-only unless explicitly superseded)
 
 ### Product Direction
-- ChatTrader bots are **AI agents**: they crawl configured sources, feed evidence + a
-  system prompt into the **Anthropic Claude API (Sonnet model)**, and produce a
-  structured report of stock signals.
-- Report output = **long/short signal per symbol**, with **confidence**,
-  **rationale**, and **source citations/timecodes**. Informational only —
+- ChatTrader agents are **AI analysts with a user-defined character/personality**: they
+  crawl configured sources, feed the crawled evidence + a character system prompt into the
+  **Anthropic Claude API (Sonnet model)**, and produce a **structured report shaped by
+  that character**, delivered to the user as a notification.
+- Report output = a **unified report**: common fields (headline, key takeaways, extracted
+  entities, tone, time horizon, novelty, a presentation card) plus a
+  **character-specific section**. Ships with six character types (`summarizer`, `teacher`,
+  `trainer`, `philosopher`, `influencer`, `finance_expert`).
+- **Finance is one character, not the product.** The `finance_expert` character
+  additionally emits **long/short signals per symbol** (confidence, rationale, source
+  citations/timecodes) and unlocks finance-only extras (charts, watchlists). A guardrail
+  prevents non-finance characters from producing investment advice / tickers / long-short
+  calls unless the evidence is explicitly about finance. Informational only —
   **no automated trade execution, brokerage write-back, or live market-data platform.**
-- If a bot crawls a podcast, the report must reflect everything discussed and
-  indicate which symbols are suggested long vs. short based on the conversation.
+- If an agent crawls a podcast, the report must reflect everything discussed, in the
+  voice/shape of the agent's character (for `finance_expert`, indicating which symbols
+  are suggested long vs. short based on the conversation).
 - User has an Anthropic Claude API key (API-based account) — integration must call
   the real Anthropic API in production, but stay **testable without a live Claude
   dependency** (inject a fake client in tests).
