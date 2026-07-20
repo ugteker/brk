@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
@@ -11,6 +11,7 @@ import {
   CloseOutlined,
   LoadingOutlined,
   MailOutlined,
+  MoreOutlined,
   BulbOutlined,
   CaretRightOutlined,
   ClockCircleOutlined,
@@ -26,6 +27,7 @@ import {
   PlusOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
+  ReadOutlined,
   RobotFilled,
   RobotOutlined,
   RocketOutlined,
@@ -458,7 +460,25 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const updatedHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playbooksSearch, setPlaybooksSearch] = useState('');
   const [selectedPlaybookId, setSelectedPlaybookId] = useState<string | null>(null);
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [selectedSourceId, setSelectedSourceIdState] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get('source')
+  );
+  // Deep-linkable selection: keep ?source=<id> in the URL so refresh/back/share work.
+  const setSelectedSourceId = useCallback((id: string | null) => {
+    setSelectedSourceIdState(id);
+    const params = new URLSearchParams(window.location.search);
+    if (id) params.set('source', id);
+    else params.delete('source');
+    const query = params.toString();
+    window.history.pushState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+  }, []);
+  useEffect(() => {
+    const onPopState = () => {
+      setSelectedSourceIdState(new URLSearchParams(window.location.search).get('source'));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const [activeSourceTab, setActiveSourceTab] = useState<string>('reports');
   const [sourceDetailReports, setSourceDetailReports] = useState<RunReportDto[]>([]);
   const [sourceDetailRuns, setSourceDetailRuns] = useState<RunDetailDto[]>([]);
@@ -2196,23 +2216,29 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                        <Card
                          className="min-w-0"
                          title={
-                           <span className="flex items-center gap-2">
-                             {getSourceDisplayTitle(selectedSource)}
+                           <span className="flex min-w-0 items-center gap-2">
+                             <Button
+                               type="text"
+                               aria-label={t('library.backToLibrary')}
+                               icon={<ArrowLeftOutlined />}
+                               className="shrink-0 -ml-2"
+                               onClick={() => setSelectedSourceId(null)}
+                             />
+                             <span className="truncate">{getSourceDisplayTitle(selectedSource)}</span>
                              <SourceTypeBadge type={selectedSource.type} />
                            </span>
                          }
                          extra={
                            <div className="flex items-center gap-2">
                              {linkedPlaybooks.length > 0 && (selectedSource.type !== 'youtube_videos' && selectedSource.type !== 'podcast_feeds') ? (
-                               <TouchSafeTooltip title={t('library.runAnalysisNow')}>
-                                 <Button
-                                   aria-label={t('library.runAnalysisNow')}
-                                   shape="circle"
-                                   loading={runningAgentId === linkedPlaybooks[0]?.agentId}
-                                   icon={<CaretRightOutlined />}
-                                   onClick={() => void onRunSourceEpisode(undefined)}
-                                 />
-                               </TouchSafeTooltip>
+                               <Button
+                                 type="primary"
+                                 loading={runningAgentId === linkedPlaybooks[0]?.agentId}
+                                 icon={<CaretRightOutlined />}
+                                 onClick={() => void onRunSourceEpisode(undefined)}
+                               >
+                                 <span className="hidden sm:inline">{t('library.runAnalysisNow')}</span>
+                               </Button>
                              ) : null}
                              {sourceDetailReports.length > 0 ? (
                                <TouchSafeTooltip title={t('studio.discussThisSource')}>
@@ -2224,22 +2250,23 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  />
                                </TouchSafeTooltip>
                              ) : null}
-                             <TouchSafeTooltip title={t('library.backToLibrary')}>
+                             <Dropdown
+                               trigger={['click']}
+                               menu={{
+                                 items: [
+                                   { key: 'edit', label: t('common.edit'), icon: <EditOutlined /> }
+                                 ],
+                                 onClick: ({ key }) => {
+                                   if (key === 'edit') onEditSource(selectedSource);
+                                 }
+                               }}
+                             >
                                <Button
-                                 aria-label={t('library.backToLibrary')}
+                                 aria-label={t('library.manageSource')}
                                  shape="circle"
-                                 icon={<ArrowLeftOutlined />}
-                                 onClick={() => setSelectedSourceId(null)}
+                                 icon={<MoreOutlined />}
                                />
-                             </TouchSafeTooltip>
-                             <TouchSafeTooltip title={t('common.edit')}>
-                               <Button
-                                 aria-label={t('common.edit')}
-                                 shape="circle"
-                                 icon={<EditOutlined />}
-                                 onClick={() => onEditSource(selectedSource)}
-                               />
-                             </TouchSafeTooltip>
+                             </Dropdown>
                            </div>
                          }
                        >
@@ -2251,11 +2278,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            try { hostname = new URL(selectedSource.value).hostname; } catch { hostname = selectedSource.value; }
                            return (
                              <>
-                             <div className="flex gap-3 mb-4 pb-4 border-b border-border">
+                             <div className="flex gap-4 mb-4 pb-4 border-b border-border">
                                {coverUrl ? (
-                                 <img src={coverUrl} alt="" className="w-20 h-20 rounded-lg object-cover flex-shrink-0 bg-muted" />
+                                 <img src={coverUrl} alt="" className="h-[72px] w-[72px] shrink-0 rounded-xl object-cover shadow-sm ring-1 ring-gray-200 dark:ring-gray-700" />
                                ) : (
-                                 <div className="w-20 h-20 rounded-lg flex-shrink-0 bg-muted flex items-center justify-center text-2xl">
+                                 <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-xl bg-muted text-3xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700">
                                    {selectedSource.type === 'youtube_videos' ? '📺' : selectedSource.type === 'podcast_feeds' ? '🎙' : '🌐'}
                                  </div>
                                )}
@@ -2271,7 +2298,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  </a>
                                  {episodeCount > 0 ? (
                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                     {episodeCount} {selectedSource.type === 'youtube_videos' ? 'videos' : selectedSource.type === 'podcast_feeds' ? 'episodes' : 'pages'}
+                                     {selectedSource.type === 'youtube_videos'
+                                       ? t('library.countVideos', { count: episodeCount })
+                                       : selectedSource.type === 'podcast_feeds'
+                                         ? t('library.countEpisodes', { count: episodeCount })
+                                         : t('library.countPages', { count: episodeCount })}
                                    </p>
                                  ) : null}
                                  {selectedSource.type === 'youtube_videos' ? (
@@ -2285,16 +2316,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      className="mt-1.5 block text-xs text-foreground hover:text-[#9d6fe8] hover:underline truncate"
                                      onClick={(e) => e.stopPropagation()}
                                    >
-                                     <span className="text-muted-foreground mr-1">Latest:</span>
+                                     <span className="text-muted-foreground mr-1">{t('library.latestLabel')}</span>
                                      {latestItem.title}
-                                     {latestItem.pubDate ? <span className="ml-1 text-muted-foreground">· {new Date(latestItem.pubDate).toLocaleDateString()}</span> : null}
+                                     {latestItem.pubDate ? <span className="ml-1 text-muted-foreground">· {new Date(latestItem.pubDate).toLocaleDateString(i18n.language)}</span> : null}
                                    </a>
                                  ) : null}
                                </div>
                              </div>
                              {linkedPlaybooks.length > 0 ? (
                                <div className="mt-3 pt-3 border-t border-border">
-                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">🤖 {t('library.expertsWatching')}</p>
+                                 <p className="text-sm font-semibold text-foreground mb-1.5">{t('library.expertsWatching')}</p>
                                  <div className="flex flex-col gap-1.5">
                                    {linkedPlaybooks.map((pb) => {
                                      const agent = agents.find((a) => a.id === pb.agentId);
@@ -2326,57 +2357,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                              </div>
                                            )}
                                          </div>
-                                         <TouchSafeTooltip title={pb.notificationsEnabled !== false ? t('playbook.notificationsOn') : t('playbook.notificationsOff')}>
-                                           <Button
-                                             size="small"
-                                             shape="circle"
-                                             aria-label={pb.notificationsEnabled !== false ? t('playbook.notificationsOn') : t('playbook.notificationsOff')}
-                                             icon={pb.notificationsEnabled !== false ? <MailOutlined /> : <MailOutlined style={{ opacity: 0.3 }} />}
-                                             onClick={async (e) => {
-                                               e.stopPropagation();
-                                               await updatePlaybook(pb.id, { notificationsEnabled: !(pb.notificationsEnabled !== false) });
-                                               await refreshPlaybooks();
-                                             }}
-                                           />
-                                         </TouchSafeTooltip>
-                                         <Dropdown
-                                           trigger={['click']}
-                                           menu={{
-                                             selectedKeys: [pb.digestFrequency ?? 'immediate'],
-                                             items: [
-                                               { key: 'immediate', label: t('playbook.digestImmediate') },
-                                               { key: 'daily', label: t('playbook.digestDaily') },
-                                               { key: 'weekly', label: t('playbook.digestWeekly') }
-                                             ],
-                                             onClick: async ({ key, domEvent }) => {
-                                               domEvent.stopPropagation();
-                                               await updatePlaybook(pb.id, { digestFrequency: key as DigestFrequency });
-                                               await refreshPlaybooks();
-                                             }
-                                           }}
-                                         >
-                                           <TouchSafeTooltip
-                                             title={`${t('playbook.digestFrequency')}: ${t(
-                                               (pb.digestFrequency ?? 'immediate') === 'daily'
-                                                 ? 'playbook.digestDaily'
-                                                 : (pb.digestFrequency ?? 'immediate') === 'weekly'
-                                                   ? 'playbook.digestWeekly'
-                                                   : 'playbook.digestImmediate'
-                                             )}`}
-                                           >
-                                             <Button
-                                               size="small"
-                                               shape="circle"
-                                               aria-label={t('playbook.digestFrequency')}
-                                               icon={
-                                                 <FieldTimeOutlined
-                                                   style={(pb.digestFrequency ?? 'immediate') === 'immediate' ? { opacity: 0.3 } : undefined}
-                                                 />
-                                               }
-                                               onClick={(e) => e.stopPropagation()}
-                                             />
-                                           </TouchSafeTooltip>
-                                         </Dropdown>
                                          <TouchSafeTooltip title={pb.enabled ? t('playbook.pause') : t('playbook.resume')}>
                                            <Button
                                              size="small"
@@ -2387,26 +2367,62 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                              onClick={(e) => onTogglePlaybookEnabled(pb, e)}
                                            />
                                          </TouchSafeTooltip>
-                                         <TouchSafeTooltip title={t('common.edit')}>
+                                         <Dropdown
+                                           trigger={['click']}
+                                           menu={{
+                                             items: [
+                                               {
+                                                 key: 'notifications',
+                                                 icon: <MailOutlined />,
+                                                 label: pb.notificationsEnabled !== false ? t('playbook.notificationsOn') : t('playbook.notificationsOff')
+                                               },
+                                               {
+                                                 key: 'digest',
+                                                 icon: <FieldTimeOutlined />,
+                                                 label: t('playbook.digestFrequency'),
+                                                 children: [
+                                                   { key: 'digest:immediate', label: t('playbook.digestImmediate') },
+                                                   { key: 'digest:daily', label: t('playbook.digestDaily') },
+                                                   { key: 'digest:weekly', label: t('playbook.digestWeekly') }
+                                                 ]
+                                               },
+                                               { key: 'edit', icon: <EditOutlined />, label: t('common.edit') },
+                                               { type: 'divider' },
+                                               { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true }
+                                             ],
+                                             selectedKeys: [`digest:${pb.digestFrequency ?? 'immediate'}`],
+                                             onClick: async ({ key, domEvent }) => {
+                                               domEvent.stopPropagation();
+                                               if (key === 'notifications') {
+                                                 await updatePlaybook(pb.id, { notificationsEnabled: !(pb.notificationsEnabled !== false) });
+                                                 await refreshPlaybooks();
+                                               } else if (key.startsWith('digest:')) {
+                                                 await updatePlaybook(pb.id, { digestFrequency: key.slice('digest:'.length) as DigestFrequency });
+                                                 await refreshPlaybooks();
+                                               } else if (key === 'edit') {
+                                                 onOpenScheduleEdit(pb);
+                                               } else if (key === 'delete') {
+                                                 Modal.confirm({
+                                                   title: t('common.delete'),
+                                                   okText: t('common.delete'),
+                                                   okButtonProps: { danger: true },
+                                                   onOk: async () => {
+                                                     await deletePlaybook(pb.id);
+                                                     await refreshPlaybooks();
+                                                   }
+                                                 });
+                                               }
+                                             }
+                                           }}
+                                         >
                                            <Button
                                              size="small"
                                              shape="circle"
-                                             aria-label={t('common.edit')}
-                                             icon={<EditOutlined />}
-                                          onClick={(e) => { e.stopPropagation(); onOpenScheduleEdit(pb, e); }}
+                                             aria-label={t('library.manageSource')}
+                                             icon={<MoreOutlined />}
+                                             onClick={(e) => e.stopPropagation()}
                                            />
-                                         </TouchSafeTooltip>
-                                         <InlineDeleteButton
-                                           ariaLabel={`Remove ${(() => {
-                                             const linkedAgent = agents.find((agent) => agent.id === pb.agentId);
-                                             return linkedAgent ? getAgentDisplayLabel(linkedAgent) : 'agent';
-                                           })()} from this source`}
-                                           confirmText={t('common.delete')}
-                                           onConfirm={async () => {
-                                             await deletePlaybook(pb.id);
-                                             await refreshPlaybooks();
-                                           }}
-                                         />
+                                         </Dropdown>
                                        </div>
                                      );
                                    })}
@@ -2427,12 +2443,25 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      children: (() => {
                                        const episodes = selectedSource.metadata.previewItems.filter((item) => Boolean(item.link));
                                        const linkedAgent = agents.find((a) => a.id === linkedPlaybooks[0]?.agentId);
+                                       // Match an episode to an existing report via the report's cited source references.
+                                       const findEpisodeReport = (epLink: string | undefined) => {
+                                         if (!epLink) return undefined;
+                                         const epVideoId = extractYoutubeVideoId(epLink);
+                                         return sourceDetailReports.find((r) =>
+                                           (r.report?.common?.source_references ?? []).some((ref) => {
+                                             if (ref.reference === epLink) return true;
+                                             if (!epVideoId) return false;
+                                             return extractYoutubeVideoId(ref.reference) === epVideoId;
+                                           })
+                                         );
+                                       };
                                        return episodes.length === 0 ? (
                                          <Empty description={<span className="text-sm text-muted-foreground">{t('library.noEpisodes')}</span>} />
                                        ) : (
                                          <ul className="divide-y divide-border">
                                            {episodes.map((ep) => {
                                              const videoId = selectedSource.type === 'youtube_videos' ? extractYoutubeVideoId(ep.link) : null;
+                                             const episodeReport = findEpisodeReport(ep.link);
                                              return (
                                                <li key={ep.link} className="flex items-center gap-3 py-2.5">
                                                  {videoId ? (
@@ -2443,13 +2472,31 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                    />
                                                  ) : null}
                                                  <div className="min-w-0 flex-1">
-                                                   <div className="truncate text-sm font-medium">{ep.title}</div>
+                                                   <div className="flex items-center gap-2 min-w-0">
+                                                     <span className="truncate text-sm font-medium">{ep.title}</span>
+                                                     {episodeReport ? (
+                                                       <Tag className="m-0 shrink-0 border-0 bg-emerald-100 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200">
+                                                         ✓ {t('library.analyzedBadge')}
+                                                       </Tag>
+                                                     ) : null}
+                                                   </div>
                                                    {ep.pubDate ? (
                                                      <div className="mt-0.5 text-xs text-muted-foreground">
-                                                       {new Date(ep.pubDate).toLocaleDateString()}
+                                                       {new Date(ep.pubDate).toLocaleDateString(i18n.language)}
                                                      </div>
                                                    ) : null}
                                                  </div>
+                                                 {episodeReport ? (
+                                                   <TouchSafeTooltip title={t('library.openReport')}>
+                                                     <Button
+                                                       size="small"
+                                                       shape="circle"
+                                                       aria-label={t('library.openReport')}
+                                                       icon={<ReadOutlined />}
+                                                       onClick={() => setActiveSourceTab('reports')}
+                                                     />
+                                                   </TouchSafeTooltip>
+                                                 ) : null}
                                                  {ep.link ? (
                                                    <TouchSafeTooltip title={t('library.openLink')}>
                                                      <Button
@@ -2464,7 +2511,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                      />
                                                    </TouchSafeTooltip>
                                                  ) : null}
-                                                 {linkedAgent ? (
+                                                 {linkedAgent && !episodeReport ? (
                                                    <TouchSafeTooltip title={t('library.runAnalysisNow')}>
                                                      <Button
                                                        size="small"
