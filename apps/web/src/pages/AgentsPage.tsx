@@ -71,7 +71,7 @@ import {
 import { getLatestAgentPrompt, listAgentReports, type PromptVersionDto, type RunReportDto } from '../api/agents';
 import { grantAgentAccess, listAgentAccessGrants } from '../api/access';
 import type { DiscussionPreselect } from '../api/discussions';
-import { getCharacterTypeColor, getCharacterTypeEmoji } from '../data/character-types';
+import { getCharacterTypeColor, getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
 import {
   cloneMarketplaceAgent,
   cloneMarketplacePlaybook,
@@ -1330,6 +1330,17 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     navigate('/studio/new', { state: { preselect } });
   }
 
+  /** Opens the shared full-report drawer (report + stats + chat) from any tab. */
+  function openReportDrawer(report: RunReportDto & Partial<{ agentName: string; playbookName: string }>) {
+    const reportAgent = agents.find((a) => a.id === report.agentId);
+    const playbook = report.playbookId ? playbooks.find((p) => p.id === report.playbookId) : undefined;
+    setViewingFullReport({
+      ...report,
+      agentName: report.agentName ?? (reportAgent ? getAgentDisplayLabel(reportAgent) : ''),
+      playbookName: report.playbookName ?? playbook?.name ?? ''
+    });
+  }
+
   async function onEditSource(source: SourceRecord) {
     setEditingSource(source);
     setSourceUrlDraft(source.value);
@@ -1896,62 +1907,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                         );
                       })()}
                     </Card>
-                    <Drawer
-                      open={Boolean(viewingFullReport)}
-                      onClose={() => setViewingFullReport(null)}
-                      destroyOnHidden
-                      width={620}
-                      placement="right"
-                      title={viewingFullReport
-                        ? (viewingFullReport.report?.common?.headline?.trim() || viewingFullReport.summary)
-                        : undefined}
-                      styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
-                    >
-                      {/* Scrollable report content */}
-                      <div className="min-h-0 flex-1 overflow-y-auto">
-                        {(() => {
-                          const drawerCommon = viewingFullReport?.report?.common;
-                          const toPercent = (value?: number) => {
-                            if (!value || value <= 0) return null;
-                            return Math.round(value <= 1 ? value * 100 : Math.min(100, value));
-                          };
-                          const stats = [
-                            { key: 'relevance', label: t('report.relevanceLabel'), value: toPercent(drawerCommon?.relevance), fill: 'bg-violet-500' },
-                            { key: 'confidence', label: t('report.confidenceLabel'), value: toPercent(drawerCommon?.confidence), fill: 'bg-emerald-500' }
-                          ].filter((stat) => stat.value !== null);
-                          if (stats.length === 0) return null;
-                          return (
-                            <div className="grid grid-cols-2 gap-4 border-b border-border px-6 py-4">
-                              {stats.map((stat) => (
-                                <div key={stat.key}>
-                                  <div className="flex items-baseline justify-between text-[11px]">
-                                    <span className="font-medium text-muted-foreground">{stat.label}</span>
-                                    <span className="font-semibold tabular-nums text-foreground">{stat.value} %</span>
-                                  </div>
-                                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-                                    <div className={`h-full rounded-full ${stat.fill}`} style={{ width: `${stat.value}%` }} />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                        <div className="p-6">
-                          {viewingFullReport?.report
-                            ? <CharacterReportRenderer report={viewingFullReport.report} />
-                            : <Empty description={t('feedCard.noFullReport')} />}
-                        </div>
-                      </div>
-                      {/* Fixed chat panel at bottom */}
-                      {viewingFullReport ? (
-                        <div className="shrink-0 border-t border-border p-4">
-                          <ReportChatPanel
-                            agentId={viewingFullReport.agentId}
-                            reportId={viewingFullReport.id}
-                          />
-                        </div>
-                      ) : null}
-                    </Drawer>
                   </>
                 )
               },
@@ -2280,9 +2235,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              <>
                              <div className="flex gap-4 mb-4 pb-4 border-b border-border">
                                {coverUrl ? (
-                                 <img src={coverUrl} alt="" className="h-[72px] w-[72px] shrink-0 rounded-xl object-cover shadow-sm ring-1 ring-gray-200 dark:ring-gray-700" />
+                                 <img src={coverUrl} alt="" className="h-24 w-24 shrink-0 rounded-xl object-cover shadow-sm ring-1 ring-gray-200 dark:ring-gray-700" />
                                ) : (
-                                 <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-xl bg-muted text-3xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700">
+                                 <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-muted text-4xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700">
                                    {selectedSource.type === 'youtube_videos' ? '📺' : selectedSource.type === 'podcast_feeds' ? '🎙' : '🌐'}
                                  </div>
                                )}
@@ -2331,19 +2286,24 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      const agent = agents.find((a) => a.id === pb.agentId);
                                      const characterLabel = agent?.characterType ? humanizeCharacterType(agent.characterType) : null;
                                      return (
-                                       <div key={pb.id} className={`flex items-start gap-2 text-xs transition-opacity ${pb.enabled ? '' : 'opacity-60'}`}>
-                                         <div className="flex flex-col gap-1 flex-1 min-w-0">
-                                           <div className="flex flex-wrap items-center gap-1.5">
-                                             {characterLabel ? (
-                                               <Tag className="m-0" color={getCharacterTypeColor(agent?.characterType)} icon={getCharacterIcon(agent?.characterType)}>{characterLabel}</Tag>
-                                             ) : null}
-                                             {agent?.promptConfig?.personality_label ? (
-                                               <Tag className="m-0" color="magenta">{agent.promptConfig.personality_label}</Tag>
+                                       <div key={pb.id} className={`flex items-start gap-2.5 text-xs transition-opacity ${pb.enabled ? '' : 'opacity-60'}`}>
+                                         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${getCharacterTypeIconBg(agent?.characterType)}`}>
+                                           {getCharacterTypeEmoji(agent?.characterType)}
+                                         </div>
+                                         <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                           <div className="flex items-center gap-1.5 min-w-0">
+                                             <span
+                                               className={`h-1.5 w-1.5 shrink-0 rounded-full ${pb.enabled ? 'bg-emerald-500' : 'bg-gray-400'}`}
+                                               title={pb.enabled ? t('playbook.active') : t('playbook.paused')}
+                                             />
+                                             <span className="font-semibold text-foreground truncate">{agent ? getAgentDisplayLabel(agent) : characterLabel}</span>
+                                             {agent && characterLabel ? (
+                                               <span className="text-muted-foreground truncate">· {characterLabel}</span>
                                              ) : null}
                                            </div>
-                                           <div className="flex items-center gap-1.5 text-muted-foreground">
-                                             <span>{formatPlaybookSchedule(pb.schedule)}</span>
-                                             <Tag color={pb.enabled ? 'green' : 'default'} className="m-0 leading-none py-0">{pb.enabled ? t('playbook.active') : t('playbook.paused')}</Tag>
+                                           <div className="text-muted-foreground">
+                                             {formatPlaybookSchedule(pb.schedule)}
+                                             {!pb.enabled ? ` · ${t('playbook.paused')}` : ''}
                                            </div>
                                            {pb.recipients.length > 0 && (
                                              <div className="flex flex-wrap gap-1 text-muted-foreground mt-0.5">
@@ -2493,7 +2453,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                        shape="circle"
                                                        aria-label={t('library.openReport')}
                                                        icon={<ReadOutlined />}
-                                                       onClick={() => setActiveSourceTab('reports')}
+                                                       onClick={() => openReportDrawer(episodeReport)}
                                                      />
                                                    </TouchSafeTooltip>
                                                  ) : null}
@@ -2557,17 +2517,40 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    </Empty>
                                  ) : sourceDetailLoading ? (
                                    <Skeleton active avatar={false} paragraph={{ rows: 4 }} />
+                                 ) : sourceDetailReports.length === 0 ? (
+                                   <Empty description={t('library.noReportsYet')} />
                                  ) : (
-                                   <AgentReportsBrowser
-                                     agentId={linkedPlaybooks[0].agentId}
-                                     agentName={(() => {
-                                       const linkedAgent = agents.find((agent) => agent.id === linkedPlaybooks[0].agentId);
-                                       return linkedAgent ? getAgentDisplayLabel(linkedAgent) : undefined;
-                                     })()}
-                                     collapsible
-                                     reports={sourceDetailReports}
-                                     onSelectSymbol={setViewingSymbol}
-                                   />
+                                   <div className="flex flex-col gap-1.5">
+                                     {sourceDetailReports.map((report) => {
+                                       const reportAgent = agents.find((a) => a.id === report.agentId);
+                                       const headline = report.report?.common?.headline?.trim() || report.summary;
+                                       const relevance = report.report?.common?.relevance;
+                                       const relPct = relevance && relevance > 0
+                                         ? Math.round(relevance <= 1 ? relevance * 100 : Math.min(100, relevance))
+                                         : null;
+                                       return (
+                                         <button
+                                           key={report.id}
+                                           type="button"
+                                           onClick={() => openReportDrawer(report)}
+                                           className="flex w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-[#9d6fe8]/50 hover:bg-muted/50"
+                                         >
+                                           <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${getCharacterTypeIconBg(reportAgent?.characterType)}`}>
+                                             {getCharacterTypeEmoji(reportAgent?.characterType)}
+                                           </div>
+                                           <div className="min-w-0 flex-1">
+                                             <p className="truncate text-sm font-medium text-foreground">{headline}</p>
+                                             <p className="mt-0.5 text-xs text-muted-foreground">
+                                               {reportAgent ? `${getAgentDisplayLabel(reportAgent)} · ` : ''}
+                                               {new Date(report.createdAt).toLocaleDateString(i18n.language)}
+                                               {relPct !== null ? ` · ${t('report.relevanceLabel')} ${relPct} %` : ''}
+                                             </p>
+                                           </div>
+                                           <ReadOutlined className="shrink-0 text-muted-foreground" />
+                                         </button>
+                                       );
+                                     })}
+                                   </div>
                                  )
                                },
                                ...(linkedPlaybooks.length > 0 ? [{
@@ -3508,6 +3491,63 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           />
         </div>
         )}
+      <Drawer
+        open={Boolean(viewingFullReport)}
+        onClose={() => setViewingFullReport(null)}
+        destroyOnHidden
+        width={620}
+        placement="right"
+        title={viewingFullReport
+          ? (viewingFullReport.report?.common?.headline?.trim() || viewingFullReport.summary)
+          : undefined}
+        styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+      >
+        {/* Scrollable report content */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {(() => {
+            const drawerCommon = viewingFullReport?.report?.common;
+            const toPercent = (value?: number) => {
+              if (!value || value <= 0) return null;
+              return Math.round(value <= 1 ? value * 100 : Math.min(100, value));
+            };
+            const stats = [
+              { key: 'relevance', label: t('report.relevanceLabel'), value: toPercent(drawerCommon?.relevance), fill: 'bg-violet-500' },
+              { key: 'confidence', label: t('report.confidenceLabel'), value: toPercent(drawerCommon?.confidence), fill: 'bg-emerald-500' }
+            ].filter((stat) => stat.value !== null);
+            if (stats.length === 0) return null;
+            return (
+              <div className="grid grid-cols-2 gap-4 border-b border-border px-6 py-4">
+                {stats.map((stat) => (
+                  <div key={stat.key}>
+                    <div className="flex items-baseline justify-between text-[11px]">
+                      <span className="font-medium text-muted-foreground">{stat.label}</span>
+                      <span className="font-semibold tabular-nums text-foreground">{stat.value} %</span>
+                    </div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className={`h-full rounded-full ${stat.fill}`} style={{ width: `${stat.value}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          <div className="p-6">
+            {viewingFullReport?.report
+              ? <CharacterReportRenderer report={viewingFullReport.report} />
+              : <Empty description={t('feedCard.noFullReport')} />}
+          </div>
+        </div>
+        {/* Fixed chat panel at bottom */}
+        {viewingFullReport ? (
+          <div className="shrink-0 border-t border-border p-4">
+            <ReportChatPanel
+              agentId={viewingFullReport.agentId}
+              reportId={viewingFullReport.id}
+              collapsible
+            />
+          </div>
+        ) : null}
+      </Drawer>
       <Modal
         title={(() => {
           if (followWizardSourcePreselected) {

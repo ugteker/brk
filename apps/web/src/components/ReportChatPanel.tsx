@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Input, Spin, message } from 'antd';
-import { SendOutlined } from '@ant-design/icons';
+import { DownOutlined, SendOutlined, UpOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { askReportQuestion, listReportChatMessages, type ReportChatMessageDto } from '../api/agents';
 
 interface ReportChatPanelProps {
   agentId: string;
   reportId: string;
+  /** Renders a header toggle so the chat can be collapsed to a slim bar (e.g. in the report drawer). */
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }
 
 /**
@@ -14,8 +17,9 @@ interface ReportChatPanelProps {
  * persona grounded in this specific report and the evidence it was based on. History is
  * per-user-per-report and persists across sessions.
  */
-export function ReportChatPanel({ agentId, reportId }: ReportChatPanelProps) {
+export function ReportChatPanel({ agentId, reportId, collapsible = false, defaultCollapsed = false }: ReportChatPanelProps) {
   const { t } = useTranslation();
+  const [collapsed, setCollapsed] = useState(collapsible && defaultCollapsed);
   const [messages, setMessages] = useState<ReportChatMessageDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [asking, setAsking] = useState(false);
@@ -73,7 +77,26 @@ export function ReportChatPanel({ agentId, reportId }: ReportChatPanelProps) {
 
   return (
     <div className="mt-3 rounded-lg border border-border bg-muted/40 p-3" onClick={(event) => event.stopPropagation()}>
-      <p className="mb-2 text-sm font-medium">{t('reportChat.title')}</p>
+      {collapsible ? (
+        <button
+          type="button"
+          className={`flex w-full items-center justify-between text-left ${collapsed ? '' : 'mb-2'}`}
+          onClick={() => setCollapsed((prev) => !prev)}
+          aria-expanded={!collapsed}
+        >
+          <span className="text-sm font-medium">
+            💬 {t('reportChat.title')}
+            {collapsed && messages.length > 0 ? (
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">({messages.length})</span>
+            ) : null}
+          </span>
+          <span className="text-xs text-muted-foreground">{collapsed ? <UpOutlined /> : <DownOutlined />}</span>
+        </button>
+      ) : (
+        <p className="mb-2 text-sm font-medium">{t('reportChat.title')}</p>
+      )}
+      {collapsed ? null : (
+      <>
       <div ref={scrollRef} className="max-h-72 space-y-2 overflow-y-auto pr-1">
         {loading ? (
           <div className="py-4 text-center">
@@ -130,6 +153,8 @@ export function ReportChatPanel({ agentId, reportId }: ReportChatPanelProps) {
         />
       </div>
       <p className="mt-1 text-[11px] text-gray-400">{t('reportChat.disclaimer')}</p>
+      </>
+      )}
     </div>
   );
 }
