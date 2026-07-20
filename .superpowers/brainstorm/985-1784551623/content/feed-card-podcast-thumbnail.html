@@ -1,0 +1,37 @@
+<style>
+  .candidate-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-top:24px}
+  .candidate{min-width:0;cursor:pointer}.candidate-head{min-height:74px;padding:0 4px 10px}.candidate-head h3{margin:0 0 5px;color:#eee7fa;font-size:15px}.candidate-head p{margin:0;color:#aaa0bc;font-size:12px;line-height:1.45}.recommended{color:#a7f3c1;font-size:11px}
+  .feed-card{overflow:hidden;border:1px solid #514060;border-radius:16px;background:#292132;box-shadow:0 10px 26px rgba(0,0,0,.24);color:#f6f0ff}.body{padding:15px}.meta{display:flex;align-items:center;gap:9px;color:#b9aec8;font-size:10px}.avatar{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,#9d75dc,#5b3894);font-size:15px}.who{color:#f3ebff;font-size:11px;font-weight:800}.when{margin-left:auto;color:#978ba5}
+  .podcast-thumb{position:relative;flex:0 0 58px;width:58px;height:58px;overflow:hidden;border:1px solid rgba(255,255,255,.24);border-radius:11px;background:linear-gradient(145deg,#132843 0%,#21627b 46%,#e29039 47%,#7d274d 100%);box-shadow:0 4px 11px rgba(0,0,0,.27)}.podcast-thumb:before{position:absolute;top:7px;left:7px;width:20px;height:20px;border:2px solid rgba(255,255,255,.8);border-radius:50%;content:""}.podcast-thumb:after{position:absolute;right:-6px;bottom:-11px;width:41px;height:41px;border:5px solid rgba(255,213,139,.75);border-radius:50%;content:""}.podcast-title{position:absolute;bottom:6px;left:7px;color:white;font-size:7px;font-weight:900;letter-spacing:.07em;line-height:1.1;text-shadow:0 1px 2px #000}.source-meta{min-width:0}.source-meta div:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .kind{display:inline-block;margin-top:13px;padding:3px 7px;border-radius:20px;background:rgba(184,145,255,.17);color:#dbc7ff;font-size:9px;font-weight:800;letter-spacing:.04em}.headline{margin:10px 0 0;color:#fff;font-size:17px;font-weight:850;line-height:1.3}.summary{margin:7px 0 0;color:#c9bfd7;font-size:12px;line-height:1.48}.evidence{margin-top:12px;padding:9px 10px;border:1px solid rgba(180,150,235,.2);border-radius:10px;background:rgba(255,255,255,.035);color:#cfc4dd;font-size:10px;line-height:1.4}.evidence b{color:#efe9f9}.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px}.chip{padding:4px 7px;border-radius:99px;background:#393047;color:#d4c8e2;font-size:9px}.chip.good{background:rgba(134,239,172,.13);color:#b7f7c9}.footer{display:flex;align-items:center;justify-content:space-between;margin-top:13px;padding-top:11px;border-top:1px solid #4c3d59;color:#b8adc6;font-size:10px}.open{padding:6px 8px;border-radius:7px;background:rgba(167,139,250,.16);color:#dccbff;font-weight:800}.decision{display:flex;gap:7px;margin-top:12px}.decision span{flex:1;padding:8px;border-radius:8px;background:rgba(255,255,255,.05);color:#d8cee6;font-size:10px}.decision b{display:block;margin-bottom:3px;color:#cdb7ff;font-size:9px}
+  .note{margin-top:24px;padding:14px 16px;border:1px solid rgba(167,139,250,.3);border-radius:13px;background:rgba(91,57,134,.15);color:#d7cce5;font-size:12px;line-height:1.5}.note b{color:#f1e8ff}@media(max-width:900px){.candidate-grid{grid-template-columns:1fr}.candidate-head{min-height:auto}}
+</style>
+<h2>Feed cards with podcast anchor</h2>
+<p class="subtitle">The source cover is a compact 58px thumbnail in the attribution row: recognizable at a glance, but never large enough to overpower the analysis.</p>
+<div class="candidate-grid">
+  <section class="candidate" data-choice="compact-thumbnail" onclick="toggleSelect(this)">
+    <div class="candidate-head"><h3>A · Compact insight <span class="recommended">— recommended</span></h3><p>Podcast artwork gives source recognition while the finding remains first.</p></div>
+    <article class="feed-card"><div class="body">
+      <div class="meta"><div class="podcast-thumb" aria-label="Tech Review podcast cover"><span class="podcast-title">TECH<br>REVIEW</span></div><div class="avatar">◈</div><div class="source-meta"><div class="who">Research Scout</div><div>Tech Review · Podcast</div></div><div class="when">8 min</div></div>
+      <span class="kind">INSIGHT</span><div class="headline">Transparency now matters more than feature breadth.</div><p class="summary">Customers repeatedly ask how decisions are made, rather than what the product can do.</p>
+      <div class="chips"><span class="chip good">High confidence</span><span class="chip">Product</span><span class="chip">New</span></div><div class="footer"><span>2 evidence items</span><span class="open">Open analysis →</span></div>
+    </div></article>
+  </section>
+  <section class="candidate" data-choice="evidence-thumbnail" onclick="toggleSelect(this)">
+    <div class="candidate-head"><h3>B · Evidence-forward</h3><p>The same source anchor plus one citation for confidence-sensitive findings.</p></div>
+    <article class="feed-card"><div class="body">
+      <div class="meta"><div class="podcast-thumb" aria-label="Tech Review podcast cover"><span class="podcast-title">TECH<br>REVIEW</span></div><div class="avatar">◈</div><div class="source-meta"><div class="who">Research Scout</div><div>Tech Review · Podcast</div></div><div class="when">8 min</div></div>
+      <span class="kind">INSIGHT</span><div class="headline">Transparency now matters more than feature breadth.</div><div class="evidence"><b>Evidence · 02:14</b>“Teams need to understand why the system reached this result.”</div>
+      <div class="chips"><span class="chip good">High confidence</span><span class="chip">Product</span></div><div class="footer"><span>2 evidence items</span><span class="open">Open analysis →</span></div>
+    </div></article>
+  </section>
+  <section class="candidate" data-choice="decision-thumbnail" onclick="toggleSelect(this)">
+    <div class="candidate-head"><h3>C · Decision-forward</h3><p>A compact cover still works when the agent has a recommendation to act on.</p></div>
+    <article class="feed-card"><div class="body">
+      <div class="meta"><div class="podcast-thumb" aria-label="Tech Review podcast cover"><span class="podcast-title">TECH<br>REVIEW</span></div><div class="avatar">✦</div><div class="source-meta"><div class="who">Strategy Partner</div><div>Tech Review · Podcast</div></div><div class="when">8 min</div></div>
+      <span class="kind">RECOMMENDATION</span><div class="headline">Make explanation a first-class product surface.</div><div class="decision"><span><b>Why now</b>Trust is the recurring concern.</span><span><b>Next step</b>Prototype an explanation flow.</span></div>
+      <div class="footer"><span>3 evidence items</span><span class="open">Open analysis →</span></div>
+    </div></article>
+  </section>
+</div>
+<div class="note"><b>Recommended rule:</b> show the thumbnail only for a single, resolved source with cover art. For multi-source analyses or missing art, omit it entirely and retain the same alignment with a smaller agent avatar.</div>
