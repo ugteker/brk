@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Avatar,
   Button,
   Card,
   List,
@@ -15,12 +14,13 @@ import {
 import {
   ArrowLeftOutlined,
   AudioOutlined,
-  PlayCircleOutlined,
-  UserOutlined
+  PlayCircleOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { getAgentDisplayLabel } from '../utils/agent-label';
-import { useParams, useNavigate } from 'react-router-dom';
+import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
+import { listAgentReports, type RunReportDto } from '../api/agents';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   getDiscussion,
   listDiscussionRuns,
@@ -36,14 +36,14 @@ import { useAppData } from '../context/AppDataContext';
 
 const { Text, Paragraph } = Typography;
 
-const FORMAT_COLORS: Record<string, string> = {
-  free_form: 'blue',
-  structured: 'purple',
-  hosted: 'orange',
-  hybrid: 'geekblue'
-};
-
 const SPEAKER_COLORS = ['#1890ff', '#52c41a', '#fa8c16', '#722ed1', '#eb2f96', '#13c2c2'];
+
+/** Everything the transcript needs to render a participant consistently. */
+interface ParticipantInfo {
+  name: string;
+  characterType: string | null;
+  index: number;
+}
 
 /** Client-side mirror of the backend sanitizeDiscussionTurnText logic.
  * Applied when rendering stored turns so that any historical JSON blobs (produced before
@@ -89,31 +89,23 @@ function sanitizeTurnContent(raw: string): string {
   return trimmed;
 }
 
-function TurnBubble({ turn, participantIndex, agentName }: { turn: DiscussionTurnDto; participantIndex: number; agentName: string }) {
-  const color = SPEAKER_COLORS[participantIndex % SPEAKER_COLORS.length];
+function TurnBubble({ turn, participant }: { turn: DiscussionTurnDto; participant: ParticipantInfo }) {
+  const color = SPEAKER_COLORS[participant.index % SPEAKER_COLORS.length];
   const displayContent = sanitizeTurnContent(turn.content);
-  // Alternate sides by participant index for a natural back-and-forth chat feel, instead of
-  // every turn (regardless of speaker) always appearing flush-left in one undifferentiated
-  // column - which is what made longer/denser turns look like one unreadable frame.
-  const isReversed = participantIndex % 2 === 1;
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 10,
-        alignItems: 'flex-start',
-        marginBottom: 16,
-        flexDirection: isReversed ? 'row-reverse' : 'row'
-      }}
-    >
-      <Avatar style={{ background: color, flexShrink: 0 }} size={32} icon={<UserOutlined />} />
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
+      <div
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${getCharacterTypeIconBg(participant.characterType)}`}
+      >
+        {getCharacterTypeEmoji(participant.characterType)}
+      </div>
       <Card
         size="small"
-        style={{ maxWidth: '80%', background: `${color}12`, border: 'none' }}
+        style={{ maxWidth: '80%', background: `${color}0d`, border: 'none' }}
         bodyStyle={{ padding: '8px 12px' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <strong style={{ fontSize: 12, color }}>{agentName}</strong>
+          <strong style={{ fontSize: 12, color }}>{participant.name}</strong>
           {turn.segmentLabel && (
             <Tag color="default" style={{ margin: 0, fontSize: 11 }}>
               {turn.segmentLabel}
@@ -132,17 +124,47 @@ function TurnBubble({ turn, participantIndex, agentName }: { turn: DiscussionTur
 function EvidencePanel({
   evidenceSnapshot,
   legacyAgenda,
-  participantIndexMap
+  participantInfoMap
 }: {
   /** The run's frozen evidence snapshot. Null for legacy runs created before snapshots
    * existed - in that case we fall back to the discussion's *current* description, since
    * no frozen agenda was ever recorded for that run. */
   evidenceSnapshot: DiscussionRunEvidenceSnapshotDto | null;
   legacyAgenda: string;
-  participantIndexMap: Record<string, number>;
+  participantInfoMap: Record<string, ParticipantInfo>;
 }) {
   const { t } = useTranslation();
   const agendaText = evidenceSnapshot ? evidenceSnapshot.agenda : legacyAgenda;
+
+  // Resolve raw report IDs to human-readable headlines by fetching each involved
+  // agent's reports once. Falls back to the bare ID for reports we can't resolve.
+  const [reportLabels, setReportLabels] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!evidenceSnapshot) return;
+    const agentIds = [...new Set(evidenceSnapshot.participants.map((p) => p.agentId))];
+    Promise.all(
+      agentIds.map(async (agentId) => {
+        try {
+          return await listAgentReports(agentId);
+        } catch {
+          return [] as RunReportDto[];
+        }
+      })
+    ).then((lists) => {
+      const labels: Record<string, string> = {};
+      for (const r of lists.flat()) {
+        const headline = r.report?.common?.headline;
+        labels[r.id] = headline && headline.trim() ? headline : r.summary.slice(0, 60);
+      }
+      setReportLabels(labels);
+    });
+  }, [evidenceSnapshot]);
+
+  function originTag(origin: string) {
+    if (origin === 'explicit') return <Tag color="blue">{t('studio.evidenceOriginExplicit')}</Tag>;
+    if (origin === 'none') return <Tag color="default">{t('studio.evidenceOriginNone')}</Tag>;
+    return <Tag color="default">{t('studio.evidenceOriginFallback')}</Tag>;
+  }
 
   return (
     <div>
@@ -153,49 +175,56 @@ function EvidencePanel({
       {!evidenceSnapshot ? (
         <Text type="secondary">{t('studio.evidenceLegacyRun')}</Text>
       ) : (
-        evidenceSnapshot.participants.map((p) => (
-          <Card key={p.participantId} size="small" style={{ marginBottom: 12 }}>
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Space>
-                <Avatar size={24} icon={<UserOutlined />} />
-                <strong>
-                  {t('studio.participants')} {(participantIndexMap[p.participantId] ?? 0) + 1}
-                </strong>
-                <Tag color={p.origin === 'explicit' ? 'blue' : 'default'}>
-                  {p.origin === 'explicit' ? t('studio.evidenceOriginExplicit') : t('studio.evidenceOriginFallback')}
-                </Tag>
-              </Space>
-              <div>
-                <Text type="secondary">{t('studio.evidenceReportsLabel')}: </Text>
-                {p.reportIds.map((id) => (
-                  <Tag key={id}>{id}</Tag>
-                ))}
-              </div>
-              {p.sourceItemIds.length > 0 && (
-                <div>
-                  <Text type="secondary">{t('studio.evidenceSourceItemsLabel')}: </Text>
-                  {p.sourceItemIds.map((id) => (
-                    <Tag key={id} color="green">
-                      {id}
-                    </Tag>
-                  ))}
-                </div>
-              )}
-              {p.transcriptWarnings.length > 0 && (
-                <div>
-                  <Text type="warning">{t('studio.evidenceWarningsLabel')}: </Text>
-                  <ul style={{ margin: '4px 0 0 0', paddingLeft: 20 }}>
-                    {p.transcriptWarnings.map((w) => (
-                      <li key={w}>
-                        <Text type="warning">{w}</Text>
-                      </li>
+        evidenceSnapshot.participants.map((p) => {
+          const info = participantInfoMap[p.participantId];
+          return (
+            <Card key={p.participantId} size="small" style={{ marginBottom: 12 }}>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Space>
+                  <div
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sm ${getCharacterTypeIconBg(info?.characterType)}`}
+                  >
+                    {getCharacterTypeEmoji(info?.characterType)}
+                  </div>
+                  <strong>{info?.name ?? p.agentId}</strong>
+                  {originTag(p.origin)}
+                </Space>
+                {p.reportIds.length > 0 && (
+                  <div>
+                    <Text type="secondary">{t('studio.evidenceReportsLabel')}: </Text>
+                    {p.reportIds.map((id) => (
+                      <Tag key={id} style={{ maxWidth: '100%', whiteSpace: 'normal' }}>
+                        {reportLabels[id] ?? id}
+                      </Tag>
                     ))}
-                  </ul>
-                </div>
-              )}
-            </Space>
-          </Card>
-        ))
+                  </div>
+                )}
+                {p.sourceItemIds.length > 0 && (
+                  <div>
+                    <Text type="secondary">{t('studio.evidenceSourceItemsLabel')}: </Text>
+                    {p.sourceItemIds.map((id) => (
+                      <Tag key={id} color="green">
+                        {id}
+                      </Tag>
+                    ))}
+                  </div>
+                )}
+                {p.transcriptWarnings.length > 0 && (
+                  <div>
+                    <Text type="warning">{t('studio.evidenceWarningsLabel')}: </Text>
+                    <ul style={{ margin: '4px 0 0 0', paddingLeft: 20 }}>
+                      {p.transcriptWarnings.map((w) => (
+                        <li key={w}>
+                          <Text type="warning">{w}</Text>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </Space>
+            </Card>
+          );
+        })
       )}
     </div>
   );
@@ -205,6 +234,7 @@ export function DiscussionDetail() {
   const { t } = useTranslation();
   const { discussionId } = useParams<{ discussionId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { agents } = useAppData();
 
   const [discussion, setDiscussion] = useState<DiscussionDto | null>(null);
@@ -216,6 +246,28 @@ export function DiscussionDetail() {
   const [renderingAudio, setRenderingAudio] = useState(false);
 
   const { turns: liveTurns, status: liveStatus } = useDiscussionStream(discussionId ?? '', liveRun);
+
+  // The wizard's "run now" already triggered a run and hands its ID over via
+  // navigation state - attach to that run's live stream instead of requiring
+  // the user to click "Run now" a second time.
+  useEffect(() => {
+    const incoming = (location.state as { liveRunId?: string } | null)?.liveRunId;
+    if (incoming) {
+      setLiveRun(incoming);
+      setSelectedRunId(incoming);
+      // Clear the state so a page refresh doesn't re-attach to a finished run.
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the newest live turn in view while the discussion is generating.
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (liveStatus === 'running' && liveTurns.length > 0) {
+      transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [liveTurns.length, liveStatus]);
 
   const loadData = useCallback(async () => {
     if (!discussionId) return;
@@ -282,16 +334,24 @@ export function DiscussionDetail() {
 
   if (!discussion) return null;
 
-  const participantIndexMap = Object.fromEntries(discussion.participants.map((p, i) => [p.id, i]));
-  const participantAgentNameMap = Object.fromEntries(
-    discussion.participants.map((p) => {
+  const participantInfoMap: Record<string, ParticipantInfo> = Object.fromEntries(
+    discussion.participants.map((p, i) => {
       const agent = agents.find((candidate) => candidate.id === p.agentId);
-      return [p.id, agent ? getAgentDisplayLabel(agent) : p.agentId];
+      return [
+        p.id,
+        {
+          name: agent ? getAgentDisplayLabel(agent) : p.agentId,
+          characterType: agent?.characterType ?? null,
+          index: i
+        }
+      ];
     })
   );
   const selectedRun = runs.find((r) => r.id === selectedRunId);
   const displayTurns: DiscussionTurnDto[] =
     liveRun && liveRun === selectedRunId ? liveTurns : selectedRun?.turns ?? [];
+  const isLive = liveStatus === 'running' && liveRun === selectedRunId;
+  const turnTarget = discussion.formatConfig.totalTurnTarget ?? 12;
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -309,9 +369,11 @@ export function DiscussionDetail() {
             <AudioOutlined style={{ marginRight: 8 }} />
             {discussion.name}
           </h2>
-          <Space style={{ marginTop: 4 }}>
-            <Tag color={FORMAT_COLORS[discussion.format] ?? 'default'}>{t(`studio.format_${discussion.format}`)}</Tag>
-            <Tag color="default">{discussion.participants.length} {t('studio.participants')}</Tag>
+          <Space style={{ marginTop: 4 }} size={4}>
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              {t(`studio.format_${discussion.format}`)} · {discussion.participants.length}{' '}
+              {t('studio.participants')}
+            </Text>
           </Space>
         </div>
         <Space>
@@ -354,13 +416,15 @@ export function DiscussionDetail() {
                       }))}
                     />
                   )}
-                  {liveStatus === 'running' && liveRun === selectedRunId && (
-                    <div style={{ marginBottom: 12 }}>
-                      <Spin size="small" style={{ marginRight: 8 }} />
-                      <Text type="secondary">Generating…</Text>
+                  {isLive && (
+                    <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Spin size="small" />
+                      <Text type="secondary">
+                        {t('studio.turnProgress', { current: displayTurns.length, target: turnTarget })}
+                      </Text>
                     </div>
                   )}
-                  {displayTurns.length === 0 && !(liveStatus === 'running' && liveRun === selectedRunId) ? (
+                  {displayTurns.length === 0 && !isLive ? (
                     selectedRun?.status === 'error' ? (
                       <Text type="danger">
                         {t('studio.runFailed', { message: selectedRun.errorMessage ?? 'Unknown error' })}
@@ -371,17 +435,44 @@ export function DiscussionDetail() {
                       <Text type="secondary">{t('studio.noRuns')}</Text>
                     )
                   ) : (
-                    <List
-                      dataSource={displayTurns}
-                      renderItem={(turn) => (
-                        <TurnBubble
-                          key={turn.id}
-                          turn={turn}
-                          participantIndex={participantIndexMap[turn.participantId] ?? 0}
-                          agentName={participantAgentNameMap[turn.participantId] ?? 'Agent'}
-                        />
+                    <>
+                      <List
+                        dataSource={displayTurns}
+                        renderItem={(turn) => (
+                          <TurnBubble
+                            key={turn.id}
+                            turn={turn}
+                            participant={
+                              participantInfoMap[turn.participantId] ?? {
+                                name: 'Agent',
+                                characterType: null,
+                                index: 0
+                              }
+                            }
+                          />
+                        )}
+                      />
+                      {!isLive && selectedRun?.status === 'done' && displayTurns.length > 0 && (
+                        <div style={{ textAlign: 'center', margin: '16px 0 8px' }}>
+                          <Text type="secondary" style={{ fontSize: 13 }}>
+                            🏁 {t('studio.discussionFinished')}
+                          </Text>
+                          {!selectedRun.audioUrl && (
+                            <div style={{ marginTop: 8 }}>
+                              <Button
+                                size="small"
+                                loading={renderingAudio}
+                                onClick={handleRenderAudio}
+                                icon={<AudioOutlined />}
+                              >
+                                {t('studio.renderAudio')}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       )}
-                    />
+                      <div ref={transcriptEndRef} />
+                    </>
                   )}
                 </div>
               )
@@ -402,7 +493,7 @@ export function DiscussionDetail() {
                 <EvidencePanel
                   evidenceSnapshot={selectedRun?.evidenceSnapshot ?? null}
                   legacyAgenda={discussion.description}
-                  participantIndexMap={participantIndexMap}
+                  participantInfoMap={participantInfoMap}
                 />
               )
             }

@@ -30,12 +30,36 @@ export interface DiscussionParticipantDto {
   reportIds: string[];
 }
 
+/** How a discussion sources its material: agent reports (default), a shared
+ * episode transcript, or nothing at all (free question, experts argue from
+ * their own expertise). */
+export type DiscussionGroundingMode = 'reports' | 'transcript' | 'free';
+
+export interface DiscussionGroundingConfigDto {
+  mode: DiscussionGroundingMode;
+  /** Artifact IDs of the shared transcripts (transcript mode only). */
+  artifactIds?: string[];
+}
+
 export interface DiscussionFormatConfigDto {
   segments?: string[];
   totalTurnTarget?: number;
   hostInstructions?: string;
   /** Language every participant should respond in. Defaults to English when unset. */
   language?: 'en' | 'de';
+  /** Absent means classic reports grounding. */
+  grounding?: DiscussionGroundingConfigDto;
+}
+
+/** A downloaded episode transcript that can ground a discussion. */
+export interface TranscriptOptionDto {
+  artifactId: string;
+  agentId: string;
+  title: string;
+  sourceRef: string;
+  contentChars: number;
+  preview: string;
+  createdAt: string;
 }
 
 export interface DiscussionDto {
@@ -52,7 +76,7 @@ export interface DiscussionDto {
   participants: DiscussionParticipantDto[];
 }
 
-export type ReportSelectionOrigin = 'explicit' | 'fallback';
+export type ReportSelectionOrigin = 'explicit' | 'fallback' | 'none';
 
 export interface ParticipantEvidenceSnapshotDto {
   participantId: string;
@@ -110,6 +134,12 @@ export interface CreateDiscussionPayload {
     /** Explicit report IDs for this participant; omitted/empty falls back to latest reports. */
     reportIds?: string[];
   }>;
+}
+
+export async function listTranscriptOptions(): Promise<TranscriptOptionDto[]> {
+  const res = await fetch(`${BASE}/transcript-options`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Failed to list transcript options');
+  return res.json();
 }
 
 export async function listDiscussions(): Promise<DiscussionDto[]> {

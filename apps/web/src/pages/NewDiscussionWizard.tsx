@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Button,
@@ -16,7 +16,14 @@ import { AudioOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { listAgents, listAgentReports, type AgentSummary, type RunReportDto } from '../api/agents';
-import { createDiscussion, triggerDiscussionRun, type DiscussionPreselect } from '../api/discussions';
+import {
+  createDiscussion,
+  listTranscriptOptions,
+  triggerDiscussionRun,
+  type DiscussionGroundingMode,
+  type DiscussionPreselect,
+  type TranscriptOptionDto
+} from '../api/discussions';
 import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
 import { getAgentDisplayLabel } from '../utils/agent-label';
 
@@ -35,25 +42,43 @@ interface ParticipantConfig {
   reportIds: string[];
 }
 
+/** Logical wizard steps; 'material' only exists in reports mode. */
+type StepKey = 'topic' | 'experts' | 'setup' | 'material' | 'start';
+
+const GROUNDING_MODES: Array<{ mode: DiscussionGroundingMode; emoji: string }> = [
+  { mode: 'reports', emoji: '📄' },
+  { mode: 'transcript', emoji: '🎙️' },
+  { mode: 'free', emoji: '💬' }
+];
+
 export function NewDiscussionWizard() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [currentStep, setCurrentStep] = useState(0);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Step 1 state
+  // Topic step: what grounds the discussion.
+  const [groundingMode, setGroundingMode] = useState<DiscussionGroundingMode>('reports');
+  const [transcriptOptions, setTranscriptOptions] = useState<TranscriptOptionDto[]>([]);
+  const [loadingTranscripts, setLoadingTranscripts] = useState(false);
+  const [transcriptsLoaded, setTranscriptsLoaded] = useState(false);
+  const [selectedTranscriptIds, setSelectedTranscriptIds] = useState<string[]>([]);
+  // Shared questions/topics. In free mode this IS the discussion topic; in the other
+  // modes it's an optional steer on top of the selected material.
+  const [agenda, setAgenda] = useState('');
+
+  // Experts step
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
 
   // Pre-fill support for entry points that jump in from a report or Library source
-  // (rather than the default blank agent-first flow).
+  // (rather than the default blank topic-first flow). Always implies reports mode.
   const [preselectedReportIdsByAgent, setPreselectedReportIdsByAgent] = useState<Record<string, string[]>>({});
   const [preselectContextLabel, setPreselectContextLabel] = useState<string | null>(null);
 
-  // Step 2 state
+  // Setup step
   const [discussionName, setDiscussionName] = useState('');
   const [format, setFormat] = useState<Format>('free_form');
   const [participants, setParticipants] = useState<ParticipantConfig[]>([]);
@@ -62,13 +87,22 @@ export function NewDiscussionWizard() {
   // language doesn't have to match the app's display language.
   const [language, setLanguage] = useState<'en' | 'de'>(i18n.language.startsWith('de') ? 'de' : 'en');
 
-  // Material step state: per-agent report options and the shared questions/topics agenda.
+  // Material step (reports mode only): per-agent report options.
   const [reportsByAgent, setReportsByAgent] = useState<Record<string, RunReportDto[]>>({});
   const [loadingReports, setLoadingReports] = useState(false);
-  const [agenda, setAgenda] = useState('');
 
-  // Step 3 state
+  // Start step
   const [runNow, setRunNow] = useState(true);
+
+  const stepKeys = useMemo<StepKey[]>(
+    () =>
+      groundingMode === 'reports'
+        ? ['topic', 'experts', 'setup', 'material', 'start']
+        : ['topic', 'experts', 'setup', 'start'],
+    [groundingMode]
+  );
+  const [currentKey, setCurrentKey] = useState<StepKey>('topic');
+  const currentIndex = stepKeys.indexOf(currentKey);
 
   useEffect(() => {
     listAgents()
@@ -80,13 +114,28 @@ export function NewDiscussionWizard() {
   useEffect(() => {
     const preselect = (location.state as { preselect?: DiscussionPreselect } | null)?.preselect;
     if (preselect && preselect.entries.length > 0) {
+      setGroundingMode('reports');
       setSelectedAgentIds(preselect.entries.map((e) => e.agentId));
       setPreselectedReportIdsByAgent(Object.fromEntries(preselect.entries.map((e) => [e.agentId, e.reportIds])));
       setPreselectContextLabel(preselect.contextLabel ?? null);
+      setCurrentKey('experts');
     }
     // Only ever applied once, from whatever state the wizard was opened with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Lazy-load transcript options the first time the transcript mode is picked.
+  useEffect(() => {
+    if (groundingMode !== 'transcript' || transcriptsLoaded || loadingTranscripts) return;
+    setLoadingTranscripts(true);
+    listTranscriptOptions()
+      .then((options) => {
+        setTranscriptOptions(options);
+        setTranscriptsLoaded(true);
+      })
+      .catch(() => setTranscriptsLoaded(true))
+      .finally(() => setLoadingTranscripts(false));
+  }, [groundingMode, transcriptsLoaded, loadingTranscripts]);
 
   function clearPreselect() {
     setSelectedAgentIds([]);
@@ -110,25 +159,55 @@ export function NewDiscussionWizard() {
     }));
   }
 
-  function goToStep2() {
-    if (selectedAgentIds.length < 2) {
-      message.warning(t('studio.minParticipants'));
-      return;
+  function suggestName(agentIds: string[]): string {
+    if (groundingMode === 'free' && agenda.trim()) {
+      const q = agenda.trim();
+      return q.length > 60 ? `${q.slice(0, 57)}…` : q;
     }
-    const p = buildInitialParticipants(selectedAgentIds);
-    setParticipants(p);
-    const names = selectedAgentIds
+    if (groundingMode === 'transcript' && selectedTranscriptIds.length > 0) {
+      const first = transcriptOptions.find((o) => o.artifactId === selectedTranscriptIds[0]);
+      if (first) return first.title;
+    }
+    return agentIds
       .map((id) => {
         const agent = agents.find((candidate) => candidate.id === id);
         return agent ? getAgentDisplayLabel(agent) : id;
       })
       .join(' × ');
-    setDiscussionName(names);
-    setCurrentStep(1);
   }
 
-  function goToMaterialStep() {
-    setCurrentStep(2);
+  function topicStepValid(): boolean {
+    if (groundingMode === 'transcript') return selectedTranscriptIds.length > 0;
+    if (groundingMode === 'free') return agenda.trim().length > 0;
+    return true;
+  }
+
+  function goToTopicNext() {
+    if (!topicStepValid()) {
+      message.warning(
+        groundingMode === 'transcript' ? t('studio.transcriptRequired') : t('studio.freeQuestionRequired')
+      );
+      return;
+    }
+    setCurrentKey('experts');
+  }
+
+  function goToSetup() {
+    if (selectedAgentIds.length < 2) {
+      message.warning(t('studio.minParticipants'));
+      return;
+    }
+    setParticipants(buildInitialParticipants(selectedAgentIds));
+    setDiscussionName(suggestName(selectedAgentIds));
+    setCurrentKey('setup');
+  }
+
+  function goAfterSetup() {
+    if (groundingMode !== 'reports') {
+      setCurrentKey('start');
+      return;
+    }
+    setCurrentKey('material');
     setLoadingReports(true);
     Promise.all(
       participants.map(async (p) => {
@@ -163,7 +242,14 @@ export function NewDiscussionWizard() {
         name: discussionName.trim(),
         description: agenda.trim() || undefined,
         format,
-        formatConfig: { totalTurnTarget, language },
+        formatConfig: {
+          totalTurnTarget,
+          language,
+          grounding: {
+            mode: groundingMode,
+            ...(groundingMode === 'transcript' ? { artifactIds: selectedTranscriptIds } : {})
+          }
+        },
         participants
       });
 
@@ -180,12 +266,13 @@ export function NewDiscussionWizard() {
     }
   }
 
-  const steps = [
-    { title: t('studio.wizardStep1') },
-    { title: t('studio.wizardStep2') },
-    { title: t('studio.wizardStepMaterial') },
-    { title: t('studio.wizardStep3') }
-  ];
+  const stepTitles: Record<StepKey, string> = {
+    topic: t('studio.wizardStepTopic'),
+    experts: t('studio.wizardStep1'),
+    setup: t('studio.wizardStep2'),
+    material: t('studio.wizardStepMaterial'),
+    start: t('studio.wizardStep3')
+  };
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
@@ -199,10 +286,99 @@ export function NewDiscussionWizard() {
         </Button>
       </div>
 
-      <Steps current={currentStep} items={steps} style={{ marginBottom: 32 }} />
+      <Steps
+        current={currentIndex}
+        items={stepKeys.map((key) => ({ title: stepTitles[key] }))}
+        style={{ marginBottom: 32 }}
+      />
 
-      {/* Step 1: Pick agents */}
-      {currentStep === 0 && (
+      {/* Topic: what should the experts talk about? */}
+      {currentKey === 'topic' && (
+        <Card>
+          <p style={{ color: '#888', marginTop: 0 }}>{t('studio.topicStepIntro')}</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
+            {GROUNDING_MODES.map(({ mode, emoji }) => {
+              const selected = groundingMode === mode;
+              return (
+                <Card
+                  key={mode}
+                  size="small"
+                  hoverable
+                  style={{
+                    cursor: 'pointer',
+                    borderColor: selected ? '#722ed1' : undefined,
+                    background: selected ? 'rgba(114,46,209,0.08)' : undefined
+                  }}
+                  onClick={() => setGroundingMode(mode)}
+                >
+                  <div style={{ fontSize: 22, marginBottom: 4 }}>{emoji}</div>
+                  <div style={{ fontWeight: 600 }}>{t(`studio.grounding_${mode}_title`)}</div>
+                  <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>
+                    {t(`studio.grounding_${mode}_desc`)}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          {groundingMode === 'transcript' && (
+            <Form layout="vertical">
+              <Form.Item label={t('studio.transcriptPickerLabel')} required>
+                <Select
+                  mode="multiple"
+                  allowClear
+                  value={selectedTranscriptIds}
+                  onChange={setSelectedTranscriptIds}
+                  loading={loadingTranscripts}
+                  placeholder={t('studio.transcriptPickerPlaceholder')}
+                  notFoundContent={
+                    loadingTranscripts ? t('studio.transcriptPickerLoading') : t('studio.transcriptPickerEmpty')
+                  }
+                  optionLabelProp="label"
+                  options={transcriptOptions.map((o) => ({
+                    value: o.artifactId,
+                    label: o.title,
+                    // Rendered inside the dropdown row for extra context.
+                    desc: o.preview
+                  }))}
+                  optionRender={(option) => (
+                    <div>
+                      <div style={{ fontWeight: 500 }}>{option.data.label}</div>
+                      <div style={{ color: '#888', fontSize: 12, whiteSpace: 'normal' }}>{option.data.desc}</div>
+                    </div>
+                  )}
+                />
+              </Form.Item>
+            </Form>
+          )}
+
+          {groundingMode === 'free' && (
+            <Form layout="vertical">
+              <Form.Item label={t('studio.freeQuestionLabel')} required>
+                <Input.TextArea
+                  value={agenda}
+                  onChange={(e) => setAgenda(e.target.value)}
+                  placeholder={t('studio.freeQuestionPlaceholder')}
+                  rows={3}
+                />
+              </Form.Item>
+            </Form>
+          )}
+
+          {groundingMode === 'reports' && (
+            <p style={{ color: '#888', fontSize: 13 }}>{t('studio.grounding_reports_hint')}</p>
+          )}
+
+          <div style={{ textAlign: 'right' }}>
+            <Button type="primary" onClick={goToTopicNext} disabled={!topicStepValid()}>
+              {t('common.next')}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Experts: pick agents */}
+      {currentKey === 'experts' && (
         <Card>
           {preselectContextLabel && (
             <Alert
@@ -217,7 +393,7 @@ export function NewDiscussionWizard() {
               }
             />
           )}
-          <Form.Item label={t('studio.wizardStep1')}>
+          <Form.Item label={t('studio.expertsStepLabel')}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {loadingAgents ? (
                 <span>Loading agents…</span>
@@ -246,16 +422,17 @@ export function NewDiscussionWizard() {
               )}
             </div>
           </Form.Item>
-          <div style={{ textAlign: 'right' }}>
-            <Button type="primary" onClick={goToStep2} disabled={selectedAgentIds.length < 2}>
+          <Space style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Button onClick={() => setCurrentKey('topic')}>{t('common.back')}</Button>
+            <Button type="primary" onClick={goToSetup} disabled={selectedAgentIds.length < 2}>
               {t('common.next')}
             </Button>
-          </div>
+          </Space>
         </Card>
       )}
 
-      {/* Step 2: Configure */}
-      {currentStep === 1 && (
+      {/* Setup: name, format, turns, language, participants */}
+      {currentKey === 'setup' && (
         <Card>
           <Form layout="vertical">
             <Form.Item label="Discussion name" required>
@@ -294,6 +471,16 @@ export function NewDiscussionWizard() {
                 ]}
               />
             </Form.Item>
+            {groundingMode === 'transcript' && (
+              <Form.Item label={t('studio.agendaLabel')}>
+                <Input.TextArea
+                  value={agenda}
+                  onChange={(e) => setAgenda(e.target.value)}
+                  placeholder={t('studio.agendaPlaceholder')}
+                  rows={2}
+                />
+              </Form.Item>
+            )}
             <Form.Item label={t('studio.participants')}>
               {participants.map((p, i) => {
                 const agent = agents.find((a) => a.id === p.agentId);
@@ -323,16 +510,16 @@ export function NewDiscussionWizard() {
             </Form.Item>
           </Form>
           <Space>
-            <Button onClick={() => setCurrentStep(0)}>{t('common.back')}</Button>
-            <Button type="primary" onClick={goToMaterialStep}>
+            <Button onClick={() => setCurrentKey('experts')}>{t('common.back')}</Button>
+            <Button type="primary" onClick={goAfterSetup}>
               {t('common.next')}
             </Button>
           </Space>
         </Card>
       )}
 
-      {/* Step 3: Material - per-participant report selection + shared agenda */}
-      {currentStep === 2 && (
+      {/* Material (reports mode only): per-participant report selection + shared agenda */}
+      {currentKey === 'material' && (
         <Card>
           <Form layout="vertical">
             <p style={{ color: '#888', marginTop: 0 }}>{t('studio.materialStepIntro')}</p>
@@ -375,16 +562,16 @@ export function NewDiscussionWizard() {
             </Form.Item>
           </Form>
           <Space>
-            <Button onClick={() => setCurrentStep(1)}>{t('common.back')}</Button>
-            <Button type="primary" onClick={() => setCurrentStep(3)}>
+            <Button onClick={() => setCurrentKey('setup')}>{t('common.back')}</Button>
+            <Button type="primary" onClick={() => setCurrentKey('start')}>
               {t('common.next')}
             </Button>
           </Space>
         </Card>
       )}
 
-      {/* Step 4: Schedule */}
-      {currentStep === 3 && (
+      {/* Start: run now toggle */}
+      {currentKey === 'start' && (
         <Card>
           <Form layout="vertical">
             <Form.Item>
@@ -394,7 +581,9 @@ export function NewDiscussionWizard() {
             </Form.Item>
           </Form>
           <Space>
-            <Button onClick={() => setCurrentStep(2)}>{t('common.back')}</Button>
+            <Button onClick={() => setCurrentKey(groundingMode === 'reports' ? 'material' : 'setup')}>
+              {t('common.back')}
+            </Button>
             <StudioPrimaryButton loading={submitting} onClick={handleSubmit}>
               {t('studio.newDiscussion')}
             </StudioPrimaryButton>
