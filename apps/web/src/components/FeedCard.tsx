@@ -178,12 +178,15 @@ export function FeedCard({
             <span aria-hidden="true" className="text-3xl">{personaEmoji}</span>
           </div>
         ) : sourceCoverImageUrl ? (
-          <img
-            data-testid="feed-card-cover"
-            src={sourceCoverImageUrl}
-            alt=""
-            className="h-full w-full object-cover"
-          />
+          <>
+            <img aria-hidden="true" src={sourceCoverImageUrl} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-lg" />
+            <img
+              data-testid="feed-card-cover"
+              src={sourceCoverImageUrl}
+              alt=""
+              className="relative h-full w-full object-contain"
+            />
+          </>
         ) : (
           <div
             data-testid="feed-card-placeholder"

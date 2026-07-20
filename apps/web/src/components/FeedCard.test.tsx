@@ -159,7 +159,7 @@ describe('FeedCard', () => {
     renderCard({ sourceCoverImageUrl: 'https://example.com/cover.jpg' });
     const cover = screen.getByTestId('feed-card-cover');
     expect(cover).toBeInTheDocument();
-    expect(cover.className).toContain('object-cover');
+    expect(cover.className).toContain('object-contain');
     expect(screen.queryByTestId('feed-card-placeholder')).not.toBeInTheDocument();
   });
 
