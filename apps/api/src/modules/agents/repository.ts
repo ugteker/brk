@@ -121,7 +121,7 @@ export class AgentRepository {
     const created = await this.db.agent.create({
       data: {
         ownerUserId,
-        name: deriveAgentName(characterType, promptConfig),
+        name: input.name && input.name.trim().length > 0 ? input.name.trim() : deriveAgentName(characterType, promptConfig),
         description: input.description ?? '',
         characterType,
         promptConfigJson: JSON.stringify(promptConfig),
@@ -190,12 +190,9 @@ export class AgentRepository {
 
   async updateAgent(agentId: string, patch: Partial<CreateAgentInput>): Promise<Agent> {
     const updated = await this.db.$transaction(async (tx: any) => {
-      const existing = await tx.agent.findUnique({ where: { id: agentId } });
-      if (!existing) {
-        throw new Error('not_found');
-      }
-      const characterType = patch.characterType ?? existing.characterType ?? DEFAULT_CHARACTER_TYPE;
-      const promptConfig = patch.promptConfig ?? parsePromptConfig(existing.promptConfigJson);
+      // Only touch the name/characterType/promptConfig when the patch explicitly includes
+      // characterType or promptConfig; otherwise preserve the existing name to avoid
+      // surprising renames when callers only toggle `active`.
       if (patch.sources) {
         await tx.agentSource.deleteMany({ where: { agentId } });
         await tx.agentSource.createMany({
@@ -209,16 +206,21 @@ export class AgentRepository {
         });
       }
 
+      const data: any = {};
+      if (patch.description !== undefined) data.description = patch.description;
+      if (patch.characterType !== undefined || patch.promptConfig !== undefined) {
+        const characterType = patch.characterType ?? DEFAULT_CHARACTER_TYPE;
+        const promptConfig = patch.promptConfig ?? {};
+        data.name = deriveAgentName(characterType, promptConfig);
+        data.characterType = characterType;
+        data.promptConfigJson = JSON.stringify(promptConfig);
+      }
+      if (patch.active !== undefined) data.status = patch.active ? 'active' : 'disabled';
+      if (patch.preferences !== undefined) data.preferencesJson = JSON.stringify(patch.preferences);
+
       return tx.agent.update({
         where: { id: agentId },
-        data: {
-          name: deriveAgentName(characterType, promptConfig),
-          ...(patch.description !== undefined ? { description: patch.description } : {}),
-          characterType,
-          promptConfigJson: JSON.stringify(promptConfig),
-          ...(patch.active !== undefined ? { status: patch.active ? 'active' : 'disabled' } : {}),
-          ...(patch.preferences !== undefined ? { preferencesJson: JSON.stringify(patch.preferences) } : {})
-        },
+        data,
         include: { sources: true }
       });
     });

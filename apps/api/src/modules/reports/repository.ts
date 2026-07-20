@@ -31,7 +31,8 @@ export class ReportRepository {
   constructor(private readonly db: ReportDb) {}
 
   async saveRunReport(input: CreateRunReportInput): Promise<RunReportRecord> {
-    const characterType = input.characterType ?? DEFAULT_CHARACTER_TYPE;
+    const characterType =
+      input.characterType ?? (input.signals && input.signals.length > 0 ? ('finance_expert' as const) : DEFAULT_CHARACTER_TYPE);
     const normalizedReport = normalizeUnifiedCharacterReport({
       characterType,
       candidate: input.report,
