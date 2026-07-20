@@ -26,7 +26,7 @@
     "dashboard": "Dashboard",
     "feed": "Feed",
     "feedEmpty": "No reports yet",
-    "feedEmptyDesc": "Once your playbooks run their first analysis, signals will appear here.",
+    "feedEmptyDesc": "Once your playbooks run their first analysis, reports will appear here.",
     "library": "Library",
     "agents": "Agents",
     "playbooks": "Playbooks",
@@ -105,6 +105,13 @@
     "agentRemovedFromSource": "Agent removed from this source.",
     "removeAgentFromSourceFailed": "Could not remove the agent from this source."
   },
+  "feed": {
+    "groupToday": "Today",
+    "groupYesterday": "Yesterday",
+    "searchAriaLabel": "Search feed",
+    "searchPlaceholder": "Search headlines, agents, or sources",
+    "searchNoResults": "No reports match your search."
+  },
   "feedCard": {
     "resultType": {
       "insight": "Insight",
@@ -134,7 +141,11 @@
     },
     "evidenceCount": "{{count}} evidence",
     "episode": "About: {{title}}",
-    "openReport": "Open analysis"
+    "openReport": "Open analysis",
+    "discuss": "Discuss",
+    "viewSource": "View {{title}} in Library",
+    "viewRun": "View run",
+    "noFullReport": "This report has no detailed content yet."
   },
   "listen": {
     "listen": "Summarize",
@@ -157,7 +168,7 @@
   },
   "agent": {
     "createNew": "Create new analyst",
-    "createNewSub": "Trading character + AI persona",
+    "createNewSub": "Character + AI persona",
     "emptyHeadline": "No analysts yet",
     "emptyDesc": "Analysts are AI personas with a system prompt. Each one reads your sources with its own character and trading philosophy.",
     "emptyCta": "Create your first analyst",
@@ -318,6 +329,12 @@
     "keyTakeaways": "Key takeaways",
     "sourcesUsed": "Sources used",
     "citations": "Citations",
+    "recommendation": "Recommendations",
+    "recommendedNextSteps": "Recommended next steps",
+    "openQuestions": "Open questions",
+    "entities": "Detected entities",
+    "relevanceLabel": "Relevance",
+    "confidenceLabel": "Confidence",
     "marketSummary": "Market summary",
     "signals": "Signals",
     "lessonExplanation": "Lesson explanation",

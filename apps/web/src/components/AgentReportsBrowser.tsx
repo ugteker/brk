@@ -395,7 +395,11 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
               );
             })}
             {openChatReportId === report.id ? <ReportChatPanel agentId={agentId} reportId={report.id} /> : null}
-            {isExpanded && report.report ? <CharacterReportRenderer report={report.report} /> : null}
+            {isExpanded && report.report ? (
+              <div className="mt-3 rounded-md border border-border bg-muted/40 p-4">
+                <CharacterReportRenderer report={report.report} />
+              </div>
+            ) : null}
           </Card>
         );
       })}

@@ -26,7 +26,7 @@
     "dashboard": "Dashboard",
     "feed": "Feed",
     "feedEmpty": "Noch keine Berichte",
-    "feedEmptyDesc": "Sobald deine Playbooks die erste Analyse durchgeführt haben, erscheinen die Signale hier.",
+    "feedEmptyDesc": "Sobald deine Playbooks die erste Analyse durchgeführt haben, erscheinen die Berichte hier.",
     "library": "Bibliothek",
     "agents": "Agenten",
     "playbooks": "Playbooks",
@@ -105,6 +105,13 @@
     "agentRemovedFromSource": "Agent wurde von dieser Quelle entfernt.",
     "removeAgentFromSourceFailed": "Agent konnte nicht von dieser Quelle entfernt werden."
   },
+  "feed": {
+    "groupToday": "Heute",
+    "groupYesterday": "Gestern",
+    "searchAriaLabel": "Feed durchsuchen",
+    "searchPlaceholder": "Schlagzeilen, Agenten oder Quellen durchsuchen",
+    "searchNoResults": "Keine Berichte gefunden."
+  },
   "feedCard": {
     "resultType": {
       "insight": "Erkenntnis",
@@ -134,7 +141,11 @@
     },
     "evidenceCount": "{{count}} Belege",
     "episode": "Besprochene Folge: {{title}}",
-    "openReport": "Analyse öffnen"
+    "openReport": "Analyse öffnen",
+    "discuss": "Diskutieren",
+    "viewSource": "{{title}} in der Bibliothek ansehen",
+    "viewRun": "Lauf anzeigen",
+    "noFullReport": "Für diesen Bericht liegen noch keine Details vor."
   },
   "listen": {
     "listen": "Fasse zusammen",
@@ -157,7 +168,7 @@
   },
   "agent": {
     "createNew": "Neuen Analysten erstellen",
-    "createNewSub": "Trading-Charakter + KI-Persona",
+    "createNewSub": "Charakter + KI-Persona",
     "emptyHeadline": "Noch keine Analysten",
     "emptyDesc": "Analysten sind KI-Personas mit einem System-Prompt. Jeder liest deine Quellen mit seinem eigenen Charakter und seiner eigenen Handelsphilosophie.",
     "emptyCta": "Ersten Analysten erstellen",
@@ -318,6 +329,12 @@
     "keyTakeaways": "Wesentliche Erkenntnisse",
     "sourcesUsed": "Verwendete Quellen",
     "citations": "Quellenangaben",
+    "recommendation": "Empfehlungen",
+    "recommendedNextSteps": "Empfohlene nächste Schritte",
+    "openQuestions": "Offene Fragen",
+    "entities": "Erkannte Entitäten",
+    "relevanceLabel": "Relevanz",
+    "confidenceLabel": "Konfidenz",
     "marketSummary": "Marktzusammenfassung",
     "signals": "Signale",
     "lessonExplanation": "Lektionserklärung",

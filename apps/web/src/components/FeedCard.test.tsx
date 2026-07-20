@@ -155,12 +155,25 @@ describe('FeedCard', () => {
     expect(screen.queryByTestId('feed-card-placeholder')).not.toBeInTheDocument();
   });
 
-  it('renders a cover image in the left strip when cover art is present', () => {
+  it('renders a cover image in the square thumbnail when cover art is present', () => {
     renderCard({ sourceCoverImageUrl: 'https://example.com/cover.jpg' });
     const cover = screen.getByTestId('feed-card-cover');
     expect(cover).toBeInTheDocument();
-    expect(cover.className).toContain('object-contain');
+    expect(cover.className).toContain('object-cover');
     expect(screen.queryByTestId('feed-card-placeholder')).not.toBeInTheDocument();
+  });
+
+  it('renders up to three hashtag keywords under the headline', () => {
+    renderCard({ report: makeReport({ keywords: ['Alpha', 'Beta', 'Gamma', 'Delta'] }) });
+    const keywords = screen.getByTestId('feed-card-keywords');
+    expect(keywords).toHaveTextContent('#Alpha');
+    expect(keywords).toHaveTextContent('#Gamma');
+    expect(keywords).not.toHaveTextContent('#Delta');
+  });
+
+  it('omits the keyword row when the report has no keywords', () => {
+    renderCard({ report: makeReport({ keywords: [] }) });
+    expect(screen.queryByTestId('feed-card-keywords')).not.toBeInTheDocument();
   });
 
   it('shows a character-emoji placeholder in the left strip when there is no cover art', () => {

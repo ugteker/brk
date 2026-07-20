@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Button, Card, Tag } from 'antd';
-import { ExportOutlined, LinkOutlined, MessageOutlined } from '@ant-design/icons';
+import { ExportOutlined, LinkOutlined, MessageOutlined, ReadOutlined } from '@ant-design/icons';
 import type { CharacterType, RunReportDto } from '../api/agents';
 import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
 import { getReportAccent, getReportAccentClasses } from '../utils/reportAccent';
@@ -142,11 +142,7 @@ export function FeedCard({
   if (supportingFields.includes('time_horizon') && common?.time_horizon && common.time_horizon !== 'unspecified') {
     metadataChips.push({ key: 'time_horizon', label: t(`feedCard.timeHorizon.${common.time_horizon}`) });
   }
-  if (supportingFields.includes('keywords')) {
-    for (const keyword of common?.keywords?.slice(0, 3) ?? []) {
-      metadataChips.push({ key: `keyword:${keyword}`, label: keyword });
-    }
-  }
+  // Keywords render as hashtags under the headline, so they are omitted from the chips.
   if (supportingFields.includes('entities')) {
     for (const entity of common?.entities?.slice(0, 2) ?? []) {
       metadataChips.push({ key: `entity:${entity.name}:${entity.type}`, label: entity.name });
@@ -162,61 +158,68 @@ export function FeedCard({
     <Card
       size="small"
       hoverable
-      className="relative flex cursor-pointer overflow-hidden border border-violet-100 bg-white shadow-sm transition-[transform,box-shadow,border-color] hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-lg dark:border-violet-950 dark:bg-gray-900 dark:hover:border-violet-800"
-      styles={{ body: { padding: 0, display: 'flex', width: '100%', minWidth: 0 } }}
+      className="relative cursor-pointer overflow-hidden border border-violet-100 bg-white shadow-sm transition-[transform,box-shadow,border-color] hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-lg dark:border-violet-950 dark:bg-gray-900 dark:hover:border-violet-800"
+      styles={{ body: { padding: 0 } }}
       onClick={onOpenFullReport}
     >
-      {/* LEFT: Cover image strip — visual anchor */}
-      <div className="relative w-20 shrink-0 overflow-hidden sm:w-24">
-        {/* Accent top band (always visible, colour driven by emphasis/result_type) */}
-        <span aria-hidden="true" className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px] ${accent.bar}`} />
-        {isSyntheticSource ? (
-          <div
-            data-testid="feed-card-synthetic-thumb"
-            className="relative flex h-full items-center justify-center bg-gradient-to-br from-[#1e1239] via-[#54239a] to-[#164e78]"
-          >
-            <span aria-hidden="true" className="text-3xl">{personaEmoji}</span>
-          </div>
-        ) : sourceCoverImageUrl ? (
-          <>
-            <img aria-hidden="true" src={sourceCoverImageUrl} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-lg" />
-            <img
-              data-testid="feed-card-cover"
-              src={sourceCoverImageUrl}
-              alt=""
-              className="relative h-full w-full object-contain"
-            />
-          </>
-        ) : (
-          <div
-            data-testid="feed-card-placeholder"
-            className={`flex h-full items-center justify-center ${getCharacterTypeIconBg(characterType)}`}
-          >
-            <span aria-hidden="true" className="text-3xl">{personaEmoji}</span>
-          </div>
-        )}
-        {/* Result type badge overlaid at bottom of image strip */}
-        <div className="absolute bottom-2 left-0 right-0 flex justify-center px-1">
-          <Tag className={`m-0 border-0 text-[10px] font-semibold tracking-wide ${accent.badge}`}>
-            {t(`feedCard.resultType.${resultType}`)}
-          </Tag>
-        </div>
-      </div>
+      {/* Accent top band (always visible, colour driven by emphasis/result_type) */}
+      <span aria-hidden="true" className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px] ${accent.bar}`} />
 
-      {/* RIGHT: Content */}
-      <div className="min-w-0 flex-1 p-4">
-        {/* Agent meta — image strip replaces the avatar, no emoji duplicate here */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="font-semibold text-gray-600 dark:text-gray-300">{characterLabel}</span>
-          {personalityLabel ? <span className="text-muted-foreground">· {personalityLabel}</span> : null}
-        </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
-          <span className="truncate">{sourceTitle}</span>
-          <span aria-hidden="true">·</span>
-          <span>{new Date(report.createdAt).toLocaleDateString(i18n.language)}</span>
+      <div className="p-4">
+        {/* Meta row: square cover thumbnail (ID-card style) + agent labels + result badge */}
+        <div className="flex items-center gap-3">
+          <div className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700">
+            {isSyntheticSource ? (
+              <div
+                data-testid="feed-card-synthetic-thumb"
+                className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#1e1239] via-[#54239a] to-[#164e78]"
+              >
+                <span aria-hidden="true" className="text-3xl">{personaEmoji}</span>
+              </div>
+            ) : sourceCoverImageUrl ? (
+              <img
+                data-testid="feed-card-cover"
+                src={sourceCoverImageUrl}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div
+                data-testid="feed-card-placeholder"
+                className={`flex h-full w-full items-center justify-center ${getCharacterTypeIconBg(characterType)}`}
+              >
+                <span aria-hidden="true" className="text-3xl">{personaEmoji}</span>
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="font-semibold text-gray-800 dark:text-gray-200">{characterLabel}</span>
+              {personalityLabel ? <span className="text-muted-foreground">· {personalityLabel}</span> : null}
+              <Tag className={`m-0 ml-1 shrink-0 border-0 text-[10px] font-semibold ${accent.badge}`}>
+                {t(`feedCard.resultType.${resultType}`)}
+              </Tag>
+            </div>
+            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <span className="truncate">{sourceTitle}</span>
+              <span aria-hidden="true">·</span>
+              <span className="whitespace-nowrap">{new Date(report.createdAt).toLocaleDateString(i18n.language)}</span>
+            </div>
+          </div>
         </div>
 
-        <h3 className="mt-2.5 text-[15px] font-semibold leading-snug text-foreground">{primaryText}</h3>
+        <h3 className="mt-3 text-[15px] font-semibold leading-snug text-foreground">{primaryText}</h3>
+
+        {(common?.keywords?.length ?? 0) > 0 ? (
+          <div
+            data-testid="feed-card-keywords"
+            className="mt-2 flex flex-wrap gap-x-2.5 gap-y-1 text-[11px] font-medium text-violet-600 dark:text-violet-400"
+          >
+            {common!.keywords!.slice(0, 3).map((keyword) => (
+              <span key={keyword}>#{keyword}</span>
+            ))}
+          </div>
+        ) : null}
 
         {focusContent ? (
           <div className={`mt-3 rounded-xl border px-4 py-3 ${accent.focusBox}`}>
@@ -298,9 +301,22 @@ export function FeedCard({
             >
               {t('feedCard.discuss')}
             </Button>
+            <Button
+              type="text"
+              size="small"
+              icon={<ReadOutlined />}
+              className="h-auto px-0 text-xs font-semibold text-violet-600 hover:!text-violet-800 dark:text-violet-300 dark:hover:!text-violet-100"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenFullReport();
+              }}
+            >
+              {t('feedCard.openReport')}
+            </Button>
           </div>
         </div>
       </div>
     </Card>
   );
 }
+
