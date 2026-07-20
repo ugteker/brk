@@ -3,9 +3,21 @@ export type DiscussionRunStatus = 'pending' | 'running' | 'done' | 'error';
 export type DiscussionTrigger = 'manual' | 'auto_suggested' | 'scheduled';
 export type ParticipantRole = 'speaker' | 'host';
 export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
-/** Whether a participant's reports for a run came from the user's explicit selection or from
- * falling back to that agent's most recent reports (see config.discussion.latestReportLimit). */
-export type ReportSelectionOrigin = 'explicit' | 'fallback';
+/** Whether a participant's reports for a run came from the user's explicit selection, from
+ * falling back to that agent's most recent reports (see config.discussion.latestReportLimit),
+ * or were intentionally skipped ('none') because the discussion is grounded in a shared
+ * transcript or a free question instead of reports. */
+export type ReportSelectionOrigin = 'explicit' | 'fallback' | 'none';
+
+/** What the discussion is grounded in - the "Worüber?" entry point chosen in the wizard. */
+export type DiscussionGroundingMode = 'reports' | 'transcript' | 'free';
+
+export interface DiscussionGroundingConfig {
+  mode: DiscussionGroundingMode;
+  /** For mode 'transcript': AgentRunArtifact ids whose raw source material (episode/page
+   * transcripts downloaded during agent runs) is shared with every participant. */
+  artifactIds?: string[];
+}
 
 export interface DiscussionFormatConfig {
   segments?: string[];
@@ -16,6 +28,10 @@ export interface DiscussionFormatConfig {
    * (undefined) when not set - stored in the existing formatConfigJson column, no schema
    * migration needed. Mirrors the playbookLanguage convention used for single-agent reports. */
   language?: 'en' | 'de';
+  /** How this discussion is grounded. Undefined means 'reports' (the original behavior:
+   * per-participant report picks with latest-N fallback). Stored in formatConfigJson,
+   * no schema migration needed. */
+  grounding?: DiscussionGroundingConfig;
 }
 
 export interface DiscussionParticipant {

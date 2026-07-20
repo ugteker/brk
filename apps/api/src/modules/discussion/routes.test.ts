@@ -35,7 +35,7 @@ function mockRepo(overrides: Partial<DiscussionRepositoryLike> = {}): Discussion
 
 async function buildApp(
   repoOverrides: Partial<DiscussionRepositoryLike> = {},
-  extraDeps: { reportRepository?: any; latestReportLimit?: number } = {}
+  extraDeps: { reportRepository?: any; latestReportLimit?: number; artifactRepository?: any } = {}
 ) {
   const app = Fastify();
   await app.register(cookie);
@@ -140,5 +140,48 @@ describe('Discussion routes', () => {
     const app = await buildApp({ getDiscussion: vi.fn().mockResolvedValue(discWithParticipant) }, { reportRepository });
     const res = await app.inject({ method: 'POST', url: '/api/discussions/d1/runs', payload: {} });
     expect(res.statusCode).toBe(202);
+  });
+
+  it('POST /api/discussions/:id/runs skips report validation for free-grounded discussions', async () => {
+    const freeDisc = {
+      ...discRow,
+      formatConfig: { grounding: { mode: 'free' } },
+      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, reportIds: [] }]
+    };
+    const reportRepository = {
+      listReportsForAgent: vi.fn().mockResolvedValue([]),
+      getReportById: vi.fn().mockResolvedValue(null)
+    };
+    const app = await buildApp({ getDiscussion: vi.fn().mockResolvedValue(freeDisc) }, { reportRepository });
+    const res = await app.inject({ method: 'POST', url: '/api/discussions/d1/runs', payload: {} });
+    expect(res.statusCode).toBe(202);
+    expect(reportRepository.listReportsForAgent).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/discussions/transcript-options returns parsed options and skips empty artifacts', async () => {
+    const artifactRepository = {
+      listRecentEvidenceArtifacts: vi.fn().mockResolvedValue([
+        {
+          id: 'art1', agentId: 'a1', sourceRef: 'https://example.com/ep1',
+          payloadJson: JSON.stringify({ content: 'Full episode transcript text', title: 'Episode 1', itemId: 'item1' }),
+          createdAt: new Date()
+        },
+        { id: 'art2', agentId: 'a1', sourceRef: 'https://example.com/ep2', payloadJson: '{}', createdAt: new Date() }
+      ])
+    };
+    const app = await buildApp({}, { artifactRepository });
+    const res = await app.inject({ method: 'GET', url: '/api/discussions/transcript-options' });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body).toHaveLength(1);
+    expect(body[0]).toMatchObject({ artifactId: 'art1', title: 'Episode 1', preview: 'Full episode transcript text' });
+    expect(artifactRepository.listRecentEvidenceArtifacts).toHaveBeenCalledWith('u1', 50);
+  });
+
+  it('GET /api/discussions/transcript-options returns empty list when repo not wired', async () => {
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/api/discussions/transcript-options' });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import type { ClaudeMessagesClient } from '../analysis/claude-client';
 import type { DiscussionRepositoryLike } from './repository';
 import type { Discussion, DiscussionParticipant, DiscussionFormat, ParticipantEvidenceSnapshot } from './types';
 import { resolveParticipantReports, type ReportResolutionRepo } from './report-resolution';
-import { buildTranscriptEvidence, type EvidenceArtifactRepo } from './evidence';
+import { buildTranscriptEvidence, buildSharedTranscriptEvidence, type EvidenceArtifactRepo, type SharedTranscriptArtifactRepo } from './evidence';
 import { sanitizeDiscussionTurnText } from './sanitize-turn-text';
 import { logger } from '../../lib/logger';
 
@@ -19,7 +19,7 @@ export interface OrchestratorReportRepo extends ReportResolutionRepo {
   getReportById(reportId: string): Promise<{ id: string; agentId: string; agentRunId: string; summary: string } | null>;
 }
 
-export type OrchestratorArtifactRepo = EvidenceArtifactRepo;
+export type OrchestratorArtifactRepo = EvidenceArtifactRepo & Partial<SharedTranscriptArtifactRepo>;
 
 export interface OrchestratorSyntheticSource {
   ensureSyntheticSource(
@@ -106,41 +106,93 @@ export class DiscussionOrchestrator {
       if (!discussion) throw new Error(`Discussion ${discussionId} not found`);
 
       const orderedParticipants = discussion.participants.sort((a, b) => a.speakerOrder - b.speakerOrder);
+      const groundingMode = discussion.formatConfig.grounding?.mode ?? 'reports';
 
-      const resolution = await resolveParticipantReports(
-        orderedParticipants.map((p) => ({ id: p.id, agentId: p.agentId, reportIds: p.reportIds })),
-        reportRepository,
-        latestReportLimit
-      );
+      let resolution: Awaited<ReturnType<typeof resolveParticipantReports>> = { resolved: [], errors: [] };
+      if (groundingMode === 'reports') {
+        resolution = await resolveParticipantReports(
+          orderedParticipants.map((p) => ({ id: p.id, agentId: p.agentId, reportIds: p.reportIds })),
+          reportRepository,
+          latestReportLimit
+        );
 
-      if (resolution.errors.length > 0) {
-        const message = `Cannot start discussion - no reports resolved for: ${resolution.errors
-          .map((e) => `agent ${e.agentId}`)
-          .join(', ')}`;
-        await discussionRepository.updateRun(runId, { status: 'error', errorMessage: message, completedAt: new Date() });
-        return;
+        if (resolution.errors.length > 0) {
+          const message = `Cannot start discussion - no reports resolved for: ${resolution.errors
+            .map((e) => `agent ${e.agentId}`)
+            .join(', ')}`;
+          await discussionRepository.updateRun(runId, { status: 'error', errorMessage: message, completedAt: new Date() });
+          return;
+        }
+      }
+
+      // Transcript-grounded discussions share one bounded excerpt set with every participant.
+      let sharedEvidence: { excerptText: string; sourceItemIds: string[]; warnings: string[] } | null = null;
+      if (groundingMode === 'transcript') {
+        const artifactIds = discussion.formatConfig.grounding?.artifactIds ?? [];
+        if (artifactIds.length === 0 || typeof artifactRepository.getArtifactsByIds !== 'function') {
+          await discussionRepository.updateRun(runId, {
+            status: 'error',
+            errorMessage: 'Cannot start discussion - no transcript selected for transcript-grounded discussion',
+            completedAt: new Date()
+          });
+          return;
+        }
+        sharedEvidence = await buildSharedTranscriptEvidence(artifactIds, artifactRepository as SharedTranscriptArtifactRepo);
+        if (!sharedEvidence.excerptText) {
+          await discussionRepository.updateRun(runId, {
+            status: 'error',
+            errorMessage: `Cannot start discussion - selected transcript(s) have no readable content (${sharedEvidence.warnings.join('; ')})`,
+            completedAt: new Date()
+          });
+          return;
+        }
       }
 
       const contexts: ParticipantContext[] = [];
       const evidenceParticipants: ParticipantEvidenceSnapshot[] = [];
 
       for (const p of orderedParticipants) {
-        const resolvedForParticipant = resolution.resolved.find((r) => r.participantId === p.id)!;
         const agent = await agentRepository.getAgent(p.agentId);
         const promptVersion = await promptRepository.getLatestPromptVersion(p.agentId);
 
-        const reportRecords = (
-          await Promise.all(resolvedForParticipant.reportIds.map((id) => reportRepository.getReportById(id)))
-        ).filter((r): r is { id: string; agentId: string; agentRunId: string; summary: string } => r !== null);
+        let recentReportsSummary: string;
+        let transcriptExcerpt: string;
+        let snapshotReportIds: string[] = [];
+        let snapshotOrigin: ParticipantEvidenceSnapshot['origin'] = 'none';
+        let snapshotSourceItemIds: string[] = [];
+        let snapshotWarnings: string[] = [];
 
-        const recentReportsSummary = reportRecords.length
-          ? reportRecords.map((r, i) => `Report ${i + 1}: ${r.summary}`).join('\n')
-          : 'No recent reports yet.';
+        if (groundingMode === 'reports') {
+          const resolvedForParticipant = resolution.resolved.find((r) => r.participantId === p.id)!;
 
-        const evidence = await buildTranscriptEvidence(
-          reportRecords.map((r) => ({ id: r.id, agentRunId: r.agentRunId })),
-          artifactRepository
-        );
+          const reportRecords = (
+            await Promise.all(resolvedForParticipant.reportIds.map((id) => reportRepository.getReportById(id)))
+          ).filter((r): r is { id: string; agentId: string; agentRunId: string; summary: string } => r !== null);
+
+          recentReportsSummary = reportRecords.length
+            ? reportRecords.map((r, i) => `Report ${i + 1}: ${r.summary}`).join('\n')
+            : 'No recent reports yet.';
+
+          const evidence = await buildTranscriptEvidence(
+            reportRecords.map((r) => ({ id: r.id, agentRunId: r.agentRunId })),
+            artifactRepository
+          );
+          transcriptExcerpt = evidence.excerptText;
+          snapshotReportIds = resolvedForParticipant.reportIds;
+          snapshotOrigin = resolvedForParticipant.origin;
+          snapshotSourceItemIds = evidence.sourceItemIds;
+          snapshotWarnings = evidence.warnings;
+        } else if (groundingMode === 'transcript') {
+          recentReportsSummary =
+            'This discussion is grounded in the shared source material below - base your contributions on it.';
+          transcriptExcerpt = sharedEvidence?.excerptText ?? '';
+          snapshotSourceItemIds = sharedEvidence?.sourceItemIds ?? [];
+          snapshotWarnings = sharedEvidence?.warnings ?? [];
+        } else {
+          recentReportsSummary =
+            'There are no source reports for this discussion - argue from your own expertise and the agenda question.';
+          transcriptExcerpt = '';
+        }
 
         const languageInstruction = DISCUSSION_LANGUAGE_INSTRUCTIONS[discussion.formatConfig.language ?? 'en'];
         const systemPromptSections = [
@@ -155,16 +207,16 @@ export class DiscussionOrchestrator {
           systemPrompt: systemPromptSections.join('\n\n'),
           model: promptVersion?.model ?? DISCUSSION_FALLBACK_MODEL,
           recentReportsSummary,
-          transcriptExcerpt: evidence.excerptText
+          transcriptExcerpt
         });
 
         evidenceParticipants.push({
           participantId: p.id,
           agentId: p.agentId,
-          reportIds: resolvedForParticipant.reportIds,
-          origin: resolvedForParticipant.origin,
-          sourceItemIds: evidence.sourceItemIds,
-          transcriptWarnings: evidence.warnings
+          reportIds: snapshotReportIds,
+          origin: snapshotOrigin,
+          sourceItemIds: snapshotSourceItemIds,
+          transcriptWarnings: snapshotWarnings
         });
       }
 

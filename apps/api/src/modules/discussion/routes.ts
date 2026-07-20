@@ -24,11 +24,55 @@ export interface DiscussionRoutesDeps {
    * (explicit selection or latest-N fallback) before creating the run, rejecting with 422
    * otherwise. Omitted in older wiring/tests, in which case only the async orchestrator's own
    * validation applies. */
+  /** When provided, POST /runs validates that every participant resolves at least one report
+   * (explicit selection or latest-N fallback) before creating the run, rejecting with 422
+   * otherwise. Omitted in older wiring/tests, in which case only the async orchestrator's own
+   * validation applies. Skipped entirely for transcript/free-grounded discussions. */
   reportRepository?: ReportResolutionRepo;
   latestReportLimit?: number;
+  /** When provided, GET /api/discussions/transcript-options lists the user's recent raw
+   * source-material artifacts as pickable grounding for transcript-based discussions. */
+  artifactRepository?: {
+    listRecentEvidenceArtifacts(userId: string, limit?: number): Promise<Array<{
+      id: string;
+      agentId: string;
+      sourceRef: string;
+      payloadJson: string;
+      createdAt: Date;
+    }>>;
+  };
 }
 
 export async function registerDiscussionRoutes(app: FastifyInstance, deps: DiscussionRoutesDeps) {
+  // List the user's recent raw source-material artifacts (episode/page transcripts downloaded
+  // during agent runs) as pickable grounding for transcript-based discussions. Registered
+  // before /api/discussions/:id so the static segment wins route matching.
+  app.get('/api/discussions/transcript-options', async (req, reply) => {
+    if (!deps.artifactRepository) {
+      return reply.status(200).send([]);
+    }
+    const artifacts = await deps.artifactRepository.listRecentEvidenceArtifacts(req.userId!, 50);
+    const options = artifacts.map((artifact) => {
+      let parsed: { content?: unknown; title?: unknown; itemId?: unknown } | null = null;
+      try {
+        parsed = JSON.parse(artifact.payloadJson);
+      } catch {
+        parsed = null;
+      }
+      const content = typeof parsed?.content === 'string' ? parsed.content : '';
+      return {
+        artifactId: artifact.id,
+        agentId: artifact.agentId,
+        title: typeof parsed?.title === 'string' && parsed.title.length > 0 ? parsed.title : artifact.sourceRef,
+        sourceRef: artifact.sourceRef,
+        contentChars: content.length,
+        preview: content.slice(0, 160),
+        createdAt: artifact.createdAt
+      };
+    }).filter((option) => option.contentChars > 0);
+    return reply.status(200).send(options);
+  });
+
   // List discussions
   app.get('/api/discussions', async (req, reply) => {
     const discussions = await deps.discussionRepository.listDiscussions(req.userId!);
@@ -96,7 +140,8 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
       return reply.status(404).send({ code: 'not_found', message: 'Discussion not found' });
     }
 
-    if (deps.reportRepository) {
+    const groundingMode = discussion.formatConfig?.grounding?.mode ?? 'reports';
+    if (deps.reportRepository && groundingMode === 'reports') {
       const resolution = await resolveParticipantReports(
         discussion.participants.map((p) => ({ id: p.id, agentId: p.agentId, reportIds: p.reportIds })),
         deps.reportRepository,

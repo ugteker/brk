@@ -201,7 +201,8 @@ async function start() {
           discussionOrchestrator.run(discussionId, runId)
       },
       reportRepository,
-      latestReportLimit: config.discussion.latestReportLimit
+      latestReportLimit: config.discussion.latestReportLimit,
+      artifactRepository
     },
     db: prisma
   });

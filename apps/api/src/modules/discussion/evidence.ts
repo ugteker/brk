@@ -77,3 +77,57 @@ export async function buildTranscriptEvidence(
 
   return { excerptText: excerpts.join('\n\n'), sourceItemIds, warnings };
 }
+
+/** Max characters kept per shared transcript artifact when a discussion is grounded directly
+ * in a transcript (grounding mode 'transcript'). Larger than the per-report excerpt cap
+ * because here the transcript IS the discussion material, not supplementary evidence. */
+export const SHARED_TRANSCRIPT_MAX_CHARS = 2400;
+
+export interface SharedTranscriptArtifactRepo {
+  getArtifactsByIds(ids: string[]): Promise<Array<{ id: string; sourceRef: string; payloadJson: string }>>;
+}
+
+/**
+ * Builds the shared transcript evidence for a transcript-grounded discussion: the raw content
+ * of the explicitly picked artifacts, bounded per artifact, shared identically with every
+ * participant. Missing/unparsable artifacts produce warnings, not failures.
+ */
+export async function buildSharedTranscriptEvidence(
+  artifactIds: string[],
+  repo: SharedTranscriptArtifactRepo
+): Promise<TranscriptEvidence> {
+  const excerpts: string[] = [];
+  const sourceItemIds: string[] = [];
+  const warnings: string[] = [];
+
+  const artifacts = await repo.getArtifactsByIds(artifactIds);
+  const byId = new Map(artifacts.map((a) => [a.id, a]));
+
+  for (const id of artifactIds) {
+    const artifact = byId.get(id);
+    if (!artifact) {
+      warnings.push(`Transcript artifact ${id} not found`);
+      continue;
+    }
+    let parsed: { content?: unknown; itemId?: unknown; title?: unknown } | null = null;
+    try {
+      parsed = JSON.parse(artifact.payloadJson);
+    } catch {
+      parsed = null;
+    }
+    const content = typeof parsed?.content === 'string' ? parsed.content : null;
+    if (!content) {
+      warnings.push(`Transcript artifact ${id} has no readable content`);
+      continue;
+    }
+    const title = typeof parsed?.title === 'string' && parsed.title.length > 0 ? parsed.title : artifact.sourceRef;
+    const bounded = content.length <= SHARED_TRANSCRIPT_MAX_CHARS
+      ? content
+      : `${content.slice(0, SHARED_TRANSCRIPT_MAX_CHARS)}…`;
+    excerpts.push(`[${title}]\n${bounded}`);
+    const itemId = typeof parsed?.itemId === 'string' && parsed.itemId.length > 0 ? parsed.itemId : artifact.id;
+    sourceItemIds.push(itemId);
+  }
+
+  return { excerptText: excerpts.join('\n\n'), sourceItemIds, warnings };
+}

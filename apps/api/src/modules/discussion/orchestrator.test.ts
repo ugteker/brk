@@ -94,13 +94,13 @@ const mockSyntheticSource = {
   ensureSyntheticSource: vi.fn().mockResolvedValue(undefined)
 };
 
-function makeOrchestrator(overrides: { claude?: any; reportRepo?: any; repo?: any; promptRepo?: any } = {}) {
+function makeOrchestrator(overrides: { claude?: any; reportRepo?: any; repo?: any; promptRepo?: any; artifactRepo?: any } = {}) {
   return new DiscussionOrchestrator({
     discussionRepository: overrides.repo ?? makeMockRepo(),
     agentRepository: mockAgentRepo as any,
     promptRepository: overrides.promptRepo ?? (mockPromptRepo as any),
     reportRepository: overrides.reportRepo ?? makeMockReportRepo(),
-    artifactRepository: makeMockArtifactRepo() as any,
+    artifactRepository: (overrides.artifactRepo ?? makeMockArtifactRepo()) as any,
     claudeClient: overrides.claude ?? mockClaude as any,
     syntheticSource: mockSyntheticSource as any
   });
@@ -330,5 +330,93 @@ describe('DiscussionOrchestrator', () => {
       expect(text).toBe("I'd push back - the data center demand story is overstated.");
       expect(text).not.toContain('{');
     }
+  });
+
+  it('runs a free-grounded discussion without any reports and snapshots origin none', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion = vi.fn().mockResolvedValue({
+      ...mockDiscussion,
+      description: 'What does AI regulation mean for open-source models?',
+      formatConfig: { totalTurnTarget: 4, grounding: { mode: 'free' } }
+    });
+    // No reports exist at all - would fail resolution in 'reports' mode.
+    const emptyReportRepo = {
+      listReportsForAgent: vi.fn().mockResolvedValue([]),
+      getReportById: vi.fn().mockResolvedValue(null)
+    };
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }) } };
+    const orchestrator = makeOrchestrator({ repo, reportRepo: emptyReportRepo, claude });
+
+    await orchestrator.run('d1', 'r1');
+
+    expect(repo.createTurn).toHaveBeenCalledTimes(4);
+    expect(emptyReportRepo.listReportsForAgent).not.toHaveBeenCalled();
+    expect(repo.setRunEvidenceSnapshot).toHaveBeenCalledWith('r1', expect.objectContaining({
+      participants: expect.arrayContaining([
+        expect.objectContaining({ participantId: 'p1', reportIds: [], origin: 'none' })
+      ])
+    }));
+    // The agenda question reaches the prompt via the director context.
+    const firstPrompt = claude.messages.create.mock.calls[0][0].messages.at(-1).content as string;
+    expect(firstPrompt).toContain('What does AI regulation mean for open-source models?');
+    const lastCall = repo.updateRun.mock.calls.at(-1)!;
+    expect(lastCall[1]).toMatchObject({ status: 'done' });
+  });
+
+  it('shares the picked transcript with every participant in a transcript-grounded discussion', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion = vi.fn().mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: { totalTurnTarget: 4, grounding: { mode: 'transcript', artifactIds: ['artifact-9'] } }
+    });
+    const artifactRepo = {
+      listArtifactsForRun: vi.fn().mockResolvedValue([]),
+      getArtifactsByIds: vi.fn().mockResolvedValue([
+        {
+          id: 'artifact-9',
+          sourceRef: 'https://example.com/episode',
+          payloadJson: JSON.stringify({ content: 'Lanz and Precht debate AI ethics at length.', itemId: 'item-9', title: 'Lanz & Precht #42' }),
+          fidelity: 'high'
+        }
+      ])
+    };
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }) } };
+    const orchestrator = makeOrchestrator({ repo, artifactRepo, claude });
+
+    await orchestrator.run('d1', 'r1');
+
+    expect(artifactRepo.getArtifactsByIds).toHaveBeenCalledWith(['artifact-9']);
+    // Every turn prompt carries the shared transcript excerpt.
+    for (const call of claude.messages.create.mock.calls) {
+      const prompt = call[0].messages.at(-1).content as string;
+      expect(prompt).toContain('Lanz and Precht debate AI ethics at length.');
+    }
+    expect(repo.setRunEvidenceSnapshot).toHaveBeenCalledWith('r1', expect.objectContaining({
+      participants: expect.arrayContaining([
+        expect.objectContaining({ participantId: 'p2', origin: 'none', sourceItemIds: ['item-9'] })
+      ])
+    }));
+    const lastCall = repo.updateRun.mock.calls.at(-1)!;
+    expect(lastCall[1]).toMatchObject({ status: 'done' });
+  });
+
+  it('rejects a transcript-grounded run with a clear error when no transcript was selected', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion = vi.fn().mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: { totalTurnTarget: 4, grounding: { mode: 'transcript', artifactIds: [] } }
+    });
+    const artifactRepo = { listArtifactsForRun: vi.fn(), getArtifactsByIds: vi.fn() };
+    const orchestrator = makeOrchestrator({ repo, artifactRepo });
+
+    await orchestrator.run('d1', 'r1');
+
+    expect(repo.createTurn).not.toHaveBeenCalled();
+    const lastCall = repo.updateRun.mock.calls.at(-1)!;
+    expect(lastCall[1].status).toBe('error');
+    expect(lastCall[1].errorMessage).toMatch(/no transcript/i);
   });
 });
