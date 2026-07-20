@@ -11,8 +11,10 @@ export interface ClaudeMessagesClient {
       max_tokens: number;
       system: string;
       messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+      tools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
+      tool_choice?: { type: 'tool'; name: string };
     }): Promise<{
-      content: Array<{ type: string; text?: string }>;
+      content: Array<{ type: string; text?: string; name?: string; input?: unknown }>;
       stop_reason?: string | null;
       usage?: { input_tokens: number; output_tokens: number };
     }>;
@@ -79,6 +81,135 @@ Write "summary" and long text fields tersely: drop filler words, use fragments o
 }
 
 const FENCED_CODE_BLOCK_PATTERN = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
+
+/**
+ * JSON schema for the forced `submit_report` tool call. With tool use the API itself guarantees
+ * the payload arrives as parsed JSON — the whole class of "model produced almost-JSON text"
+ * failures (unescaped quotes in quoted speech, trailing commas, prose around the object, markdown
+ * fences) disappears. The schema mirrors the response-format prompt; deep validation/normalization
+ * still happens in parseClaudeResponse/normalizeUnifiedCharacterReport, so the schema stays
+ * permissive on nested detail.
+ */
+function buildReportToolSchema(characterType: CharacterType): Record<string, unknown> {
+  const sectionProperties: Record<string, unknown> = (() => {
+    switch (characterType) {
+      case 'finance_expert':
+        return {
+          character_type: { const: 'finance_expert' },
+          market_summary: { type: 'string' },
+          signals: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                symbol: { type: 'string' },
+                side: { enum: ['long', 'short'] },
+                confidence: { type: 'number', minimum: 0, maximum: 100 },
+                rationale: { type: 'string' },
+                citations: { type: 'array', items: { type: 'string' } }
+              },
+              required: ['symbol', 'side', 'confidence']
+            }
+          }
+        };
+      case 'teacher':
+        return { character_type: { const: 'teacher' }, lesson_explanation: { type: 'string' } };
+      case 'trainer':
+        return {
+          character_type: { const: 'trainer' },
+          qa_drill: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { question: { type: 'string' }, answer: { type: 'string' } },
+              required: ['question', 'answer']
+            }
+          }
+        };
+      case 'philosopher':
+        return { character_type: { const: 'philosopher' }, argument_reflection: { type: 'string' } };
+      case 'influencer':
+        return {
+          character_type: { const: 'influencer' },
+          content_angles: { type: 'array', items: { type: 'string' } },
+          hooks: { type: 'array', items: { type: 'string' } }
+        };
+      case 'summarizer':
+      default:
+        return { character_type: { const: 'summarizer' }, bullet_digest: { type: 'array', items: { type: 'string' } } };
+    }
+  })();
+
+  return {
+    type: 'object',
+    properties: {
+      common: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string' },
+          key_takeaways: { type: 'array', items: { type: 'string' } },
+          sources_used: { type: 'array', items: { type: 'string' } },
+          citations: { type: 'array', items: { type: 'string' } },
+          headline: { type: 'string' },
+          short_summary: { type: 'string' },
+          result_type: { enum: ['insight', 'summary', 'risk', 'recommendation', 'question', 'update'] },
+          keywords: { type: 'array', items: { type: 'string' } },
+          relevance: { type: 'number' },
+          confidence: { type: 'number' },
+          evidence: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { claim: { type: 'string' }, citations: { type: 'array', items: { type: 'string' } } },
+              required: ['claim']
+            }
+          },
+          entities: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { name: { type: 'string' }, type: { type: 'string' } },
+              required: ['name', 'type']
+            }
+          },
+          recommendation: { type: 'string' },
+          open_questions: { type: 'array', items: { type: 'string' } },
+          time_horizon: { enum: ['immediate', 'short_term', 'medium_term', 'long_term', 'unspecified'] },
+          tone: { enum: ['neutral', 'positive', 'cautious', 'critical', 'urgent'] },
+          source_references: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { label: { type: 'string' }, reference: { type: 'string' } },
+              required: ['label', 'reference']
+            }
+          },
+          novelty: { type: 'number' },
+          card_presentation: {
+            type: 'object',
+            properties: {
+              emphasis: { enum: ['standard', 'attention', 'critical', 'positive'] },
+              primary_field: { enum: ['headline', 'short_summary', 'recommendation', 'open_question', 'key_takeaway'] },
+              supporting_fields: {
+                type: 'array',
+                items: { enum: ['result_type', 'keywords', 'relevance', 'confidence', 'time_horizon', 'entities', 'evidence', 'novelty'] }
+              },
+              hide_when_empty: { type: 'boolean' },
+              rationale: { type: 'string' }
+            }
+          }
+        },
+        required: ['summary', 'key_takeaways']
+      },
+      section: { type: 'object', properties: sectionProperties, required: ['character_type'] },
+      sourceWarnings: { type: 'array', items: { type: 'string' } },
+      needsHumanReview: { type: 'boolean' }
+    },
+    required: ['common', 'section', 'needsHumanReview']
+  };
+}
+
+const REPORT_TOOL_NAME = 'submit_report';
 
 /**
  * Extracts a JSON payload from Claude's raw text response. Despite `RESPONSE_FORMAT_INSTRUCTIONS`
@@ -155,13 +286,20 @@ export class ClaudeClient {
       // than a clear "truncated" error. Raised well above what a typical structured report needs.
       max_tokens: 8192,
       system: request.systemPrompt,
-      messages: [{ role: 'user', content: userMessage }]
+      messages: [{ role: 'user', content: userMessage }],
+      // Forced tool call: the API returns the report as an already-parsed JSON object, which
+      // eliminates almost-JSON text failures (unescaped quotes in quoted speech, prose around
+      // the payload, markdown fences). The text path below stays as a defensive fallback for
+      // clients/models that answer with plain text anyway.
+      tools: [
+        {
+          name: REPORT_TOOL_NAME,
+          description: 'Submit the structured analysis report. Must be called exactly once with the complete report.',
+          input_schema: buildReportToolSchema(request.characterType)
+        }
+      ],
+      tool_choice: { type: 'tool', name: REPORT_TOOL_NAME }
     });
-
-    const textBlock = response.content.find((block) => block.type === 'text');
-    if (!textBlock?.text) {
-      throw new Error('Claude response did not contain a text block');
-    }
 
     if (response.stop_reason === 'max_tokens') {
       throw new Error(
@@ -170,11 +308,22 @@ export class ClaudeClient {
     }
 
     let parsed: Parameters<typeof parseClaudeResponse>[0];
-    try {
-      parsed = JSON.parse(extractJsonFromResponseText(textBlock.text)) as Parameters<typeof parseClaudeResponse>[0];
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(`Claude response was not valid JSON: ${reason}`);
+    const toolBlock = response.content.find(
+      (block) => block.type === 'tool_use' && block.name === REPORT_TOOL_NAME && block.input && typeof block.input === 'object'
+    );
+    if (toolBlock) {
+      parsed = toolBlock.input as Parameters<typeof parseClaudeResponse>[0];
+    } else {
+      const textBlock = response.content.find((block) => block.type === 'text');
+      if (!textBlock?.text) {
+        throw new Error('Claude response did not contain a text block');
+      }
+      try {
+        parsed = JSON.parse(extractJsonFromResponseText(textBlock.text)) as Parameters<typeof parseClaudeResponse>[0];
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`Claude response was not valid JSON: ${reason}`);
+      }
     }
     const result = parseClaudeResponse(parsed, request.characterType);
     if (response.usage) {
