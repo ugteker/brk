@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Button, Card, Tag } from 'antd';
-import { AudioOutlined, ExportOutlined, LinkOutlined, MessageOutlined } from '@ant-design/icons';
+import { ExportOutlined, LinkOutlined, MessageOutlined } from '@ant-design/icons';
 import type { CharacterType, RunReportDto } from '../api/agents';
 import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
 import { getReportAccent, getReportAccentClasses } from '../utils/reportAccent';
@@ -157,66 +157,63 @@ export function FeedCard({
   }
 
   const showSignals = characterType === 'finance_expert' && signals.length > 0;
-  const showAccentBar = emphasis === 'critical';
 
   return (
     <Card
       size="small"
       hoverable
-      className="relative cursor-pointer overflow-hidden border border-violet-100 bg-white shadow-sm transition-[transform,box-shadow,border-color] hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-lg dark:border-violet-950 dark:bg-gray-900 dark:hover:border-violet-800"
-      styles={{ body: { padding: 0 } }}
+      className="relative flex cursor-pointer overflow-hidden border border-violet-100 bg-white shadow-sm transition-[transform,box-shadow,border-color] hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-lg dark:border-violet-950 dark:bg-gray-900 dark:hover:border-violet-800"
+      styles={{ body: { padding: 0, display: 'flex', width: '100%', minWidth: 0 } }}
       onClick={onOpenFullReport}
     >
-      {showAccentBar ? <span aria-hidden="true" className={`pointer-events-none absolute inset-x-0 top-0 z-20 h-[3px] rounded-t-[inherit] ${accent.bar}`} /> : null}
-
-      {/* Hero: same treatment as the Library card (blurred-fill + contained cover, neutral placeholder — never a loud, off-brand block). */}
-      <div className="relative h-44 overflow-hidden bg-slate-900">
+      {/* LEFT: Cover image strip — visual anchor */}
+      <div className="relative w-20 shrink-0 overflow-hidden sm:w-24">
+        {/* Accent top band (always visible, colour driven by emphasis/result_type) */}
+        <span aria-hidden="true" className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px] ${accent.bar}`} />
         {isSyntheticSource ? (
-          <div data-testid="feed-card-synthetic-thumb" className="relative flex h-full items-center justify-center overflow-hidden bg-gradient-to-br from-[#1e1239] via-[#54239a] to-[#164e78]">
-            <div aria-hidden="true" className="absolute -left-12 -top-16 h-44 w-44 rounded-full bg-violet-300/30 blur-3xl" />
-            <div aria-hidden="true" className="absolute -bottom-20 -right-8 h-52 w-52 rounded-full bg-sky-300/25 blur-3xl" />
-            <div className="relative flex h-24 w-24 items-center justify-center rounded-[1.75rem] border border-white/25 bg-white/15 text-white shadow-xl shadow-violet-950/40 backdrop-blur-sm">
-              <AudioOutlined className="text-5xl" />
-            </div>
+          <div
+            data-testid="feed-card-synthetic-thumb"
+            className="relative flex h-full items-center justify-center bg-gradient-to-br from-[#1e1239] via-[#54239a] to-[#164e78]"
+          >
+            <span aria-hidden="true" className="text-3xl">{personaEmoji}</span>
           </div>
         ) : sourceCoverImageUrl ? (
-          <>
-            <img aria-hidden="true" src={sourceCoverImageUrl} className="absolute -inset-4 h-[calc(100%+2rem)] w-[calc(100%+2rem)] object-cover blur-xl opacity-60" />
-            <img data-testid="feed-card-cover" src={sourceCoverImageUrl} alt="" className="relative h-full w-full object-contain" />
-          </>
+          <img
+            data-testid="feed-card-cover"
+            src={sourceCoverImageUrl}
+            alt=""
+            className="h-full w-full object-cover"
+          />
         ) : (
-          <div data-testid="feed-card-placeholder" className="flex h-full items-center justify-center text-sm text-slate-300">
-            {t('library.coverUnavailable')}
+          <div
+            data-testid="feed-card-placeholder"
+            className={`flex h-full items-center justify-center ${getCharacterTypeIconBg(characterType)}`}
+          >
+            <span aria-hidden="true" className="text-3xl">{personaEmoji}</span>
           </div>
         )}
-        <div className="absolute left-3 top-3">
-          <Tag className={`m-0 border-0 text-[10px] font-semibold tracking-wide ${accent.badge}`}>{t(`feedCard.resultType.${resultType}`)}</Tag>
+        {/* Result type badge overlaid at bottom of image strip */}
+        <div className="absolute bottom-2 left-0 right-0 flex justify-center px-1">
+          <Tag className={`m-0 border-0 text-[10px] font-semibold tracking-wide ${accent.badge}`}>
+            {t(`feedCard.resultType.${resultType}`)}
+          </Tag>
         </div>
       </div>
 
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          <span
-            role="img"
-            aria-label={characterType ?? 'summarizer'}
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${getCharacterTypeIconBg(characterType)}`}
-          >
-            {personaEmoji}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{characterLabel}</span>
-              {personalityLabel ? <span className="text-xs text-muted-foreground">· {personalityLabel}</span> : null}
-            </div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
-              <span className="truncate">{sourceTitle}</span>
-              <span aria-hidden="true">·</span>
-              <span>{new Date(report.createdAt).toLocaleDateString(i18n.language)}</span>
-            </div>
-          </div>
+      {/* RIGHT: Content */}
+      <div className="min-w-0 flex-1 p-4">
+        {/* Agent meta — image strip replaces the avatar, no emoji duplicate here */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="font-semibold text-gray-600 dark:text-gray-300">{characterLabel}</span>
+          {personalityLabel ? <span className="text-muted-foreground">· {personalityLabel}</span> : null}
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+          <span className="truncate">{sourceTitle}</span>
+          <span aria-hidden="true">·</span>
+          <span>{new Date(report.createdAt).toLocaleDateString(i18n.language)}</span>
         </div>
 
-        <h3 className="mt-3 text-base font-semibold leading-snug text-foreground">{primaryText}</h3>
+        <h3 className="mt-2.5 text-[15px] font-semibold leading-snug text-foreground">{primaryText}</h3>
 
         {focusContent ? (
           <div className={`mt-3 rounded-xl border px-4 py-3 ${accent.focusBox}`}>

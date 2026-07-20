@@ -38,6 +38,7 @@ import { AgentStatusCard } from '../components/AgentStatusCard';
 import { AgentReportsBrowser } from '../components/AgentReportsBrowser';
 import { AgentRunsBrowser } from '../components/AgentRunsBrowser';
 import { FeedCard, groupReportsByDay } from '../components/FeedCard';
+import { ReportChatPanel } from '../components/ReportChatPanel';
 import { CharacterReportRenderer } from '../components/CharacterReportRenderer';
 import { AgentPromptEditor } from '../components/AgentPromptEditor';
 import { EpisodePickerModal } from '../components/EpisodePickerModal';
@@ -1884,11 +1885,23 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                       title={viewingFullReport
                         ? (viewingFullReport.report?.common?.headline?.trim() || viewingFullReport.summary)
                         : undefined}
-                      styles={{ body: { padding: 0, overflowY: 'auto' } }}
+                      styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
                     >
-                      {viewingFullReport?.report
-                        ? <CharacterReportRenderer report={viewingFullReport.report} />
-                        : <Empty description={t('feedCard.noFullReport')} />}
+                      {/* Scrollable report content */}
+                      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+                        {viewingFullReport?.report
+                          ? <CharacterReportRenderer report={viewingFullReport.report} />
+                          : <Empty description={t('feedCard.noFullReport')} />}
+                      </div>
+                      {/* Fixed chat panel at bottom */}
+                      {viewingFullReport ? (
+                        <div className="shrink-0 border-t border-border p-4">
+                          <ReportChatPanel
+                            agentId={viewingFullReport.agentId}
+                            reportId={viewingFullReport.id}
+                          />
+                        </div>
+                      ) : null}
                     </Drawer>
                   </>
                 )

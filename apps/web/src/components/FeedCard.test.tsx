@@ -56,7 +56,6 @@ function renderCard(props: Partial<ComponentProps<typeof FeedCard>> = {}) {
   const onDiscuss = vi.fn();
   const onOpenFullReport = vi.fn();
   const onOpenSource = vi.fn();
-  const onOpenInPlaybooks = vi.fn();
   render(
     <FeedCard
       report={makeReport({ result_type: 'summary' })}
@@ -67,12 +66,11 @@ function renderCard(props: Partial<ComponentProps<typeof FeedCard>> = {}) {
       isSyntheticSource={false}
       onOpenFullReport={onOpenFullReport}
       onOpenSource={onOpenSource}
-      onOpenInPlaybooks={onOpenInPlaybooks}
       onDiscuss={onDiscuss}
       {...props}
     />
   );
-  return { onDiscuss, onOpenFullReport, onOpenSource, onOpenInPlaybooks };
+  return { onDiscuss, onOpenFullReport, onOpenSource };
 }
 
 describe('FeedCard', () => {
@@ -157,18 +155,18 @@ describe('FeedCard', () => {
     expect(screen.queryByTestId('feed-card-placeholder')).not.toBeInTheDocument();
   });
 
-  it('renders a cover thumbnail (blurred fill + contained image, matching the Library card) when cover art is present', () => {
+  it('renders a cover image in the left strip when cover art is present', () => {
     renderCard({ sourceCoverImageUrl: 'https://example.com/cover.jpg' });
     const cover = screen.getByTestId('feed-card-cover');
     expect(cover).toBeInTheDocument();
-    expect(cover.className).toContain('object-contain');
+    expect(cover.className).toContain('object-cover');
     expect(screen.queryByTestId('feed-card-placeholder')).not.toBeInTheDocument();
   });
 
-  it('shows the same neutral "cover unavailable" placeholder as the Library card when there is no cover art', () => {
+  it('shows a character-emoji placeholder in the left strip when there is no cover art', () => {
     renderCard({ sourceCoverImageUrl: null, isSyntheticSource: false });
     expect(screen.getByTestId('feed-card-placeholder')).toBeInTheDocument();
-    expect(screen.getByText('Cover unavailable')).toBeInTheDocument();
+    expect(screen.queryByTestId('feed-card-cover')).not.toBeInTheDocument();
   });
 
   it('fires onOpenFullReport (not any footer action) when the card body is clicked', () => {
@@ -204,8 +202,8 @@ describe('FeedCard', () => {
     expect(screen.queryByTitle(/Episode/i)).not.toBeInTheDocument();
   });
 
-  it('omits the "View run" link when onOpenInPlaybooks is not provided', () => {
-    renderCard({ onOpenInPlaybooks: undefined });
+  it('omits the "View run" link (removed from card footer)', () => {
+    renderCard();
     expect(screen.queryByText('View run')).not.toBeInTheDocument();
   });
 });
