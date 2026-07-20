@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Button,
@@ -52,6 +52,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
   const isEditing = Boolean(agent);
   const [currentStep, setCurrentStep] = useState(0);
   const [maxVisitedStep, setMaxVisitedStep] = useState(0);
+  const [name, setName] = useState(agent?.name ?? '');
   const [description, setDescription] = useState(agent?.description ?? '');
   const [active, setActive] = useState(agent ? agent.status === 'active' : true);
 
@@ -76,6 +77,13 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
   const selectedPersonaLabel = selectedPersona?.name ?? personaId;
   const selectedCharacterLabel = selectedCharacter?.name ?? characterId;
   const agentDisplayLabel = `${selectedCharacterLabel} · ${selectedPersonaLabel}`;
+
+  // Initialize agent name to either the provided agent name or the derived display label
+  useEffect(() => {
+    if (!agent?.name && (!name || name.trim().length === 0)) {
+      setName(agentDisplayLabel);
+    }
+  }, [agent, agentDisplayLabel]);
 
   function onPersonaChange(nextPersonaId: string) {
     const nextCharacters = getPromptCharactersForPersona(nextPersonaId);
@@ -104,6 +112,10 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
       }
       if (!characterId) {
         setValidationError('Choose a personality to continue.');
+        return false;
+      }
+      if (!name || name.trim().length === 0) {
+        setValidationError('Give this agent a short name to continue.');
         return false;
       }
     }
@@ -151,6 +163,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
       setSaveState('saving');
 
       const payload = {
+        name: name && name.trim().length > 0 ? name.trim() : undefined,
         description,
         active,
         characterType: personaId,
@@ -261,6 +274,9 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                   <p className="text-xs text-muted-foreground">Your agent will appear as</p>
                   <p className="font-medium">{agentDisplayLabel}</p>
                 </div>
+                <Form.Item label="Agent name">
+                  <Input aria-label="Agent name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+                </Form.Item>
                 <Form.Item label="Description" extra="Keep it brief. You can refine behavior in the next step.">
                   <TextArea
                     aria-label="Description"
@@ -299,7 +315,9 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
                         ]}
                       />
                     </Form.Item>
-                  ) : null}
+                  ) : (
+                    <Paragraph className="text-xs text-muted-foreground">Risk level is only used for finance expert personality</Paragraph>
+                  )}
                 </div>
 
                 <Form.Item label="Model">

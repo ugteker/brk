@@ -13,6 +13,22 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
   }) as unknown as MediaQueryList;
 }
 
+// Ant Design relies on getComputedStyle for measurements; jsdom sometimes
+// doesn't implement it. Provide a minimal stub used by rc-component's
+// getScrollBarSize and other layout utilities.
+if (typeof window !== 'undefined') {
+  // Force a harmless stub for getComputedStyle so rc-component/antd's
+  // measurement utilities don't call jsdom's unimplemented helper.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).getComputedStyle = (elt: Element, pseudo?: string) => {
+    return {
+      getPropertyValue: (prop: string) => '',
+      width: '0px',
+      height: '0px'
+    } as any;
+  };
+}
+
 // Ant Design's auto-sizing TextArea observes element resize via ResizeObserver,
 // which jsdom does not implement either.
 if (typeof window !== 'undefined' && !('ResizeObserver' in window)) {
