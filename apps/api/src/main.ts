@@ -27,7 +27,7 @@ import { UserRepository } from './modules/auth/repository';
 import { GoogleOAuthHttpClient } from './modules/auth/google-oauth';
 import { hashPassword } from './modules/auth/password';
 import { SmtpMailer } from './modules/auth/mailer';
-import { config } from './config';
+import { config, isTtsConfigured } from './config';
 import { AccessRepository } from './modules/access/repository';
 import { DomainAccessResolver } from './modules/access/permissions';
 import { SourceRepository } from './modules/source/repository';
@@ -40,6 +40,9 @@ import { PrismaUsageStore, UsageService } from './modules/usage/budget';
 import { DiscussionRepository } from './modules/discussion/repository';
 import { DiscussionOrchestrator } from './modules/discussion/orchestrator';
 import { SyntheticSourceService } from './modules/discussion/synthetic-source';
+import { OpenAITtsClient } from './modules/discussion/tts-client';
+import { FileTtsStorage } from './modules/discussion/tts-storage';
+import OpenAI from 'openai';
 import { logger } from './lib/logger';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
@@ -202,7 +205,16 @@ async function start() {
       },
       reportRepository,
       latestReportLimit: config.discussion.latestReportLimit,
-      artifactRepository
+      artifactRepository,
+      audioDir: config.tts.audioDir,
+      // TTS is optional: without an OPENAI_API_KEY the render endpoint answers 501
+      // and the UI tells the user that audio rendering isn't configured.
+      ...(isTtsConfigured()
+        ? {
+            ttsClient: new OpenAITtsClient(new OpenAI({ apiKey: config.tts.openaiApiKey })),
+            ttsStorage: new FileTtsStorage(config.tts.audioDir)
+          }
+        : {})
     },
     db: prisma
   });

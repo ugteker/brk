@@ -22,6 +22,7 @@ import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character
 import { listAgentReports, type RunReportDto } from '../api/agents';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
+  getAudioRenderStatus,
   getDiscussion,
   listDiscussionRuns,
   triggerAudioRender,
@@ -313,12 +314,33 @@ export function DiscussionDetail() {
 
   async function handleRenderAudio() {
     if (!discussionId || !selectedRunId) return;
+    const runId = selectedRunId;
     setRenderingAudio(true);
     try {
-      await triggerAudioRender(discussionId, selectedRunId);
-      message.success(t('studio.audioRendering'));
-    } catch {
-      message.error('Audio render failed');
+      await triggerAudioRender(discussionId, runId);
+      message.info(t('studio.audioRendering'));
+      // Poll until the detached render finishes (or fails) so the player appears
+      // without a manual page reload. Capped at 5 minutes.
+      for (let i = 0; i < 100; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const status = await getAudioRenderStatus(discussionId, runId);
+        if (status.state === 'done') {
+          message.success(t('studio.audioReady'));
+          await loadData();
+          return;
+        }
+        if (status.state === 'error') {
+          message.error(t('studio.audioFailed'));
+          return;
+        }
+      }
+      message.warning(t('studio.audioFailed'));
+    } catch (error) {
+      message.error(
+        error instanceof Error && error.message === 'tts_not_configured'
+          ? t('studio.audioNotConfigured')
+          : t('studio.audioFailed')
+      );
     } finally {
       setRenderingAudio(false);
     }

@@ -193,7 +193,19 @@ export async function triggerAudioRender(id: string, runId: string): Promise<voi
     method: 'POST',
     credentials: 'include'
   });
+  if (res.status === 501) throw new Error('tts_not_configured');
   if (!res.ok) throw new Error('Failed to trigger audio render');
+}
+
+export type AudioRenderState = 'idle' | 'rendering' | 'done' | 'error';
+
+export async function getAudioRenderStatus(
+  id: string,
+  runId: string
+): Promise<{ state: AudioRenderState; audioUrl: string | null }> {
+  const res = await fetch(`${BASE}/${id}/runs/${runId}/audio-status`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Failed to get audio status');
+  return res.json();
 }
 
 export async function deleteDiscussion(id: string): Promise<void> {

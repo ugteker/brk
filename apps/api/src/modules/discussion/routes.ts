@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify';
+import { promises as fs } from 'fs';
+import path from 'path';
 import type { DiscussionRepositoryLike } from './repository';
 import type { CreateDiscussionInput, UpdateDiscussionInput, DiscussionTrigger } from './types';
 import { resolveParticipantReports, type ReportResolutionRepo } from './report-resolution';
+import { sanitizeAudioFileName } from './tts-storage';
 
 export interface DiscussionRunTriggerLike {
   triggerDiscussionRun(discussionId: string, runId: string): Promise<void>;
@@ -20,6 +23,8 @@ export interface DiscussionRoutesDeps {
   runTrigger?: DiscussionRunTriggerLike;
   ttsClient?: DiscussionTtsLike;
   ttsStorage?: DiscussionTtsStorageLike;
+  /** Directory rendered mp3 files are read from by GET /api/discussions/audio/:file. */
+  audioDir?: string;
   /** When provided, POST /runs validates that every participant resolves at least one report
    * (explicit selection or latest-N fallback) before creating the run, rejecting with 422
    * otherwise. Omitted in older wiring/tests, in which case only the async orchestrator's own
@@ -44,6 +49,36 @@ export interface DiscussionRoutesDeps {
 }
 
 export async function registerDiscussionRoutes(app: FastifyInstance, deps: DiscussionRoutesDeps) {
+  // Tracks in-flight/failed audio renders per run so the UI can poll for progress -
+  // the actual render runs detached from the triggering request.
+  const audioRenderState = new Map<string, 'rendering' | 'error' | 'done'>();
+
+  // Serves rendered discussion audio. Registered before /api/discussions/:id so the
+  // static "audio" segment wins route matching. File names embed the run ID, which is
+  // resolved back to its discussion to enforce ownership.
+  app.get('/api/discussions/audio/:file', async (req, reply) => {
+    const { file } = req.params as { file: string };
+    if (!deps.audioDir) {
+      return reply.status(404).send({ code: 'not_found', message: 'Audio not available' });
+    }
+    const safeName = sanitizeAudioFileName(file.replace(/\.mp3$/i, ''));
+    // Keys are `${runId}-turn-N` or `${runId}-full`; run IDs are cuid-style with no dashes.
+    const runId = safeName.split('-')[0];
+    const run = await deps.discussionRepository.getRunWithTurns(runId);
+    const discussion = run ? await deps.discussionRepository.getDiscussion(run.discussionId) : null;
+    if (!discussion || discussion.ownerUserId !== req.userId) {
+      return reply.status(404).send({ code: 'not_found', message: 'Audio not found' });
+    }
+    try {
+      const buffer = await fs.readFile(path.join(deps.audioDir, `${safeName}.mp3`));
+      reply.header('Content-Type', 'audio/mpeg');
+      reply.header('Cache-Control', 'private, max-age=86400');
+      return reply.send(buffer);
+    } catch {
+      return reply.status(404).send({ code: 'not_found', message: 'Audio file not found' });
+    }
+  });
+
   // List the user's recent raw source-material artifacts (episode/page transcripts downloaded
   // during agent runs) as pickable grounding for transcript-based discussions. Registered
   // before /api/discussions/:id so the static segment wins route matching.
@@ -231,6 +266,7 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
 
     const ttsClient = deps.ttsClient;
     const ttsStorage = deps.ttsStorage;
+    audioRenderState.set(runId, 'rendering');
     (async () => {
       const allAudio: Buffer[] = [];
       for (const turn of run.turns) {
@@ -244,8 +280,28 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
       const stitched = Buffer.concat(allAudio);
       const stitchedUrl = await ttsStorage.save(`${runId}-full`, stitched);
       await deps.discussionRepository.updateRun(runId, { audioUrl: stitchedUrl });
-    })().catch(() => {});
+      audioRenderState.set(runId, 'done');
+    })().catch((error) => {
+      audioRenderState.set(runId, 'error');
+      app.log.error({ err: error, runId }, 'discussion audio render failed');
+    });
 
     return reply.status(202).send({ message: 'Audio rendering started' });
+  });
+
+  // Lets the UI poll whether a triggered audio render finished, failed, or was never
+  // started (state survives only in-process; a restart falls back to audioUrl presence).
+  app.get('/api/discussions/:id/runs/:runId/audio-status', async (req, reply) => {
+    const { id, runId } = req.params as { id: string; runId: string };
+    const discussion = await deps.discussionRepository.getDiscussion(id);
+    if (!discussion || discussion.ownerUserId !== req.userId) {
+      return reply.status(404).send({ code: 'not_found', message: 'Discussion not found' });
+    }
+    const run = await deps.discussionRepository.getRunWithTurns(runId);
+    if (!run) {
+      return reply.status(404).send({ code: 'not_found', message: 'Run not found' });
+    }
+    const state = audioRenderState.get(runId) ?? (run.audioUrl ? 'done' : 'idle');
+    return reply.send({ state, audioUrl: run.audioUrl ?? null });
   });
 }
