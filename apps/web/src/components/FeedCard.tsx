@@ -57,8 +57,6 @@ export interface FeedCardProps {
   onOpenFullReport: () => void;
   /** Jumps to the source in the Library hub, when the source can be resolved */
   onOpenSource?: () => void;
-  /** Jumps to the run/report inside the Playbooks hub, when resolvable */
-  onOpenInPlaybooks?: () => void;
   onDiscuss: () => void;
 }
 
@@ -72,7 +70,6 @@ export function FeedCard({
   isSyntheticSource,
   onOpenFullReport,
   onOpenSource,
-  onOpenInPlaybooks,
   onDiscuss
 }: FeedCardProps) {
   const { t, i18n } = useTranslation();
@@ -301,18 +298,6 @@ export function FeedCard({
             >
               {t('feedCard.discuss')}
             </Button>
-            {onOpenInPlaybooks ? (
-              <button
-                type="button"
-                className="font-medium text-violet-600 hover:text-violet-800 dark:text-violet-300 dark:hover:text-violet-100"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpenInPlaybooks();
-                }}
-              >
-                {t('feedCard.viewRun')} ›
-              </button>
-            ) : null}
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Badge, Button, Card, Dropdown, Empty, Input, Modal, Popconfirm, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
+import { Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
@@ -37,6 +37,8 @@ import { AgentForm } from '../components/AgentForm';
 import { AgentStatusCard } from '../components/AgentStatusCard';
 import { AgentReportsBrowser } from '../components/AgentReportsBrowser';
 import { AgentRunsBrowser } from '../components/AgentRunsBrowser';
+import { FeedCard, groupReportsByDay } from '../components/FeedCard';
+import { CharacterReportRenderer } from '../components/CharacterReportRenderer';
 import { AgentPromptEditor } from '../components/AgentPromptEditor';
 import { EpisodePickerModal } from '../components/EpisodePickerModal';
 import { TouchSafeTooltip } from '../components/TouchSafeTooltip';
@@ -102,6 +104,7 @@ import { EntityActions } from '../components/EntityActions';
 import { InlineDeleteButton } from '../components/InlineDeleteButton';
 import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID } from '../data/prompt-personas';
 import { getAgentDisplayLabel } from '../utils/agent-label';
+import { extractYoutubeVideoId, getYoutubeThumbnailUrl } from '../utils/youtube';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -285,27 +288,6 @@ function probeRankScore(probe: { reachable: boolean; kind: ProbeKind; confidence
   return score;
 }
 
-function extractYoutubeVideoId(url?: string | null): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.includes('youtu.be')) {
-      return parsed.pathname.replace('/', '') || null;
-    }
-    if (parsed.hostname.includes('youtube.com')) {
-      if (parsed.pathname === '/watch') {
-        return parsed.searchParams.get('v');
-      }
-      if (parsed.pathname.startsWith('/shorts/')) {
-        return parsed.pathname.split('/')[2] ?? null;
-      }
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
 function formatPlaybookSchedule(schedule: PlaybookRecord['schedule']): string {
   if (schedule.mode === 'interval') return `Every ${schedule.intervalMinutes} min`;
   if (schedule.mode === 'daily') return `Daily ${schedule.dailyTime} (${schedule.timezone})`;
@@ -443,6 +425,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }, [initialHub]);
   const [feedReports, setFeedReports] = useState<Array<RunReportDto & { agentName: string; playbookName: string }>>([]);
   const [feedLoading, setFeedLoading] = useState(false);
+  const [feedSearch, setFeedSearch] = useState('');
+  const [viewingFullReport, setViewingFullReport] = useState<RunReportDto & { agentName: string; playbookName: string } | null>(null);
 
   const HUB_TO_PATH: Record<HubKey, string> = { feed: '/', sources: '/library', agents: '/agents', playbooks: '/playbooks' };
 
@@ -719,6 +703,25 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }).catch(() => { if (alive) setFeedLoading(false); });
     return () => { alive = false; };
   }, [playbooks, agents]);
+
+  // Start a Studio discussion seeded with this report + its agent. The wizard still needs a
+  // second participant (discussions require >= 2), so this lands the user in /studio/new with
+  // the agent pre-checked rather than creating a discussion outright.
+  function openDiscussionFromReport(report: RunReportDto) {
+    const contextLabel = (report.report?.common?.headline?.trim() || report.summary || '').slice(0, 80);
+    const preselect: DiscussionPreselect = {
+      entries: [{ agentId: report.agentId, reportIds: [report.id] }],
+      contextLabel
+    };
+    navigate('/studio/new', { state: { preselect } });
+  }
+
+  // Jump from a feed card straight to its source's detail view in the Library hub.
+  function openSourceInLibrary(source: SourceRecord) {
+    setActiveHub('sources');
+    setSelectedSourceId(source.id);
+    setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports');
+  }
 
   // Applies a symbol deep link from a report notification email (?agentId=&symbol=), which opens
   // straight into that agent's SymbolPerformancePage. Runs once agents have loaded (so we can
@@ -1534,7 +1537,17 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     if (source.metadata.coverImageUrl) return source.metadata.coverImageUrl;
     if (source.type !== 'youtube_videos') return null;
     const firstPreviewVideoId = extractYoutubeVideoId(source.metadata.previewItems[0]?.link);
-    if (firstPreviewVideoId) return `https://i.ytimg.com/vi/${firstPreviewVideoId}/hqdefault.jpg`;
+    return firstPreviewVideoId ? getYoutubeThumbnailUrl(firstPreviewVideoId) : null;
+  }
+
+  // A report's own cited video URL is fresher and more accurate than the source's cached
+  // (creation-time-only, never refreshed by crawls) preview snapshot above — prefer it.
+  function getReportEpisodeThumbnailUrl(report: RunReportDto): string | null {
+    const references = report.report?.common?.source_references ?? [];
+    for (const reference of references) {
+      const videoId = extractYoutubeVideoId(reference.reference);
+      if (videoId) return getYoutubeThumbnailUrl(videoId);
+    }
     return null;
   }
 
@@ -1779,218 +1792,105 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 key: 'feed',
                 label: <span><FileTextOutlined /> {t('nav.feed')}</span>,
                 children: (
-                  <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}><FileTextOutlined /> {t('nav.feed')}</Title>}>
-                    {feedLoading ? (
-                      <div className="space-y-3">
-                        {[1,2,3].map(i => <Skeleton key={i} active paragraph={{ rows: 2 }} />)}
-                      </div>
-                    ) : feedReports.length === 0 ? (
-                      <div className="flex flex-col items-center gap-4 py-12 text-center">
-                        <span className="text-5xl">📊</span>
-                        <div>
-                          <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('nav.feedEmpty')}</p>
-                          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('nav.feedEmptyDesc')}</p>
+                  <>
+                    <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}><FileTextOutlined /> {t('nav.feed')}</Title>}>
+                      {feedLoading ? (
+                        <div className="space-y-3">
+                          {[1,2,3].map(i => <Skeleton key={i} active paragraph={{ rows: 2 }} />)}
                         </div>
-                        <Button type="primary" onClick={() => setActiveHub('sources')}>{t('nav.library')}</Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {feedReports.slice(0, 30).map((report) => {
-                          const signals = report.signals ?? [];
-                          const bullCount = signals.filter((s) => s.side === 'long').length;
-                          const bearCount = signals.filter((s) => s.side === 'short').length;
+                      ) : feedReports.length === 0 ? (
+                        <div className="flex flex-col items-center gap-4 py-12 text-center">
+                          <span className="text-5xl">📰</span>
+                          <div>
+                            <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('nav.feedEmpty')}</p>
+                            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('nav.feedEmptyDesc')}</p>
+                          </div>
+                          <Button type="primary" onClick={() => setActiveHub('sources')}>{t('nav.library')}</Button>
+                        </div>
+                      ) : (() => {
+                        const normalizedFeedSearch = feedSearch.trim().toLowerCase();
+                        const searchFilteredReports = !normalizedFeedSearch ? feedReports : feedReports.filter((report) => {
                           const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
-                          const source = playbook?.sourceIds.length === 1
-                            ? sources.find((candidate) => candidate.id === playbook.sourceIds[0])
-                            : undefined;
-                          const sourceCoverImageUrl = source ? getSourceCoverImageUrl(source) : null;
+                          const source = playbook?.sourceIds.length ? sources.find((candidate) => candidate.id === playbook.sourceIds[0]) : undefined;
                           const reportAgent = agents.find((agent) => agent.id === report.agentId);
-                          const common = report.report?.common;
-                          const presentation = common?.card_presentation;
-                          const supportingFields = presentation?.supporting_fields ?? [];
-                          const episodeReference = common?.source_references?.find((sourceReference) => {
-                            try {
-                              const url = new URL(sourceReference.reference);
-                              return url.protocol === 'https:' || url.protocol === 'http:';
-                            } catch {
-                              return false;
-                            }
-                          });
-                          const resultType = common?.result_type ?? 'summary';
-                          const fallbackHeadline = common?.headline?.trim() || report.summary;
-                          const primaryText = (() => {
-                            switch (presentation?.primary_field) {
-                              case 'recommendation':
-                                return common?.recommendation?.trim() || fallbackHeadline;
-                              case 'open_question':
-                                return common?.open_questions?.[0]?.trim() || fallbackHeadline;
-                              case 'key_takeaway':
-                                return common?.key_takeaways?.[0]?.trim() || fallbackHeadline;
-                              case 'short_summary':
-                                return common?.short_summary?.trim() || fallbackHeadline;
-                              case 'headline':
-                              default:
-                                return fallbackHeadline;
-                            }
-                          })();
-                          const shortSummary = common?.short_summary?.trim() || report.summary;
-                          const detailText = shortSummary === primaryText ? '' : shortSummary;
-                          const focusContent = (() => {
-                            if (common?.recommendation?.trim()) {
-                              return { label: t('feedCard.focus.recommendation'), text: common.recommendation.trim() };
-                            }
-                            if (resultType === 'risk' && common?.key_takeaways?.[0]?.trim()) {
-                              return { label: t('feedCard.focus.risk'), text: common.key_takeaways[0].trim() };
-                            }
-                            if (common?.open_questions?.[0]?.trim()) {
-                              return { label: t('feedCard.focus.openQuestion'), text: common.open_questions[0].trim() };
-                            }
-                            if (common?.key_takeaways?.[0]?.trim()) {
-                              return { label: t('feedCard.focus.keyTakeaway'), text: common.key_takeaways[0].trim() };
-                            }
-                            const fallbackFocus = common?.short_summary?.trim() || report.summary.trim();
-                            return fallbackFocus
-                              ? { label: t('feedCard.focus.keyTakeaway'), text: fallbackFocus }
-                              : null;
-                          })();
-                          const metadataChips: Array<{ key: string; label: string; className?: string }> = [];
-                          if (supportingFields.includes('relevance') && (common?.relevance ?? 0) > 0) {
-                            metadataChips.push({ key: 'relevance', label: t('feedCard.relevance', { value: common!.relevance }), className: 'bg-violet-100 text-violet-700 dark:bg-violet-950/70 dark:text-violet-200' });
-                          }
-                          if (supportingFields.includes('confidence') && (common?.confidence ?? 0) >= 50) {
-                            const confidenceLevel = common!.confidence >= 70 ? 'high' : 'medium';
-                            metadataChips.push({
-                              key: 'confidence',
-                              label: t(`feedCard.confidence.${confidenceLevel}`),
-                              className: confidenceLevel === 'high'
-                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200'
-                                : 'bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-200'
-                            });
-                          }
-                          if (supportingFields.includes('time_horizon') && common?.time_horizon && common.time_horizon !== 'unspecified') {
-                            metadataChips.push({ key: 'time_horizon', label: t(`feedCard.timeHorizon.${common.time_horizon}`) });
-                          }
-                          if (supportingFields.includes('keywords')) {
-                            for (const keyword of common?.keywords?.slice(0, 3) ?? []) {
-                              metadataChips.push({ key: `keyword:${keyword}`, label: keyword });
-                            }
-                          }
-                          if (supportingFields.includes('entities')) {
-                            for (const entity of common?.entities?.slice(0, 2) ?? []) {
-                              metadataChips.push({ key: `entity:${entity.name}:${entity.type}`, label: entity.name });
-                            }
-                          }
-                          if (supportingFields.includes('novelty') && (common?.novelty ?? 0) > 0) {
-                            metadataChips.push({ key: 'novelty', label: t('feedCard.novelty', { value: common!.novelty }) });
-                          }
-                          return (
-                            <Card
-                              key={report.id}
-                              size="small"
-                              hoverable={Boolean(playbook)}
-                              className={`overflow-hidden border border-violet-100 bg-white shadow-sm transition-[transform,box-shadow,border-color] dark:border-violet-950 dark:bg-gray-900 ${
-                                playbook ? 'cursor-pointer hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md dark:hover:border-violet-800' : ''
-                              }`}
-                              styles={{ body: { padding: 0 } }}
-                              onClick={playbook
-                                ? () => {
-                                  setSelectedPlaybookId(playbook.id);
-                                  setActiveHub('playbooks');
-                                  setActivePlaybookTab('reports');
-                                  setHighlightedReportId(report.id);
-                                }
-                                : undefined}
-                            >
-                              {sourceCoverImageUrl ? (
-                                <div className="relative h-16 overflow-hidden bg-slate-900">
-                                  <img
-                                    aria-hidden="true"
-                                    src={sourceCoverImageUrl}
-                                    className="absolute -inset-4 h-[calc(100%+2rem)] w-[calc(100%+2rem)] object-cover blur-xl opacity-55"
-                                  />
-                                  <img
-                                    src={sourceCoverImageUrl}
-                                    alt=""
-                                    className="relative h-full w-full object-contain"
-                                  />
-                                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 to-transparent px-3 pb-2 pt-5 text-xs font-semibold text-white">
-                                    {getSourceDisplayTitle(source!)}
-                                  </div>
-                                </div>
-                              ) : null}
-                              <div className="p-4">
-                                <div className="flex items-start gap-3">
-                                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${PERSONA_ICON_BG_MAP[reportAgent?.characterType ?? 'summarizer']}`}>
-                                    {getCharacterIcon(reportAgent?.characterType)}
-                                  </span>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                        {reportAgent ? getAgentCharacterLabel(reportAgent) : report.agentName}
+                          const sourceTitle = source ? getSourceDisplayTitle(source) : report.playbookName;
+                          const characterLabel = reportAgent ? getAgentCharacterLabel(reportAgent) : report.agentName;
+                          const headline = report.report?.common?.headline ?? '';
+                          return `${headline} ${report.summary} ${report.agentName} ${sourceTitle} ${characterLabel}`.toLowerCase().includes(normalizedFeedSearch);
+                        });
+                        return (
+                          <>
+                            <div className="mb-4">
+                              <Input
+                                aria-label={t('feed.searchAriaLabel')}
+                                value={feedSearch}
+                                onChange={(event) => setFeedSearch(event.currentTarget.value)}
+                                placeholder={t('feed.searchPlaceholder')}
+                                prefix={<SearchOutlined />}
+                                allowClear
+                                style={{ maxWidth: 420 }}
+                              />
+                            </div>
+                            {searchFilteredReports.length === 0 ? (
+                              <Empty description={t('feed.searchNoResults')} />
+                            ) : (
+                              <div className="space-y-6">
+                                {groupReportsByDay(searchFilteredReports.slice(0, 30)).map((group) => (
+                                  <div key={group.key} className="space-y-3">
+                                    <div className="mb-1 flex items-center gap-3">
+                                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                        {group.kind === 'today'
+                                          ? t('feed.groupToday')
+                                          : group.kind === 'yesterday'
+                                            ? t('feed.groupYesterday')
+                                            : new Date(group.dateISO).toLocaleDateString(i18n.language, { year: 'numeric', month: 'short', day: 'numeric' })}
                                       </span>
-                                      <span className="text-xs text-muted-foreground">{source ? getSourceDisplayTitle(source) : report.playbookName}</span>
+                                      <span className="h-px flex-1 bg-border" />
                                     </div>
-                                    <span className="text-[11px] text-muted-foreground">{new Date(report.createdAt).toLocaleDateString(i18n.language)}</span>
+                                    {group.reports.map((report) => {
+                                      const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
+                                      const source = playbook?.sourceIds.length ? sources.find((candidate) => candidate.id === playbook.sourceIds[0]) : undefined;
+                                      const reportAgent = agents.find((agent) => agent.id === report.agentId);
+                                      return (
+                                        <FeedCard
+                                          key={report.id}
+                                          report={report}
+                                          characterType={reportAgent?.characterType}
+                                          characterLabel={reportAgent ? getAgentCharacterLabel(reportAgent) : report.agentName}
+                                          personalityLabel={reportAgent ? getAgentPersonalityLabel(reportAgent) : undefined}
+                                          sourceTitle={source ? getSourceDisplayTitle(source) : report.playbookName}
+                                          sourceCoverImageUrl={(source ? getSourceCoverImageUrl(source) : null) ?? getReportEpisodeThumbnailUrl(report)}
+                                          isSyntheticSource={source?.type === 'synthetic_discussion'}
+                                          onOpenFullReport={() => setViewingFullReport(report)}
+                                          onOpenSource={source ? () => openSourceInLibrary(source) : undefined}
+                                          onDiscuss={() => openDiscussionFromReport(report)}
+                                        />
+                                      );
+                                    })}
                                   </div>
-                                </div>
-                                <div className="mt-4">
-                                  <Tag className="m-0 border-violet-200 bg-violet-50 text-[10px] font-semibold tracking-wide text-violet-700 dark:border-violet-800 dark:bg-violet-950/70 dark:text-violet-200">
-                                    {t(`feedCard.resultType.${resultType}`)}
-                                  </Tag>
-                                  <h3 className="mt-2 text-base font-semibold leading-snug text-foreground">{primaryText}</h3>
-                                  {detailText ? <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{detailText}</p> : null}
-                                </div>
-                                {focusContent ? (
-                                  <div className="mt-4 rounded-xl border border-violet-200 border-l-[4px] border-l-violet-500 bg-violet-50 px-4 py-3 dark:border-violet-900 dark:border-l-violet-400 dark:bg-violet-950/40">
-                                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-200">
-                                      {focusContent.label}
-                                    </span>
-                                    <p className="mt-1 text-sm font-medium leading-relaxed text-violet-950 dark:text-violet-100">{focusContent.text}</p>
-                                  </div>
-                                ) : null}
-                                {metadataChips.length > 0 ? (
-                                  <div className="mt-3 flex flex-wrap gap-1.5">
-                                    {metadataChips.slice(0, 3).map((chip) => (
-                                      <Tag key={chip.key} className={`m-0 border-0 text-[11px] ${chip.className ?? 'bg-muted text-muted-foreground'}`}>
-                                        {chip.label}
-                                      </Tag>
-                                    ))}
-                                  </div>
-                                ) : null}
-                                {reportAgent?.characterType === 'finance_expert' && signals.length > 0 ? (
-                                  <div className="mt-3 flex flex-wrap gap-1">
-                                    {signals.slice(0, 3).map((signal, index) => (
-                                      <Tag key={`${signal.symbol}:${index}`} color={signal.side === 'long' ? 'green' : 'red'} className="m-0 text-xs">
-                                        {signal.side === 'long' ? '▲' : '▼'} {signal.symbol}
-                                      </Tag>
-                                    ))}
-                                    {signals.length > 3 ? <Tag className="m-0 text-xs text-muted-foreground">+{signals.length - 3}</Tag> : null}
-                                  </div>
-                                ) : null}
-                                {episodeReference ? (
-                                  <div className="mt-3" onClick={(event) => event.stopPropagation()}>
-                                    <Button
-                                      type="text"
-                                      size="small"
-                                      icon={<LinkOutlined />}
-                                      className="h-auto max-w-full px-0 text-left text-xs text-violet-700 hover:!text-violet-900 dark:text-violet-300 dark:hover:!text-violet-100"
-                                      onClick={() => window.open(episodeReference.reference, '_blank', 'noopener,noreferrer')}
-                                    >
-                                      <span className="truncate">{t('feedCard.episode', { title: episodeReference.label })}</span>
-                                    </Button>
-                                  </div>
-                                ) : null}
-                                <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
-                                  <span>{common?.evidence?.length ? t('feedCard.evidenceCount', { count: common.evidence.length }) : t('feedCard.openReport')}</span>
-                                  {playbook ? <span className="font-medium text-violet-600 dark:text-violet-300">{t('feedCard.openReport')} ›</span> : null}
-                                </div>
+                                ))}
                               </div>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </Card>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </Card>
+                    <Drawer
+                      open={Boolean(viewingFullReport)}
+                      onClose={() => setViewingFullReport(null)}
+                      destroyOnHidden
+                      width={620}
+                      placement="right"
+                      title={viewingFullReport
+                        ? (viewingFullReport.report?.common?.headline?.trim() || viewingFullReport.summary)
+                        : undefined}
+                      styles={{ body: { padding: 0, overflowY: 'auto' } }}
+                    >
+                      {viewingFullReport?.report
+                        ? <CharacterReportRenderer report={viewingFullReport.report} />
+                        : <Empty description={t('feedCard.noFullReport')} />}
+                    </Drawer>
+                  </>
                 )
               },
               {
@@ -2495,7 +2395,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                <li key={ep.link} className="flex items-center gap-3 py-2.5">
                                                  {videoId ? (
                                                    <img
-                                                     src={`https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`}
+                                                     src={getYoutubeThumbnailUrl(videoId, 'mqdefault')}
                                                      alt=""
                                                      className="w-16 h-11 rounded object-cover flex-shrink-0 bg-muted"
                                                    />
