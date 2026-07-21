@@ -22,6 +22,9 @@ services:
       DATABASE_URL: "file:/app/api/prisma/dev.db"
     volumes:
       - api-data:/app/api/prisma
+      # Server-side secrets materialized by CI (not stored in git); mounted read-only
+      # so GOOGLE_TTS_CREDENTIALS can point at /run/secrets/google-tts-service-account.json.
+      - ./secrets:/run/secrets:ro
     # Published on the host so the server's public IP works directly
     # (temporary, until a real domain + named Cloudflare tunnel replaces
     # this — see deploy/README.md). cloudflared's Quick Tunnel keeps

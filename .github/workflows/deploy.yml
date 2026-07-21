@@ -50,12 +50,19 @@ jobs:
           host: ${{ secrets.HETZNER_HOST }}
           username: ${{ secrets.HETZNER_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
-          envs: HETZNER_APP_ENV,DEPLOY_PATH,DEPLOY_BRANCH
+          envs: HETZNER_APP_ENV,HETZNER_GOOGLE_TTS_SA_JSON_B64,DEPLOY_PATH,DEPLOY_BRANCH
           script: |
             set -e
             umask 077
             printf '%s\n' "$HETZNER_APP_ENV" > "$DEPLOY_PATH/.env"
             chmod 600 "$DEPLOY_PATH/.env"
+            mkdir -p "$DEPLOY_PATH/secrets"
+            if [ -n "$HETZNER_GOOGLE_TTS_SA_JSON_B64" ]; then
+              printf '%s' "$HETZNER_GOOGLE_TTS_SA_JSON_B64" | base64 -d > "$DEPLOY_PATH/secrets/google-tts-service-account.json"
+              chmod 600 "$DEPLOY_PATH/secrets/google-tts-service-account.json"
+            else
+              rm -f "$DEPLOY_PATH/secrets/google-tts-service-account.json"
+            fi
             cd "$DEPLOY_PATH"
             git pull --ff-only origin "$DEPLOY_BRANCH"
             export VITE_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -66,3 +73,4 @@ jobs:
             docker compose logs chattrader --tail 20
         env:
           HETZNER_APP_ENV: ${{ secrets.HETZNER_APP_ENV }}
+          HETZNER_GOOGLE_TTS_SA_JSON_B64: ${{ secrets.HETZNER_GOOGLE_TTS_SA_JSON_B64 }}
