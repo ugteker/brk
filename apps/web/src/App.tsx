@@ -1,6 +1,7 @@
 import { Spin } from 'antd';
 import type { ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useSafeNavigate } from './utils/useSafeNavigate';
 import { AgentsPage } from './pages/AgentsPage';
 import { AuthPage } from './pages/AuthPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
@@ -21,7 +22,7 @@ function RequireAdmin({ children }: { children: ReactNode }) {
 }
 
 function AdminUsersRoute() {
-  const navigate = useNavigate();
+  const navigate = useSafeNavigate();
   return <AdminUsersPage onBack={() => navigate('/')} />;
 }
 

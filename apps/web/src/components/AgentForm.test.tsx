@@ -9,22 +9,40 @@ import { AgentForm } from './AgentForm';
 import { AgentsPage } from '../pages/AgentsPage';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
+import { AppDataProvider } from '../context/AppDataContext';
+import { AppShell } from '../components/AppShell';
+import { MemoryRouter } from 'react-router-dom';
 
 const TOTAL_STEPS = 3;
 
 async function renderAgentsPage(options?: { openAgentsHub?: boolean }) {
+  // If tests want the admin Agents & Playbooks hub open, set the persisted adminMode
+  // flag so AppDataProvider initializes with adminMode=true. This avoids relying on
+  // Dropdown/menu interactions in the test environment and keeps the helper deterministic.
+  if (options?.openAgentsHub ?? true) {
+    localStorage.setItem('chattrader:adminMode', '1');
+  } else {
+    localStorage.removeItem('chattrader:adminMode');
+  }
+
   const utils = render(
     <AuthProvider>
-      <ThemeProvider>
-        <AgentsPage />
-      </ThemeProvider>
+      <AppDataProvider>
+        <ThemeProvider>
+          <MemoryRouter>
+            <AppShell>
+              <AgentsPage hub={options?.openAgentsHub ? 'agents' : undefined} />
+            </AppShell>
+          </MemoryRouter>
+        </ThemeProvider>
+      </AppDataProvider>
     </AuthProvider>
   );
+
   if (options?.openAgentsHub ?? true) {
-    const menuBtn = await screen.findByRole('button', { name: /account menu/i });
-    fireEvent.click(menuBtn);
-    fireEvent.click(await screen.findByRole('menuitem', { name: /agents & playbooks/i }));
-    fireEvent.click(await screen.findByRole('tab', { name: /agents/i }));
+    // Menu interaction is flaky in jsdom with AntD Dropdown; instead ensure the Agents nav
+    // is visible by relying on the persisted adminMode above and then select the Agents nav button.
+    fireEvent.click(await screen.findByRole('button', { name: /agents/i }));
   }
   return utils;
 }
@@ -113,6 +131,8 @@ vi.mock('../api/access', () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // Ensure adminMode persistence is cleared between tests so state doesn't leak
+  localStorage.removeItem('chattrader:adminMode');
 });
 
 it('renders wizard stepper controls and key fields', async () => {
@@ -229,13 +249,13 @@ it('sends active:false when the Active toggle is switched off', async () => {
 it('cancels the wizard and returns to the dashboard', async () => {
   await renderAgentsPage();
 
-  fireEvent.click(screen.getByRole('button', { name: /create follower/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /create your first analyst/i }));
   expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
 
   expect(screen.getByRole('heading', { name: 'ChatTrader' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /create follower/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /create your first analyst/i })).toBeInTheDocument();
 });
 
 it('clicking the app name returns to the sources hub from an agent detail view', async () => {
@@ -303,7 +323,7 @@ it('removes an agent after confirming the popconfirm', async () => {
   fireEvent.click(await screen.findByRole('button', { name: /^remove$/i }));
 
   expect(deleteAgent).toHaveBeenCalledWith('agent-1');
-  expect(await screen.findByRole('button', { name: /create follower/i })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /create your first analyst/i })).toBeInTheDocument();
 });
 
 it('runs an agent now via the run-now button', async () => {

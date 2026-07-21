@@ -17,7 +17,8 @@ import {
 } from '@ant-design/icons';
 import { Badge, Button, Dropdown, Layout, Popover, Tag, Typography, message } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { useAuth } from '../auth/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -122,7 +123,7 @@ function activeKey(pathname: string): string {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
+  const navigate = useSafeNavigate();
   const { pathname } = useLocation();
   const { user, isAdmin, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -161,6 +162,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const userMenuItems = [
     ...(user ? [{ key: 'user-label', label: <span className="font-medium">{user.displayName ?? user.email}</span>, disabled: true }] : []),
     ...(user ? [{ type: 'divider' as const }] : []),
+    // Quick access to open the admin Agents & Playbooks area for admins
+    ...(isAdmin ? [{ key: 'admin-open-area', label: t('nav.adminArea'), icon: <TeamOutlined />, onClick: () => setAdminMode(true) }] : []),
     {
       key: 'theme-toggle',
       label: theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',

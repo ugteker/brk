@@ -14,7 +14,8 @@ import {
 } from 'antd';
 import { AudioOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { listAgents, listAgentReports, type AgentSummary, type RunReportDto } from '../api/agents';
 import {
   createDiscussion,
@@ -53,7 +54,7 @@ const GROUNDING_MODES: Array<{ mode: DiscussionGroundingMode; emoji: string }> =
 
 export function NewDiscussionWizard() {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
+  const navigate = useSafeNavigate();
   const location = useLocation();
 
   const [agents, setAgents] = useState<AgentSummary[]>([]);

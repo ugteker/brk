@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { useTranslation } from 'react-i18next';
 import { Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
@@ -377,7 +377,7 @@ function hasEpisodicSource(agent: AgentSummary): boolean {
 export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const { user, isAdmin, logout } = useAuth();
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
+  const navigate = useSafeNavigate();
   const {
     agents, setAgents,
     sources, setSources,

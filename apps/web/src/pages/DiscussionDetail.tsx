@@ -20,7 +20,8 @@ import { useTranslation } from 'react-i18next';
 import { getAgentDisplayLabel } from '../utils/agent-label';
 import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
 import { listAgentReports, type RunReportDto } from '../api/agents';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
+import { useSafeNavigate } from '../utils/useSafeNavigate';
 import {
   getAudioRenderStatus,
   getDiscussion,
@@ -234,7 +235,7 @@ function EvidencePanel({
 export function DiscussionDetail() {
   const { t } = useTranslation();
   const { discussionId } = useParams<{ discussionId: string }>();
-  const navigate = useNavigate();
+  const navigate = useSafeNavigate();
   const location = useLocation();
   const { agents } = useAppData();
 

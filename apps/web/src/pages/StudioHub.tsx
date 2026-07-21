@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Button, Empty, Popconfirm, Spin, Tag, Tooltip, Typography, message } from 'antd';
 import { AudioOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { deleteDiscussion, listDiscussions, triggerDiscussionRun, type DiscussionDto } from '../api/discussions';
 import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
 
@@ -26,7 +26,7 @@ const SPEAKER_HEX = ['#1890ff', '#52c41a', '#fa8c16', '#722ed1', '#eb2f96', '#13
 
 export function StudioHub() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
+  const navigate = useSafeNavigate();
   const [discussions, setDiscussions] = useState<DiscussionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningId, setRunningId] = useState<string | null>(null);

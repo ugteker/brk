@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, Empty, Input, Progress, Tag, message } from 'antd';
 import { AudioOutlined, DownOutlined, MailOutlined, MessageOutlined, StarFilled, StarOutlined, UpOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { resendReportNotification, type RunReportDto, type SignalDto } from '../api/agents';
 import { getCharacterTypeColor } from '../data/character-types';
 import { TouchSafeTooltip } from './TouchSafeTooltip';
@@ -99,7 +99,7 @@ export function computeAiTotals(reports: RunReportDto[]): AiTotals {
 
 export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, onSelectReport, onSelectSymbol, highlightedReportId }: AgentReportsBrowserProps) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
+  const navigate = useSafeNavigate();
   const highlightedRef = useRef<HTMLDivElement | null>(null);
   const [sendingReportId, setSendingReportId] = useState<string | null>(null);
   const [expandedReportIds, setExpandedReportIds] = useState<Set<string>>(() =>

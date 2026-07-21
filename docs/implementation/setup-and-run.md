@@ -145,16 +145,18 @@ Set-Location G:\brk\apps\web
 npm run test
 ```
 
-## Run End-to-End Tests
+## Run UI Smoke Tests
 
 ```powershell
 Set-Location G:\brk\apps\web
-npm run test:e2e
+npm run test:smoke
 ```
 
-E2E specs live under `apps/web/e2e/` (scoped via `playwright.config.ts`'s `testDir` so they
-don't collide with Vitest unit tests). These specs render synthetic DOM fixtures rather than
-driving the full Vite dev server + live API, so they run without an Anthropic API key.
+Smoke specs live under `apps/web/e2e/` (scoped via `playwright.config.ts`'s `testDir` so they
+don't collide with Vitest unit tests). The smoke suite is intentionally minimal and currently
+targets only critical app-load/dashboard visibility checks while the UI is still changing rapidly.
+Specs render synthetic DOM fixtures rather than driving the full Vite dev server + live API, so
+they run without an Anthropic API key.
 
 ## Prisma Notes
 
