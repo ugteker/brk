@@ -247,6 +247,15 @@ export function DiscussionDetail() {
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [renderingAudio, setRenderingAudio] = useState(false);
+  // Rotating "warming up the studio" copy shown while a live run has produced no
+  // turns yet - generating the first turn can take a while and a bare spinner
+  // reads like a hang.
+  const WARMUP_MESSAGE_COUNT = 5;
+  const [warmupIndex, setWarmupIndex] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setWarmupIndex((i) => (i + 1) % WARMUP_MESSAGE_COUNT), 4000);
+    return () => clearInterval(interval);
+  }, []);
   // Hide the "Render audio" button entirely when the backend has no TTS configured.
   const [ttsAvailable, setTtsAvailable] = useState(false);
 
@@ -452,7 +461,9 @@ export function DiscussionDetail() {
                     <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Spin size="small" />
                       <Text type="secondary">
-                        {t('studio.turnProgress', { current: displayTurns.length, target: turnTarget })}
+                        {displayTurns.length === 0
+                          ? t(`studio.warmup${warmupIndex}`)
+                          : t('studio.turnProgress', { current: displayTurns.length, target: turnTarget })}
                       </Text>
                     </div>
                   )}

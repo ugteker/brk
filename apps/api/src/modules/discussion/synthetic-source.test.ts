@@ -6,10 +6,19 @@ function makeDb(sourceExists = false) {
   return {
     source: {
       findFirst: vi.fn().mockResolvedValue(sourceRow),
-      create: vi.fn().mockResolvedValue({ id: 's-new' })
+      create: vi.fn().mockResolvedValue({ id: 's-new' }),
+      findUnique: vi.fn().mockResolvedValue({
+        id: 's-new',
+        configJson: JSON.stringify({ discussionId: 'd1', name: 'Bull vs Bear', participants: ['Agent A'], libraryCard: { title: 'Bull vs Bear' } })
+      }),
+      update: vi.fn().mockResolvedValue({})
     },
     sourceItem: {
-      create: vi.fn().mockResolvedValue({ id: 'si1' })
+      create: vi.fn().mockResolvedValue({ id: 'si1' }),
+      findMany: vi.fn().mockResolvedValue([
+        { title: 'Bull vs Bear — 2026-07-22', link: 'discussion-run:r1', publishedAt: new Date('2026-07-22T00:00:00Z') }
+      ]),
+      count: vi.fn().mockResolvedValue(1)
     },
     discussion: {
       update: vi.fn().mockResolvedValue({})
@@ -59,5 +68,30 @@ describe('SyntheticSourceService', () => {
     expect(db.source.findFirst).not.toHaveBeenCalled();
     expect(db.source.create).not.toHaveBeenCalled();
     expect(db.sourceItem.create).toHaveBeenCalled();
+  });
+
+  it('refreshes the library card with recent runs and item count after each run', async () => {
+    const db = makeDb(false);
+    const svc = new SyntheticSourceService(db as any);
+    await svc.ensureSyntheticSource(baseDiscussion, 'r1', 'transcript', ['Agent A', 'Agent B']);
+    expect(db.source.update).toHaveBeenCalled();
+    const updateArg = db.source.update.mock.calls[0][0];
+    const cfg = JSON.parse(updateArg.data.configJson);
+    expect(cfg.libraryCard.title).toBe('Bull vs Bear');
+    expect(cfg.libraryCard.itemCount).toBe(1);
+    expect(cfg.libraryCard.previewItems).toEqual([
+      expect.objectContaining({ title: 'Bull vs Bear — 2026-07-22' })
+    ]);
+    // Participants stay intact in config
+    expect(cfg.participants).toEqual(['Agent A']);
+  });
+
+  it('does not fail the run when the library card refresh errors', async () => {
+    const db = makeDb(false);
+    db.source.findUnique.mockRejectedValue(new Error('db gone'));
+    const svc = new SyntheticSourceService(db as any);
+    await expect(
+      svc.ensureSyntheticSource(baseDiscussion, 'r1', 'transcript', ['Agent A'])
+    ).resolves.toBeUndefined();
   });
 });
