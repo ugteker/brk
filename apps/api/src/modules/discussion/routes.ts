@@ -79,6 +79,13 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     }
   });
 
+  // Lets the UI know which optional features are wired up so it can hide dead controls
+  // (e.g. the "Render audio" button when no TTS backend is configured). Registered before
+  // /api/discussions/:id so the static segment wins route matching.
+  app.get('/api/discussions/capabilities', async (_req, reply) => {
+    return reply.send({ tts: Boolean(deps.ttsClient && deps.ttsStorage) });
+  });
+
   // List the user's recent raw source-material artifacts (episode/page transcripts downloaded
   // during agent runs) as pickable grounding for transcript-based discussions. Registered
   // before /api/discussions/:id so the static segment wins route matching.
@@ -220,8 +227,10 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
       return reply.status(404).send({ code: 'not_found', message: 'Discussion not found' });
     }
     reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache');
+    reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
     reply.raw.setHeader('Connection', 'keep-alive');
+    // Tell nginx (and compatible proxies) not to buffer this stream.
+    reply.raw.setHeader('X-Accel-Buffering', 'no');
     reply.raw.flushHeaders();
 
     let lastTurnIndex = -1;

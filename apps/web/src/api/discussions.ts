@@ -188,6 +188,12 @@ export async function getDiscussionRun(id: string, runId: string): Promise<Discu
   return res.json();
 }
 
+export async function getDiscussionCapabilities(): Promise<{ tts: boolean }> {
+  const res = await fetch(`${BASE}/capabilities`, { credentials: 'include' });
+  if (!res.ok) return { tts: false };
+  return res.json();
+}
+
 export async function triggerAudioRender(id: string, runId: string): Promise<void> {
   const res = await fetch(`${BASE}/${id}/runs/${runId}/audio`, {
     method: 'POST',

@@ -28,6 +28,7 @@ import {
   listDiscussionRuns,
   triggerAudioRender,
   triggerDiscussionRun,
+  getDiscussionCapabilities,
   type DiscussionDto,
   type DiscussionRunDto,
   type DiscussionRunEvidenceSnapshotDto,
@@ -246,6 +247,14 @@ export function DiscussionDetail() {
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [renderingAudio, setRenderingAudio] = useState(false);
+  // Hide the "Render audio" button entirely when the backend has no TTS configured.
+  const [ttsAvailable, setTtsAvailable] = useState(false);
+
+  useEffect(() => {
+    getDiscussionCapabilities()
+      .then((caps) => setTtsAvailable(caps.tts))
+      .catch(() => setTtsAvailable(false));
+  }, []);
 
   const { turns: liveTurns, status: liveStatus } = useDiscussionStream(discussionId ?? '', liveRun);
 
@@ -408,7 +417,7 @@ export function DiscussionDetail() {
           >
             {runs.length === 0 ? t('studio.runNow') : t('studio.runAgain')}
           </Button>
-          {selectedRunId && (
+          {ttsAvailable && selectedRunId && (
             <Button loading={renderingAudio} onClick={handleRenderAudio} icon={<AudioOutlined />}>
               {t('studio.renderAudio')}
             </Button>
@@ -480,7 +489,7 @@ export function DiscussionDetail() {
                           <Text type="secondary" style={{ fontSize: 13 }}>
                             🏁 {t('studio.discussionFinished')}
                           </Text>
-                          {!selectedRun.audioUrl && (
+                          {ttsAvailable && !selectedRun.audioUrl && (
                             <div style={{ marginTop: 8 }}>
                               <Button
                                 size="small"
@@ -505,8 +514,10 @@ export function DiscussionDetail() {
               label: t('studio.audioPlayer'),
               children: selectedRun?.audioUrl ? (
                 <audio src={selectedRun.audioUrl} controls style={{ width: '100%' }} />
-              ) : (
+              ) : ttsAvailable ? (
                 <Text type="secondary">No audio yet. Click &quot;{t('studio.renderAudio')}&quot; to generate a podcast.</Text>
+              ) : (
+                <Text type="secondary">{t('studio.audioNotConfigured')}</Text>
               )
             },
             {

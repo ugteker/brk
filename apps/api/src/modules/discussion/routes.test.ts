@@ -112,6 +112,27 @@ describe('Discussion routes', () => {
     expect(res.statusCode).toBe(501);
   });
 
+  it('GET /api/discussions/capabilities reports tts=false without a TTS client', async () => {
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/api/discussions/capabilities' });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ tts: false });
+  });
+
+  it('GET /api/discussions/capabilities reports tts=true when client and storage are wired', async () => {
+    const app = Fastify();
+    await app.register(cookie);
+    app.addHook('onRequest', async (req) => { req.userId = 'u1'; req.userRole = 'user'; });
+    await registerDiscussionRoutes(app, {
+      discussionRepository: mockRepo(),
+      ttsClient: { renderTurn: vi.fn() },
+      ttsStorage: { save: vi.fn() }
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/discussions/capabilities' });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ tts: true });
+  });
+
   it('POST /api/discussions/:id/runs returns 422 when a participant resolves no reports', async () => {
     const discWithParticipant = {
       ...discRow,
