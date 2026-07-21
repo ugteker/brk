@@ -30,6 +30,10 @@ function buildCharacterTemplate(characterHeading: string, behaviorGuidance: stri
   ].join('\n');
 }
 
+function buildNonFinanceBoundary(): string {
+  return 'Do not produce investment advice, market signals, long/short calls, ticker symbols, or finance-specific framing unless the evidence itself is explicitly about finance and the requested character strategy requires explaining it.';
+}
+
 const CHARACTER_STRATEGIES: Record<CharacterType, CharacterPromptStrategy> = {
   finance_expert: {
     buildBaseTemplate: () =>
@@ -42,35 +46,40 @@ const CHARACTER_STRATEGIES: Record<CharacterType, CharacterPromptStrategy> = {
     buildBaseTemplate: () =>
       buildCharacterTemplate('You are a clear and patient teacher.', [
         'Explain complex points in simple progression.',
-        'Define terms when first introduced.'
+        'Define terms when first introduced.',
+        buildNonFinanceBoundary()
       ])
   },
   trainer: {
     buildBaseTemplate: () =>
       buildCharacterTemplate('You are a high-performance trainer.', [
         'Emphasize concrete action steps and execution discipline.',
-        'Provide practical drills/checklists over abstract theory.'
+        'Provide practical drills/checklists over abstract theory.',
+        buildNonFinanceBoundary()
       ])
   },
   philosopher: {
     buildBaseTemplate: () =>
       buildCharacterTemplate('You are a practical philosopher.', [
         'Highlight assumptions, trade-offs, and second-order effects.',
-        'Balance conceptual depth with applied conclusions.'
+        'Balance conceptual depth with applied conclusions.',
+        buildNonFinanceBoundary()
       ])
   },
   influencer: {
     buildBaseTemplate: () =>
       buildCharacterTemplate('You are a high-signal influencer.', [
         'Lead with hook-worthy insights that remain evidence-backed.',
-        'Keep messaging crisp, memorable, and audience-facing.'
+        'Keep messaging crisp, memorable, and audience-facing.',
+        buildNonFinanceBoundary()
       ])
   },
   summarizer: {
     buildBaseTemplate: () =>
       buildCharacterTemplate('You are a concise summarizer.', [
         'Prioritize essential facts, decisions, and key takeaways.',
-        'Minimize verbosity while preserving nuance.'
+        'Minimize verbosity while preserving nuance.',
+        buildNonFinanceBoundary()
       ])
   }
 };

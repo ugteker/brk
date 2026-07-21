@@ -26,6 +26,24 @@ export class ArtifactRepository {
     return rows.map((row: unknown) => this.toRecord(row as Parameters<typeof this.toRecord>[0]));
   }
 
+  async getArtifactsByIds(ids: string[]): Promise<ArtifactRecord[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db.agentRunArtifact.findMany({ where: { id: { in: ids } } });
+    return rows.map((row: unknown) => this.toRecord(row as Parameters<typeof this.toRecord>[0]));
+  }
+
+  /** Lists the user's most recent raw source-material artifacts (episode/page transcripts
+   * downloaded during agent runs) - the pickable options for transcript-grounded Studio
+   * discussions. Ownership is resolved through the run's agent. */
+  async listRecentEvidenceArtifacts(userId: string, limit = 50): Promise<ArtifactRecord[]> {
+    const rows = await this.db.agentRunArtifact.findMany({
+      where: { kind: 'normalized_evidence', agentRun: { agent: { ownerUserId: userId } } },
+      orderBy: { createdAt: 'desc' },
+      take: limit
+    });
+    return rows.map((row: unknown) => this.toRecord(row as Parameters<typeof this.toRecord>[0]));
+  }
+
   private toRecord(row: {
     id: string;
     agentId: string;

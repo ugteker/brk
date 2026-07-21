@@ -6,6 +6,7 @@ import type { Agent } from '../agents/types';
 import type { PromptRepository } from '../prompts/repository';
 import type { ArtifactRepository } from '../artifacts/repository';
 import type { ReportRepository } from '../reports/repository';
+import type { RunReportRecord } from '../reports/types';
 import type { SourceCursorRepositoryLike } from '../crawler/source-cursor-repository';
 import type { RunPhase } from '../runs/run-queue.service';
 import { logger } from '../../lib/logger';
@@ -32,6 +33,10 @@ export interface AgentRunOptions {
   forcedEpisode?: ForcedEpisodeSelection;
   playbookRecipients?: string[];
   playbookLanguage?: string;
+  playbookNotificationsEnabled?: boolean;
+  // 'daily'/'weekly' suppress the immediate per-run email; those reports are rolled up into a
+  // periodic digest email by the digest loop instead. 'immediate'/undefined keeps per-run emails.
+  playbookDigestFrequency?: string;
 }
 
 export interface AgentRunnerDeps {
@@ -45,6 +50,16 @@ export interface AgentRunnerDeps {
   // Best-effort mailer for the automatic post-run report notification - if omitted (or if sending
   // fails), the run itself still succeeds; email is a courtesy, not a run precondition.
   mailer?: MailerLike;
+  // Alerts users whose personal watchlist contains a symbol from the new report - independent of
+  // playbook recipients/digest settings. Best-effort: never fails the run.
+  watchlistNotifier?: {
+    notifyForReport(input: { agentId: string; agentName: string; report: RunReportRecord; language?: string }): Promise<void>;
+  };
+  // Monthly cost guardrail: when configured and the agent owner's month-to-date estimated spend
+  // has reached their budget, the run fails fast with budget_exceeded *before* calling Claude.
+  budgetGuard?: {
+    checkRunAllowed(userId: string): Promise<{ allowed: boolean; spentUsd: number; budgetUsd: number | null }>;
+  };
   // Reports the run's current sub-stage (crawling/analyzing/notifying) so the Runs view can show
   // more than a generic spinner. Best-effort: a failure here must never fail the run itself.
   onPhaseChange?: (agentRunId: string, phase: RunPhase) => Promise<void>;
@@ -162,6 +177,20 @@ export class AgentRunner {
 
       await this.setPhase(agentRunId, 'analyzing');
 
+      // Budget gate sits after the no-new-content check (free) and before the Claude call (the
+      // costly part). Cursors haven't advanced yet, so blocked items are retried once the budget
+      // resets or is raised - nothing is silently lost.
+      if (this.deps.budgetGuard) {
+        const budgetCheck = await this.deps.budgetGuard.checkRunAllowed(agent.ownerUserId);
+        if (!budgetCheck.allowed) {
+          return {
+            status: 'failed',
+            errorCode: 'budget_exceeded',
+            errorMessage: `Monthly AI budget reached: ~$${budgetCheck.spentUsd.toFixed(2)} of $${(budgetCheck.budgetUsd ?? 0).toFixed(2)} spent this month. Raise or remove the budget in Usage & budget to resume runs.`
+          };
+        }
+      }
+
       const effectiveSystemPrompt = buildEffectiveSystemPrompt({
         characterType: agent.characterType,
         promptConfig: agent.promptConfig,
@@ -205,8 +234,24 @@ export class AgentRunner {
       // internally and never throws, so a flaky SMTP server can't fail an otherwise-successful run.
       // Falls back to the source URL for any evidence block without a resolved title (e.g. plain
       // web-page sources), and de-dupes in case the same item appears from more than one source.
-      const itemTitles = [...new Set(evidence.map((block) => block.title || block.sourceRef))];
-      await sendReportNotification(this.deps.mailer, agent, report, itemTitles, options?.playbookRecipients ?? [], options?.playbookLanguage);
+      // Skipped when the playbook has muted notifications (notificationsEnabled === false) or uses
+      // a daily/weekly digest cadence - digest playbooks get one rollup email from the digest loop.
+      const digestsDefer = options?.playbookDigestFrequency === 'daily' || options?.playbookDigestFrequency === 'weekly';
+      if (options?.playbookNotificationsEnabled !== false && !digestsDefer) {
+        const itemTitles = [...new Set(evidence.map((block) => block.title || block.sourceRef))];
+        await sendReportNotification(this.deps.mailer, agent, report, itemTitles, options?.playbookRecipients ?? [], options?.playbookLanguage);
+      }
+
+      // Watchlist alerts fire for every new report - a watchlist follow is the user's own explicit
+      // subscription, so playbook mute/digest settings don't suppress it. Never fails the run.
+      if (this.deps.watchlistNotifier) {
+        await this.deps.watchlistNotifier.notifyForReport({
+          agentId,
+          agentName: agent.name,
+          report,
+          language: options?.playbookLanguage
+        });
+      }
 
       return { status: 'succeeded', reportId: report.id };
     } catch (error) {

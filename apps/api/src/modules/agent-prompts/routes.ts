@@ -1,11 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import type { PromptRepository } from '../prompts/repository';
 import type { ReportRepository } from '../reports/repository';
+import type { RunsRepository } from '../runs/repository';
 import type { CreatePromptVersionInput } from '../prompts/types';
 import type { AgentRepositoryLike } from '../agents/routes';
 import type { MailerLike } from '../auth/mailer';
 import type { DomainAccessResolver } from '../access/permissions';
 import { sendReportNotification } from '../agents/notifications';
+import type { ReportChatService } from '../reports/chat';
 
 export interface AgentPromptRoutesDeps {
   promptRepository: Pick<PromptRepository, 'savePromptVersion' | 'getLatestPromptVersion'>;
@@ -13,9 +15,11 @@ export interface AgentPromptRoutesDeps {
     ReportRepository,
     'getLatestRunReport' | 'listReportsForAgent' | 'getReportById' | 'listSignalHistoryForSymbol'
   >;
+  runsRepository?: Pick<RunsRepository, 'listRunDetailsForAgent'>;
   agentRepository?: Pick<AgentRepositoryLike, 'getAgent'>;
   mailer?: MailerLike;
   accessResolver?: Pick<DomainAccessResolver, 'resolve'>;
+  reportChatService?: Pick<ReportChatService, 'listMessages' | 'ask'>;
 }
 
 async function requireAgentAccess(
@@ -115,6 +119,54 @@ export async function registerAgentPromptRoutes(app: FastifyInstance, deps: Agen
     return reply.status(200).send({ status: 'sent', recipientCount: recipients.length });
   });
 
+  // Report Q&A chat ("Ask the analyst"): free-form follow-up questions about a specific report,
+  // answered by Claude grounded in the report + its persisted crawled evidence. Chat history is
+  // per user per report.
+  app.get('/api/agents/:agentId/reports/:reportId/chat', async (req, reply) => {
+    const { agentId, reportId } = req.params as { agentId: string; reportId: string };
+    if (!deps.reportChatService) {
+      return reply.status(500).send({ code: 'chat_unavailable', message: 'Report chat is not configured' });
+    }
+    const access = await requireAgentAccess(deps, req, agentId, 'read');
+    if (!access.ok) {
+      return reply.status(access.statusCode).send({ code: access.code, message: access.message });
+    }
+    const report = await deps.reportRepository.getReportById(reportId);
+    if (!report || report.agentId !== agentId) {
+      return reply.status(404).send({ code: 'not_found', message: 'Report not found for this agent' });
+    }
+    const messages = await deps.reportChatService.listMessages(reportId, req.userId!);
+    return reply.status(200).send(messages);
+  });
+
+  app.post('/api/agents/:agentId/reports/:reportId/chat', async (req, reply) => {
+    const { agentId, reportId } = req.params as { agentId: string; reportId: string };
+    if (!deps.reportChatService) {
+      return reply.status(500).send({ code: 'chat_unavailable', message: 'Report chat is not configured' });
+    }
+    const access = await requireAgentAccess(deps, req, agentId, 'read');
+    if (!access.ok) {
+      return reply.status(access.statusCode).send({ code: access.code, message: access.message });
+    }
+    const body = (req.body ?? {}) as { question?: string };
+    const question = typeof body.question === 'string' ? body.question.trim() : '';
+    if (question.length === 0) {
+      return reply.status(400).send({ code: 'validation_error', message: 'question is required' });
+    }
+    if (question.length > 2000) {
+      return reply.status(400).send({ code: 'validation_error', message: 'question must be 2000 characters or less' });
+    }
+
+    const result = await deps.reportChatService.ask(agentId, reportId, req.userId!, question);
+    if (!result.ok) {
+      if (result.code === 'missing_prompt_version') {
+        return reply.status(409).send({ code: 'missing_prompt_version', message: 'This agent has no system prompt configured' });
+      }
+      return reply.status(404).send({ code: 'not_found', message: 'Report not found for this agent' });
+    }
+    return reply.status(200).send(result.messages);
+  });
+
   app.get('/api/agents/:agentId/prompt/latest', async (req, reply) => {
     const { agentId } = req.params as { agentId: string };
     const access = await requireAgentAccess(deps, req, agentId, 'read');
@@ -144,5 +196,69 @@ export async function registerAgentPromptRoutes(app: FastifyInstance, deps: Agen
       enabled: input.enabled ?? true
     });
     return reply.status(201).send(saved);
+  });
+
+  // SSE stream — pushes run + report updates to the client while a playbook is selected.
+  // Replaces client-side 4s polling: server polls every 2s during active runs, 20s otherwise.
+  app.get('/api/agents/:agentId/stream', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string };
+    const access = await requireAgentAccess(deps, req, agentId, 'read');
+    if (!access.ok) {
+      return reply.status(access.statusCode).send({ code: access.code, message: access.message });
+    }
+    if (!deps.runsRepository) {
+      return reply.status(503).send({ code: 'unavailable', message: 'Streaming not available' });
+    }
+
+    void reply.hijack();
+    const res = reply.raw;
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    function send(event: string, data: unknown) {
+      try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+    }
+
+    let resolveClose!: () => void;
+    const closePromise = new Promise<void>(resolve => { resolveClose = resolve; });
+    req.raw.once('close', resolveClose);
+
+    const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
+
+    // Initial snapshot
+    const [initialRuns, initialReports] = await Promise.all([
+      deps.runsRepository.listRunDetailsForAgent(agentId),
+      deps.reportRepository.listReportsForAgent(agentId)
+    ]);
+    send('runs', initialRuns);
+    send('reports', initialReports);
+
+    let currentRuns = initialRuns;
+
+    // Adaptive poll: 2s while runs are active, 20s when idle
+    while (true) {
+      const hasActive = currentRuns.some(r => r.status === 'running' || r.status === 'queued');
+      const result = await Promise.race([
+        sleep(hasActive ? 2000 : 20000).then(() => 'tick' as const),
+        closePromise.then(() => 'closed' as const),
+      ]);
+      if (result === 'closed') break;
+
+      try {
+        const [newRuns, newReports] = await Promise.all([
+          deps.runsRepository!.listRunDetailsForAgent(agentId),
+          deps.reportRepository.listReportsForAgent(agentId)
+        ]);
+        currentRuns = newRuns;
+        send('runs', newRuns);
+        send('reports', newReports);
+      } catch { break; }
+    }
+
+    try { res.end(); } catch { /* already closed */ }
   });
 }

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClaudeMessagesClient } from './claude-client';
+import { extractJsonFromResponseText } from './claude-client';
 import type { SiteProfile } from './types';
 
 /**
@@ -99,7 +100,7 @@ export class SiteInspectorClient {
       const textBlock = response.content.find((block) => block.type === 'text');
       if (!textBlock?.text) return null;
 
-      const parsed = JSON.parse(textBlock.text) as unknown;
+      const parsed = JSON.parse(extractJsonFromResponseText(textBlock.text)) as unknown;
       return validateSiteProfile(parsed);
     } catch {
       return null;

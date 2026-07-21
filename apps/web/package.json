@@ -8,7 +8,8 @@
     "dev": "vite --host 0.0.0.0 --port 4173",
     "start": "vite preview --host 0.0.0.0 --port 4173",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:smoke": "playwright test --grep @smoke",
+    "test:e2e": "npm run test:smoke"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.2",
@@ -23,6 +24,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^17.0.9",
+    "react-router-dom": "^7.18.1",
     "tailwind-merge": "^2.5.5"
   },
   "devDependencies": {

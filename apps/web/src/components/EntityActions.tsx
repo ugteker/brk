@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Button, Checkbox, Divider, Input, Modal, Select, Space } from 'antd';
-import { EditOutlined, ShareAltOutlined } from '@ant-design/icons';
+import { Button, Checkbox, Divider, Dropdown, Input, Modal, Select, Space } from 'antd';
+import { EditOutlined, MoreOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { InlineDeleteButton } from './InlineDeleteButton';
 
 export interface EntityActionsProps {
@@ -13,6 +13,8 @@ export interface EntityActionsProps {
   sharePermissions?: string[];
   onPublish?: (payload: { title: string; summary?: string; visibility?: 'public' | 'private' }) => void | Promise<void>;
   defaultPublishTitle: string;
+  variant?: 'inline' | 'menu';
+  menuAriaLabel?: string;
 }
 
 /** Combined Share & Publish dialog — the user picks whether to share with a user, publish to
@@ -26,7 +28,9 @@ export function EntityActions({
   onShare,
   sharePermissions = ['read'],
   onPublish,
-  defaultPublishTitle
+  defaultPublishTitle,
+  variant = 'inline',
+  menuAriaLabel
 }: EntityActionsProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -71,23 +75,47 @@ export function EntityActions({
     }
   }
 
+  const editAction = onEdit ? (
+    <Button aria-label={`Edit ${entityLabel}`} shape="circle" icon={<EditOutlined />} onClick={() => void onEdit()} />
+  ) : null;
+  const shareAction = (onShare || onPublish) ? (
+    <Button aria-label={`Share or publish ${entityLabel}`} shape="circle" icon={<ShareAltOutlined />} onClick={openDialog} />
+  ) : null;
+  const actions = variant === 'menu' ? (
+    <Dropdown
+      trigger={['click']}
+      menu={{
+        items: [
+          onEdit ? { key: 'edit', icon: <EditOutlined />, label: `Edit ${entityLabel}`, onClick: () => void onEdit() } : null,
+          (onShare || onPublish) ? { key: 'share-publish', icon: <ShareAltOutlined />, label: `Share or publish ${entityLabel}`, onClick: openDialog } : null
+        ].filter(Boolean)
+      }}
+    >
+      <Button
+        aria-label={menuAriaLabel ?? `Manage ${entityLabel}`}
+        shape="circle"
+        type="text"
+        icon={<MoreOutlined />}
+        onClick={(event) => event.stopPropagation()}
+      />
+    </Dropdown>
+  ) : (
+    <Space size={4}>
+      {editAction}
+      {onDelete ? (
+        <InlineDeleteButton
+          onConfirm={onDelete}
+          ariaLabel={`Remove ${entityLabel}`}
+          confirmText="Remove"
+        />
+      ) : null}
+      {shareAction}
+    </Space>
+  );
+
   return (
     <>
-      <Space size={4}>
-        {onEdit ? (
-          <Button aria-label={`Edit ${entityLabel}`} shape="circle" icon={<EditOutlined />} onClick={() => void onEdit()} />
-        ) : null}
-        {onDelete ? (
-          <InlineDeleteButton
-            onConfirm={onDelete}
-            ariaLabel={`Remove ${entityLabel}`}
-            confirmText="Remove"
-          />
-        ) : null}
-        {(onShare || onPublish) ? (
-          <Button aria-label={`Share or publish ${entityLabel}`} shape="circle" icon={<ShareAltOutlined />} onClick={openDialog} />
-        ) : null}
-      </Space>
+      {actions}
 
       <Modal
         title={`Share / Publish ${entityLabel}`}

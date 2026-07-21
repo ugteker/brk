@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ReportRepository } from './repository';
 
-function createFakeDb() {
+function createFakeDb(agentCharacterTypes: Record<string, string> = {}) {
   const rows: Array<{
     id: string;
     agentId: string;
@@ -21,10 +21,18 @@ function createFakeDb() {
   }> = [];
   let seq = 0;
 
+  // Mirrors real Prisma: the `agent` relation is only attached when a query's own
+  // `include` actually asks for it - independent per query, just like a real join,
+  // so this can regression-test create()'s include specifically without masking it.
+  function withAgent<T extends { agentId: string }>(row: T, include?: { agent?: unknown }): T & { agent?: { characterType: string } } {
+    return { ...row, agent: include?.agent && agentCharacterTypes[row.agentId] ? { characterType: agentCharacterTypes[row.agentId] } : undefined };
+  }
+
   return {
     agentRunReport: {
       create: async ({
-        data
+        data,
+        include
       }: {
         data: {
           agentId: string;
@@ -41,6 +49,7 @@ function createFakeDb() {
           estimatedCostUsd: number | null;
           signals: { create: Array<{ symbol: string; side: string; confidence: number; rationale: string; citationsJson: string }> };
         };
+        include?: { agent?: unknown };
       }) => {
         seq += 1;
         const row = {
@@ -61,21 +70,30 @@ function createFakeDb() {
           signals: data.signals.create
         };
         rows.push(row);
-        return row;
+        return withAgent(row, include);
       },
-      findFirst: async ({ where }: { where: { agentId?: string; id?: string } }) => {
+      findFirst: async ({
+        where,
+        include
+      }: {
+        where: { agentId?: string; id?: string };
+        include?: { agent?: unknown };
+      }) => {
         if (where.id) {
-          return rows.find((r) => r.id === where.id) ?? null;
+          const found = rows.find((r) => r.id === where.id);
+          return found ? withAgent(found, include) : null;
         }
         const matches = rows.filter((r) => r.agentId === where.agentId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-        return matches[0] ?? null;
+        return matches[0] ? withAgent(matches[0], include) : null;
       },
       findMany: async ({
         where,
-        orderBy
+        orderBy,
+        include
       }: {
         where: { agentId: string; signals?: { some: { symbol: string } } };
         orderBy?: { createdAt: 'asc' | 'desc' };
+        include?: { agent?: unknown };
       }) => {
         let matches = rows.filter((r) => r.agentId === where.agentId);
         if (where.signals) {
@@ -83,7 +101,9 @@ function createFakeDb() {
           matches = matches.filter((r) => r.signals.some((s) => s.symbol === symbol));
         }
         const direction = orderBy?.createdAt === 'asc' ? 1 : -1;
-        return matches.sort((a, b) => direction * (a.createdAt.getTime() - b.createdAt.getTime()));
+        return matches
+          .sort((a, b) => direction * (a.createdAt.getTime() - b.createdAt.getTime()))
+          .map((r) => withAgent(r, include));
       }
     }
   };
@@ -346,5 +366,33 @@ describe('ReportRepository', () => {
         }
       })
     ).rejects.toThrow('signals are only allowed for finance_expert');
+  });
+
+  it('saves and re-reads a non-finance_expert report without throwing (regression: create() must include the agent relation)', async () => {
+    // Bug: saveRunReport's agentRunReport.create() call omitted `include: { agent: ... } }`,
+    // so toRecord()'s characterType detection always fell back to 'finance_expert' - which then
+    // mismatched the already-correctly-normalized reportJson for any non-finance_expert agent and
+    // threw ReportShapeValidationError, even though the row had already been durably saved.
+    const repo = new ReportRepository(createFakeDb({ 'agent-1': 'teacher' }) as never);
+
+    const saved = await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-teacher-1',
+      promptVersionId: 'prompt-1',
+      characterType: 'teacher',
+      summary: 'teacher summary',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: [],
+      report: {
+        common: { summary: 'teacher summary', key_takeaways: [], sources_used: [], citations: [] },
+        section: { character_type: 'teacher', lesson_explanation: 'lesson content' }
+      }
+    });
+
+    expect(saved.report.section.character_type).toBe('teacher');
+
+    const reRead = await repo.getReportById(saved.id);
+    expect(reRead?.report.section.character_type).toBe('teacher');
   });
 });

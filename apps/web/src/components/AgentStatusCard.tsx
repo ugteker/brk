@@ -54,7 +54,7 @@ export function AgentStatusCard() {
         Latest agent runtime status
       </Title>
       {runs.length === 0 ? (
-        <p className="text-sm text-gray-700">No runs yet.</p>
+        <p className="text-sm text-muted-foreground">No runs yet.</p>
       ) : (
         <>
           <p className="text-sm">
@@ -74,7 +74,7 @@ export function AgentStatusCard() {
                   width: 6,
                   height: 6,
                   borderRadius: '50%',
-                  background: index === activeIndex ? '#1677ff' : '#d9d9d9',
+                  background: index === activeIndex ? '#722ed1' : 'hsl(225, 18%, 30%)',
                   display: 'inline-block'
                 }}
               />

@@ -31,14 +31,13 @@ export type ScheduleInput =
   | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string };
 
 export interface CreateAgentInput {
-  name: string;
+  name?: string;
   description?: string;
   active?: boolean;
   characterType?: CharacterType;
   promptConfig?: PromptConfig;
   sources?: Array<{ type: SourceType; value: string; frequencyMinutes?: number; maxItems?: number }>;
   preferences?: Record<string, string[]>;
-  schedule?: ScheduleInput;
 }
 
 export type AgentSharePermission = 'read' | 'edit' | 'delete';

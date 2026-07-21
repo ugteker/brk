@@ -23,8 +23,11 @@ jobs:
       - name: Install web deps
         run: npm ci
         working-directory: apps/web
-      - name: Test web
-        run: npm run test
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: Smoke test web
+        run: npm run test:smoke
         working-directory: apps/web
 
   deploy-production:

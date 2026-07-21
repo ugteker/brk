@@ -9,6 +9,7 @@ export interface AgentScheduleRecord {
   agentId: string;
   nextRunAt: Date;
   enabled: boolean;
+  playbookId?: string;
 }
 
 export interface AgentRunRecord {
@@ -23,11 +24,18 @@ export interface AgentRunRecord {
   retryCount: number;
   errorCode?: string;
   errorMessage?: string;
+  // Set when the run was triggered by a Playbook schedule, carrying the notification
+  // context (recipients/language/notifications flag) so the worker can pass them to the agent runner.
+  playbookId?: string;
+  playbookRecipients?: string[];
+  playbookLanguage?: string;
+  playbookNotificationsEnabled?: boolean;
+  playbookDigestFrequency?: string;
 }
 
 export interface RunStore {
   getDueSchedules(now: Date): Promise<AgentScheduleRecord[]>;
-  upsertQueuedRun(agentId: string, scheduledFor: Date): Promise<void>;
+  upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string): Promise<void>;
   claimNextQueuedRun(workerId: string): Promise<AgentRunRecord | null>;
   setPhase(runId: string, phase: RunPhase): Promise<void>;
   completeRun(
@@ -36,6 +44,7 @@ export interface RunStore {
     errorCode?: string,
     errorMessage?: string
   ): Promise<void>;
+  markPlaybookExecuted(playbookId: string): Promise<void>;
 }
 
 export class InMemoryRunStore implements RunStore {
@@ -51,7 +60,7 @@ export class InMemoryRunStore implements RunStore {
     return this.schedules.filter((s) => s.enabled && s.nextRunAt.getTime() <= now.getTime());
   }
 
-  async upsertQueuedRun(agentId: string, scheduledFor: Date): Promise<void> {
+  async upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string): Promise<void> {
     const exists = this.runs.some(
       (r) => r.agentId === agentId && r.scheduledFor.getTime() === scheduledFor.getTime()
     );
@@ -64,7 +73,8 @@ export class InMemoryRunStore implements RunStore {
       scheduledFor,
       status: 'queued',
       phase: null,
-      retryCount: 0
+      retryCount: 0,
+      playbookId
     });
   }
 
@@ -101,6 +111,9 @@ export class InMemoryRunStore implements RunStore {
     run.errorCode = errorCode;
     run.errorMessage = errorMessage;
   }
+
+  // No-op for in-memory store (used in tests); override in subclasses if needed.
+  async markPlaybookExecuted(_playbookId: string): Promise<void> {}
 }
 
 export class RunQueueService {
@@ -109,7 +122,7 @@ export class RunQueueService {
   async enqueueDueRuns(now: Date): Promise<number> {
     const due = await this.store.getDueSchedules(now);
     for (const schedule of due) {
-      await this.store.upsertQueuedRun(schedule.agentId, schedule.nextRunAt);
+      await this.store.upsertQueuedRun(schedule.agentId, schedule.nextRunAt, schedule.playbookId);
     }
     return due.length;
   }
@@ -133,5 +146,9 @@ export class RunQueueService {
     errorMessage?: string
   ): Promise<void> {
     await this.store.completeRun(runId, status, errorCode, errorMessage);
+  }
+
+  async markPlaybookExecuted(playbookId: string): Promise<void> {
+    await this.store.markPlaybookExecuted(playbookId);
   }
 }

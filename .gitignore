@@ -58,3 +58,9 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+/.superpowers/brainstorm/1003-1784380496/state/server.pid
+/.superpowers/brainstorm/1018-1784396210/state/server.pid
+/.superpowers/brainstorm/1018-1784396210/state/server-info
+/.superpowers/brainstorm/1003-1784380496/state/server-instance-id
+/.superpowers/brainstorm/1018-1784396210/state/server-instance-id
+/.superpowers/brainstorm/1003-1784380496/state/server-stopped

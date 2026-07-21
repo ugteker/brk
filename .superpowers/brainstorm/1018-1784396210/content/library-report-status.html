@@ -1,0 +1,89 @@
+<style>
+  .library-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; margin-top:24px; }
+  .variant { border:1px solid #403458; border-radius:18px; padding:14px; background:#211a2c; color:#f3edff; cursor:pointer; }
+  .variant:hover { border-color:#a78bfa; box-shadow:0 0 0 3px rgba(167,139,250,.14); }
+  .variant h3 { margin:0 0 5px; font-size:15px; color:#d8c8ff; }
+  .variant > p { min-height:40px; margin:0 0 14px; color:#b9b0ca; font-size:12px; line-height:1.45; }
+  .source-card { overflow:hidden; border:1px solid rgba(167,139,250,.38); border-radius:15px; background:#2a2136; box-shadow:0 8px 22px rgba(0,0,0,.24); }
+  .cover { height:108px; position:relative; overflow:hidden; background:linear-gradient(125deg,#1a1733,#5c2aa2 56%,#155275); }
+  .cover:before { content:""; position:absolute; inset:-20px; background:radial-gradient(circle at 22% 30%,rgba(255,255,255,.2),transparent 30%),radial-gradient(circle at 84% 72%,rgba(125,211,252,.35),transparent 32%); filter:blur(10px); }
+  .type { position:absolute; top:10px; left:10px; padding:4px 8px; border-radius:99px; background:rgba(19,14,32,.68); border:1px solid rgba(255,255,255,.23); font-size:10px; }
+  .menu { position:absolute; top:10px; right:10px; width:25px; height:25px; display:grid; place-items:center; border-radius:8px; background:rgba(19,14,32,.62); font-weight:700; }
+  .body { padding:14px; }
+  .title { font-weight:800; font-size:15px; }
+  .url { color:#9f94b8; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:3px; }
+  .items { margin:13px 0 0; border-top:1px solid #40344f; padding-top:10px; color:#a99fbb; font-size:10px; }
+  .items strong { display:block; margin-bottom:5px; color:#cac1d6; font-size:10px; }
+  .items div { color:#f0eaf8; margin:4px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .agents { margin-top:15px; border-top:1px solid #40344f; padding-top:11px; }
+  .agents-title { color:#aaa0b9; font-size:10px; font-weight:700; margin-bottom:8px; }
+  .agent-row { display:flex; gap:9px; align-items:center; }
+  .agent { display:flex; flex-direction:column; align-items:center; gap:4px; font-size:9px; color:#e5dff0; }
+  .agent-icon { width:31px; height:31px; display:grid; place-items:center; border-radius:50%; background:linear-gradient(135deg,#d8c3ff,#9e7bdf); color:#2a1649; font-size:15px; }
+  .agent-icon.alt { background:linear-gradient(135deg,#93e5db,#54a9b9); }
+  .add { width:31px; height:31px; display:grid; place-items:center; border:1px dashed #8f7baa; color:#baabcf; border-radius:50%; }
+  .report-row { margin-top:13px; display:flex; align-items:center; gap:8px; border-radius:10px; padding:8px 9px; font-size:10px; }
+  .report-row .dot { width:7px; height:7px; border-radius:50%; flex:none; }
+  .report-row .arrow { margin-left:auto; color:#d4bdff; font-size:14px; }
+  .report-row strong { display:block; font-size:10px; }
+  .report-row small { color:#b8aec8; }
+  .has-reports { background:linear-gradient(100deg,rgba(108,63,169,.32),rgba(41,78,124,.24)); border:1px solid rgba(174,137,245,.35); }
+  .has-reports .dot { background:#9df1bd; box-shadow:0 0 0 3px rgba(95,213,132,.15); }
+  .no-reports { background:rgba(255,255,255,.035); border:1px dashed #635474; color:#bbb0c6; }
+  .no-reports .dot { background:#7c6e8d; }
+  .rail-badge { display:inline-flex; align-items:center; gap:5px; margin-left:auto; border-radius:99px; padding:4px 7px; background:rgba(111,70,174,.36); color:#dfd0ff; font-size:9px; font-weight:700; }
+  .rail-badge i { display:inline-block; width:5px; height:5px; border-radius:50%; background:#9df1bd; }
+  .footer-pulse { display:flex; align-items:center; justify-content:space-between; margin-top:13px; padding-top:10px; border-top:1px solid #40344f; color:#b7acc8; font-size:10px; }
+  .footer-pulse .count { color:#f0e9fd; font-weight:800; }
+  .footer-pulse .count span { color:#9df1bd; }
+  .footer-pulse .empty { color:#8f849c; }
+  @media (max-width: 900px) { .library-grid { grid-template-columns:1fr; } }
+</style>
+<h2>Berichtsstatus auf der Bibliothekskarte</h2>
+<p class="subtitle">Die Karte zeigt bereits Quelle, Inhalte und zugeordnete Agenten. Die neue Information sollte sofort beantworten: „Gibt es Ergebnisse?“ — ohne die Karte mit einer weiteren Aktion zu überladen.</p>
+<div class="library-grid">
+  <div class="variant" data-choice="report-row" onclick="toggleSelect(this)">
+    <h3>A · Ergebnis-Zeile <span style="color:#9df1bd">— Empfehlung</span></h3>
+    <p>Eine eigene, anklickbare Statuszeile zwischen Inhalt und Agenten. Positiver und leerer Zustand sind gleich klar.</p>
+    <div class="source-card">
+      <div class="cover"><span class="type">▶ YouTube</span><span class="menu">···</span></div>
+      <div class="body">
+        <div class="title">Lanz &amp; Precht</div><div class="url">youtube.com / Playlist</div>
+        <div class="items"><strong>NEUE FOLGEN</strong><div>▶ Europa unter Druck</div><div>▶ Die neue Unordnung</div></div>
+        <div class="report-row has-reports"><span class="dot"></span><span><strong>4 Berichte verfügbar</strong><small>Letzter vor 18 Minuten</small></span><span class="arrow">›</span></div>
+        <div class="agents"><div class="agents-title">WIRD BEOBACHTET VON</div><div class="agent-row"><div class="agent"><div class="agent-icon">⌕</div>Scout</div><div class="agent"><div class="agent-icon alt">✦</div>Thinker</div><div class="add">+</div></div></div>
+      </div>
+    </div>
+    <div style="height:10px"></div>
+    <div class="source-card"><div class="body"><div class="title">Stadtgespräch</div><div class="url">podcast.example / RSS</div><div class="report-row no-reports"><span class="dot"></span><span><strong>Noch keine Berichte</strong><small>Agenten analysieren neue Inhalte automatisch</small></span></div></div></div>
+  </div>
+  <div class="variant" data-choice="agent-rail" onclick="toggleSelect(this)">
+    <h3>B · Signal an der Agentenleiste</h3>
+    <p>Sehr kompakt: Der Berichtsstand ist Teil der Agenten-Zuordnung. Gut, wenn Berichte als Ergebnis der Agenten verstanden werden.</p>
+    <div class="source-card">
+      <div class="cover"><span class="type">▶ YouTube</span><span class="menu">···</span></div>
+      <div class="body">
+        <div class="title">Lanz &amp; Precht</div><div class="url">youtube.com / Playlist</div>
+        <div class="items"><strong>NEUE FOLGEN</strong><div>▶ Europa unter Druck</div><div>▶ Die neue Unordnung</div></div>
+        <div class="agents"><div style="display:flex;align-items:center;margin-bottom:8px"><div class="agents-title" style="margin:0">WIRD BEOBACHTET VON</div><div class="rail-badge"><i></i> 4 Berichte</div></div><div class="agent-row"><div class="agent"><div class="agent-icon">⌕</div>Scout</div><div class="agent"><div class="agent-icon alt">✦</div>Thinker</div><div class="add">+</div></div></div>
+      </div>
+    </div>
+    <div style="height:10px"></div>
+    <div class="source-card"><div class="body"><div class="title">Stadtgespräch</div><div class="url">podcast.example / RSS</div><div class="agents"><div style="display:flex;align-items:center"><div class="agents-title" style="margin:0">WIRD BEOBACHTET VON</div><div class="rail-badge" style="background:rgba(255,255,255,.06);color:#a99fb3"><i style="background:#766a81"></i> Keine Berichte</div></div></div></div></div>
+  </div>
+  <div class="variant" data-choice="footer-pulse" onclick="toggleSelect(this)">
+    <h3>C · Karten-Puls im Fuß</h3>
+    <p>Minimal und ruhig: Der Status bleibt stets an derselben Stelle, konkurriert aber weniger mit der Agenten-Zuordnung.</p>
+    <div class="source-card">
+      <div class="cover"><span class="type">▶ YouTube</span><span class="menu">···</span></div>
+      <div class="body">
+        <div class="title">Lanz &amp; Precht</div><div class="url">youtube.com / Playlist</div>
+        <div class="items"><strong>NEUE FOLGEN</strong><div>▶ Europa unter Druck</div><div>▶ Die neue Unordnung</div></div>
+        <div class="agents"><div class="agents-title">WIRD BEOBACHTET VON</div><div class="agent-row"><div class="agent"><div class="agent-icon">⌕</div>Scout</div><div class="agent"><div class="agent-icon alt">✦</div>Thinker</div><div class="add">+</div></div></div>
+        <div class="footer-pulse"><span class="count"><span>●</span> 4 Berichte</span><span>Letzter vor 18 Min. ›</span></div>
+      </div>
+    </div>
+    <div style="height:10px"></div>
+    <div class="source-card"><div class="body"><div class="title">Stadtgespräch</div><div class="url">podcast.example / RSS</div><div class="footer-pulse"><span class="empty">○ Noch keine Berichte</span><span>›</span></div></div></div>
+  </div>
+</div>

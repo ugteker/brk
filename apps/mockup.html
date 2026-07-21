@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="de" class="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Feed-Karten · Mockup v2</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+    /* Unread pulse ring */
+    @keyframes unread-ping {
+      75%, 100% { transform: scale(2); opacity: 0; }
+    }
+    .unread-ping { animation: unread-ping 1.6s cubic-bezier(0,0,0.2,1) infinite; }
+
+    /* Card hover lift */
+    .feed-card { transition: transform 0.16s ease-out, box-shadow 0.16s ease-out, border-color 0.16s ease-out; }
+    .feed-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(114,46,209,0.13); }
+
+    /* Drawer slide in */
+    @keyframes slide-in {
+      from { transform: translateX(100%); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+    .drawer { animation: slide-in 0.24s ease-out both; }
+
+    /* Pin button */
+    .pin-btn { opacity: 0; transition: opacity 0.15s; }
+    .feed-card:hover .pin-btn, .pin-btn.pinned { opacity: 1; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .feed-card { transition: none; }
+      .unread-ping { animation: none; }
+      .drawer { animation: none; }
+    }
+  </style>
+</head>
+<body class="bg-[#f0f1f7] text-slate-900 dark:bg-[#0d1017] dark:text-slate-100 transition-colors">
+
+<!-- ══════════════════════════════════════
+     LAYOUT WRAPPER: Feed (left) + Drawer (right)
+     ══════════════════════════════════════ -->
+<div class="flex min-h-screen">
+
+  <!-- ── Feed column ─────────────────── -->
+  <div id="feed-col" class="min-w-0 flex-1 overflow-y-auto px-4 py-8 transition-all" style="max-width:640px; margin:0 auto;">
+
+    <!-- Top bar -->
+    <div class="mb-6 flex items-center justify-between">
+      <div>
+        <h1 class="text-lg font-bold tracking-tight">Feed · Mockup <span class="text-sm font-normal text-slate-400">v2 – echte Daten</span></h1>
+        <p class="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">Kompakte Karten · Unread-Dot · Pin · Drawer-Ansicht</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="theme-toggle"
+          class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700">
+          🌙 / ☀️
+        </button>
+      </div>
+    </div>
+
+    <!-- Date divider (fixed: no uppercase tracking-wider) -->
+    <div class="mb-4 flex items-center gap-3">
+      <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Heute</span>
+      <span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span>
+    </div>
+
+    <div class="space-y-3">
+
+      <!-- ═══════════════════════════════════════════
+           KARTE 1 · UNGELESEN · Philosopher · Amber
+           Echte DB-Daten: Spahn / CDU / Leihmutterschaft
+           Ansatz: quadratisches Thumbnail (Personalausweis-Stil)
+           ═══════════════════════════════════════════ -->
+      <article class="feed-card group relative cursor-pointer overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-sm dark:border-violet-950 dark:bg-[#161b22]"
+               onclick="openDrawer()">
+
+        <!-- Amber accent top band -->
+        <span class="absolute inset-x-0 top-0 z-10 h-[3px] bg-amber-500"></span>
+
+        <div class="relative p-4">
+          <!-- Unread dot -->
+          <span class="absolute right-3 top-3 z-10 flex h-2.5 w-2.5" title="Ungelesen">
+            <span class="unread-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+            <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-violet-500"></span>
+          </span>
+          <!-- Pin button -->
+          <button class="pin-btn absolute right-8 top-2.5 z-10 flex h-6 w-6 items-center justify-center rounded-md text-slate-400 hover:text-amber-500 dark:text-slate-500"
+                  title="Anpinnen" onclick="event.stopPropagation(); togglePin(this)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L9 9H2l5.5 4-2 7L12 16l6.5 4-2-7L22 9h-7z"/></svg>
+          </button>
+
+          <!-- Meta row: square cover thumbnail (like an ID card photo) + labels -->
+          <div class="flex items-center gap-3 pr-14">
+            <div class="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-700">
+              <img src="https://picsum.photos/seed/spahn-cdu/96/96" alt="" class="h-full w-full object-cover" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5 text-xs">
+                <span class="font-semibold text-slate-800 dark:text-slate-200">Socratic Guide</span>
+                <span class="text-slate-400">·</span>
+                <span class="text-slate-400 dark:text-slate-500">Philosopher</span>
+                <span class="ml-1 shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">Insight</span>
+              </div>
+              <div class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500">
+                <span class="truncate">Spahn / CDU Leihmutterschaft</span>
+                <span aria-hidden="true">·</span>
+                <span class="whitespace-nowrap">vor 2 Std</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Headline – semibold because unread -->
+          <h3 class="mt-3 text-[15px] font-semibold leading-snug text-slate-900 dark:text-slate-50">
+            Spahn-Interview: Leihmutterschaft in USA löst CDU-Krise aus
+          </h3>
+
+          <!-- Keywords: hashtag style, scannable topics -->
+          <div class="mt-2 flex flex-wrap gap-x-2.5 gap-y-1 text-[11px] font-medium text-violet-600 dark:text-violet-400">
+            <span>#Leihmutterschaft</span>
+            <span>#Parteiethik</span>
+            <span>#Führungskrise</span>
+          </div>
+
+          <!-- Focus callout -->
+          <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 dark:border-amber-900 dark:bg-amber-950/30">
+            <span class="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+              <span class="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500 dark:bg-amber-400"></span>
+              Nächste Schritte
+            </span>
+            <p class="mt-1 text-[13px] leading-relaxed text-amber-950 dark:text-amber-100">
+              CDU-Fraktionssitzung September 2024 beobachten: Innerparteiliche Dynamik auswerten.
+            </p>
+          </div>
+
+          <!-- Chips -->
+          <div class="mt-2.5 flex flex-wrap gap-1.5">
+            <span class="rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950/60 dark:text-amber-200">Relevanz 95 %</span>
+            <span class="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-200">Konfidenz: hoch</span>
+            <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">Jens Spahn</span>
+            <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-400 dark:bg-slate-800 dark:text-slate-500">+2</span>
+          </div>
+
+          <!-- Footer -->
+          <div class="mt-3 flex items-center justify-end gap-3 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
+            <button class="flex items-center gap-1 font-medium text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-200" onclick="event.stopPropagation()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Diskutieren
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <!-- ═══════════════════════════════════════════
+           KARTE 2 · GELESEN · Finance Expert · Violet
+           ═══════════════════════════════════════════ -->
+      <article class="feed-card group relative cursor-pointer overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-sm dark:border-violet-950 dark:bg-[#161b22]">
+
+        <!-- Violet accent top band -->
+        <span class="absolute inset-x-0 top-0 z-10 h-[3px] bg-violet-500"></span>
+
+        <div class="relative p-4">
+          <!-- Pin button -->
+          <button class="pin-btn absolute right-3 top-2.5 z-10 flex h-6 w-6 items-center justify-center rounded-md text-slate-400 hover:text-amber-500 dark:text-slate-500"
+                  title="Anpinnen" onclick="event.stopPropagation(); togglePin(this)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L9 9H2l5.5 4-2 7L12 16l6.5 4-2-7L22 9h-7z"/></svg>
+          </button>
+
+          <!-- Meta row: square thumbnail + labels -->
+          <div class="flex items-center gap-3 pr-8">
+            <div class="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-700">
+              <img src="https://picsum.photos/seed/finance-fed/96/96" alt="" class="h-full w-full object-cover" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5 text-xs">
+                <span class="font-semibold text-slate-800 dark:text-slate-200">Finance Expert</span>
+                <span class="text-slate-400">·</span>
+                <span class="text-slate-400 dark:text-slate-500">Balanced Analyst</span>
+                <span class="ml-1 shrink-0 rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">Insight</span>
+              </div>
+              <div class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500">
+                <span class="truncate">Markets Weekly</span>
+                <span>·</span>
+                <span class="whitespace-nowrap">gestern</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Headline – normal weight because read -->
+          <h3 class="mt-3 text-[15px] font-medium leading-snug text-slate-700 dark:text-slate-300">
+            Fed-Entscheid erhöht Druck auf zinssensitive Werte im dritten Quartal
+          </h3>
+
+          <!-- Keywords -->
+          <div class="mt-2 flex flex-wrap gap-x-2.5 gap-y-1 text-[11px] font-medium text-violet-600 dark:text-violet-400">
+            <span>#Zinspolitik</span>
+            <span>#Fed</span>
+            <span>#Q3-Ausblick</span>
+          </div>
+
+          <!-- Chips -->
+          <div class="mt-3 flex flex-wrap gap-1.5">
+            <span class="rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-950/60 dark:text-violet-200">Relevanz 82 %</span>
+            <span class="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-200">Konfidenz: hoch</span>
+            <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">Federal Reserve</span>
+          </div>
+          <!-- Trading signals -->
+          <div class="mt-2 flex flex-wrap gap-1.5 text-xs">
+            <span class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">▲ BRK.B</span>
+            <span class="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 font-semibold text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">▼ ARKK</span>
+          </div>
+          <div class="mt-3 flex items-center justify-end gap-3 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
+            <button class="flex items-center gap-1 font-medium text-violet-600 hover:text-violet-800 dark:text-violet-400" onclick="event.stopPropagation()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Diskutieren
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <!-- ═══════════════════════════════════════════
+           KARTE 3 · ANGEPINNT · Teacher · Emerald
+           ═══════════════════════════════════════════ -->
+      <article class="feed-card group relative cursor-pointer overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/30 shadow-sm dark:border-amber-900/60 dark:bg-[#1a1710]">
+
+        <!-- Emerald accent top band -->
+        <span class="absolute inset-x-0 top-0 z-10 h-[3px] bg-emerald-500"></span>
+
+        <div class="relative p-4">
+          <!-- Pin button (filled = pinned) -->
+          <button class="pin-btn pinned absolute right-3 top-2.5 z-10 flex h-6 w-6 items-center justify-center rounded-md text-amber-500"
+                  title="Angepinnt – zum Entpinnen klicken" onclick="event.stopPropagation(); togglePin(this)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2L9 9H2l5.5 4-2 7L12 16l6.5 4-2-7L22 9h-7z"/></svg>
+          </button>
+
+          <!-- Meta row: square thumbnail + labels -->
+          <div class="flex items-center gap-3 pr-8">
+            <div class="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-700">
+              <img src="https://picsum.photos/seed/podcast-ai/96/96" alt="" class="h-full w-full object-cover" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5 text-xs">
+                <span class="font-semibold text-slate-800 dark:text-slate-200">Teacher</span>
+                <span class="text-slate-400">·</span>
+                <span class="text-slate-400 dark:text-slate-500">Lex Fridman Podcast</span>
+                <span class="ml-1 shrink-0 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">Empfehlung</span>
+              </div>
+              <div class="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">vor 3 Tagen</div>
+            </div>
+          </div>
+
+          <!-- Headline -->
+          <h3 class="mt-3 text-[15px] font-medium leading-snug text-slate-700 dark:text-slate-300">
+            Bewusstsein und KI: Warum Qualia die Grenze der Simulation markieren könnte
+          </h3>
+
+          <!-- Keywords -->
+          <div class="mt-2 flex flex-wrap gap-x-2.5 gap-y-1 text-[11px] font-medium text-violet-600 dark:text-violet-400">
+            <span>#Bewusstsein</span>
+            <span>#Qualia</span>
+            <span>#HardProblem</span>
+          </div>
+
+          <!-- Focus callout -->
+          <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-900 dark:bg-emerald-950/30">
+            <span class="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+              <span class="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"></span>
+              Schlüsselerkenntnis
+            </span>
+            <p class="mt-1 text-[13px] leading-relaxed text-emerald-950 dark:text-emerald-100">
+              Funktionale Äquivalenz reicht nicht aus – das Hard Problem of Consciousness bleibt ungelöst.
+            </p>
+          </div>
+
+          <div class="mt-3 flex items-center justify-end gap-3 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
+            <button class="flex items-center gap-1 font-medium text-violet-600 hover:text-violet-800 dark:text-violet-400" onclick="event.stopPropagation()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Diskutieren
+            </button>
+          </div>
+        </div>
+      </article>
+
+    </div><!-- /space-y-3 -->
+  </div><!-- /feed-col -->
+
+  <!-- ══════════════════════════════════════
+       DRAWER PANEL (right side)
+       ══════════════════════════════════════ -->
+  <div id="drawer"
+       class="drawer hidden fixed right-0 top-0 bottom-0 z-50 w-full max-w-[600px] flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-[#161b22] overflow-hidden"
+       style="display:none; flex-direction:column;">
+
+    <!-- Drawer header: cover + meta -->
+    <div class="border-b border-slate-100 dark:border-slate-800">
+      <div class="flex items-start gap-4 px-5 py-4">
+        <div class="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-700">
+          <img src="https://picsum.photos/seed/spahn-cdu/128/128" alt="" class="h-full w-full object-cover" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+            <span class="font-semibold text-slate-600 dark:text-slate-300">Socratic Guide</span>
+            <span>·</span>
+            <span>Philosopher</span>
+            <span>·</span>
+            <span>vor 2 Std</span>
+            <span class="ml-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">Insight</span>
+          </div>
+          <h2 class="mt-1 text-[15px] font-semibold leading-snug text-slate-900 dark:text-slate-50 line-clamp-2">
+            Spahn-Interview: Leihmutterschaft in USA löst CDU-Krise aus – Zukunft als Fraktionschef offen
+          </h2>
+        </div>
+        <button onclick="closeDrawer()"
+                class="ml-1 shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <!-- Stat row: visual meters instead of plain chips -->
+      <div class="grid grid-cols-2 gap-4 px-5 pb-4">
+        <div>
+          <div class="flex items-baseline justify-between text-[11px]">
+            <span class="font-medium text-slate-500 dark:text-slate-400">Relevanz</span>
+            <span class="font-semibold tabular-nums text-slate-800 dark:text-slate-200">95 %</span>
+          </div>
+          <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            <div class="h-full rounded-full bg-violet-500" style="width:95%"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-baseline justify-between text-[11px]">
+            <span class="font-medium text-slate-500 dark:text-slate-400">Konfidenz</span>
+            <span class="font-semibold tabular-nums text-slate-800 dark:text-slate-200">92 %</span>
+          </div>
+          <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            <div class="h-full rounded-full bg-emerald-500" style="width:92%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drawer body: CharacterReportRenderer content -->
+    <div class="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+
+      <!-- Keywords: prominent topic anchors -->
+      <div class="flex flex-wrap gap-1.5">
+        <span class="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">#Leihmutterschaft</span>
+        <span class="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">#Parteiethik</span>
+        <span class="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">#Führungskrise</span>
+        <span class="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">#CDU</span>
+      </div>
+
+      <!-- Zusammenfassung: lead paragraph, larger + first-line emphasis -->
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-[13px] dark:bg-slate-800">📋</span>
+          <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-200">Zusammenfassung</h4>
+        </div>
+        <p class="mt-2 text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
+          CDU-Fraktionschef Spahn ist via US-Leihmutterschaft Vater geworden. Erstinterview offenbart zehnjähriges ethisches Ringen.
+        </p>
+        <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          CDU-Beschluss (Feb 2024) lehnt Leihmutterschaft ab – Spahn schwieg damals. Massive innerparteiliche Kritik, Rücktrittsforderung aus MV.
+        </p>
+      </div>
+
+      <!-- Kernaussagen: numbered cards instead of plain bullets -->
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-[13px] dark:bg-slate-800">💡</span>
+          <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-200">Kernaussagen</h4>
+        </div>
+        <ol class="mt-2 space-y-2">
+          <li class="flex gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
+            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[11px] font-bold text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">1</span>
+            <p class="text-sm leading-relaxed text-slate-600 dark:text-slate-300">Spahn wurde durch US-Leihmutterschaft Vater; in Deutschland ist Vermittlung verboten, nicht Elternschaft selbst.</p>
+          </li>
+          <li class="flex gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
+            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[11px] font-bold text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">2</span>
+            <p class="text-sm leading-relaxed text-slate-600 dark:text-slate-300">CDU-Beschlusslage lehnt auch altruistische Leihmutterschaft ab; Spahn schwieg damals, bedauert dies heute.</p>
+          </li>
+          <li class="flex gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
+            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[11px] font-bold text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">3</span>
+            <p class="text-sm leading-relaxed text-slate-600 dark:text-slate-300">Massive innerparteiliche Kritik: Doppelmoral-Vorwurf, Rücktrittsforderung CDU MV; Zukunft als Fraktionschef offen.</p>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Empfehlungen -->
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-[13px] dark:bg-slate-800">🧭</span>
+          <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-200">Empfehlungen</h4>
+        </div>
+        <div class="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/30">
+          <span class="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+            <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+            Empfohlene nächste Schritte
+          </span>
+          <p class="mt-1 text-sm font-medium leading-relaxed text-amber-950 dark:text-amber-100">
+            CDU-Fraktionssitzung September 2024 beobachten: Rücktrittsdruckentwicklung und innerparteiliche Dynamik auswerten. Ethik-Debatte zur Leihmutterschaft in Deutschland dürfte an Fahrt gewinnen.
+          </p>
+        </div>
+      </div>
+
+      <!-- Offene Fragen -->
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-[13px] dark:bg-slate-800">❓</span>
+          <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-200">Offene Fragen</h4>
+        </div>
+        <ul class="mt-2 space-y-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <li class="flex gap-2"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400"></span>Übersteht Spahn die Fraktionssitzung im September politisch?</li>
+          <li class="flex gap-2"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400"></span>Öffnet die CDU ihre Position zur altruistischen Leihmutterschaft?</li>
+        </ul>
+      </div>
+
+      <!-- Erkannte Entitäten -->
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-[13px] dark:bg-slate-800">🏷️</span>
+          <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-200">Erkannte Entitäten</h4>
+        </div>
+        <div class="mt-2 flex flex-wrap gap-1.5">
+          <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">👤 Jens Spahn</span>
+          <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">🏛 CDU</span>
+          <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">📜 BGH</span>
+        </div>
+      </div>
+
+    </div><!-- /drawer body -->
+
+    <!-- Drawer footer: ReportChatPanel ("Ask the analyst") -->
+    <div class="border-t border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-[#0d1017]">
+      <div class="px-4 py-2">
+        <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide dark:text-slate-600 hidden">Ask</p>
+      </div>
+      <!-- Chat messages preview -->
+      <div class="max-h-32 overflow-y-auto px-4 py-2 space-y-2">
+        <div class="flex gap-2 text-xs">
+          <span class="rounded-full bg-violet-100 px-2 py-0.5 font-medium text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">Du</span>
+          <p class="text-slate-600 dark:text-slate-400">Was bedeutet das für die CDU-Bundestagsfraktion konkret?</p>
+        </div>
+        <div class="flex gap-2 text-xs">
+          <span class="rounded-full bg-slate-200 px-2 py-0.5 font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">🦉</span>
+          <p class="text-slate-600 dark:text-slate-400">Die Fraktionsführung steht unter erheblichem Druck. Sollte Spahn im September keine Mehrheit für seinen Verbleib sichern...</p>
+        </div>
+      </div>
+      <!-- Input -->
+      <div class="flex items-center gap-2 px-4 pb-4 pt-2">
+        <input type="text" placeholder="Den Analysten fragen …"
+               class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:border-violet-400 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:placeholder:text-slate-500 dark:text-slate-200" />
+        <button class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white hover:bg-violet-700 transition">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /drawer -->
+
+  <!-- Drawer backdrop -->
+  <div id="backdrop" onclick="closeDrawer()"
+       class="hidden fixed inset-0 z-40 bg-black/20 backdrop-blur-sm dark:bg-black/40" style="display:none;"></div>
+
+</div><!-- /flex layout -->
+
+<script>
+  // Theme toggle
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    document.documentElement.classList.toggle('dark');
+  });
+
+  // Drawer open/close
+  function openDrawer() {
+    const drawer = document.getElementById('drawer');
+    const backdrop = document.getElementById('backdrop');
+    drawer.style.display = 'flex';
+    backdrop.style.display = 'block';
+    // Mark first card as read (remove unread dot)
+    const dot = document.querySelector('.unread-ping')?.parentElement;
+    if (dot) dot.remove();
+  }
+
+  function closeDrawer() {
+    document.getElementById('drawer').style.display = 'none';
+    document.getElementById('backdrop').style.display = 'none';
+  }
+
+  // Pin toggle
+  function togglePin(btn) {
+    const filled = btn.querySelector('svg path')?.getAttribute('fill') === 'currentColor';
+    const svg = btn.querySelector('svg');
+    if (filled) {
+      // Unpin
+      svg.innerHTML = '<path d="M12 2L9 9H2l5.5 4-2 7L12 16l6.5 4-2-7L22 9h-7z"/>';
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      btn.classList.remove('pinned', 'text-amber-500');
+      btn.classList.add('text-slate-400');
+      btn.closest('article').classList.remove('border-amber-200', 'bg-amber-50/30', 'dark:border-amber-900/60', 'dark:bg-[#1a1710]');
+      btn.closest('article').classList.add('border-violet-100', 'bg-white', 'dark:border-violet-950', 'dark:bg-[#161b22]');
+    } else {
+      // Pin
+      svg.innerHTML = '<path d="M12 2L9 9H2l5.5 4-2 7L12 16l6.5 4-2-7L22 9h-7z"/>';
+      svg.setAttribute('fill', 'currentColor');
+      svg.setAttribute('stroke', 'none');
+      btn.classList.add('pinned', 'text-amber-500');
+      btn.classList.remove('text-slate-400');
+      btn.closest('article').classList.add('border-amber-200', 'dark:border-amber-900/60');
+    }
+  }
+
+  // Keyboard: Escape closes drawer
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+</script>
+</body>
+</html>
+
+
+

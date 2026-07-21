@@ -1,5 +1,6 @@
 import type { ClaudeAnalysisResult } from './types';
 import type { SignalRecord } from '../reports/types';
+import { DEFAULT_CHARACTER_TYPE } from '../agents/types';
 import type { CharacterType } from '../agents/types';
 import { normalizeUnifiedCharacterReport, ReportShapeValidationError } from '../reports/unified-report';
 
@@ -42,7 +43,7 @@ function parseSignal(raw: RawSignal, index: number): SignalRecord {
   };
 }
 
-export function parseClaudeResponse(raw: RawClaudeResponse, characterType: CharacterType = 'finance_expert'): ClaudeAnalysisResult {
+export function parseClaudeResponse(raw: RawClaudeResponse, characterType: CharacterType = DEFAULT_CHARACTER_TYPE): ClaudeAnalysisResult {
   const legacySummary = typeof raw.summary === 'string' ? raw.summary : '';
   const legacySignals = Array.isArray(raw.signals) ? raw.signals.map((signal, index) => parseSignal(signal as RawSignal, index)) : [];
 

@@ -64,7 +64,7 @@ it('switches to signup mode and shows a confirmation-sent screen', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
 
   await waitFor(() => expect(signupMock).toHaveBeenCalledWith('c@d.com', 'password123'));
-  expect(await screen.findByText('Check your email')).toBeInTheDocument();
+  expect(await screen.findByText('Check your inbox 📬')).toBeInTheDocument();
   expect(screen.getByText(/c@d.com/)).toBeInTheDocument();
 });
 

@@ -11,7 +11,7 @@ describe('startSchedulerLoop', () => {
     vi.useFakeTimers();
     const queue = {
       enqueueDueRuns: vi.fn(async () => 1)
-    } as unknown as Pick<RunQueueService, 'enqueueDueRuns'>;
+    } as unknown as Pick<RunQueueService, 'enqueueDueRuns' | 'claimNextRun' | 'completeRun' | 'markPlaybookExecuted'>;
     const processNextRun = vi.fn(async () => {});
     const runner = { run: vi.fn(async () => ({ status: 'succeeded' as const })) };
 

@@ -1,0 +1,38 @@
+<style>
+  .image-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;margin-top:24px}
+  .image-variant{min-width:0}.image-head{min-height:66px;padding:0 3px 12px}.image-head h3{margin:0 0 5px;color:#e2d5ff;font-size:15px}.image-head p{margin:0;color:#b9afc8;font-size:12px;line-height:1.45}
+  .report-card{overflow:hidden;border:1px solid #514060;border-radius:16px;background:#2a2136;box-shadow:0 8px 22px rgba(0,0,0,.25);color:#f3edff}
+  .lp-art{position:relative;overflow:hidden;background:linear-gradient(140deg,#07131c 0%,#142d3e 47%,#d65f3f 48%,#f1b157 100%)}.lp-art:before{content:"";position:absolute;inset:-25px;background:radial-gradient(circle at 20% 25%,rgba(255,255,255,.22),transparent 20%),radial-gradient(circle at 77% 71%,rgba(255,220,170,.38),transparent 27%);filter:blur(9px)}.lp-mark{position:relative;display:flex;height:100%;align-items:end;padding:11px;color:#fff;font-weight:900;letter-spacing:-.04em;font-size:18px;line-height:.86;text-shadow:0 2px 8px rgba(0,0,0,.35)}.lp-mark small{display:block;font-size:7px;letter-spacing:.1em;margin-bottom:2px;text-transform:uppercase}
+  .body{padding:14px}.meta{display:flex;align-items:center;gap:9px;font-size:10px;color:#b6abc7}.avatar{height:31px;width:31px;display:grid;place-items:center;border-radius:10px;background:linear-gradient(135deg,#9b70dc,#5b3397);font-size:15px}.who{font-weight:800;color:#f1eaff;font-size:11px}.when{margin-left:auto;color:#978ba5}.source{margin-top:3px;color:#b7abc6;font-size:10px}.kind{display:inline-block;padding:3px 6px;border-radius:99px;background:rgba(174,129,255,.17);color:#d9c2ff;font-size:9px;font-weight:800;letter-spacing:.02em}
+  .headline{margin:13px 0 6px;font-weight:850;font-size:16px;line-height:1.28;color:#fff}.summary{margin:0;color:#c8bed4;font-size:12px;line-height:1.5}.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:11px}.chip{padding:4px 7px;border-radius:99px;background:#393047;color:#cfc2df;font-size:9px}.good{background:rgba(134,239,172,.13);color:#b7f7c9}.footer{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid #493a56;color:#b8adc6;font-size:10px}.open{color:#d7c3ff;font-weight:750}
+  .top-strip{height:68px}.top-strip .lp-mark{font-size:16px}.cover-row{display:grid;grid-template-columns:72px 1fr;gap:11px}.square-cover{width:72px;height:72px;border-radius:10px;box-shadow:0 4px 13px rgba(0,0,0,.3)}.square-cover .lp-mark{font-size:13px;padding:8px}.square-cover .lp-mark small{font-size:6px}.cover-row .headline{margin:4px 0 5px;font-size:15px}.cover-row .summary{font-size:11px}.image-hero{height:146px}.image-hero .lp-mark{font-size:26px;padding:16px}.image-hero:after{content:"▶ Neue Folge";position:absolute;top:11px;left:11px;padding:4px 7px;border:1px solid rgba(255,255,255,.28);border-radius:99px;background:rgba(20,15,28,.55);color:#fff;font-size:9px}.caption{margin-top:8px;color:#8c8199;font-size:9px;text-align:center}
+  .note{margin-top:24px;padding:14px 16px;border:1px solid rgba(167,139,250,.35);border-radius:14px;background:rgba(92,55,137,.16);color:#d9d0e6;font-size:12px;line-height:1.5}.note b{color:#e6d9ff}
+  @media(max-width:900px){.image-grid{grid-template-columns:1fr}.image-head{min-height:auto}}
+</style>
+<h2>Feedkarte · Quellenbild aus der Bibliothek</h2>
+<p class="subtitle">Beispiel „Lanz &amp; Precht“. Das Bild ist hier nur ein repräsentatives Cover; im Produkt kommt es unverändert aus <code>SourceRecord.metadata.coverImageUrl</code>.</p>
+<div class="image-grid">
+  <section class="image-variant" data-choice="strip" onclick="toggleSelect(this)">
+    <div class="image-head"><h3>A · Quellenstreifen <span style="color:#a7f3c1">— Empfehlung</span></h3><p>Wiedererkennung ohne Ablenkung. Die Analyse bleibt klar die Hauptsache.</p></div>
+    <article class="report-card"><div class="lp-art top-strip"><div class="lp-mark"><div><small>Podcast · YouTube</small>Lanz<br>&amp; Precht</div></div></div><div class="body">
+      <div class="meta"><div class="avatar">⌕</div><div><div class="who">Kontext-Analyst</div><div class="source">Neue Folge · vor 8 Minuten</div></div></div>
+      <div style="margin-top:12px"><span class="kind">ERKENNTNIS</span></div><div class="headline">Der Alltag entscheidet, ob neue Regeln akzeptiert werden.</div><p class="summary">Entlastung muss sichtbar werden, nicht nur angekündigt sein.</p><div class="chips"><span class="chip">Gesellschaft</span><span class="chip good">Relevanz 84</span></div><div class="footer"><span>2 Belege</span><span class="open">Analyse öffnen ›</span></div>
+    </div></article>
+  </section>
+  <section class="image-variant" data-choice="thumbnail" onclick="toggleSelect(this)">
+    <div class="image-head"><h3>B · Cover als Kontext</h3><p>Das quadratische Cover steht neben der Kernaussage — gut für Feed-Listen mit viel Informationsdichte.</p></div>
+    <article class="report-card"><div class="body">
+      <div class="meta"><div class="avatar">✦</div><div><div class="who">Strategie-Partner</div><div class="source">Lanz &amp; Precht · vor 8 Minuten</div></div></div>
+      <div class="cover-row" style="margin-top:13px"><div class="lp-art square-cover"><div class="lp-mark"><div><small>Podcast</small>Lanz<br>&amp; Precht</div></div></div><div><span class="kind">EMPFEHLUNG</span><div class="headline">Weniger Auswahl schafft schnelleres Vertrauen.</div><p class="summary">Nutzer suchen Orientierung, nicht mehr Optionen.</p></div></div>
+      <div class="chips"><span class="chip">Produkt</span><span class="chip good">Vertrauen 91</span></div><div class="footer"><span>3 Quellenreferenzen</span><span class="open">Analyse öffnen ›</span></div>
+    </div></article>
+  </section>
+  <section class="image-variant" data-choice="hero" onclick="toggleSelect(this)">
+    <div class="image-head"><h3>C · Bild-Einstieg</h3><p>Emotional und stark für einzelne, besonders wichtige Erkenntnisse — kann in langen Feeds aber zu dominant werden.</p></div>
+    <article class="report-card"><div class="lp-art image-hero"><div class="lp-mark"><div><small>Der Podcast</small>Lanz<br>&amp; Precht</div></div></div><div class="body">
+      <div class="meta"><div class="avatar">◈</div><div><div class="who">Research Scout</div><div class="source">Analysiert vor 12 Minuten</div></div></div>
+      <div style="margin-top:12px"><span class="kind">UPDATE</span></div><div class="headline">Die Frage nach Orientierung wird wichtiger als der Konflikt selbst.</div><p class="summary">Eine wiederkehrende Beobachtung prägt die gesamte Diskussion.</p><div class="footer"><span>Neu · 2 Entitäten</span><span class="open">Analyse öffnen ›</span></div>
+    </div></article>
+  </section>
+</div>
+<div class="note"><b>Empfehlung:</b> A als Standard. B eignet sich als kompakter Listenmodus. C nur für vom Agenten hoch priorisierte Berichte, etwa mit <code>emphasis: "attention"</code> oder <code>"critical"</code>. Ohne gespeichertes Cover wird die Karte ohne Bild, aber mit unveränderter Hierarchie gerendert.</div>

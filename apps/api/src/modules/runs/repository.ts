@@ -49,6 +49,21 @@ function extractArtifactContent(payloadJson: string): string {
   }
 }
 
+/**
+ * Pulls the human-readable episode/item title out of an artifact's payloadJson, when the
+ * source adapter had one available (see EvidenceBlock.title in analysis/types.ts). Returns
+ * null for legacy/malformed payloads or sources with no title (e.g. a plain web page) - the
+ * UI falls back to showing the raw sourceRef URL in that case.
+ */
+function extractArtifactTitle(payloadJson: string): string | null {
+  try {
+    const parsed = JSON.parse(payloadJson) as { title?: unknown };
+    return typeof parsed.title === 'string' && parsed.title.length > 0 ? parsed.title : null;
+  } catch {
+    return null;
+  }
+}
+
 export class RunsRepository {
   constructor(private readonly db: RunsDb) {}
 
@@ -118,7 +133,8 @@ export class RunsRepository {
           sourceRef: artifact.sourceRef,
           fidelity: artifact.fidelity,
           contentPreview: content.slice(0, CONTENT_PREVIEW_LENGTH),
-          contentLength: content.length
+          contentLength: content.length,
+          title: extractArtifactTitle(artifact.payloadJson)
         };
       })
     };

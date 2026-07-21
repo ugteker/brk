@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
+import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { useTranslation } from 'react-i18next';
-import { Badge, Button, Card, Dropdown, Empty, Input, Layout, Modal, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
+import { Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
   AudioOutlined,
   AudioMutedOutlined,
   CheckCircleOutlined,
+  CloseOutlined,
   LoadingOutlined,
   MailOutlined,
+  MoreOutlined,
   BulbOutlined,
   CaretRightOutlined,
   ClockCircleOutlined,
@@ -16,32 +19,37 @@ import {
   DatabaseOutlined,
   DeleteOutlined,
   EditOutlined,
+  FieldTimeOutlined,
   FileTextOutlined,
   GlobalOutlined,
   LinkOutlined,
-  LogoutOutlined,
   PlusCircleOutlined,
   PlusOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
+  ReadOutlined,
   RobotFilled,
   RobotOutlined,
   RocketOutlined,
   SearchOutlined,
   TeamOutlined,
-  ToolOutlined,
-  UserOutlined
+  ToolOutlined
 } from '@ant-design/icons';
 import { AgentForm } from '../components/AgentForm';
 import { AgentStatusCard } from '../components/AgentStatusCard';
-import { ThemePicker } from '../components/ThemePicker';
 import { AgentReportsBrowser } from '../components/AgentReportsBrowser';
 import { AgentRunsBrowser } from '../components/AgentRunsBrowser';
+import { FeedCard, groupReportsByDay } from '../components/FeedCard';
+import { ReportChatPanel } from '../components/ReportChatPanel';
+import { CharacterReportRenderer } from '../components/CharacterReportRenderer';
 import { AgentPromptEditor } from '../components/AgentPromptEditor';
 import { EpisodePickerModal } from '../components/EpisodePickerModal';
 import { TouchSafeTooltip } from '../components/TouchSafeTooltip';
-import { AdminUsersPage } from './AdminUsersPage';
+import { ListenActiveButton, ListenIdleButton } from '../components/ListenButtons';
 import { SymbolPerformancePage } from './SymbolPerformancePage';
+import { seedDemoData } from '../api/admin';
+import { useAgentStream } from '../hooks/useAgentStream';
+import { useAppData } from '../context/AppDataContext';
 import {
   createAgent,
   deleteAgent,
@@ -62,13 +70,12 @@ import {
 } from '../api/agents';
 import { getLatestAgentPrompt, listAgentReports, type PromptVersionDto, type RunReportDto } from '../api/agents';
 import { grantAgentAccess, listAgentAccessGrants } from '../api/access';
+import type { DiscussionPreselect } from '../api/discussions';
+import { getCharacterTypeColor, getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
 import {
   cloneMarketplaceAgent,
   cloneMarketplacePlaybook,
   cloneMarketplaceSource,
-  listMarketplaceAgents,
-  listMarketplacePlaybooks,
-  listMarketplaceSources,
   type MarketplaceAgentListItem,
   type MarketplacePlaybookListItem,
   type MarketplaceSourceListItem
@@ -81,6 +88,7 @@ import {
   runPlaybookNow,
   sharePlaybook,
   updatePlaybook,
+  type DigestFrequency,
   type PlaybookRecord
 } from '../api/playbooks';
 import {
@@ -98,14 +106,10 @@ import { useAuth } from '../auth/AuthContext';
 import { EntityActions } from '../components/EntityActions';
 import { InlineDeleteButton } from '../components/InlineDeleteButton';
 import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID } from '../data/prompt-personas';
+import { getAgentDisplayLabel } from '../utils/agent-label';
+import { extractYoutubeVideoId, getYoutubeThumbnailUrl } from '../utils/youtube';
 
-const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
-
-// How often to poll for run/report updates while an agent's detail view is open - frequent
-// enough that pending/running runs (from the scheduler or a manual trigger) and newly-completed
-// reports show up promptly without a manual page refresh, without hammering the API.
-const RUNS_POLL_INTERVAL_MS = 4000;
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const TIMEZONE_OPTIONS = [
@@ -116,7 +120,7 @@ const TIMEZONE_OPTIONS = [
   { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
   { value: 'Asia/Tokyo', label: 'Asia/Tokyo' }
 ];
-type HubKey = 'sources' | 'agents' | 'playbooks';
+type HubKey = 'feed' | 'sources' | 'agents' | 'playbooks';
 type ProbeKind = 'feed' | 'listing_page' | 'single_page' | 'unknown';
 interface LibraryTabRecord {
   id: string;
@@ -135,7 +139,7 @@ const YouTubeLogo = () => (
       <path d="M17.6 3.2A2.3 2.3 0 0 0 15.9 1.5C14.5 1 9 1 9 1S3.5 1 2.1 1.5A2.3 2.3 0 0 0 .4 3.2C0 4.6 0 7.5 0 7.5s0 2.9.4 4.3c.2.9.9 1.5 1.7 1.7C3.5 14 9 14 9 14s5.5 0 6.9-.5c.9-.2 1.5-.8 1.7-1.7C18 10.4 18 7.5 18 7.5s0-2.9-.4-4.3z" fill="#FF0000"/>
       <path d="M7 10.5V4.5l5.5 3-5.5 3z" fill="white"/>
     </svg>
-    <span style={{ fontWeight: 700, fontSize: '0.8em', color: '#282828', letterSpacing: '-0.2px', lineHeight: 1 }} aria-label="YouTube">YouTube</span>
+    <span style={{ fontWeight: 700, fontSize: '0.8em', letterSpacing: '-0.2px', lineHeight: 1 }} aria-label="YouTube">YouTube</span>
   </span>
 );
 
@@ -144,11 +148,14 @@ function SourceTypeBadge({ type }: { type: string }) {
   if (type === 'podcast_feeds') return (
     <Tag icon={<AudioOutlined />} color="purple" className="m-0">Podcast</Tag>
   );
+  if (type === 'synthetic_discussion') return (
+    <Tag icon={<AudioOutlined />} color="geekblue" className="m-0">🎙 Synthetic</Tag>
+  );
   return <Tag icon={<GlobalOutlined />} className="m-0">Web</Tag>;
 }
 
 const DEFAULT_LIBRARY_TAB_ID = 'library-default';
-const DEFAULT_LIBRARY_TAB_NAME = 'Library';
+const DEFAULT_LIBRARY_TAB_NAME = 'My Collection';
 
 interface AutoDetectedSource {
   type: SourceType;
@@ -159,6 +166,14 @@ interface AutoDetectedSource {
   itemCount?: number;
   previewItems: Array<{ title: string; link: string | null; pubDate: string | null }>;
 }
+
+const GUIDED_SUGGESTED_SOURCE: AutoDetectedSource = {
+  type: 'youtube_videos',
+  url: 'https://www.youtube.com/playlist?list=PLdPrKDvwrog6nXguUXjQcTIw685Xa6Bg5',
+  kind: 'listing_page',
+  title: 'Lanz & Precht',
+  previewItems: []
+};
 
 function GhostCreateCard({
   ariaLabel,
@@ -276,27 +291,6 @@ function probeRankScore(probe: { reachable: boolean; kind: ProbeKind; confidence
   return score;
 }
 
-function extractYoutubeVideoId(url?: string | null): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.includes('youtu.be')) {
-      return parsed.pathname.replace('/', '') || null;
-    }
-    if (parsed.hostname.includes('youtube.com')) {
-      if (parsed.pathname === '/watch') {
-        return parsed.searchParams.get('v');
-      }
-      if (parsed.pathname.startsWith('/shorts/')) {
-        return parsed.pathname.split('/')[2] ?? null;
-      }
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
 function formatPlaybookSchedule(schedule: PlaybookRecord['schedule']): string {
   if (schedule.mode === 'interval') return `Every ${schedule.intervalMinutes} min`;
   if (schedule.mode === 'daily') return `Daily ${schedule.dailyTime} (${schedule.timezone})`;
@@ -304,17 +298,8 @@ function formatPlaybookSchedule(schedule: PlaybookRecord['schedule']): string {
   return `Weekly ${schedule.dailyTime} on ${days} (${schedule.timezone})`;
 }
 
-const PERSONA_EMOJI_MAP: Record<string, string> = {
-  finance_expert: '📈',
-  teacher:        '🎓',
-  influencer:     '📣',
-  trainer:        '💪',
-  philosopher:    '🦉',
-  summarizer:     '📋',
-};
-
 const PersonaIcon = ({ personaId, style }: { personaId: string; style?: CSSProperties }) => {
-  const emoji = PERSONA_EMOJI_MAP[personaId] ?? '🤖';
+  const emoji = getCharacterTypeEmoji(personaId);
   return (
     <span role="img" aria-label={personaId} className="anticon" style={{ fontSize: '1em', lineHeight: 1, ...style }}>
       {emoji}
@@ -361,15 +346,6 @@ const PERSONA_ICON_MAP: Record<string, ReactNode> = {
   summarizer:     <PersonaIcon personaId="summarizer" />,
 };
 
-const PERSONA_COLOR_MAP: Record<string, string> = {
-  finance_expert: 'blue',
-  teacher:        'purple',
-  influencer:     'orange',
-  trainer:        'volcano',
-  philosopher:    'cyan',
-  summarizer:     'default',
-};
-
 const PERSONA_ICON_BG_MAP: Record<string, string> = {
   finance_expert: 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-300',
   teacher:        'bg-purple-50 text-purple-600 dark:bg-purple-950 dark:text-purple-300',
@@ -398,23 +374,35 @@ function hasEpisodicSource(agent: AgentSummary): boolean {
   return agent.sources.some((source) => source.type === 'podcast_feeds' || source.type === 'youtube_videos');
 }
 
-export function AgentsPage() {
+export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const { user, isAdmin, logout } = useAuth();
   const { t, i18n } = useTranslation();
-  const [showAdminWorkspace, setShowAdminWorkspace] = useState(false);
-  const [showAdminUsers, setShowAdminUsers] = useState(false);
+  const navigate = useSafeNavigate();
+  const {
+    agents, setAgents,
+    sources, setSources,
+    playbooks, setPlaybooks,
+    agentsLoadState: loadState,
+    sourcesLoadState,
+    playbooksLoadState,
+    marketplaceAgents, setMarketplaceAgents: _setMarketplaceAgents,
+    marketplaceSources, setMarketplaceSources: _setMarketplaceSources,
+    marketplacePlaybooks, setMarketplacePlaybooks: _setMarketplacePlaybooks,
+    marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
+    refreshAgents: _refreshAgents, refreshSources: _refreshSources, refreshPlaybooks: _refreshPlaybooks,
+    failedRunNotices, setFailedRunNotices,
+    newReportNotices, setNewReportNotices,
+    bellDismissedIds,
+    forceShowOnboarding, forceShowGuidedWizard, setForceShowGuidedWizard
+  } = useAppData();
   const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
   const [editingAgent, setEditingAgent] = useState<{ detail: AgentDetail; prompt: PromptVersionDto | null } | null>(
     null
   );
   const [isLoadingEditTarget, setIsLoadingEditTarget] = useState(false);
-  const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [agentsSearch, setAgentsSearch] = useState('');
-  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [reports, setReports] = useState<RunReportDto[]>([]);
-  const [runs, setRuns] = useState<RunDetailDto[]>([]);
   const [prompt, setPrompt] = useState<PromptVersionDto | null>(null);
   const [togglingAgentId, setTogglingAgentId] = useState<string | null>(null);
   const [togglingPlaybookId, setTogglingPlaybookId] = useState<string | null>(null);
@@ -426,9 +414,32 @@ export function AgentsPage() {
   const [activePlaybookTab, setActivePlaybookTab] = useState('reports');
   const [highlightedReportId, setHighlightedReportId] = useState<string | null>(null);
   const [hasAppliedSymbolDeepLink, setHasAppliedSymbolDeepLink] = useState(false);
-  const [activeHub, setActiveHub] = useState<HubKey>('sources');
-  const [sources, setSources] = useState<SourceRecord[]>([]);
-  const [sourcesLoadState, setSourcesLoadState] = useState<'idle' | 'loading' | 'error'>('loading');
+  const [activeHub, setActiveHubState] = useState<HubKey>(initialHub ?? 'feed');
+
+  // AppShell's nav buttons navigate via <Router> directly (not through setActiveHub below),
+  // and React Router keeps this same AgentsPage instance mounted across "/", "/library",
+  // "/agents", "/playbooks" (same component/route element). Without this sync, activeHub
+  // would only ever reflect its initial mount value and clicking e.g. Library in the shell
+  // would change the URL but never switch the visible panel.
+  useEffect(() => {
+    if (initialHub) {
+      setActiveHubState((prev) => (prev === initialHub ? prev : initialHub));
+    }
+  }, [initialHub]);
+  const [feedReports, setFeedReports] = useState<Array<RunReportDto & { agentName: string; playbookName: string }>>([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedSearch, setFeedSearch] = useState('');
+  const [viewingFullReport, setViewingFullReport] = useState<RunReportDto & { agentName: string; playbookName: string } | null>(null);
+
+  const HUB_TO_PATH: Record<HubKey, string> = { feed: '/', sources: '/library', agents: '/agents', playbooks: '/playbooks' };
+
+  function setActiveHub(hub: HubKey) {
+    setActiveHubState(hub);
+    navigate(HUB_TO_PATH[hub], { replace: true });
+  }
+  // Derived (not separate state) so navigating via AppShell's Agents/Playbooks nav buttons
+  // always keeps this in sync with the active route — no manual toggle needed.
+  const showAdminWorkspace = activeHub === 'agents' || activeHub === 'playbooks';
   const [sourcesSearch, setSourcesSearch] = useState('');
   const [libraryTabs, setLibraryTabs] = useState<LibraryTabRecord[]>([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
   const [activeLibraryTabId, setActiveLibraryTabId] = useState(DEFAULT_LIBRARY_TAB_ID);
@@ -447,11 +458,27 @@ export function AgentsPage() {
   const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [recentlyUpdatedSourceId, setRecentlyUpdatedSourceId] = useState<string | null>(null);
   const updatedHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [playbooks, setPlaybooks] = useState<PlaybookRecord[]>([]);
-  const [playbooksLoadState, setPlaybooksLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [playbooksSearch, setPlaybooksSearch] = useState('');
   const [selectedPlaybookId, setSelectedPlaybookId] = useState<string | null>(null);
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [selectedSourceId, setSelectedSourceIdState] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get('source')
+  );
+  // Deep-linkable selection: keep ?source=<id> in the URL so refresh/back/share work.
+  const setSelectedSourceId = useCallback((id: string | null) => {
+    setSelectedSourceIdState(id);
+    const params = new URLSearchParams(window.location.search);
+    if (id) params.set('source', id);
+    else params.delete('source');
+    const query = params.toString();
+    window.history.pushState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+  }, []);
+  useEffect(() => {
+    const onPopState = () => {
+      setSelectedSourceIdState(new URLSearchParams(window.location.search).get('source'));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const [activeSourceTab, setActiveSourceTab] = useState<string>('reports');
   const [sourceDetailReports, setSourceDetailReports] = useState<RunReportDto[]>([]);
   const [sourceDetailRuns, setSourceDetailRuns] = useState<RunDetailDto[]>([]);
@@ -491,7 +518,6 @@ export function AgentsPage() {
   const [showInlineAgentCreate, setShowInlineAgentCreate] = useState(false);
   const [isInlineAgentSaving, setIsInlineAgentSaving] = useState(false);
   const [inlineAgentStep, setInlineAgentStep] = useState(0); // 0=character+personality, 1=model+prompt, 2=schedule+recipients
-  const [inlineAgentName, setInlineAgentName] = useState('My Analyst');
   const [inlineAgentDescription, setInlineAgentDescription] = useState('');
   const [inlineAgentPersonaId, setInlineAgentPersonaId] = useState(DEFAULT_PROMPT_PERSONA_ID);
   const [inlineAgentCharacterId, setInlineAgentCharacterId] = useState(DEFAULT_PROMPT_CHARACTER_ID);
@@ -505,26 +531,28 @@ export function AgentsPage() {
   const [showSourcesMarketplace, setShowSourcesMarketplace] = useState(false);
   const [showPlaybooksMarketplace, setShowPlaybooksMarketplace] = useState(false);
   const [showAgentsMarketplace, setShowAgentsMarketplace] = useState(false);
-  const [marketplaceAgents, setMarketplaceAgents] = useState<MarketplaceAgentListItem[]>([]);
-  const [marketplaceSources, setMarketplaceSources] = useState<MarketplaceSourceListItem[]>([]);
-  const [marketplacePlaybooks, setMarketplacePlaybooks] = useState<MarketplacePlaybookListItem[]>([]);
   const [cloningPublicationId, setCloningPublicationId] = useState<string | null>(null);
-  const [marketplaceAgentCount, setMarketplaceAgentCount] = useState(0);
-  const [marketplaceSourceCount, setMarketplaceSourceCount] = useState(0);
-  const [marketplacePlaybookCount, setMarketplacePlaybookCount] = useState(0);
   const [marketplaceAgentsSearch, setMarketplaceAgentsSearch] = useState('');
   const [marketplacePlaybooksSearch, setMarketplacePlaybooksSearch] = useState('');
   const [accessGrantCount, setAccessGrantCount] = useState(0);
-
-  /** Set of source IDs the current user already has an active playbook for. */
-  const followedSourceIds = useMemo(
-    () => new Set(playbooks.flatMap((pb) => pb.sourceIds)),
-    [playbooks]
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() =>
+    localStorage.getItem('chattrader:onboarding:dismissed') === '1'
   );
+  const [guidedWizardOpen, setGuidedWizardOpen] = useState(false);
+  const [guidedWizardUrl, setGuidedWizardUrl] = useState('');
+  const [guidedWizardDetecting, setGuidedWizardDetecting] = useState(false);
+  const [guidedWizardSource, setGuidedWizardSource] = useState<AutoDetectedSource>(GUIDED_SUGGESTED_SOURCE);
+  const [guidedWizardPersonaId, setGuidedWizardPersonaId] = useState('finance_expert');
+  const [guidedWizardRunning, setGuidedWizardRunning] = useState(false);
+  const [guidedWizardDismissed, setGuidedWizardDismissed] = useState(() =>
+    localStorage.getItem('chattrader:guided-wizard:dismissed') === '1'
+  );
+  const [wizardShowAdvanced, setWizardShowAdvanced] = useState(false);
 
-  function isSignInRequiredError(error: unknown): boolean {
-    return error instanceof Error && /sign in required|unauthenticated/i.test(error.message);
-  }
+  /** Onboarding step completion */
+  const onboardingHasFirstReport = agents.some((a) => (a.reportCount ?? 0) > 0);
+  const onboardingAllDone = sources.length > 0 && agents.length > 0 && playbooks.length > 0 && onboardingHasFirstReport;
+  const onboardingDataLoaded = sourcesLoadState !== 'loading' && loadState !== 'loading' && playbooksLoadState !== 'loading';
 
   function libraryTabsStorageKey(): string {
     return `chattrader:library-tabs:${user?.id ?? 'anonymous'}`;
@@ -570,7 +598,6 @@ export function AgentsPage() {
   }
 
   function startEditingLibraryTab(tab: LibraryTabRecord) {
-    if (tab.id === DEFAULT_LIBRARY_TAB_ID) return;
     setEditingLibraryTabId(tab.id);
     setEditingLibraryTabName(tab.name);
   }
@@ -599,186 +626,123 @@ export function AgentsPage() {
     setEditingLibraryTabName('');
   }
 
+  // Keep these as wrappers so existing call sites work; actual data management is in AppDataContext
   async function refreshSources() {
-    try {
-      setSourcesLoadState('loading');
-      const response = await listSources();
-      setSources(response);
-      reconcileSourceLibraries(response);
-      setSourcesLoadState('idle');
-    } catch (error) {
-      if (isSignInRequiredError(error)) {
-        await logout();
-        return;
-      }
-      setSourcesLoadState('error');
-    }
+    await _refreshSources();
+    reconcileSourceLibraries(sources);
   }
 
   async function refreshPlaybooks() {
-    try {
-      setPlaybooksLoadState('loading');
-      const response = await listPlaybooks();
-      setPlaybooks(response);
-      setPlaybooksLoadState('idle');
-    } catch (error) {
-      if (isSignInRequiredError(error)) {
-        await logout();
-        return;
-      }
+    return _refreshPlaybooks();
+  }
 
-      useEffect(() => {
-        try {
-          const savedTabs = window.localStorage.getItem(libraryTabsStorageKey());
-          const parsedTabs = savedTabs ? JSON.parse(savedTabs) : null;
-          const normalizedTabs = normalizeLibraryTabs(parsedTabs);
-          setLibraryTabs(normalizedTabs);
-
-          const savedAssignments = window.localStorage.getItem(libraryAssignmentsStorageKey());
-          const parsedAssignments = savedAssignments ? JSON.parse(savedAssignments) : {};
-          if (parsedAssignments && typeof parsedAssignments === 'object') {
-            setSourceLibraryBySourceId(parsedAssignments as Record<string, string>);
-          } else {
-            setSourceLibraryBySourceId({});
-          }
-          setActiveLibraryTabId((current) =>
-            normalizedTabs.some((tab) => tab.id === current) ? current : DEFAULT_LIBRARY_TAB_ID
-          );
-        } catch {
-          setLibraryTabs([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
-          setActiveLibraryTabId(DEFAULT_LIBRARY_TAB_ID);
-          setSourceLibraryBySourceId({});
-        }
-      }, [user?.id]);
-
-      useEffect(() => {
-        try {
-          window.localStorage.setItem(libraryTabsStorageKey(), JSON.stringify(libraryTabs));
-          window.localStorage.setItem(libraryAssignmentsStorageKey(), JSON.stringify(sourceLibraryBySourceId));
-        } catch {
-          // ignore storage failures
-        }
-      }, [libraryTabs, sourceLibraryBySourceId, user?.id]);
-      setPlaybooksLoadState('error');
-    }
+  async function refreshAgents() {
+    return _refreshAgents();
   }
 
   async function refreshMarketplaceCounts() {
+    // Marketplace counts now come from AppDataContext — no-op here
+  }
+
+
+  // Auto-dismiss onboarding checklist once all 4 steps are complete
+  useEffect(() => {
+    if (onboardingAllDone && onboardingDataLoaded && !onboardingDismissed && !forceShowOnboarding) {
+      localStorage.setItem('chattrader:onboarding:dismissed', '1');
+      setOnboardingDismissed(true);
+    }
+  }, [onboardingAllDone, onboardingDataLoaded, onboardingDismissed, forceShowOnboarding]);
+
+  // Open guided first-run wizard for truly new users (nothing set up yet, not dismissed)
+  useEffect(() => {
+    if (!onboardingDataLoaded) return;
+    if (forceShowGuidedWizard) {
+      setGuidedWizardOpen(true);
+      return;
+    }
+    if (guidedWizardDismissed || sources.length > 0 || agents.length > 0 || playbooks.length > 0) return;
+    setGuidedWizardOpen(true);
+  }, [onboardingDataLoaded, forceShowGuidedWizard, guidedWizardDismissed, sources.length, agents.length, playbooks.length]);
+
+  // Load library tabs and source assignments from localStorage
+  useEffect(() => {
     try {
-      const [sourceItems, playbookItems, agentItems] = await Promise.all([
-        listMarketplaceSources().catch(() => []),
-        listMarketplacePlaybooks().catch(() => []),
-        listMarketplaceAgents().catch(() => [])
-      ]);
-      setMarketplaceAgentCount(agentItems.length);
-      setMarketplaceSourceCount(sourceItems.length);
-      setMarketplacePlaybookCount(playbookItems.length);
-      setMarketplaceAgents(agentItems);
-      setMarketplaceSources(sourceItems);
-      setMarketplacePlaybooks(playbookItems);
+      const savedTabs = window.localStorage.getItem(libraryTabsStorageKey());
+      const parsedTabs = savedTabs ? JSON.parse(savedTabs) : null;
+      const normalizedTabs = normalizeLibraryTabs(parsedTabs);
+      setLibraryTabs(normalizedTabs);
+      const savedAssignments = window.localStorage.getItem(libraryAssignmentsStorageKey());
+      const parsedAssignments = savedAssignments ? JSON.parse(savedAssignments) : {};
+      if (parsedAssignments && typeof parsedAssignments === 'object') {
+        setSourceLibraryBySourceId(parsedAssignments as Record<string, string>);
+      } else {
+        setSourceLibraryBySourceId({});
+      }
+      setActiveLibraryTabId((current) =>
+        normalizedTabs.some((tab) => tab.id === current) ? current : DEFAULT_LIBRARY_TAB_ID
+      );
     } catch {
-      setMarketplaceAgentCount(0);
-      setMarketplaceSourceCount(0);
-      setMarketplacePlaybookCount(0);
+      setLibraryTabs([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
+      setActiveLibraryTabId(DEFAULT_LIBRARY_TAB_ID);
+      setSourceLibraryBySourceId({});
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
-
-  async function refreshAgents() {
+  // Persist library tabs and source assignments to localStorage
+  useEffect(() => {
     try {
-      setLoadState('loading');
-      const response = await listAgents();
-      setAgents(response);
-      setLoadState('idle');
-    } catch (error) {
-      if (isSignInRequiredError(error)) {
-        await logout();
-        return;
-      }
-      setLoadState('error');
+      window.localStorage.setItem(libraryTabsStorageKey(), JSON.stringify(libraryTabs));
+      window.localStorage.setItem(libraryAssignmentsStorageKey(), JSON.stringify(sourceLibraryBySourceId));
+    } catch {
+      // ignore storage failures
     }
+  }, [libraryTabs, sourceLibraryBySourceId, user?.id]);
+
+  // Load the reports feed — latest reports across all agents linked to my playbooks
+  useEffect(() => {
+    const agentIds = [...new Set(playbooks.map((p) => p.agentId).filter(Boolean))];
+    if (agentIds.length === 0) { setFeedReports([]); return; }
+    let alive = true;
+    setFeedLoading(true);
+    Promise.all(
+      agentIds.map(async (agentId) => {
+        const reps = await listAgentReports(agentId).catch(() => []);
+        const agent = agents.find((a) => a.id === agentId);
+        const agentName = agent ? getAgentDisplayLabel(agent) : agentId;
+        return reps.map((report) => ({
+          ...report,
+          agentName,
+          playbookName: report.playbookId ? playbooks.find((playbook) => playbook.id === report.playbookId)?.name ?? '' : ''
+        }));
+      })
+    ).then((nested) => {
+      if (!alive) return;
+      const flat = nested.flat().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setFeedReports(flat);
+      setFeedLoading(false);
+    }).catch(() => { if (alive) setFeedLoading(false); });
+    return () => { alive = false; };
+  }, [playbooks, agents]);
+
+  // Start a Studio discussion seeded with this report + its agent. The wizard still needs a
+  // second participant (discussions require >= 2), so this lands the user in /studio/new with
+  // the agent pre-checked rather than creating a discussion outright.
+  function openDiscussionFromReport(report: RunReportDto) {
+    const contextLabel = (report.report?.common?.headline?.trim() || report.summary || '').slice(0, 80);
+    const preselect: DiscussionPreselect = {
+      entries: [{ agentId: report.agentId, reportIds: [report.id] }],
+      contextLabel
+    };
+    navigate('/studio/new', { state: { preselect } });
   }
 
-  useEffect(() => {
-    let alive = true;
-    async function load() {
-      try {
-        setLoadState('loading');
-        const response = await listAgents();
-        if (!alive) return;
-        setAgents(response);
-        setLoadState('idle');
-      } catch {
-        if (!alive) return;
-        setLoadState('error');
-      }
-    }
-
-    load();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    async function loadHubData() {
-      try {
-        setSourcesLoadState('loading');
-        setPlaybooksLoadState('loading');
-        const [sourcesResult, playbooksResult] = await Promise.allSettled([
-          listSources(),
-          listPlaybooks()
-        ]);
-        const [marketplaceSources, marketplacePlaybooks, marketplaceAgents] = await Promise.all([
-          listMarketplaceSources().catch(() => []),
-          listMarketplacePlaybooks().catch(() => []),
-          listMarketplaceAgents().catch(() => [])
-        ]);
-        if (!alive) return;
-        if (sourcesResult.status === 'fulfilled') {
-          setSources(sourcesResult.value);
-          reconcileSourceLibraries(sourcesResult.value);
-          setSourcesLoadState('idle');
-        } else {
-          if (isSignInRequiredError(sourcesResult.reason)) {
-            await logout();
-            return;
-          }
-          setSourcesLoadState('error');
-        }
-
-        if (playbooksResult.status === 'fulfilled') {
-          setPlaybooks(playbooksResult.value);
-          setPlaybooksLoadState('idle');
-        } else {
-          if (isSignInRequiredError(playbooksResult.reason)) {
-            await logout();
-            return;
-          }
-          setPlaybooksLoadState('error');
-        }
-
-        setMarketplaceAgentCount(marketplaceAgents.length);
-        setMarketplaceSourceCount(marketplaceSources.length);
-        setMarketplacePlaybookCount(marketplacePlaybooks.length);
-        setMarketplaceAgents(marketplaceAgents);
-      } catch (error) {
-        if (!alive) return;
-        if (isSignInRequiredError(error)) {
-          await logout();
-          return;
-        }
-        setSourcesLoadState('error');
-        setPlaybooksLoadState('error');
-      }
-    }
-
-    loadHubData();
-    return () => {
-      alive = false;
-    };
-  }, []);
+  // Jump from a feed card straight to its source's detail view in the Library hub.
+  function openSourceInLibrary(source: SourceRecord) {
+    setActiveHub('sources');
+    setSelectedSourceId(source.id);
+    setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports');
+  }
 
   // Applies a symbol deep link from a report notification email (?agentId=&symbol=), which opens
   // straight into that agent's SymbolPerformancePage. Runs once agents have loaded (so we can
@@ -818,24 +782,43 @@ export function AgentsPage() {
   const selectedPlaybook = playbooks.find((playbook) => playbook.id === selectedPlaybookId) ?? null;
   const executionAgentId = selectedPlaybook?.agentId ?? null;
 
+  // SSE stream — replaces the old 4s polling interval
+  const { runs, setRuns, reports, setReports } = useAgentStream(executionAgentId);
+  const selectedPlaybookReports = selectedPlaybook
+    ? reports.filter((report) => report.playbookId === selectedPlaybook.id)
+    : reports;
+
+  // Accumulate failed runs into the bell notification centre (driven by SSE updates)
   useEffect(() => {
-    if (!executionAgentId) return;
-    let alive = true;
+    const failedRuns = runs.filter((r) => r.status === 'failed');
+    if (failedRuns.length === 0) return;
+    const executionAgent = agents.find((agent) => agent.id === executionAgentId);
+    const agentName = executionAgent ? getAgentDisplayLabel(executionAgent) : executionAgentId ?? '';
+    setFailedRunNotices((prev) => {
+      const existingIds = new Set(prev.map((n) => n.runId));
+      const newNotices = failedRuns
+        .filter((r) => !existingIds.has(r.id))
+        .map((r) => ({ runId: r.id, agentId: executionAgentId!, agentName, errorMessage: r.errorMessage ?? null, timestamp: r.finishedAt ?? r.startedAt ?? '' }));
+      return newNotices.length > 0 ? [...prev, ...newNotices] : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runs]);
 
-    async function refreshPlaybookExecution() {
-      const [agentReports, agentRuns] = await Promise.all([listAgentReports(executionAgentId), listAgentRuns(executionAgentId)]);
-      if (!alive) return;
-      setReports(agentReports);
-      setRuns(agentRuns);
-    }
-
-    refreshPlaybookExecution();
-    const intervalId = setInterval(refreshPlaybookExecution, RUNS_POLL_INTERVAL_MS);
-    return () => {
-      alive = false;
-      clearInterval(intervalId);
-    };
-  }, [executionAgentId]);
+  // Accumulate newly-created reports into the bell notification centre too (driven by the
+  // same SSE stream), so users don't have to keep an agent selected/open to notice new output.
+  useEffect(() => {
+    if (reports.length === 0) return;
+    const executionAgent = agents.find((agent) => agent.id === executionAgentId);
+    const agentName = executionAgent ? getAgentDisplayLabel(executionAgent) : executionAgentId ?? '';
+    setNewReportNotices((prev) => {
+      const existingIds = new Set(prev.map((n) => n.reportId));
+      const newNotices = reports
+        .filter((r) => !existingIds.has(r.id))
+        .map((r) => ({ reportId: r.id, agentId: executionAgentId!, agentName, summary: r.summary, timestamp: r.createdAt }));
+      return newNotices.length > 0 ? [...prev, ...newNotices] : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reports]);
 
   // Load reports + runs for the selected source (merged from all agents analyzing it)
   useEffect(() => {
@@ -923,6 +906,7 @@ export function AgentsPage() {
 
   async function executeRun(agent: AgentSummary, forcedEpisode?: ForcedEpisodeSelection) {
     setRunningAgentId(agent.id);
+    // SSE stream drives live updates; no manual polling re-arm needed
     try {
       const result = await runAgentNow(agent.id, forcedEpisode);
       if (result.status === 'failed') {
@@ -932,10 +916,6 @@ export function AgentsPage() {
       } else {
         message.success('Agent run completed');
         setSourceDetailRefreshKey((k) => k + 1);
-      }
-      if (executionAgentId === agent.id) {
-        const [agentReports] = await Promise.all([listAgentReports(agent.id)]);
-        setReports(agentReports);
       }
       await refreshAgents();
     } catch (err) {
@@ -993,6 +973,15 @@ export function AgentsPage() {
         setSelectedAgentId(null);
       }
       await refreshAgents();
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Agent not found') {
+        if (selectedAgentId === agent.id) {
+          setSelectedAgentId(null);
+        }
+        await refreshAgents();
+        return;
+      }
+      message.error(error instanceof Error ? error.message : 'Failed to delete agent');
     } finally {
       setDeletingAgentId(null);
     }
@@ -1034,7 +1023,6 @@ export function AgentsPage() {
     // of tab state. Source is already known so we skip step 0 (Pick source).
     setFollowWizardSourcePreselected(true);
     setShowInlineAgentCreate(false);
-    setInlineAgentName('My Analyst');
     setEditingPlaybookId(null);
     setWizardFocusedAgentId(null);
     setPlaybookCreateStep(1);
@@ -1058,6 +1046,21 @@ export function AgentsPage() {
     }
   }
 
+  async function onRemoveAgentFromSource(playbook: PlaybookRecord, sourceId: string) {
+    try {
+      const remainingSourceIds = playbook.sourceIds.filter((id) => id !== sourceId);
+      if (remainingSourceIds.length === 0) {
+        await deletePlaybook(playbook.id);
+      } else {
+        await updatePlaybook(playbook.id, { sourceIds: remainingSourceIds });
+      }
+      await refreshPlaybooks();
+      message.success(t('library.agentRemovedFromSource'));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('library.removeAgentFromSourceFailed'));
+    }
+  }
+
   function onCancelPlaybookCreate() {
     setIsPlaybookCreateOpen(false);
     setPlaybookCreateStep(0);
@@ -1069,11 +1072,11 @@ export function AgentsPage() {
     setInlineAgentStep(0);
     setInlineAgentValidationError(null);
     setConfirmingUnfollow(false);
+    setWizardShowAdvanced(false);
   }
 
   function openInlineAgentCreate() {
     setInlineAgentStep(0);
-    setInlineAgentName('My Analyst');
     setInlineAgentDescription('');
     setInlineAgentPersonaId(DEFAULT_PROMPT_PERSONA_ID);
     setInlineAgentCharacterId(DEFAULT_PROMPT_CHARACTER_ID);
@@ -1111,12 +1114,6 @@ export function AgentsPage() {
   }
 
   function validateInlineAgentStep(step: number): boolean {
-    if (step === 0) {
-      if (!inlineAgentName.trim()) {
-        setInlineAgentValidationError('Give the agent a name to continue.');
-        return false;
-      }
-    }
     if (step === 1) {
       if (inlineAgentPersonaId === 'finance_expert' && !inlineAgentRiskLevel) {
         setInlineAgentValidationError('Risk level is required for Finance Expert.');
@@ -1142,17 +1139,11 @@ export function AgentsPage() {
   }
 
   async function onSaveInlineAgent() {
-    const name = inlineAgentName.trim();
-    if (!name) {
-      setInlineAgentValidationError('Give the agent a name.');
-      return;
-    }
     setIsInlineAgentSaving(true);
     try {
       const inlinePersona = getPromptPersona(inlineAgentPersonaId);
       const inlineChar = getPromptCharacter(inlineAgentPersonaId, inlineAgentCharacterId);
       const payload = {
-        name,
         description: inlineAgentDescription,
         active: true,
         characterType: inlineAgentPersonaId,
@@ -1180,7 +1171,8 @@ export function AgentsPage() {
   }
 
   function derivePlaybookName(agentId: string, sourceIds: string[]): string {
-    const agentName = agents.find((agent) => agent.id === agentId)?.name ?? 'Agent';
+    const selectedAgent = agents.find((agent) => agent.id === agentId);
+    const agentName = selectedAgent ? getAgentDisplayLabel(selectedAgent) : 'Agent';
     const primarySourceId = sourceIds[0];
     const primarySource = sources.find((source) => source.id === primarySourceId);
     const sourceTitle = primarySource?.metadata.title ?? primarySource?.value ?? 'Source';
@@ -1235,12 +1227,11 @@ export function AgentsPage() {
           : playbookScheduleModeDraft === 'weekly'
             ? { mode: 'weekly' as const, daysOfWeek: playbookDaysOfWeekDraft, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft }
             : { mode: 'daily' as const, dailyTime: playbookDailyTimeDraft, timezone: playbookTimezoneDraft };
-      // In follow mode the schedule draft is never shown/edited, so use the default for new
-      // playbooks; in admin-hub mode use the explicit draft values.
-      const scheduleForNew = followWizardSourcePreselected ? defaultSchedule : explicitSchedule;
+      // In follow mode use advanced draft values if expanded, otherwise defaults.
+      const scheduleForNew = followWizardSourcePreselected && !wizardShowAdvanced ? defaultSchedule : explicitSchedule;
       const cleanedRecipients = playbookRecipientsDraft.map((v) => v.trim()).filter(Boolean);
-      // Recipients for new playbooks in follow mode: default to current user email
-      const recipientsForNew = followWizardSourcePreselected ? (user?.email ? [user.email] : []) : cleanedRecipients;
+      // Recipients for new playbooks: advanced-mode uses draft; streamlined follow mode defaults to current user email.
+      const recipientsForNew = (followWizardSourcePreselected && !wizardShowAdvanced) ? (user?.email ? [user.email] : []) : cleanedRecipients;
       if (editingPlaybookId) {
         // Admin-hub edit mode: update the explicit playbook + diff agent selection
         const agentId = wizardFocusedAgentId ?? playbookAgentIdsDraft[0] ?? '';
@@ -1317,6 +1308,37 @@ export function AgentsPage() {
     } finally {
       setCloningPublicationId(null);
     }
+  }
+
+  /** Groups this source's merged report list (sourceDetailReports) by agent, taking
+   * each agent's latest report (first occurrence, since already sorted newest-first)
+   * as the explicit pick, and jumps into the Studio wizard pre-seeded with them. */
+  function onDiscussSource(source: SourceRecord) {
+    const latestReportByAgent = new Map<string, RunReportDto>();
+    for (const report of sourceDetailReports) {
+      if (!latestReportByAgent.has(report.agentId)) {
+        latestReportByAgent.set(report.agentId, report);
+      }
+    }
+    const preselect: DiscussionPreselect = {
+      entries: Array.from(latestReportByAgent.entries()).map(([agentId, report]) => ({
+        agentId,
+        reportIds: [report.id]
+      })),
+      contextLabel: getSourceDisplayTitle(source)
+    };
+    navigate('/studio/new', { state: { preselect } });
+  }
+
+  /** Opens the shared full-report drawer (report + stats + chat) from any tab. */
+  function openReportDrawer(report: RunReportDto & Partial<{ agentName: string; playbookName: string }>) {
+    const reportAgent = agents.find((a) => a.id === report.agentId);
+    const playbook = report.playbookId ? playbooks.find((p) => p.id === report.playbookId) : undefined;
+    setViewingFullReport({
+      ...report,
+      agentName: report.agentName ?? (reportAgent ? getAgentDisplayLabel(reportAgent) : ''),
+      playbookName: report.playbookName ?? playbook?.name ?? ''
+    });
   }
 
   async function onEditSource(source: SourceRecord) {
@@ -1501,7 +1523,7 @@ export function AgentsPage() {
   const filteredAgents = agents.filter((agent) => {
     if (!normalizedAgentsSearch) return true;
     const sourceValues = agent.sources.map((source) => source.value).join(' ');
-    return `${agent.name} ${sourceValues}`.toLowerCase().includes(normalizedAgentsSearch);
+    return `${getAgentDisplayLabel(agent)} ${sourceValues}`.toLowerCase().includes(normalizedAgentsSearch);
   });
   const filteredPlaybooks = playbooks.filter((playbook) => {
     if (!normalizedPlaybooksSearch) return true;
@@ -1515,7 +1537,7 @@ export function AgentsPage() {
   const normalizedMarketplacePlaybooksSearch = marketplacePlaybooksSearch.trim().toLowerCase();
   const filteredMarketplaceAgents = marketplaceAgents.filter((item) => {
     if (!normalizedMarketplaceAgentsSearch) return true;
-    return `${item.title} ${item.summary} ${item.agent.name}`.toLowerCase().includes(normalizedMarketplaceAgentsSearch);
+    return `${item.title} ${item.summary} ${getAgentDisplayLabel(item.agent)}`.toLowerCase().includes(normalizedMarketplaceAgentsSearch);
   });
   const filteredMarketplacePlaybooks = marketplacePlaybooks.filter((item) => {
     if (!normalizedMarketplacePlaybooksSearch) return true;
@@ -1524,6 +1546,10 @@ export function AgentsPage() {
 
   function getSourceDisplayTitle(source: SourceRecord): string {
     if (source.metadata.title?.trim()) return source.metadata.title;
+    // Synthetic discussions store the name in config (for sources created before libraryCard.title was set)
+    if (source.type === 'synthetic_discussion' && typeof source.config.name === 'string' && source.config.name.trim()) {
+      return source.config.name.trim();
+    }
     try {
       const url = new URL(source.value);
       return url.hostname;
@@ -1532,16 +1558,34 @@ export function AgentsPage() {
     }
   }
 
+  function getSourceSpeakers(source: SourceRecord): string[] {
+    if (source.type !== 'synthetic_discussion') return [];
+    const p = source.config.participants;
+    if (Array.isArray(p)) return p.filter((n): n is string => typeof n === 'string');
+    return [];
+  }
+
   function getSourceCoverImageUrl(source: SourceRecord): string | null {
     if (source.metadata.coverImageUrl) return source.metadata.coverImageUrl;
     if (source.type !== 'youtube_videos') return null;
     const firstPreviewVideoId = extractYoutubeVideoId(source.metadata.previewItems[0]?.link);
-    if (firstPreviewVideoId) return `https://i.ytimg.com/vi/${firstPreviewVideoId}/hqdefault.jpg`;
+    return firstPreviewVideoId ? getYoutubeThumbnailUrl(firstPreviewVideoId) : null;
+  }
+
+  // A report's own cited video URL is fresher and more accurate than the source's cached
+  // (creation-time-only, never refreshed by crawls) preview snapshot above — prefer it.
+  function getReportEpisodeThumbnailUrl(report: RunReportDto): string | null {
+    const references = report.report?.common?.source_references ?? [];
+    for (const reference of references) {
+      const videoId = extractYoutubeVideoId(reference.reference);
+      if (videoId) return getYoutubeThumbnailUrl(videoId);
+    }
     return null;
   }
 
   function getSourceKindLabel(source: SourceRecord): string {
     if (source.type === 'youtube_videos' || source.type === 'podcast_feeds') return 'Playlist';
+    if (source.type === 'synthetic_discussion') return 'Discussion';
     return 'Page';
   }
 
@@ -1653,22 +1697,23 @@ export function AgentsPage() {
       return;
     }
 
-    if (!episode) {
-      // Non-episodic or "run latest" — delegate to the normal path
-      await executeRun(agent);
-      return;
+    try {
+      setSourceDetailRefreshKey((k) => k + 1);
+      if (episode) {
+        const libSource = sources.find((s) => s.id === selectedSourceId);
+        if (!libSource) return;
+        await runPlaybookNow(linked[0].id, {
+          sourceType: libSource.type,
+          sourceValue: libSource.value,
+          itemLink: episode.link
+        });
+      } else {
+        await runPlaybookNow(linked[0].id);
+      }
+      setSourceDetailRefreshKey((k) => k + 1);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to start analysis');
     }
-
-    const libSource = sources.find((s) => s.id === selectedSourceId);
-    if (!libSource) return;
-
-    // Run with this specific episode as the forced selection. The backend will create an ad-hoc
-    // source config if the library source URL is not already in agent.sources.
-    await executeRun(agent, {
-      sourceType: libSource.type as EpisodeOptionDto['sourceType'],
-      sourceValue: libSource.value,
-      itemLink: episode.link
-    });
   }
 
   // Called when user picks a specific agent from the multi-agent run picker modal
@@ -1677,27 +1722,23 @@ export function AgentsPage() {
     const episode = runPickerEpisode;
     setRunPickerEpisode(undefined);
     setActiveSourceTab('runs');
-    if (!agent) {
-      try {
-        setSourceDetailRefreshKey((k) => k + 1);
+    try {
+      setSourceDetailRefreshKey((k) => k + 1);
+      if (episode) {
+        const libSource = sources.find((s) => s.id === selectedSourceId);
+        if (!libSource) return;
+        await runPlaybookNow(playbook.id, {
+          sourceType: libSource.type,
+          sourceValue: libSource.value,
+          itemLink: episode.link
+        });
+      } else {
         await runPlaybookNow(playbook.id);
-        setSourceDetailRefreshKey((k) => k + 1);
-      } catch (err) {
-        message.error(err instanceof Error ? err.message : 'Failed to start analysis');
       }
-      return;
+      setSourceDetailRefreshKey((k) => k + 1);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to start analysis');
     }
-    if (!episode) {
-      await executeRun(agent);
-      return;
-    }
-    const libSource = sources.find((s) => s.id === selectedSourceId);
-    if (!libSource) return;
-    await executeRun(agent, {
-      sourceType: libSource.type as EpisodeOptionDto['sourceType'],
-      sourceValue: libSource.value,
-      itemLink: episode.link
-    });
   }
 
   async function onCreateDetectedSource() {
@@ -1754,129 +1795,172 @@ export function AgentsPage() {
 
   // Resets every overlay/detail view back to the plain agent-list dashboard - used by the
   // clickable app-name header so it works as a "home" link from anywhere (agent detail, wizard,
-  // symbol performance page, admin users page).
+  // symbol performance page).
   function goToDashboard() {
     setSelectedAgentId(null);
     setViewingSymbol(null);
     setIsCreatingAgent(false);
     setEditingAgent(null);
-    setShowAdminWorkspace(false);
-    setShowAdminUsers(false);
-    setActiveHub('sources');
+    setActiveHub('feed');
     setSelectedPlaybookId(null);
   }
 
   return (
-    <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
-      <Header style={{ background: 'transparent', height: 'auto', padding: '24px 24px 0' }}>
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <div style={{ minWidth: 0 }}>
-            <Title
-              level={2}
-              onClick={goToDashboard}
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') goToDashboard();
-              }}
-              style={{
-                margin: 0,
-                whiteSpace: 'nowrap',
-                wordBreak: 'keep-all',
-                overflowWrap: 'normal',
-                fontSize: 'clamp(1.25rem, 5vw, 1.875rem)',
-                cursor: 'pointer'
-              }}
-            >
-              ChatTrader
-            </Title>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemePicker />
-            {/* User / account menu — admins get extra admin entries */}
-            <Button
-              size="small"
-              type="text"
-              onClick={() => i18n.changeLanguage(i18n.language.startsWith('de') ? 'en' : 'de')}
-              title={t('language.switchTo')}
-              style={{ fontWeight: 600, minWidth: 32 }}
-            >
-              {t('language.current')}
-            </Button>
-            <Dropdown
-              trigger={['click']}
-              menu={{
-                items: [
-                  ...(user ? [{ key: 'user-label', label: <span className="font-medium">{user.displayName ?? user.email}</span>, disabled: true }] : []),
-                  ...(user ? [{ type: 'divider' as const }] : []),
-                  ...(isAdmin ? [
-                    {
-                      key: 'admin-agents-playbooks',
-                      label: showAdminWorkspace ? t('common.back') : t('nav.agentsAndPlaybooks'),
-                      icon: showAdminWorkspace ? <ArrowLeftOutlined /> : <RocketOutlined />,
-                      onClick: () => {
-                        if (showAdminWorkspace) {
-                          setShowAdminWorkspace(false);
-                          setShowAdminUsers(false);
-                          setActiveHub('sources');
-                        } else {
-                          setShowAdminWorkspace(true);
-                          setActiveHub('agents');
-                        }
-                      }
-                    },
-                    {
-                      key: 'admin-users',
-                      label: t('nav.userManagement'),
-                      icon: <TeamOutlined />,
-                      onClick: () => {
-                        setShowAdminWorkspace(true);
-                        setShowAdminUsers(true);
-                      }
-                    },
-                    { type: 'divider' as const }
-                  ] : []),
-                  {
-                    key: 'logout',
-                    label: t('nav.logOut'),
-                    icon: <LogoutOutlined />,
-                    onClick: () => logout()
-                  }
-                ]
-              }}
-            >
-              <Button
-                shape="circle"
-                icon={<UserOutlined />}
-                aria-label={t('nav.accountMenu')}
-              />
-            </Dropdown>
-          </div>
-        </div>
-      </Header>
-      <Content style={{ padding: 24 }}>
-        {showAdminWorkspace && showAdminUsers ? (
-          <AdminUsersPage onBack={() => setShowAdminUsers(false)} />
-        ) : viewingSymbol && (selectedAgent || executionAgentId) ? (
-          <SymbolPerformancePage
-            agentId={selectedAgent?.id ?? executionAgentId!}
-            symbol={viewingSymbol}
-            onBack={() => setViewingSymbol(null)}
-          />
-        ) : (
-        <div className="mx-auto max-w-6xl space-y-4">
+    <>
+      {viewingSymbol && (selectedAgent || executionAgentId) ? (
+        <SymbolPerformancePage
+          agentId={selectedAgent?.id ?? executionAgentId!}
+          symbol={viewingSymbol}
+          onBack={() => setViewingSymbol(null)}
+        />
+      ) : (
+      <div className="mx-auto max-w-6xl space-y-4">
           <Tabs
             activeKey={activeHub}
             onChange={(key) => setActiveHub(key as HubKey)}
-            tabBarStyle={showAdminWorkspace ? undefined : { display: 'none' }}
+            renderTabBar={() => <></>}
             items={[
               {
+                key: 'feed',
+                label: <span><FileTextOutlined /> {t('nav.feed')}</span>,
+                children: (
+                  <>
+                    <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}><FileTextOutlined /> {t('nav.feed')}</Title>}>
+                      {feedLoading ? (
+                        <div className="space-y-3">
+                          {[1,2,3].map(i => <Skeleton key={i} active paragraph={{ rows: 2 }} />)}
+                        </div>
+                      ) : feedReports.length === 0 ? (
+                        <div className="flex flex-col items-center gap-4 py-12 text-center">
+                          <span className="text-5xl">📰</span>
+                          <div>
+                            <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('nav.feedEmpty')}</p>
+                            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('nav.feedEmptyDesc')}</p>
+                          </div>
+                          <Button type="primary" onClick={() => setActiveHub('sources')}>{t('nav.library')}</Button>
+                        </div>
+                      ) : (() => {
+                        const normalizedFeedSearch = feedSearch.trim().toLowerCase();
+                        const searchFilteredReports = !normalizedFeedSearch ? feedReports : feedReports.filter((report) => {
+                          const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
+                          const source = playbook?.sourceIds.length ? sources.find((candidate) => candidate.id === playbook.sourceIds[0]) : undefined;
+                          const reportAgent = agents.find((agent) => agent.id === report.agentId);
+                          const sourceTitle = source ? getSourceDisplayTitle(source) : report.playbookName;
+                          const characterLabel = reportAgent ? getAgentCharacterLabel(reportAgent) : report.agentName;
+                          const headline = report.report?.common?.headline ?? '';
+                          return `${headline} ${report.summary} ${report.agentName} ${sourceTitle} ${characterLabel}`.toLowerCase().includes(normalizedFeedSearch);
+                        });
+                        return (
+                          <>
+                            <div className="mb-4">
+                              <Input
+                                aria-label={t('feed.searchAriaLabel')}
+                                value={feedSearch}
+                                onChange={(event) => setFeedSearch(event.currentTarget.value)}
+                                placeholder={t('feed.searchPlaceholder')}
+                                prefix={<SearchOutlined />}
+                                allowClear
+                                style={{ maxWidth: 420 }}
+                              />
+                            </div>
+                            {searchFilteredReports.length === 0 ? (
+                              <Empty description={t('feed.searchNoResults')} />
+                            ) : (
+                              <div className="space-y-6">
+                                {groupReportsByDay(searchFilteredReports.slice(0, 30)).map((group) => (
+                                  <div key={group.key} className="space-y-3">
+                                    <div className="mb-1 flex items-center gap-3">
+                                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                        {group.kind === 'today'
+                                          ? t('feed.groupToday')
+                                          : group.kind === 'yesterday'
+                                            ? t('feed.groupYesterday')
+                                            : new Date(group.dateISO).toLocaleDateString(i18n.language, { year: 'numeric', month: 'short', day: 'numeric' })}
+                                      </span>
+                                      <span className="h-px flex-1 bg-border" />
+                                    </div>
+                                    {group.reports.map((report) => {
+                                      const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
+                                      const source = playbook?.sourceIds.length ? sources.find((candidate) => candidate.id === playbook.sourceIds[0]) : undefined;
+                                      const reportAgent = agents.find((agent) => agent.id === report.agentId);
+                                      return (
+                                        <FeedCard
+                                          key={report.id}
+                                          report={report}
+                                          characterType={reportAgent?.characterType}
+                                          characterLabel={reportAgent ? getAgentCharacterLabel(reportAgent) : report.agentName}
+                                          personalityLabel={reportAgent ? getAgentPersonalityLabel(reportAgent) : undefined}
+                                          sourceTitle={source ? getSourceDisplayTitle(source) : report.playbookName}
+                                          sourceCoverImageUrl={(source ? getSourceCoverImageUrl(source) : null) ?? getReportEpisodeThumbnailUrl(report)}
+                                          isSyntheticSource={source?.type === 'synthetic_discussion'}
+                                          onOpenFullReport={() => setViewingFullReport(report)}
+                                          onOpenSource={source ? () => openSourceInLibrary(source) : undefined}
+                                          onDiscuss={() => openDiscussionFromReport(report)}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </Card>
+                  </>
+                )
+              },
+              {
                 key: 'sources',
-                label: t('nav.dashboard'),
+                label: <span><DatabaseOutlined /> {t('nav.library')}</span>,
                 children: (
                   <Card
                     className="min-w-0"
-                    title={<Title level={4} style={{ margin: 0 }}>{t('nav.dashboard')}</Title>}
+                    title={<Title level={4} style={{ margin: 0 }}><DatabaseOutlined /> {t('nav.library')}</Title>}
                   >
+                   {/* First-run onboarding checklist — shown until all 4 steps complete or dismissed */}
+                   {(forceShowOnboarding || (!onboardingDismissed && !showAdminWorkspace && onboardingDataLoaded && !onboardingAllDone)) ? (
+                     <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950 px-5 py-4">
+                       <div className="flex items-start justify-between gap-3">
+                         <div className="min-w-0">
+                           <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-100">{t('onboarding.gettingStarted')}</p>
+                           <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">{t('onboarding.gettingStartedDesc')}</p>
+                         </div>
+                         <Button
+                           type="text"
+                           size="small"
+                           className="shrink-0 text-indigo-400 hover:text-indigo-600"
+                           onClick={() => {
+                             localStorage.setItem('chattrader:onboarding:dismissed', '1');
+                             setOnboardingDismissed(true);
+                           }}
+                         >
+                           {t('onboarding.dismiss')}
+                         </Button>
+                       </div>
+                       <div className="mt-3 space-y-2">
+                         {[
+                           { done: sources.length > 0, label: t('onboarding.step1'), desc: t('onboarding.step1Desc'), action: () => { setEditingSource(null); setIsSourceCreateOpen(true); setSourceUrlDraft(''); setAutoDetectedSource(null); } },
+                           { done: agents.length > 0, label: t('onboarding.step2'), desc: t('onboarding.step2Desc'), action: () => setActiveHub('agents') },
+                           { done: playbooks.length > 0, label: t('onboarding.step3'), desc: t('onboarding.step3Desc'), action: () => openPlaybookCreate() },
+                           { done: onboardingHasFirstReport, label: t('onboarding.step4'), desc: t('onboarding.step4Desc'), action: () => setActiveHub('feed') },
+                         ].map((step, i) => (
+                           <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 ${step.done ? 'opacity-50' : 'bg-white dark:bg-indigo-900'}`}>
+                             <span className="text-lg shrink-0">{step.done ? '✅' : '⬜'}</span>
+                             <div className="min-w-0 flex-1">
+                               <p className={`text-xs font-medium ${step.done ? 'line-through text-gray-400' : 'text-indigo-900 dark:text-indigo-100'}`}>{step.label}</p>
+                               <p className="text-xs text-indigo-500 dark:text-indigo-400">{step.desc}</p>
+                             </div>
+                             {!step.done && (
+                               <Button size="small" type="primary" onClick={step.action}>
+                                 {t('common.next')}
+                               </Button>
+                             )}
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   ) : null}
                    {/* Unified inner tab bar: user library tabs + fixed Marketplace tab */}
                    <div
                      onDoubleClick={() => {
@@ -1920,7 +2004,7 @@ export function AgentsPage() {
                            ) : (
                              <span className="inline-flex items-center gap-1">
                                {tab.name}
-                               {tab.id !== DEFAULT_LIBRARY_TAB_ID && tab.id === activeLibraryTabId ? (
+                               {tab.id === activeLibraryTabId ? (
                                  <button
                                    type="button"
                                    aria-label={t('library.renameTab')}
@@ -1977,7 +2061,21 @@ export function AgentsPage() {
                    {/* Marketplace grid — same rich card layout as library, Clone button only */}
                    {showSourcesMarketplace ? (
                      <div>
-                       {filteredMarketplaceSources.length === 0 ? <Empty description={normalizedSourceSearch ? 'No matching sources.' : 'No marketplace sources available.'} /> : null}
+                       {/* Marketplace mode indicator banner */}
+                       <div className="mb-4 flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-800 dark:bg-sky-950">
+                         <CompassOutlined className="text-sky-500 text-lg shrink-0" />
+                         <div className="min-w-0">
+                           <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{t('marketplace.sourcesHeading')}</p>
+                           <p className="text-xs text-sky-600 dark:text-sky-400">{t('marketplace.sourcesDesc')}</p>
+                         </div>
+                       </div>
+                       {filteredMarketplaceSources.length === 0 ? (
+                         <div className="flex flex-col items-center gap-3 py-12 text-center">
+                           <span className="text-5xl">🧭</span>
+                           <p className="text-base font-semibold text-gray-700 dark:text-gray-200">{t('marketplace.emptyHeadline')}</p>
+                           <p className="text-sm text-gray-400 max-w-xs">{normalizedSourceSearch ? t('marketplace.noItems') : t('marketplace.emptyDesc')}</p>
+                         </div>
+                       ) : null}
                        <div className="grid gap-3 sm:grid-cols-2">
                          {filteredMarketplaceSources.map((item) => {
                            const src = item as unknown as import('../api/sources').SourceRecord;
@@ -2007,7 +2105,7 @@ export function AgentsPage() {
                                      className="h-14 w-14 rounded-md object-cover"
                                    />
                                  ) : (
-                                   <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
+                                   <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-muted-foreground">
                                      Cover unavailable
                                    </div>
                                  )}
@@ -2023,7 +2121,7 @@ export function AgentsPage() {
                                    </div>
                                  </div>
                                </div>
-                               <div className="mt-3 text-xs text-gray-700">
+                               <div className="mt-3 text-xs text-muted-foreground">
                                  {item.metadata.previewItems.length > 0 ? (
                                    <>
                                      <div className="mb-1 font-medium">Recent episodes preview</div>
@@ -2073,40 +2171,57 @@ export function AgentsPage() {
                        <Card
                          className="min-w-0"
                          title={
-                           <span className="flex items-center gap-2">
-                             {getSourceDisplayTitle(selectedSource)}
+                           <span className="flex min-w-0 items-center gap-2">
+                             <Button
+                               type="text"
+                               aria-label={t('library.backToLibrary')}
+                               icon={<ArrowLeftOutlined />}
+                               className="shrink-0 -ml-2"
+                               onClick={() => setSelectedSourceId(null)}
+                             />
+                             <span className="truncate">{getSourceDisplayTitle(selectedSource)}</span>
                              <SourceTypeBadge type={selectedSource.type} />
                            </span>
                          }
                          extra={
                            <div className="flex items-center gap-2">
                              {linkedPlaybooks.length > 0 && (selectedSource.type !== 'youtube_videos' && selectedSource.type !== 'podcast_feeds') ? (
-                               <TouchSafeTooltip title={t('library.runAnalysisNow')}>
+                               <Button
+                                 type="primary"
+                                 loading={runningAgentId === linkedPlaybooks[0]?.agentId}
+                                 icon={<CaretRightOutlined />}
+                                 onClick={() => void onRunSourceEpisode(undefined)}
+                               >
+                                 <span className="hidden sm:inline">{t('library.runAnalysisNow')}</span>
+                               </Button>
+                             ) : null}
+                             {sourceDetailReports.length > 0 ? (
+                               <TouchSafeTooltip title={t('studio.discussThisSource')}>
                                  <Button
-                                   aria-label={t('library.runAnalysisNow')}
+                                   aria-label={t('studio.discussThisSource')}
                                    shape="circle"
-                                   loading={runningAgentId === linkedPlaybooks[0]?.agentId}
-                                   icon={<CaretRightOutlined />}
-                                   onClick={() => void onRunSourceEpisode(undefined)}
+                                   icon={<AudioOutlined />}
+                                   onClick={() => onDiscussSource(selectedSource)}
                                  />
                                </TouchSafeTooltip>
                              ) : null}
-                             <TouchSafeTooltip title={t('library.backToLibrary')}>
+                             <Dropdown
+                               trigger={['click']}
+                               menu={{
+                                 items: [
+                                   { key: 'edit', label: t('common.edit'), icon: <EditOutlined /> }
+                                 ],
+                                 onClick: ({ key }) => {
+                                   if (key === 'edit') onEditSource(selectedSource);
+                                 }
+                               }}
+                             >
                                <Button
-                                 aria-label={t('library.backToLibrary')}
+                                 aria-label={t('library.manageSource')}
                                  shape="circle"
-                                 icon={<ArrowLeftOutlined />}
-                                 onClick={() => setSelectedSourceId(null)}
+                                 icon={<MoreOutlined />}
                                />
-                             </TouchSafeTooltip>
-                             <TouchSafeTooltip title={t('common.edit')}>
-                               <Button
-                                 aria-label={t('common.edit')}
-                                 shape="circle"
-                                 icon={<EditOutlined />}
-                                 onClick={() => onEditSource(selectedSource)}
-                               />
-                             </TouchSafeTooltip>
+                             </Dropdown>
                            </div>
                          }
                        >
@@ -2118,11 +2233,11 @@ export function AgentsPage() {
                            try { hostname = new URL(selectedSource.value).hostname; } catch { hostname = selectedSource.value; }
                            return (
                              <>
-                             <div className="flex gap-3 mb-4 pb-4 border-b border-gray-100">
+                             <div className="flex gap-4 mb-4 pb-4 border-b border-border">
                                {coverUrl ? (
-                                 <img src={coverUrl} alt="" className="w-20 h-20 rounded-lg object-cover flex-shrink-0 bg-gray-100" />
+                                 <img src={coverUrl} alt="" className="h-24 w-24 shrink-0 rounded-xl object-cover shadow-sm ring-1 ring-gray-200 dark:ring-gray-700" />
                                ) : (
-                                 <div className="w-20 h-20 rounded-lg flex-shrink-0 bg-gray-100 flex items-center justify-center text-2xl">
+                                 <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-muted text-4xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700">
                                    {selectedSource.type === 'youtube_videos' ? '📺' : selectedSource.type === 'podcast_feeds' ? '🎙' : '🌐'}
                                  </div>
                                )}
@@ -2131,56 +2246,67 @@ export function AgentsPage() {
                                    href={selectedSource.value}
                                    target="_blank"
                                    rel="noopener noreferrer"
-                                   className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                                   className="text-sm text-[#9d6fe8] hover:underline flex items-center gap-1"
                                    onClick={(e) => e.stopPropagation()}
                                  >
                                    {hostname} <LinkOutlined className="text-xs" />
                                  </a>
                                  {episodeCount > 0 ? (
-                                   <p className="text-xs text-gray-500 mt-0.5">
-                                     {episodeCount} {selectedSource.type === 'youtube_videos' ? 'videos' : selectedSource.type === 'podcast_feeds' ? 'episodes' : 'pages'}
+                                   <p className="text-xs text-muted-foreground mt-0.5">
+                                     {selectedSource.type === 'youtube_videos'
+                                       ? t('library.countVideos', { count: episodeCount })
+                                       : selectedSource.type === 'podcast_feeds'
+                                         ? t('library.countEpisodes', { count: episodeCount })
+                                         : t('library.countPages', { count: episodeCount })}
                                    </p>
+                                 ) : null}
+                                 {selectedSource.type === 'youtube_videos' ? (
+                                   <p className="text-xs text-muted-foreground mt-0.5">{t('library.youtubeTranscriptNote')}</p>
                                  ) : null}
                                  {latestItem?.link ? (
                                    <a
                                      href={latestItem.link}
                                      target="_blank"
                                      rel="noopener noreferrer"
-                                     className="mt-1.5 block text-xs text-gray-700 hover:text-blue-600 hover:underline truncate"
+                                     className="mt-1.5 block text-xs text-foreground hover:text-[#9d6fe8] hover:underline truncate"
                                      onClick={(e) => e.stopPropagation()}
                                    >
-                                     <span className="text-gray-400 mr-1">Latest:</span>
+                                     <span className="text-muted-foreground mr-1">{t('library.latestLabel')}</span>
                                      {latestItem.title}
-                                     {latestItem.pubDate ? <span className="ml-1 text-gray-400">· {new Date(latestItem.pubDate).toLocaleDateString()}</span> : null}
+                                     {latestItem.pubDate ? <span className="ml-1 text-muted-foreground">· {new Date(latestItem.pubDate).toLocaleDateString(i18n.language)}</span> : null}
                                    </a>
                                  ) : null}
                                </div>
                              </div>
                              {linkedPlaybooks.length > 0 ? (
-                               <div className="mt-3 pt-3 border-t border-gray-100">
-                                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">🤖 {t('library.expertsWatching')}</p>
+                               <div className="mt-3 pt-3 border-t border-border">
+                                 <p className="text-sm font-semibold text-foreground mb-1.5">{t('library.expertsWatching')}</p>
                                  <div className="flex flex-col gap-1.5">
                                    {linkedPlaybooks.map((pb) => {
                                      const agent = agents.find((a) => a.id === pb.agentId);
-                                     const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
                                      const characterLabel = agent?.characterType ? humanizeCharacterType(agent.characterType) : null;
                                      return (
-                                       <div key={pb.id} className={`flex items-start gap-2 text-xs transition-opacity ${pb.enabled ? '' : 'opacity-60'}`}>
-                                         <div className="flex flex-col gap-1 flex-1 min-w-0">
-                                           <div className="flex flex-wrap items-center gap-1.5">
-                                             {characterLabel ? (
-                                               <Tag className="m-0" color={PERSONA_COLOR_MAP[agent?.characterType ?? ''] ?? 'default'} icon={getCharacterIcon(agent?.characterType)}>{characterLabel}</Tag>
-                                             ) : null}
-                                             {agent?.promptConfig?.personality_label ? (
-                                               <Tag className="m-0" color="magenta">{agent.promptConfig.personality_label}</Tag>
+                                       <div key={pb.id} className={`flex items-start gap-2.5 text-xs transition-opacity ${pb.enabled ? '' : 'opacity-60'}`}>
+                                         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${getCharacterTypeIconBg(agent?.characterType)}`}>
+                                           {getCharacterTypeEmoji(agent?.characterType)}
+                                         </div>
+                                         <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                           <div className="flex items-center gap-1.5 min-w-0">
+                                             <span
+                                               className={`h-1.5 w-1.5 shrink-0 rounded-full ${pb.enabled ? 'bg-emerald-500' : 'bg-gray-400'}`}
+                                               title={pb.enabled ? t('playbook.active') : t('playbook.paused')}
+                                             />
+                                             <span className="font-semibold text-foreground truncate">{agent ? getAgentDisplayLabel(agent) : characterLabel}</span>
+                                             {agent && characterLabel ? (
+                                               <span className="text-muted-foreground truncate">· {characterLabel}</span>
                                              ) : null}
                                            </div>
-                                           <div className="flex items-center gap-1.5 text-gray-400">
-                                             <span>{formatPlaybookSchedule(pb.schedule)}</span>
-                                             <Tag color={pb.enabled ? 'green' : 'default'} className="m-0 leading-none py-0">{pb.enabled ? t('playbook.active') : t('playbook.paused')}</Tag>
+                                           <div className="text-muted-foreground">
+                                             {formatPlaybookSchedule(pb.schedule)}
+                                             {!pb.enabled ? ` · ${t('playbook.paused')}` : ''}
                                            </div>
                                            {pb.recipients.length > 0 && (
-                                             <div className="flex flex-wrap gap-1 text-gray-400 mt-0.5">
+                                             <div className="flex flex-wrap gap-1 text-muted-foreground mt-0.5">
                                                <MailOutlined className="opacity-50 mt-0.5" />
                                                {pb.recipients.slice(0, 2).map((r) => (
                                                  <span key={r} className="truncate max-w-[120px]">{r}</span>
@@ -2201,23 +2327,62 @@ export function AgentsPage() {
                                              onClick={(e) => onTogglePlaybookEnabled(pb, e)}
                                            />
                                          </TouchSafeTooltip>
-                                         <TouchSafeTooltip title={t('common.edit')}>
+                                         <Dropdown
+                                           trigger={['click']}
+                                           menu={{
+                                             items: [
+                                               {
+                                                 key: 'notifications',
+                                                 icon: <MailOutlined />,
+                                                 label: pb.notificationsEnabled !== false ? t('playbook.notificationsOn') : t('playbook.notificationsOff')
+                                               },
+                                               {
+                                                 key: 'digest',
+                                                 icon: <FieldTimeOutlined />,
+                                                 label: t('playbook.digestFrequency'),
+                                                 children: [
+                                                   { key: 'digest:immediate', label: t('playbook.digestImmediate') },
+                                                   { key: 'digest:daily', label: t('playbook.digestDaily') },
+                                                   { key: 'digest:weekly', label: t('playbook.digestWeekly') }
+                                                 ]
+                                               },
+                                               { key: 'edit', icon: <EditOutlined />, label: t('common.edit') },
+                                               { type: 'divider' },
+                                               { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true }
+                                             ],
+                                             selectedKeys: [`digest:${pb.digestFrequency ?? 'immediate'}`],
+                                             onClick: async ({ key, domEvent }) => {
+                                               domEvent.stopPropagation();
+                                               if (key === 'notifications') {
+                                                 await updatePlaybook(pb.id, { notificationsEnabled: !(pb.notificationsEnabled !== false) });
+                                                 await refreshPlaybooks();
+                                               } else if (key.startsWith('digest:')) {
+                                                 await updatePlaybook(pb.id, { digestFrequency: key.slice('digest:'.length) as DigestFrequency });
+                                                 await refreshPlaybooks();
+                                               } else if (key === 'edit') {
+                                                 onOpenScheduleEdit(pb);
+                                               } else if (key === 'delete') {
+                                                 Modal.confirm({
+                                                   title: t('common.delete'),
+                                                   okText: t('common.delete'),
+                                                   okButtonProps: { danger: true },
+                                                   onOk: async () => {
+                                                     await deletePlaybook(pb.id);
+                                                     await refreshPlaybooks();
+                                                   }
+                                                 });
+                                               }
+                                             }
+                                           }}
+                                         >
                                            <Button
                                              size="small"
                                              shape="circle"
-                                             aria-label={t('common.edit')}
-                                             icon={<EditOutlined />}
-                                          onClick={(e) => { e.stopPropagation(); onOpenScheduleEdit(pb, e); }}
+                                             aria-label={t('library.manageSource')}
+                                             icon={<MoreOutlined />}
+                                             onClick={(e) => e.stopPropagation()}
                                            />
-                                         </TouchSafeTooltip>
-                                         <InlineDeleteButton
-                                           ariaLabel={`Remove ${agents.find((a) => a.id === pb.agentId)?.name ?? 'agent'} from this source`}
-                                           confirmText={t('common.delete')}
-                                           onConfirm={async () => {
-                                             await deletePlaybook(pb.id);
-                                             await refreshPlaybooks();
-                                           }}
-                                         />
+                                         </Dropdown>
                                        </div>
                                      );
                                    })}
@@ -2238,29 +2403,60 @@ export function AgentsPage() {
                                      children: (() => {
                                        const episodes = selectedSource.metadata.previewItems.filter((item) => Boolean(item.link));
                                        const linkedAgent = agents.find((a) => a.id === linkedPlaybooks[0]?.agentId);
+                                       // Match an episode to an existing report via the report's cited source references.
+                                       const findEpisodeReport = (epLink: string | undefined) => {
+                                         if (!epLink) return undefined;
+                                         const epVideoId = extractYoutubeVideoId(epLink);
+                                         return sourceDetailReports.find((r) =>
+                                           (r.report?.common?.source_references ?? []).some((ref) => {
+                                             if (ref.reference === epLink) return true;
+                                             if (!epVideoId) return false;
+                                             return extractYoutubeVideoId(ref.reference) === epVideoId;
+                                           })
+                                         );
+                                       };
                                        return episodes.length === 0 ? (
-                                         <Empty description={<span className="text-sm text-gray-500">{t('library.noEpisodes')}</span>} />
+                                         <Empty description={<span className="text-sm text-muted-foreground">{t('library.noEpisodes')}</span>} />
                                        ) : (
-                                         <ul className="divide-y divide-gray-100">
+                                         <ul className="divide-y divide-border">
                                            {episodes.map((ep) => {
                                              const videoId = selectedSource.type === 'youtube_videos' ? extractYoutubeVideoId(ep.link) : null;
+                                             const episodeReport = findEpisodeReport(ep.link);
                                              return (
                                                <li key={ep.link} className="flex items-center gap-3 py-2.5">
                                                  {videoId ? (
                                                    <img
-                                                     src={`https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`}
+                                                     src={getYoutubeThumbnailUrl(videoId, 'mqdefault')}
                                                      alt=""
-                                                     className="w-16 h-11 rounded object-cover flex-shrink-0 bg-gray-100"
+                                                     className="w-16 h-11 rounded object-cover flex-shrink-0 bg-muted"
                                                    />
                                                  ) : null}
                                                  <div className="min-w-0 flex-1">
-                                                   <div className="truncate text-sm font-medium">{ep.title}</div>
+                                                   <div className="flex items-center gap-2 min-w-0">
+                                                     <span className="truncate text-sm font-medium">{ep.title}</span>
+                                                     {episodeReport ? (
+                                                       <Tag className="m-0 shrink-0 border-0 bg-emerald-100 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200">
+                                                         ✓ {t('library.analyzedBadge')}
+                                                       </Tag>
+                                                     ) : null}
+                                                   </div>
                                                    {ep.pubDate ? (
-                                                     <div className="mt-0.5 text-xs text-gray-400">
-                                                       {new Date(ep.pubDate).toLocaleDateString()}
+                                                     <div className="mt-0.5 text-xs text-muted-foreground">
+                                                       {new Date(ep.pubDate).toLocaleDateString(i18n.language)}
                                                      </div>
                                                    ) : null}
                                                  </div>
+                                                 {episodeReport ? (
+                                                   <TouchSafeTooltip title={t('library.openReport')}>
+                                                     <Button
+                                                       size="small"
+                                                       shape="circle"
+                                                       aria-label={t('library.openReport')}
+                                                       icon={<ReadOutlined />}
+                                                       onClick={() => openReportDrawer(episodeReport)}
+                                                     />
+                                                   </TouchSafeTooltip>
+                                                 ) : null}
                                                  {ep.link ? (
                                                    <TouchSafeTooltip title={t('library.openLink')}>
                                                      <Button
@@ -2275,7 +2471,7 @@ export function AgentsPage() {
                                                      />
                                                    </TouchSafeTooltip>
                                                  ) : null}
-                                                 {linkedAgent ? (
+                                                 {linkedAgent && !episodeReport ? (
                                                    <TouchSafeTooltip title={t('library.runAnalysisNow')}>
                                                      <Button
                                                        size="small"
@@ -2311,24 +2507,50 @@ export function AgentsPage() {
                                        <span className="text-sm text-gray-600">{t('library.noWorkflowCta')}</span>
                                      }
                                    >
-                                     <Button
+                                     <ListenIdleButton
                                        icon={<RobotOutlined />}
-                                       style={{ background: '#e6f4ff', borderColor: '#91caff', color: '#1677ff', fontWeight: 600 }}
+                                       style={{ background: 'rgba(114,46,209,0.12)', borderColor: 'rgba(114,46,209,0.4)', color: '#9d6fe8', fontWeight: 600 }}
                                        onClick={(event) => onFollowSource(selectedSource, event)}
                                      >
                                        {t('listen.listen')}
-                                     </Button>
+                                     </ListenIdleButton>
                                    </Empty>
                                  ) : sourceDetailLoading ? (
                                    <Skeleton active avatar={false} paragraph={{ rows: 4 }} />
+                                 ) : sourceDetailReports.length === 0 ? (
+                                   <Empty description={t('library.noReportsYet')} />
                                  ) : (
-                                   <AgentReportsBrowser
-                                     agentId={linkedPlaybooks[0].agentId}
-                                     agentName={agents.find((a) => a.id === linkedPlaybooks[0].agentId)?.name}
-                                     collapsible
-                                     reports={sourceDetailReports}
-                                     onSelectSymbol={setViewingSymbol}
-                                   />
+                                   <div className="flex flex-col gap-1.5">
+                                     {sourceDetailReports.map((report) => {
+                                       const reportAgent = agents.find((a) => a.id === report.agentId);
+                                       const headline = report.report?.common?.headline?.trim() || report.summary;
+                                       const relevance = report.report?.common?.relevance;
+                                       const relPct = relevance && relevance > 0
+                                         ? Math.round(relevance <= 1 ? relevance * 100 : Math.min(100, relevance))
+                                         : null;
+                                       return (
+                                         <button
+                                           key={report.id}
+                                           type="button"
+                                           onClick={() => openReportDrawer(report)}
+                                           className="flex w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-[#9d6fe8]/50 hover:bg-muted/50"
+                                         >
+                                           <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${getCharacterTypeIconBg(reportAgent?.characterType)}`}>
+                                             {getCharacterTypeEmoji(reportAgent?.characterType)}
+                                           </div>
+                                           <div className="min-w-0 flex-1">
+                                             <p className="truncate text-sm font-medium text-foreground">{headline}</p>
+                                             <p className="mt-0.5 text-xs text-muted-foreground">
+                                               {reportAgent ? `${getAgentDisplayLabel(reportAgent)} · ` : ''}
+                                               {new Date(report.createdAt).toLocaleDateString(i18n.language)}
+                                               {relPct !== null ? ` · ${t('report.relevanceLabel')} ${relPct} %` : ''}
+                                             </p>
+                                           </div>
+                                           <ReadOutlined className="shrink-0 text-muted-foreground" />
+                                         </button>
+                                       );
+                                     })}
+                                   </div>
                                  )
                                },
                                ...(linkedPlaybooks.length > 0 ? [{
@@ -2359,25 +2581,52 @@ export function AgentsPage() {
                      {filteredSources.map((source) => {
                        const isRecentlyUpdated = recentlyUpdatedSourceId === source.id;
                        const linkedForCard = playbooks.filter((p) => p.sourceIds.includes(source.id));
-                       const cardReportCount = linkedForCard.reduce((sum, pb) => {
-                         const a = agents.find((ag) => ag.id === pb.agentId);
-                         return sum + (a?.reportCount ?? 0);
-                       }, 0);
+                       const cardAgentLinks = linkedForCard
+                         .map((playbook) => {
+                           const agent = agents.find((candidate) => candidate.id === playbook.agentId);
+                           return agent ? { playbook, agent } : null;
+                         })
+                         .filter((link): link is { playbook: PlaybookRecord; agent: AgentSummary } => Boolean(link));
+                       const cardAgentIds = new Set(cardAgentLinks.map(({ agent }) => agent.id));
+                       const cardReports = feedReports.filter((report) => cardAgentIds.has(report.agentId));
+                       const latestCardReport = cardReports[0];
+                       const coverImageUrl = getSourceCoverImageUrl(source);
                        return (
                        <Card
                          key={source.id}
                          size="small"
                          hoverable
                          onClick={() => { setRecentlyUpdatedSourceId(null); setSelectedSourceId(source.id); setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports'); }}
-                         style={{ cursor: 'pointer', outline: isRecentlyUpdated ? '2px solid #1677ff' : undefined, outlineOffset: isRecentlyUpdated ? '2px' : undefined }}
-                         styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1 } }}
-                         className="min-h-[170px] transition-shadow flex flex-col"
-                         extra={
-                           <div onClick={(event) => event.stopPropagation()}>
-                             {/* Edit + Share/Publish — Delete moved into Edit view */}
+                         style={{ cursor: 'pointer', outline: isRecentlyUpdated ? '2px solid #722ed1' : undefined, outlineOffset: isRecentlyUpdated ? '2px' : undefined }}
+                         styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1, padding: 0 } }}
+                         className="overflow-hidden border border-[rgba(114,46,209,0.18)] shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-[rgba(114,46,209,0.38)] hover:shadow-md dark:border-[rgba(167,139,250,0.30)] dark:hover:border-[rgba(167,139,250,0.55)] flex flex-col"
+                       >
+                         <div className="relative h-44 overflow-hidden bg-slate-900">
+                           {source.type === 'synthetic_discussion' ? (
+                             <div className="relative flex h-full items-center justify-center overflow-hidden bg-gradient-to-br from-[#1e1239] via-[#54239a] to-[#164e78]">
+                               <div aria-hidden="true" className="absolute -left-12 -top-16 h-44 w-44 rounded-full bg-violet-300/30 blur-3xl" />
+                               <div aria-hidden="true" className="absolute -bottom-20 -right-8 h-52 w-52 rounded-full bg-sky-300/25 blur-3xl" />
+                               <div className="relative flex h-24 w-24 items-center justify-center rounded-[1.75rem] border border-white/25 bg-white/15 text-white shadow-xl shadow-violet-950/40 backdrop-blur-sm">
+                                 <AudioOutlined className="text-5xl" />
+                               </div>
+                             </div>
+                           ) : coverImageUrl ? (
+                             <>
+                               <img aria-hidden="true" src={coverImageUrl} className="absolute -inset-4 h-[calc(100%+2rem)] w-[calc(100%+2rem)] object-cover blur-xl opacity-60" />
+                               <img src={coverImageUrl} alt={`${getSourceDisplayTitle(source)} cover`} className="relative h-full w-full object-contain" />
+                             </>
+                           ) : (
+                             <div className="flex h-full items-center justify-center text-sm text-slate-300">{t('library.coverUnavailable')}</div>
+                           )}
+                           <div className="absolute left-3 top-3">
+                             <SourceTypeBadge type={source.type} />
+                           </div>
+                           <div className="absolute right-2 top-2" onClick={(event) => event.stopPropagation()}>
                              <EntityActions
                                entityLabel="source"
                                isOwner={source.ownerUserId === user?.id}
+                               variant="menu"
+                               menuAriaLabel={t('library.manageSource')}
                                onEdit={() => onEditSource(source)}
                                onShare={(payload) =>
                                  shareSource(source.id, {
@@ -2390,118 +2639,189 @@ export function AgentsPage() {
                                defaultPublishTitle={getSourceDisplayTitle(source)}
                              />
                            </div>
-                         }
-                       >
-                         <div className="flex-1">
-                         <div className="grid grid-cols-[56px_1fr] gap-3">
-                           {getSourceCoverImageUrl(source) ? (
-                             <img
-                               src={getSourceCoverImageUrl(source)!}
-                               alt={`${getSourceDisplayTitle(source)} cover`}
-                               className="h-14 w-14 rounded-md object-cover"
-                             />
-                           ) : (
-                             <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
-                               Cover unavailable
-                             </div>
-                           )}
-                           <div className="min-w-0">
-                             <div className="text-sm font-semibold">{getSourceDisplayTitle(source)}</div>
-                             <Text type="secondary" className="text-xs">{source.value}</Text>
-                             <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                               <SourceTypeBadge type={source.type} />
-                               <Tag>{getSourceKindLabel(source)}</Tag>
-                               {(source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
-                                 <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
-                               ) : null}
-                             </div>
-                           </div>
                          </div>
-                         <div className="mt-3 text-xs text-gray-700">
+                         <div className="flex flex-1 flex-col p-4">
+                           <div className="min-w-0">
+                             <div className="text-base font-semibold leading-snug">{getSourceDisplayTitle(source)}</div>
+                             {source.type !== 'synthetic_discussion' && (
+                               <Text type="secondary" className="block truncate text-xs">{source.value}</Text>
+                             )}
+                           </div>
+                         <div className="mt-4 text-xs">
                            {source.metadata.previewItems.length > 0 ? (
                              <>
-                               <div className="mb-1 font-medium">{t('library.recentEpisodes')}</div>
-                               <ul className="list-inside list-disc space-y-1">
-                                 {source.metadata.previewItems.slice(0, 3).map((item) => (
-                                   <li key={`${source.id}:${item.link ?? item.title}`}>{item.title}</li>
+                               <div className="mb-1 font-medium text-muted-foreground">
+                                 {source.type === 'synthetic_discussion' ? t('library.recentRuns') : t('library.recentItems')}
+                               </div>
+                               <ul className="space-y-1 text-foreground">
+                                 {source.metadata.previewItems.slice(0, 2).map((item) => (
+                                   <li key={`${source.id}:${item.link ?? item.title}`} className="truncate">▶ {item.title}</li>
                                  ))}
                                </ul>
                              </>
                            ) : (
-                             t('library.noEpisodes')
+                             <span className="text-muted-foreground">
+                               {source.type === 'synthetic_discussion' ? t('library.noRuns') : t('library.noEpisodes')}
+                             </span>
                            )}
                          </div>
-                         {/* flex-1 content end */}
+                         <div className="mt-4" onClick={(event) => event.stopPropagation()}>
+                           <Button
+                             type="text"
+                             block
+                             className={`h-auto rounded-lg border px-3 py-2 text-left ${
+                               latestCardReport
+                                 ? 'border-violet-200 bg-violet-50/70 hover:!border-violet-300 hover:!bg-violet-100/70 dark:border-violet-500/30 dark:bg-violet-950/30 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/50'
+                                 : 'border-dashed border-border bg-muted/30 hover:!border-violet-300 hover:!bg-violet-50/50 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/30'
+                             }`}
+                             aria-label={latestCardReport ? t('library.openReports', { count: cardReports.length }) : t('library.noReportsYet')}
+                             onClick={() => {
+                               setRecentlyUpdatedSourceId(null);
+                               setSelectedSourceId(source.id);
+                               setActiveSourceTab('reports');
+                             }}
+                           >
+                             <span className="flex items-center gap-2">
+                               <CheckCircleOutlined
+                                 className={latestCardReport ? 'text-emerald-500 dark:text-emerald-400' : 'text-muted-foreground'}
+                               />
+                               <span className="min-w-0 flex-1">
+                                 <span className="block text-xs font-semibold text-foreground">
+                                   {latestCardReport ? t('library.reportsAvailable', { count: cardReports.length }) : t('library.noReportsYet')}
+                                 </span>
+                                 <span className="block truncate text-[11px] text-muted-foreground">
+                                   {latestCardReport
+                                     ? t('library.latestReportAt', {
+                                         date: new Date(latestCardReport.createdAt).toLocaleDateString(i18n.language, {
+                                           day: 'numeric',
+                                           month: 'short'
+                                         })
+                                       })
+                                     : t('library.reportsWillAppearHere')}
+                                 </span>
+                               </span>
+                               {latestCardReport ? <span className="text-base text-violet-500 dark:text-violet-300">›</span> : null}
+                             </span>
+                           </Button>
                          </div>
-                         {(() => {
-                           const linked = playbooks.filter((p) => p.sourceIds.includes(source.id));
-                           const isFollowed = followedSourceIds.has(source.id);
-                           const latestRun = linked.length > 0
-                             ? linked.map((p) => p.lastRunAt).filter(Boolean).sort().pop()
-                             : null;
-                           return (
-                             <div className="mt-3 border-t border-gray-100 pt-2" onClick={(e) => e.stopPropagation()}>
-                               {linked.length > 0 && (
-                                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-                                   {linked.map((pb) => {
-                                     const agent = agents.find((a) => a.id === pb.agentId);
-                                     const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
-                                     const label = agent?.characterType ? humanizeCharacterType(agent.characterType) : (agent?.name ?? pb.name);
-                                     return (
-                                       <Tag key={pb.id} color={PERSONA_COLOR_MAP[agent?.characterType ?? ''] ?? 'cyan'} className="m-0 flex items-center gap-1">
-                                         {emoji} {label}
-                                       </Tag>
-                                     );
-                                   })}
-                                   {cardReportCount > 0 ? (
-                                     <Tag color="purple" icon={<FileTextOutlined />} className="m-0">
-                                       {cardReportCount} {cardReportCount === 1 ? t('library.reportSingular') : t('library.reportPlural')}
-                                     </Tag>
-                                   ) : null}
-                                   {latestRun
-                                     ? <span className="text-gray-400">{t('library.lastRun', { date: new Date(latestRun).toLocaleString() })}</span>
-                                     : <span className="text-gray-400">{t('library.notYetAnalyzed')}</span>}
-                                 </div>
-                               )}
-                               {isFollowed ? (
+                         <div className="mt-6 border-t border-border pt-4" onClick={(event) => event.stopPropagation()}>
+                           <div className="mb-2 text-xs font-medium text-muted-foreground">{t('library.agentFollowLabel')}</div>
+                           <div className="rounded-lg border border-slate-200/80 bg-slate-50/60 p-3 dark:border-slate-700/80 dark:bg-slate-800/40">
+                             <div className="flex flex-wrap items-start gap-3">
+                               {cardAgentLinks.map(({ agent, playbook }) => {
+                                 const characterLabel = getAgentCharacterLabel(agent);
+                                 const personalityLabel = getAgentPersonalityLabel(agent);
+                                 const canRemove = source.ownerUserId === user?.id;
+                                 return (
+                                   <div key={playbook.id} className="group relative">
+                                     <TouchSafeTooltip
+                                       title={<div><div className="font-medium">{getAgentDisplayLabel(agent)}</div><div>{humanizeCharacterType(agent.characterType)}</div><div>{personalityLabel}</div></div>}
+                                     >
+                                       <Button
+                                         type="text"
+                                         aria-label={`${getAgentDisplayLabel(agent)}: ${characterLabel}, ${humanizeCharacterType(agent.characterType)}, ${personalityLabel}`}
+                                         className="h-auto w-12 p-0"
+                                       >
+                                         <span className="flex flex-col items-center gap-1 text-center">
+                                           <span className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${PERSONA_ICON_BG_MAP[agent.characterType ?? 'summarizer']}`}>
+                                             {getCharacterIcon(agent.characterType)}
+                                           </span>
+                                           <span className="w-full truncate text-[10px] leading-tight">{characterLabel}</span>
+                                         </span>
+                                       </Button>
+                                     </TouchSafeTooltip>
+                                     {canRemove ? (
+                                       <TouchSafeTooltip title={t('library.removeAgentFromSource')}>
+                                         <Popconfirm
+                                           title={t('library.removeAgentConfirm', { name: getAgentDisplayLabel(agent) })}
+                                           description={t('library.removeAgentConfirmDescription')}
+                                           okText={t('common.remove')}
+                                           cancelText={t('common.cancel')}
+                                           onConfirm={() => void onRemoveAgentFromSource(playbook, source.id)}
+                                         >
+                                           <Button
+                                             type="primary"
+                                             danger
+                                             shape="circle"
+                                             size="small"
+                                             aria-label={t('library.removeAgentFromSource')}
+                                             icon={<CloseOutlined />}
+                                             className="absolute -right-1 -top-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                                             onClick={(event) => event.stopPropagation()}
+                                           />
+                                         </Popconfirm>
+                                       </TouchSafeTooltip>
+                                     ) : null}
+                                   </div>
+                                 );
+                               })}
+                               <TouchSafeTooltip title={t('library.addAgent')}>
                                  <Button
-                                   block
-                                   aria-label={t('listen.listeningAriaLabel')}
-                                   icon={<RobotFilled className="robot-pulse" />}
-                                   style={{ background: '#1677ff', borderColor: '#1677ff', color: '#fff', fontWeight: 600 }}
+                                   type="dashed"
+                                   shape="circle"
+                                   size="large"
+                                   aria-label={t('library.addAgent')}
+                                   icon={<PlusOutlined />}
+                                   className="border-2 border-dashed border-sky-400 bg-sky-50 text-sky-700 shadow-sm transition-colors hover:border-sky-500 hover:bg-sky-100 hover:text-sky-800 dark:border-sky-500 dark:bg-sky-950/50 dark:text-sky-300"
                                    onClick={(event) => onFollowSource(source, event)}
-                                 >
-                                   {t('listen.listening')}
-                                 </Button>
-                               ) : (
-                                 <Button
-                                   block
-                                   aria-label={t('listen.listenAriaLabel')}
-                                   icon={<RobotOutlined />}
-                                   style={{ background: '#e6f4ff', borderColor: '#91caff', color: '#1677ff', fontWeight: 600 }}
-                                   onClick={(event) => onFollowSource(source, event)}
-                                 >
-                                   {t('listen.listen')}
-                                 </Button>
-                               )}
+                                 />
+                               </TouchSafeTooltip>
                              </div>
-                           );
-                         })()}
+                           </div>
+                         </div>
+                         </div>
                        </Card>
                        );
                      })}
-                     <GhostCreateCard
-                       ariaLabel="Create new source"
-                       onClick={() => {
-                         setEditingSource(null);
-                         setIsSourceCreateOpen(true);
-                         setSourceUrlDraft('');
-                         setAutoDetectedSource(null);
-                       }}
-                       icon={<DatabaseOutlined />}
-                       title="Create new source"
-                       sub="URL detect + metadata preview"
-                     />
+                     {sources.length === 0 ? (
+                       <div className="col-span-full flex flex-col items-center gap-4 rounded-xl border border-dashed border-border py-12 px-6 text-center">
+                         <span className="text-5xl">📚</span>
+                         <div>
+                           <p className="text-base font-semibold text-foreground">{t('library.emptyHeadline')}</p>
+                           <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">{t('library.emptyDesc')}</p>
+                         </div>
+                         <Button
+                           type="primary"
+                           size="large"
+                           icon={<PlusCircleOutlined />}
+                           onClick={() => {
+                             setEditingSource(null);
+                             setIsSourceCreateOpen(true);
+                             setSourceUrlDraft('');
+                             setAutoDetectedSource(null);
+                           }}
+                         >
+                           {t('library.emptyCta')}
+                         </Button>
+                         <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+                           <span className="font-medium text-foreground">{t('library.howItWorks')}:</span>
+                           {[
+                             t('library.howStep1'),
+                             t('library.howStep2'),
+                             t('library.howStep3'),
+                           ].map((step, i, arr) => (
+                             <span key={step} className="flex items-center gap-1">
+                               <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700 dark:bg-sky-950 dark:text-sky-300">{step}</span>
+                               {i < arr.length - 1 ? <span className="text-muted-foreground/50">→</span> : null}
+                             </span>
+                           ))}
+                         </div>
+                       </div>
+                     ) : null}
+                     {sources.length > 0 && (
+                       <GhostCreateCard
+                         ariaLabel={t('library.addSource')}
+                         onClick={() => {
+                           setEditingSource(null);
+                           setIsSourceCreateOpen(true);
+                           setSourceUrlDraft('');
+                           setAutoDetectedSource(null);
+                         }}
+                         icon={<DatabaseOutlined />}
+                         title={t('library.addSource')}
+                         sub="YouTube, podcast, or any website"
+                       />
+                     )}
                    </div>
                    ) : null}
                    </>
@@ -2659,7 +2979,7 @@ export function AgentsPage() {
                           <span className="flex items-center gap-2">
                             <Badge
                               status={selectedAgent.status === 'disabled' ? 'default' : 'success'}
-                              text={selectedAgent.name}
+                              text={getAgentDisplayLabel(selectedAgent)}
                             />
                             <Tag>Access grants: {accessGrantCount}</Tag>
                           </span>
@@ -2744,8 +3064,40 @@ export function AgentsPage() {
                             </Button>
                           </Badge>
                         </div>
-                        {loadState === 'loading' ? <p className="text-sm text-gray-700">Loading agents...</p> : null}
+                        {loadState === 'loading' ? (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {[1, 2, 3, 4].map((i) => (
+                              <Card key={i} size="small" className="min-h-[170px]">
+                                <Skeleton active paragraph={{ rows: 3 }} />
+                              </Card>
+                            ))}
+                          </div>
+                        ) : null}
                         {loadState === 'error' ? <p className="text-sm text-red-700">Failed to load agents.</p> : null}
+                        {loadState !== 'loading' && filteredAgents.length === 0 && !showAgentsMarketplace ? (
+                          <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-gray-200 py-12 px-6 text-center dark:border-gray-700">
+                            <span className="text-5xl">🤖</span>
+                            <div>
+                              <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('agent.emptyHeadline')}</p>
+                              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('agent.emptyDesc')}</p>
+                            </div>
+                            <Button
+                              type="primary"
+                              size="large"
+                              icon={<PlusCircleOutlined />}
+                              onClick={() => {
+                                setIsCreatingAgent(true);
+                                setEditingAgent(null);
+                                setSelectedAgentId(null);
+                              }}
+                            >
+                              {t('agent.emptyCta')}
+                            </Button>
+                            {sources.length === 0 ? (
+                              <p className="text-xs text-amber-600 dark:text-amber-400 max-w-xs">{t('agent.emptySourceHint')}</p>
+                            ) : null}
+                          </div>
+                        ) : null}
                         <div className="grid gap-3 sm:grid-cols-2">
                           {filteredAgents.map((agent) => (
                             <Card
@@ -2761,7 +3113,7 @@ export function AgentsPage() {
                                   <div className="text-sm font-semibold">
                                     <Badge
                                       status={agent.status === 'disabled' ? 'default' : 'success'}
-                                      text={agent.name}
+                                      text={getAgentDisplayLabel(agent)}
                                     />
                                   </div>
                                   <div className="mt-1 flex flex-wrap gap-1 text-xs">
@@ -2783,7 +3135,7 @@ export function AgentsPage() {
                                     }
                                     sharePermissions={['read', 'edit', 'delete']}
                                     onPublish={(payload) => publishAgent(agent.id, payload)}
-                                    defaultPublishTitle={agent.name}
+                                    defaultPublishTitle={getAgentDisplayLabel(agent)}
                                   />
                                 </div>
                               </div>
@@ -2795,20 +3147,20 @@ export function AgentsPage() {
                             </Card>
                           ))}
                           <GhostCreateCard
-                           ariaLabel="Create follower"
+                           ariaLabel={t('agent.emptyCta')}
                            onClick={() => {
                              setIsCreatingAgent(true);
                              setEditingAgent(null);
                              setSelectedAgentId(null);
                            }}
                            icon={<AppstoreOutlined />}
-                           title="Create follower"
-                           sub="Character + personality setup"
+                           title={t('agent.createNew')}
+                           sub={t('agent.createNewSub')}
                            className="w-full"
                           />
                         </div>
                         <Modal
-                          title="Marketplace agents"
+                          title={<span className="flex items-center gap-2"><CompassOutlined className="text-sky-500" />{t('marketplace.heading')} — {t('nav.agents')}</span>}
                           open={showAgentsMarketplace}
                           onCancel={() => { setShowAgentsMarketplace(false); setMarketplaceAgentsSearch(''); }}
                           footer={null}
@@ -2823,13 +3175,18 @@ export function AgentsPage() {
                               prefix={<SearchOutlined />}
                               allowClear
                             />
-                            {filteredMarketplaceAgents.length === 0 ? <Empty description={marketplaceAgentsSearch ? 'No matching agents.' : 'No marketplace agents available.'} /> : null}
+                            {filteredMarketplaceAgents.length === 0 ? (
+                              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                                <span className="text-4xl">🧭</span>
+                                <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">{marketplaceAgentsSearch ? t('marketplace.noItems') : t('marketplace.emptyHeadline')}</p>
+                              </div>
+                            ) : null}
                             {filteredMarketplaceAgents.map((item) => (
                               <Card key={item.publicationId} size="small">
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="min-w-0">
                                     <div className="truncate text-sm font-semibold">{item.title}</div>
-                                    <div className="truncate text-xs text-gray-600">{item.summary || item.agent.name}</div>
+                                    <div className="truncate text-xs text-gray-600">{item.summary || getAgentDisplayLabel(item.agent)}</div>
                                   </div>
                                   <Button
                                     size="small"
@@ -2927,7 +3284,7 @@ export function AgentsPage() {
                               children: (
                                 <AgentReportsBrowser
                                   agentId={selectedPlaybook.agentId}
-                                  reports={reports}
+                                  reports={selectedPlaybookReports}
                                   highlightedReportId={highlightedReportId}
                                   onSelectSymbol={setViewingSymbol}
                                 />
@@ -2947,6 +3304,67 @@ export function AgentsPage() {
                       <>
                         {playbooksLoadState === 'loading' ? <p className="text-sm text-gray-700">Loading playbooks...</p> : null}
                         {playbooksLoadState === 'error' ? <p className="text-sm text-red-700">Failed to load playbooks.</p> : null}
+                        {playbooksLoadState !== 'loading' && filteredPlaybooks.length === 0 ? (
+                          <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-gray-200 py-12 px-6 text-center dark:border-gray-700">
+                            <span className="text-5xl">📅</span>
+                            <div>
+                              <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('playbook.emptyHeadline')}</p>
+                              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('playbook.emptyDesc')}</p>
+                            </div>
+                            {sources.length === 0 ? (
+                              <Button
+                                size="large"
+                                onClick={() => setActiveHub('sources')}
+                              >
+                                {t('playbook.emptyCtaNoSources')}
+                              </Button>
+                            ) : agents.length === 0 ? (
+                              <Button
+                                size="large"
+                                onClick={() => setActiveHub('agents')}
+                              >
+                                {t('playbook.emptyCtaNoAgents')}
+                              </Button>
+                            ) : (
+                              <Button
+                                type="primary"
+                                size="large"
+                                icon={<PlusCircleOutlined />}
+                                onClick={openPlaybookCreate}
+                              >
+                                {t('playbook.emptyCtaReady')}
+                              </Button>
+                            )}
+                          </div>
+                        ) : null}
+                        {/* Marketplace quick-start strip — shown when empty and marketplace has items */}
+                        {playbooksLoadState !== 'loading' && filteredPlaybooks.length === 0 && marketplacePlaybooks.length > 0 ? (
+                          <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950 px-5 py-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <CompassOutlined className="text-sky-500" />
+                              <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{t('marketplace.quickStartHeading')}</p>
+                            </div>
+                            <p className="text-xs text-sky-600 dark:text-sky-400 mb-3">{t('marketplace.quickStartDesc')}</p>
+                            <div className="space-y-2">
+                              {marketplacePlaybooks.slice(0, 3).map((item) => (
+                                <div key={item.publicationId} className="flex items-center justify-between gap-3 rounded-lg bg-white dark:bg-sky-900 px-3 py-2">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">{item.title}</p>
+                                    <p className="text-xs text-gray-500 truncate">{item.summary || item.playbook.name}</p>
+                                  </div>
+                                  <Button
+                                    size="small"
+                                    type="primary"
+                                    loading={cloningPublicationId === item.publicationId}
+                                    onClick={() => onCloneMarketplacePlaybook(item.publicationId)}
+                                  >
+                                    {t('marketplace.followPlaybook')}
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="grid gap-3 sm:grid-cols-2">
                           {filteredPlaybooks.map((playbook) => (
                             <Card
@@ -3010,18 +3428,20 @@ export function AgentsPage() {
                               </div>
                             </Card>
                           ))}
-                          <GhostCreateCard
-                           ariaLabel="Create new playbook"
-                           onClick={openPlaybookCreate}
-                           icon={<RocketOutlined />}
-                           title="Create new playbook"
-                           sub="Agent + sources + schedule"
-                          />
+                          {filteredPlaybooks.length > 0 && (
+                           <GhostCreateCard
+                            ariaLabel={t('playbook.emptyCtaReady')}
+                            onClick={openPlaybookCreate}
+                            icon={<RocketOutlined />}
+                            title={t('playbook.createNew')}
+                            sub={t('playbook.createNewSub')}
+                           />
+                          )}
                         </div>
                       </>
                     )}
                     <Modal
-                      title="Marketplace playbooks"
+                      title={<span className="flex items-center gap-2"><CompassOutlined className="text-sky-500" />{t('marketplace.heading')} — {t('nav.playbooks')}</span>}
                       open={showPlaybooksMarketplace}
                       onCancel={() => { setShowPlaybooksMarketplace(false); setMarketplacePlaybooksSearch(''); }}
                       footer={null}
@@ -3036,7 +3456,12 @@ export function AgentsPage() {
                           prefix={<SearchOutlined />}
                           allowClear
                         />
-                        {filteredMarketplacePlaybooks.length === 0 ? <Empty description={marketplacePlaybooksSearch ? t('marketplace.noItems') : t('marketplace.noItems')} /> : null}
+                        {filteredMarketplacePlaybooks.length === 0 ? (
+                          <div className="flex flex-col items-center gap-3 py-8 text-center">
+                            <span className="text-4xl">🧭</span>
+                            <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">{marketplacePlaybooksSearch ? t('marketplace.noItems') : t('marketplace.emptyHeadline')}</p>
+                          </div>
+                        ) : null}
                         {filteredMarketplacePlaybooks.map((item) => (
                           <Card key={item.publicationId} size="small">
                             <div className="flex items-center justify-between gap-3">
@@ -3066,7 +3491,63 @@ export function AgentsPage() {
           />
         </div>
         )}
-      </Content>
+      <Drawer
+        open={Boolean(viewingFullReport)}
+        onClose={() => setViewingFullReport(null)}
+        destroyOnHidden
+        width={620}
+        placement="right"
+        title={viewingFullReport
+          ? (viewingFullReport.report?.common?.headline?.trim() || viewingFullReport.summary)
+          : undefined}
+        styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+      >
+        {/* Scrollable report content */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {(() => {
+            const drawerCommon = viewingFullReport?.report?.common;
+            const toPercent = (value?: number) => {
+              if (!value || value <= 0) return null;
+              return Math.round(value <= 1 ? value * 100 : Math.min(100, value));
+            };
+            const stats = [
+              { key: 'relevance', label: t('report.relevanceLabel'), value: toPercent(drawerCommon?.relevance), fill: 'bg-violet-500' },
+              { key: 'confidence', label: t('report.confidenceLabel'), value: toPercent(drawerCommon?.confidence), fill: 'bg-emerald-500' }
+            ].filter((stat) => stat.value !== null);
+            if (stats.length === 0) return null;
+            return (
+              <div className="grid grid-cols-2 gap-4 border-b border-border px-6 py-4">
+                {stats.map((stat) => (
+                  <div key={stat.key}>
+                    <div className="flex items-baseline justify-between text-[11px]">
+                      <span className="font-medium text-muted-foreground">{stat.label}</span>
+                      <span className="font-semibold tabular-nums text-foreground">{stat.value} %</span>
+                    </div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className={`h-full rounded-full ${stat.fill}`} style={{ width: `${stat.value}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          <div className="p-6">
+            {viewingFullReport?.report
+              ? <CharacterReportRenderer report={viewingFullReport.report} />
+              : <Empty description={t('feedCard.noFullReport')} />}
+          </div>
+        </div>
+        {/* Fixed chat panel at bottom */}
+        {viewingFullReport ? (
+          <div className="shrink-0 border-t border-border p-4">
+            <ReportChatPanel
+              agentId={viewingFullReport.agentId}
+              reportId={viewingFullReport.id}
+              collapsible
+            />
+          </div>
+        ) : null}
+      </Drawer>
       <Modal
         title={(() => {
           if (followWizardSourcePreselected) {
@@ -3082,7 +3563,7 @@ export function AgentsPage() {
         onCancel={onCancelPlaybookCreate}
         footer={null}
         destroyOnHidden
-        width={720}
+        width="min(720px, 95vw)"
       >
         <div className="space-y-3">
           {/* Unified steps indicator — morphs between pick-agent path and create-agent path */}
@@ -3177,6 +3658,7 @@ export function AgentsPage() {
             </div>
           ) : null}
           {playbookCreateStep === 1 ? (
+            <>
             <div className="space-y-3">
               {/* Hide agent selection grid when the inline creation sub-wizard is active */}
               {!showInlineAgentCreate ? (
@@ -3187,7 +3669,7 @@ export function AgentsPage() {
                   const isFocused = wizardFocusedAgentId === agent.id;
                   const { intro, icon, characterLabel, personalityLabel, personaId } = getAgentCardDisplay(agent, t);
                   const iconBgClass = PERSONA_ICON_BG_MAP[personaId] ?? PERSONA_ICON_BG_MAP['summarizer'];
-                  const tagColor = PERSONA_COLOR_MAP[personaId] ?? 'default';
+                  const tagColor = getCharacterTypeColor(personaId);
 
                   const linkedPlaybookEntry = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === agent.id);
                   // If this agent is already linked to the current source, show that playbook's schedule.
@@ -3203,7 +3685,7 @@ export function AgentsPage() {
                       className={`transition-opacity ${anySelected && !selected ? 'opacity-40' : 'opacity-100'}`}
                     >
                     <WizardSelectableCard
-                      ariaLabel={`Select agent ${agent.name}`}
+                      ariaLabel={`Select agent ${getAgentDisplayLabel(agent)}`}
                       selected={selected}
                       onClick={() => {
                         // Always toggle — works in both create and edit modes
@@ -3220,7 +3702,7 @@ export function AgentsPage() {
                             {icon}
                           </span>
                           <span className="text-sm font-semibold truncate">
-                            <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={agent.name} />
+                            <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={getAgentDisplayLabel(agent)} />
                           </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
@@ -3228,16 +3710,13 @@ export function AgentsPage() {
                             <Tag color="blue" className="m-0 text-xs">{t('common.editing') || 'Editing'}</Tag>
                           ) : (
                             <InlineDeleteButton
-                                ariaLabel={`Delete agent ${agent.name}`}
+                                ariaLabel={`Delete agent ${getAgentDisplayLabel(agent)}`}
                                 confirmText={t('common.delete')}
                                 onConfirm={async () => {
-                                  await deleteAgent(agent.id);
                                   setPlaybookAgentIdsDraft((prev) => prev.filter((id) => id !== agent.id));
                                   setWizardAlreadyLinkedAgentIds((prev) => prev.filter((id) => id !== agent.id));
                                   setWizardAlreadyLinkedPlaybooks((prev) => prev.filter((p) => p.agentId !== agent.id));
-                                  await refreshPlaybooks();
-                                  const refreshed = await listAgents();
-                                  setAgents(refreshed);
+                                  setAgents((prev) => prev.filter((candidate) => candidate.id !== agent.id));
                                 }}
                               />
                           )}
@@ -3299,18 +3778,11 @@ export function AgentsPage() {
                       <p className="mb-3 text-sm text-red-600">{inlineAgentValidationError}</p>
                     ) : null}
 
-                    {/* Step 0: Name + Character type only */}
+                    {/* Step 0: Character type */}
                     {inlineAgentStep === 0 ? (
                       <div className="space-y-3">
-                        {/* Name first */}
-                        <Input
-                          aria-label={t('agent.namePlaceholder')}
-                          placeholder={t('agent.namePlaceholder')}
-                          value={inlineAgentName}
-                          onChange={(e) => setInlineAgentName(e.currentTarget.value)}
-                        />
                         {/* Character section */}
-                        <div className="flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+                        <div className="flex items-center gap-2 rounded-md bg-[rgba(114,46,209,0.12)] px-3 py-2 text-sm font-medium text-[#9d6fe8]">
                           <BulbOutlined />
                           {t('agent.chooseCharacter')}
                         </div>
@@ -3320,14 +3792,14 @@ export function AgentsPage() {
                               key={persona.id}
                               type="button"
                               onClick={() => onInlineAgentPersonaChange(persona.id)}
-                              className={`relative rounded-md border p-3 text-left transition ${inlineAgentPersonaId === persona.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              className={`relative rounded-md border-2 p-3 text-left text-foreground transition-all !bg-card ${inlineAgentPersonaId === persona.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                               aria-label={`Inline character ${t(`personas.${persona.id}.name`)}`}
                             >
                               {inlineAgentPersonaId === persona.id ? (
-                                <span className="absolute top-1 right-1 text-sm leading-none text-blue-500"><RobotFilled /></span>
+                                <span className="absolute top-1 right-1 text-sm leading-none text-[#9d6fe8]"><RobotFilled /></span>
                               ) : null}
-                              <p className="font-medium text-sm">{t(`personas.${persona.id}.name`)}</p>
-                              <p className="text-xs text-gray-500">{t(`personas.${persona.id}.tagline`)}</p>
+                              <p className="font-semibold text-sm">{t(`personas.${persona.id}.name`)}</p>
+                              <p className="text-xs text-muted-foreground">{t(`personas.${persona.id}.tagline`)}</p>
                             </button>
                           ))}
                         </div>
@@ -3338,14 +3810,14 @@ export function AgentsPage() {
                     {inlineAgentStep === 1 ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">{t('agent.character')}:</span>
-                          <Tag color="blue">{inlinePersonaLabel}</Tag>
+                          <span className="text-xs text-muted-foreground">{t('agent.character')}:</span>
+                          <Tag color="purple">{inlinePersonaLabel}</Tag>
                         </div>
                         {/* Personality section */}
-                        <div className="flex items-center gap-2 rounded-md bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">
+                        <div className="flex items-center gap-2 rounded-md bg-[rgba(114,46,209,0.12)] px-3 py-2 text-sm font-medium text-[#9d6fe8]">
                           <ToolOutlined />
                           {t('agent.choosePersonality')}
-                          <span className="ml-1 font-normal text-violet-500">{t('agent.forCharacter', { character: inlinePersonaLabel })}</span>
+                          <span className="ml-1 font-normal text-muted-foreground">{t('agent.forCharacter', { character: inlinePersonaLabel })}</span>
                         </div>
                         <div className="grid gap-2 md:grid-cols-3">
                           {inlineChars.map((char) => (
@@ -3353,21 +3825,21 @@ export function AgentsPage() {
                               key={char.id}
                               type="button"
                               onClick={() => onInlineAgentCharacterChange(char.id)}
-                              className={`relative rounded-md border p-3 text-left transition ${inlineAgentCharacterId === char.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              className={`relative rounded-md border-2 p-3 text-left text-foreground transition-all !bg-card ${inlineAgentCharacterId === char.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                               aria-label={`Inline personality ${t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}`}
                             >
                               {inlineAgentCharacterId === char.id ? (
-                                <span className="absolute top-1 right-1 text-sm leading-none text-violet-500"><RobotFilled /></span>
+                                <span className="absolute top-1 right-1 text-sm leading-none text-[#9d6fe8]"><RobotFilled /></span>
                               ) : null}
-                              <p className="font-medium text-sm">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}</p>
-                              <p className="text-xs text-gray-500">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.tagline`)}</p>
+                              <p className="font-semibold text-sm">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.name`)}</p>
+                              <p className="text-xs text-muted-foreground">{t(`personas.${inlineAgentPersonaId}.characters.${char.id}.tagline`)}</p>
                             </button>
                           ))}
                         </div>
                         <div className="border-t pt-3 space-y-3">
                           {/* Report detail level picker */}
                           <div>
-                            <p className="mb-2 text-xs text-gray-500">{t('report.detail.label')}</p>
+                            <p className="mb-2 text-xs text-muted-foreground">{t('report.detail.label')}</p>
                             <div className="grid grid-cols-3 gap-2">
                               {([
                                 { id: 'brief' as const, label: t('report.detail.brief'), desc: t('report.detail.briefDesc'), icon: '⚡' },
@@ -3378,18 +3850,18 @@ export function AgentsPage() {
                                   key={opt.id}
                                   type="button"
                                   onClick={() => setInlineAgentReportDetailLevel(opt.id)}
-                                  className={`relative rounded-md border p-3 text-left transition ${inlineAgentReportDetailLevel === opt.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                                  className={`relative rounded-md border-2 p-3 text-left text-foreground transition-all !bg-card ${inlineAgentReportDetailLevel === opt.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
                                 >
                                   <div className="text-base mb-1">{opt.icon}</div>
-                                  <p className="font-medium text-sm">{opt.label}</p>
-                                  <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                                  <p className="font-semibold text-sm">{opt.label}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">{opt.desc}</p>
                                 </button>
                               ))}
                             </div>
                           </div>
                           {inlineAgentPersonaId === 'finance_expert' ? (
                             <div>
-                              <p className="mb-1 text-xs text-gray-500">{t('agent.riskLevel')}</p>
+                              <p className="mb-1 text-xs text-muted-foreground">{t('agent.riskLevel')}</p>
                               <Select
                                   aria-label={t('agent.riskLevel')}
                                 value={inlineAgentRiskLevel}
@@ -3404,7 +3876,7 @@ export function AgentsPage() {
                             </div>
                           ) : null}
                           <div>
-                            <p className="mb-1 text-xs text-gray-500">{t('agent.model')}</p>
+                            <p className="mb-1 text-xs text-muted-foreground">{t('agent.model')}</p>
                             <Select
                               aria-label={t('agent.model')}
                               value={inlineAgentModel}
@@ -3417,7 +3889,7 @@ export function AgentsPage() {
                             />
                           </div>
                           <div>
-                            <p className="mb-1 text-xs text-gray-500">{t('agent.systemPrompt')}</p>
+                            <p className="mb-1 text-xs text-muted-foreground">{t('agent.systemPrompt')}</p>
                             <Input.TextArea
                               aria-label={t('agent.systemPrompt')}
                               rows={5}
@@ -3509,6 +3981,93 @@ export function AgentsPage() {
                 );
               })() : null}
             </div>
+
+            {/* Advanced settings for follow-source mode (replaces the separate step 2) */}
+            {playbookCreateStep === 1 && followWizardSourcePreselected && !showInlineAgentCreate ? (
+              <div className="border-t pt-3">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  onClick={() => setWizardShowAdvanced((v) => !v)}
+                >
+                  <span>{wizardShowAdvanced ? '▾' : '▸'}</span>
+                  <span>{t('listen.advancedSettings')}</span>
+                </button>
+                {wizardShowAdvanced ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="text-xs text-gray-500 mb-1">{t('schedule.scheduleLabel')}</div>
+                    <Select
+                      aria-label={t('schedule.mode')}
+                      value={playbookScheduleModeDraft}
+                      onChange={(value) => setPlaybookScheduleModeDraft(value as 'interval' | 'daily' | 'weekly')}
+                      options={[
+                        { value: 'interval', label: t('schedule.interval') },
+                        { value: 'daily', label: t('schedule.daily') },
+                        { value: 'weekly', label: t('schedule.weekly') }
+                      ]}
+                    />
+                    {playbookScheduleModeDraft === 'interval' ? (
+                      <Input
+                        aria-label={t('schedule.intervalAriaLabel')}
+                        value={String(playbookIntervalMinutesDraft)}
+                        onChange={(event) => setPlaybookIntervalMinutesDraft(Math.max(15, Number(event.currentTarget.value) || 60))}
+                        placeholder={t('schedule.intervalPlaceholder')}
+                      />
+                    ) : (
+                      <>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <Input
+                            aria-label={t('schedule.dailyTimeAriaLabel')}
+                            value={playbookDailyTimeDraft}
+                            onChange={(event) => setPlaybookDailyTimeDraft(event.currentTarget.value)}
+                            placeholder="HH:mm"
+                          />
+                          <Select
+                            aria-label={t('schedule.timezoneAriaLabel')}
+                            value={playbookTimezoneDraft}
+                            onChange={(value) => setPlaybookTimezoneDraft(value)}
+                            options={TIMEZONE_OPTIONS}
+                            placeholder={t('schedule.timezonePlaceholder')}
+                            showSearch
+                            className="w-full"
+                          />
+                        </div>
+                        {playbookScheduleModeDraft === 'weekly' ? (
+                          <Select
+                            aria-label={t('schedule.daysOfWeekAriaLabel')}
+                            mode="multiple"
+                            value={playbookDaysOfWeekDraft}
+                            onChange={(values) => setPlaybookDaysOfWeekDraft(values as number[])}
+                            options={[
+                              { value: 1, label: t('schedule.days.mon') },
+                              { value: 2, label: t('schedule.days.tue') },
+                              { value: 3, label: t('schedule.days.wed') },
+                              { value: 4, label: t('schedule.days.thu') },
+                              { value: 5, label: t('schedule.days.fri') },
+                              { value: 6, label: t('schedule.days.sat') },
+                              { value: 0, label: t('schedule.days.sun') }
+                            ]}
+                          />
+                        ) : null}
+                      </>
+                    )}
+                    <div className="space-y-1">
+                      <div className="text-xs font-medium text-gray-700 dark:text-gray-300">{t('schedule.recipients')}</div>
+                      <Select
+                        aria-label={t('schedule.recipients')}
+                        mode="tags"
+                        value={playbookRecipientsDraft}
+                        onChange={(values) => setPlaybookRecipientsDraft(values as string[])}
+                        tokenSeparators={[',', ' ']}
+                        placeholder={t('schedule.recipientsPlaceholder')}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            </>
           ) : null}
           {playbookCreateStep === 2 ? (
             <>
@@ -3669,9 +4228,9 @@ export function AgentsPage() {
       >
         <div className="space-y-2 py-1">
           {runPickerLinked.map(({ playbook, agent }) => {
-            const emoji = agent?.characterType ? (PERSONA_EMOJI_MAP[agent.characterType] ?? '🤖') : '🤖';
+            const emoji = getCharacterTypeEmoji(agent?.characterType);
             const characterLabel = agent?.characterType ? humanizeCharacterType(agent.characterType) : null;
-            const tagColor = PERSONA_COLOR_MAP[agent?.characterType ?? ''] ?? 'default';
+            const tagColor = getCharacterTypeColor(agent?.characterType);
             return (
               <Button
                 key={playbook.id}
@@ -3683,7 +4242,7 @@ export function AgentsPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-xl">{emoji}</span>
                   <div className="flex flex-col items-start gap-0.5 min-w-0">
-                    <span className="font-semibold text-sm">{agent?.name ?? playbook.name}</span>
+                    <span className="font-semibold text-sm">{agent ? getAgentDisplayLabel(agent) : playbook.name}</span>
                     <div className="flex items-center gap-1.5">
                       {characterLabel ? <Tag color={tagColor} className="m-0 text-xs">{characterLabel}</Tag> : null}
                       {agent?.promptConfig?.personality_label ? <Tag color="magenta" className="m-0 text-xs">{agent.promptConfig.personality_label}</Tag> : null}
@@ -3697,12 +4256,15 @@ export function AgentsPage() {
       </Modal>
       {/* Schedule-only edit modal — opened via ✎ on individual playbook cards in the detail panel */}
       <Modal
-        title={scheduleEditPlaybook ? `${agents.find((a) => a.id === scheduleEditPlaybook.agentId)?.name ?? t('common.edit')} — ${t('playbook.schedule')}` : t('common.edit')}
+        title={scheduleEditPlaybook ? `${(() => {
+          const scheduledAgent = agents.find((agent) => agent.id === scheduleEditPlaybook.agentId);
+          return scheduledAgent ? getAgentDisplayLabel(scheduledAgent) : t('common.edit');
+        })()} — ${t('playbook.schedule')}` : t('common.edit')}
         open={isScheduleEditOpen}
         onCancel={() => { setIsScheduleEditOpen(false); setScheduleEditPlaybook(null); }}
         footer={null}
         destroyOnHidden
-        width={480}
+        width="min(480px, 95vw)"
       >
         <div className="space-y-4 pt-2">
           <Select
@@ -3798,6 +4360,178 @@ export function AgentsPage() {
           </div>
         </div>
       </Modal>
-    </Layout>
+
+      {/* Guided first-report wizard — shown to brand-new users with zero setup */}
+      <Modal
+        title={<span className="flex items-center gap-2"><RocketOutlined className="text-blue-500" /> {t('guided.title')}</span>}
+        open={guidedWizardOpen}
+        onCancel={() => {
+          setGuidedWizardOpen(false);
+          setForceShowGuidedWizard(false);
+          localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
+          setGuidedWizardDismissed(true);
+        }}
+        footer={null}
+        destroyOnHidden
+        width="min(600px, 95vw)"
+      >
+        <div className="space-y-5">
+          <section className="space-y-3">
+            <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step1Desc')}</p>
+            <Button
+              block
+              size="large"
+              aria-pressed={guidedWizardSource.url === GUIDED_SUGGESTED_SOURCE.url}
+              className={`h-auto py-3 text-left ${guidedWizardSource.url === GUIDED_SUGGESTED_SOURCE.url
+                ? 'border-[#722ed1] bg-[#f9f0ff] dark:bg-[#2a1645]'
+                : 'border-[#722ed1]/30 bg-[#f9f0ff] hover:!border-[#722ed1] dark:bg-[#2a1645]'}`}
+              onClick={() => {
+                setGuidedWizardUrl('');
+                setGuidedWizardSource(GUIDED_SUGGESTED_SOURCE);
+              }}
+            >
+              <span className="font-semibold">{t('guided.suggestedSource')}</span>
+              <span className="ml-2 text-xs text-muted-foreground">{t('guided.suggestedSourceDescription')}</span>
+            </Button>
+            <Input
+              size="large"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={guidedWizardUrl}
+              onChange={(e) => setGuidedWizardUrl(e.currentTarget.value)}
+              prefix={<LinkOutlined />}
+              onPressEnter={async () => {
+                const url = guidedWizardUrl.trim();
+                if (!url) return;
+                setGuidedWizardDetecting(true);
+                try {
+                  const candidates = detectSourceTypeCandidates(url);
+                  let best: AutoDetectedSource | null = null;
+                  let bestScore = -1;
+                  for (const candidate of candidates) {
+                    try {
+                      const probe = await probeSource({ type: candidate, value: url, maxItems: 5 });
+                      const score = probeRankScore(probe as { reachable: boolean; kind: ProbeKind; confidence?: number }, candidate);
+                      if (score > bestScore) { bestScore = score; best = { type: candidate, url, kind: probe.kind, title: probe.title, coverImageUrl: probe.coverImageUrl, itemCount: probe.itemCount, previewItems: (probe.previewItems ?? []).slice(0, 5) }; }
+                      if (probe.reachable && probe.kind !== 'unknown') break;
+                    } catch { /* try next */ }
+                  }
+                  if (!best) { message.error(t('source.probeError')); return; }
+                  setGuidedWizardSource(best);
+                } catch { message.error(t('source.probeError')); }
+                finally { setGuidedWizardDetecting(false); }
+              }}
+            />
+            <Button
+              type="primary"
+              block
+              loading={guidedWizardDetecting}
+              disabled={!guidedWizardUrl.trim()}
+              onClick={async () => {
+                const url = guidedWizardUrl.trim();
+                if (!url) return;
+                setGuidedWizardDetecting(true);
+                try {
+                  const candidates = detectSourceTypeCandidates(url);
+                  let best: AutoDetectedSource | null = null;
+                  let bestScore = -1;
+                  for (const candidate of candidates) {
+                    try {
+                      const probe = await probeSource({ type: candidate, value: url, maxItems: 5 });
+                      const score = probeRankScore(probe as { reachable: boolean; kind: ProbeKind; confidence?: number }, candidate);
+                      if (score > bestScore) { bestScore = score; best = { type: candidate, url, kind: probe.kind, title: probe.title, coverImageUrl: probe.coverImageUrl, itemCount: probe.itemCount, previewItems: (probe.previewItems ?? []).slice(0, 5) }; }
+                      if (probe.reachable && probe.kind !== 'unknown') break;
+                    } catch { /* try next */ }
+                  }
+                  if (!best) { message.error(t('source.probeError')); return; }
+                  setGuidedWizardSource(best);
+                } catch { message.error(t('source.probeError')); }
+                finally { setGuidedWizardDetecting(false); }
+              }}
+            >
+              {t('guided.detectSource')}
+            </Button>
+            {guidedWizardSource.url !== GUIDED_SUGGESTED_SOURCE.url && (
+              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
+                <p className="text-sm font-semibold text-green-800 dark:text-green-200">✅ {guidedWizardSource.title ?? guidedWizardSource.url}</p>
+                <p className="mt-0.5 text-xs text-green-600 dark:text-green-400">{guidedWizardSource.type}</p>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step2Desc')}</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {PROMPT_PERSONAS.map((persona) => (
+                <div
+                  key={persona.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={guidedWizardPersonaId === persona.id}
+                  onClick={() => setGuidedWizardPersonaId(persona.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setGuidedWizardPersonaId(persona.id); } }}
+                  className={`cursor-pointer rounded-lg border-2 px-3 py-2 text-foreground transition-all !bg-card ${guidedWizardPersonaId === persona.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
+                >
+                  <p className="text-sm font-semibold">{persona.name}</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{persona.description}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <Button
+            type="primary"
+            block
+            size="large"
+            icon={<CaretRightOutlined />}
+            loading={guidedWizardRunning}
+            onClick={async () => {
+              setGuidedWizardRunning(true);
+              try {
+                const newSource = await createSource({
+                  type: guidedWizardSource.type,
+                  value: guidedWizardSource.url,
+                  metadata: {
+                    title: guidedWizardSource.title,
+                    coverImageUrl: guidedWizardSource.coverImageUrl ?? null,
+                    itemCount: guidedWizardSource.itemCount,
+                    previewItems: guidedWizardSource.previewItems.map((item) => ({ title: item.title, link: item.link ?? undefined, pubDate: item.pubDate }))
+                  }
+                });
+                const newAgent = await createAgent({
+
+                  characterType: guidedWizardPersonaId as import('../api/agents').CharacterType,
+                  preferences: {},
+                }) as import('../api/agents').AgentSummary;
+                await createPlaybook({
+                  name: `${guidedWizardSource.title ?? 'My Source'} — ${getAgentDisplayLabel(newAgent)}`,
+                  agentId: newAgent.id,
+                  sourceIds: [newSource.id],
+                  recipients: user?.email ? [user.email] : [],
+                  schedule: { mode: 'daily', dailyTime: '08:00', timezone: 'UTC' },
+                  language: 'en',
+                });
+                await Promise.all([refreshAgents()]);
+                const [newSources, newPlaybooks] = await Promise.all([listSources(), listPlaybooks()]);
+                setSources(newSources);
+                setPlaybooks(newPlaybooks);
+                await runAgentNow(newAgent.id).catch(() => null);
+                message.success(t('guided.success'));
+                setGuidedWizardOpen(false);
+                setForceShowGuidedWizard(false);
+                localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
+                setGuidedWizardDismissed(true);
+                setActiveHub('feed');
+              } catch (err) {
+                message.error(err instanceof Error ? err.message : t('guided.error'));
+              } finally {
+                setGuidedWizardRunning(false);
+              }
+            }}
+          >
+            {t('guided.runNow')}
+          </Button>
+        </div>
+      </Modal>
+    </>
   );
 }

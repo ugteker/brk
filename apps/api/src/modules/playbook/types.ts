@@ -4,6 +4,9 @@ export type PlaybookScheduleInput =
   | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string };
 
 export type PlaybookExecutionMode = 'latest_only' | 'all_sources';
+// 'immediate' keeps the classic one-email-per-run behavior; 'daily'/'weekly' suppress per-run
+// emails and instead send a single rollup digest covering every report produced in the period.
+export type DigestFrequency = 'immediate' | 'daily' | 'weekly';
 export type PlaybookSharePermission = 'read' | 'edit' | 'delete' | 'execute';
 export type PublicationVisibility = 'public' | 'private';
 export type FollowTargetType = 'channel' | 'episode';
@@ -29,6 +32,8 @@ export interface UpdatePlaybookInput {
   name?: string;
   description?: string;
   enabled?: boolean;
+  notificationsEnabled?: boolean;
+  digestFrequency?: DigestFrequency;
   schedule?: PlaybookScheduleInput;
   sourceIds?: string[];
   recipients?: string[];
@@ -47,6 +52,9 @@ export interface Playbook {
   name: string;
   description: string;
   enabled: boolean;
+  notificationsEnabled: boolean;
+  digestFrequency: DigestFrequency;
+  lastDigestSentAt: Date | null;
   schedule: PlaybookScheduleInput;
   sourceIds: string[];
   recipients: string[];

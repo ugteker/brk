@@ -19,7 +19,7 @@ function createFakeAgentRepo() {
         updatedAt: new Date(),
         sources: input.sources ?? [],
         preferences: input.preferences ?? {},
-        schedule: input.schedule ?? null
+        schedule: null
       };
       agents.set(agent.id, agent);
       return agent;

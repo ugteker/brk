@@ -7,6 +7,7 @@ export type PlaybookExecutionMode = 'latest_only' | 'all_sources';
 export type PlaybookSharePermission = 'read' | 'edit' | 'delete' | 'execute';
 export type PublicationVisibility = 'public' | 'private';
 export type FollowTargetType = 'channel' | 'episode';
+export type DigestFrequency = 'immediate' | 'daily' | 'weekly';
 
 export interface PlaybookRecord {
   id: string;
@@ -15,6 +16,8 @@ export interface PlaybookRecord {
   name: string;
   description: string;
   enabled: boolean;
+  notificationsEnabled: boolean;
+  digestFrequency: DigestFrequency;
   schedule: PlaybookSchedule;
   sourceIds: string[];
   recipients: string[];
@@ -51,6 +54,8 @@ export interface UpdatePlaybookPayload {
   name?: string;
   description?: string;
   enabled?: boolean;
+  notificationsEnabled?: boolean;
+  digestFrequency?: DigestFrequency;
   schedule?: PlaybookSchedule;
   sourceIds?: string[];
   recipients?: string[];
@@ -130,8 +135,18 @@ export async function deletePlaybook(playbookId: string): Promise<void> {
   }
 }
 
-export async function runPlaybookNow(playbookId: string): Promise<{ status: string; errorCode?: string }> {
-  const response = await fetch(`/api/playbooks/${playbookId}/run`, { method: 'POST' });
+export interface PlaybookForcedEpisode {
+  sourceType: string;
+  sourceValue: string;
+  itemLink: string;
+}
+
+export async function runPlaybookNow(playbookId: string, forcedEpisode?: PlaybookForcedEpisode): Promise<{ status: string; errorCode?: string }> {
+  const response = await fetch(`/api/playbooks/${playbookId}/run`, {
+    method: 'POST',
+    headers: forcedEpisode ? { 'content-type': 'application/json' } : undefined,
+    body: forcedEpisode ? JSON.stringify(forcedEpisode) : undefined
+  });
   if (!response.ok) {
     if (response.status === 503) {
       throw new Error('Manual runs are not available right now');

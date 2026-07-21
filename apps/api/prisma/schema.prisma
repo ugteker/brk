@@ -20,6 +20,9 @@ model User {
   locked                      Boolean   @default(false)
   passwordResetToken          String?   @unique
   passwordResetExpiresAt      DateTime?
+  // Monthly Claude-spend budget in USD - null means unlimited. When month-to-date estimated cost
+  // across the user's agents reaches this, new runs fail fast with budget_exceeded.
+  monthlyBudgetUsd            Float?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -36,7 +39,6 @@ model Agent {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   sources     AgentSource[]
-  schedules   AgentSchedule[]
   runs        AgentRun[]
   promptVersions AgentPromptVersion[]
   runReports  AgentRunReport[]
@@ -59,24 +61,10 @@ model AgentSource {
   agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
 }
 
-model AgentSchedule {
-  id        String   @id @default(cuid())
-  agentId     String
-  mode      String   @default("interval")
-  intervalMinutes Int?
-  dailyTime String?
-  timezone  String?
-  daysOfWeekJson String?
-  nextRunAt DateTime
-  enabled   Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  agent       Agent      @relation(fields: [agentId], references: [id], onDelete: Restrict)
-}
-
 model AgentRun {
   id           String   @id @default(cuid())
   agentId        String
+  playbookId   String?
   scheduledFor DateTime
   status       String
   phase        String?
@@ -89,6 +77,7 @@ model AgentRun {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   agent          Agent      @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  playbook       Playbook?  @relation(fields: [playbookId], references: [id], onDelete: Restrict)
   artifacts    AgentRunArtifact[]
   report       AgentRunReport?
 
@@ -156,6 +145,27 @@ model AgentSignal {
   report        AgentRunReport @relation(fields: [agentRunReportId], references: [id], onDelete: Restrict)
 }
 
+model ReportChatMessage {
+  id        String   @id @default(cuid())
+  reportId  String
+  userId    String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([reportId, userId, createdAt])
+}
+
+model WatchlistEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  symbol    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, symbol])
+  @@index([symbol])
+}
+
 model AgentSourceCursor {
   id                  String    @id @default(cuid())
   agentId             String
@@ -199,6 +209,7 @@ model Source {
   playbooks  PlaybookSource[]
   accessGrants AccessGrant[]
   marketplacePublications MarketplacePublication[]
+  items      SourceItem[]
 
   @@unique([ownerUserId, type, value])
 }
@@ -215,6 +226,9 @@ model Playbook {
   daysOfWeekJson    String?
   nextRunAt         DateTime
   enabled           Boolean  @default(true)
+  notificationsEnabled Boolean @default(true)
+  digestFrequency   String   @default("immediate")
+  lastDigestSentAt  DateTime?
   executionMode     String   @default("latest_only")
   maxSourcesPerRun  Int      @default(3)
   maxItemsPerSource Int      @default(1)
@@ -227,6 +241,7 @@ model Playbook {
   updatedAt         DateTime @updatedAt
   agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Restrict)
   sources           PlaybookSource[]
+  runs              AgentRun[]
   accessGrants      AccessGrant[]
   marketplacePublications MarketplacePublication[]
 
@@ -293,4 +308,71 @@ model MarketplacePublication {
 
   @@index([resourceType, resourceId])
   @@index([publisherUserId, status, visibility])
+}
+
+model SourceItem {
+  id          String   @id @default(cuid())
+  sourceId    String
+  title       String
+  content     String
+  link        String
+  publishedAt DateTime
+  createdAt   DateTime @default(now())
+  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+}
+
+model Discussion {
+  id                String   @id @default(cuid())
+  ownerUserId       String
+  name              String
+  description       String   @default("")
+  format            String   @default("free_form")
+  formatConfigJson  String   @default("{}")
+  scheduleJson      String?
+  syntheticSourceId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  participants      DiscussionParticipant[]
+  runs              DiscussionRun[]
+}
+
+model DiscussionParticipant {
+  id             String   @id @default(cuid())
+  discussionId   String
+  agentId        String
+  role           String   @default("speaker")
+  voiceId        String   @default("alloy")
+  speakerOrder   Int      @default(0)
+  reportIdsJson  String   @default("[]")
+  discussion     Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  turns          DiscussionTurn[]
+}
+
+model DiscussionRun {
+  id                    String    @id @default(cuid())
+  discussionId          String
+  status                String    @default("pending")
+  triggeredBy           String    @default("manual")
+  errorMessage          String?
+  startedAt             DateTime?
+  completedAt           DateTime?
+  syntheticSourceItemId String?
+  audioUrl              String?
+  evidenceSnapshotJson  String?
+  createdAt             DateTime  @default(now())
+  discussion            Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  turns                 DiscussionTurn[]
+}
+
+model DiscussionTurn {
+  id               String   @id @default(cuid())
+  discussionRunId  String
+  participantId    String
+  turnIndex        Int
+  segmentLabel     String?
+  content          String
+  audioUrl         String?
+  createdAt        DateTime @default(now())
+  run              DiscussionRun         @relation(fields: [discussionRunId], references: [id], onDelete: Cascade)
+  participant      DiscussionParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
 }

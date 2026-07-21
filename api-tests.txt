@@ -1,0 +1,74 @@
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mG:/brk/apps/api[39m
+
+ [32m✓[39m src/modules/discussion/orchestrator.test.ts [2m([22m[2m17 tests[22m[2m)[22m[90m 190[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/agent-runner.test.ts [2m([22m[2m22 tests[22m[2m)[22m[90m 135[2mms[22m[39m
+ [32m✓[39m src/modules/reports/repository.test.ts [2m([22m[2m14 tests[22m[2m)[22m[90m 33[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/source-adapters/youtube-adapter.test.ts [2m([22m[2m22 tests[22m[2m)[22m[90m 53[2mms[22m[39m
+ [32m✓[39m src/modules/playbook/routes.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 631[2mms[22m[39m
+ [32m✓[39m src/modules/agent-prompts/routes.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 717[2mms[22m[39m
+ [32m✓[39m src/modules/source/routes.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 750[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/source-adapters/smart-crawler.test.ts [2m([22m[2m13 tests[22m[2m)[22m[90m 128[2mms[22m[39m
+ [32m✓[39m src/modules/agents/routes.test.ts [2m([22m[2m27 tests[22m[2m)[22m[33m 1421[2mms[22m[39m
+ [32m✓[39m src/modules/agents/repository.test.ts [2m([22m[2m9 tests[22m[2m)[22m[90m 36[2mms[22m[39m
+ [32m✓[39m src/modules/runs/repository.test.ts [2m([22m[2m8 tests[22m[2m)[22m[90m 20[2mms[22m[39m
+ [32m✓[39m src/modules/discussion/routes.test.ts [2m([22m[2m14 tests[22m[2m)[22m[33m 704[2mms[22m[39m
+ [32m✓[39m src/modules/runs/routes.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 435[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/claude-client.test.ts [2m([22m[2m10 tests[22m[2m)[22m[90m 26[2mms[22m[39m
+ [32m✓[39m src/modules/playbook/digest.test.ts [2m([22m[2m9 tests[22m[2m)[22m[90m 29[2mms[22m[39m
+ [32m✓[39m src/modules/watchlist/watchlist.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 614[2mms[22m[39m
+   [33m[2m✓[22m[39m watchlist routes[2m > [22madds, lists, and removes watchlist entries for the signed-in user [33m396[2mms[22m[39m
+ [32m✓[39m src/modules/reports/chat.test.ts [2m([22m[2m8 tests[22m[2m)[22m[90m 28[2mms[22m[39m
+ [32m✓[39m src/modules/auth/routes.test.ts [2m([22m[2m17 tests[22m[2m)[22m[33m 5960[2mms[22m[39m
+   [33m[2m✓[22m[39m auth routes[2m > [22msigns up with email/password and requires email confirmation before login [33m625[2mms[22m[39m
+   [33m[2m✓[22m[39m auth routes[2m > [22mrejects signup when the email is already registered [33m301[2mms[22m[39m
+   [33m[2m✓[22m[39m auth routes[2m > [22mconfirms the email via the link and then allows login [33m751[2mms[22m[39m
+   [33m[2m✓[22m[39m auth routes[2m > [22mrejects login before the email is confirmed [33m634[2mms[22m[39m
+   [33m[2m✓[22m[39m auth routes[2m > [22mlogs in with correct credentials and rejects incorrect ones [33m786[2mms[22m[39m
+   [33m[2m✓[22m[39m auth routes[2m > [22mrejects login for a locked account [33m495[2mms[22m[39m
+   [33m[2m✓[22m[39m auth routes[2m > [22mreturns the current user from /api/auth/me using the session cookie [33m673[2mms[22m[39m
+   [33m[2m✓[22m[39m auth routes[2m > [22mresends a confirmation email without revealing whether the account exists [33m328[2mms[22m[39m
+   [33m[2m✓[22m[39m auth routes[2m > [22mhandles the forgot-password/reset-password flow [33m862[2mms[22m[39m
+ [32m✓[39m src/modules/playbook/repository.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 24[2mms[22m[39m
+ [32m✓[39m src/modules/discussion/repository.test.ts [2m([22m[2m11 tests[22m[2m)[22m[90m 41[2mms[22m[39m
+ [32m✓[39m src/modules/crawler/source-cursor-repository.test.ts [2m([22m[2m8 tests[22m[2m)[22m[90m 19[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/agent-runner.integration.test.ts [2m([22m[2m1 test[22m[2m)[22m[90m 25[2mms[22m[39m
+ [32m✓[39m src/modules/usage/usage.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 381[2mms[22m[39m
+ [32m✓[39m src/modules/crawler/crawl-config-repository.test.ts [2m([22m[2m10 tests[22m[2m)[22m[90m 22[2mms[22m[39m
+ [32m✓[39m src/modules/agents/notifications.test.ts [2m([22m[2m8 tests[22m[2m)[22m[90m 23[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/source-adapters/feed-items.test.ts [2m([22m[2m7 tests[22m[2m)[22m[90m 26[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/site-inspector-client.test.ts [2m([22m[2m10 tests[22m[2m)[22m[90m 25[2mms[22m[39m
+ [32m✓[39m src/modules/discussion/report-resolution.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 22[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/character-prompt-strategy.test.ts [2m([22m[2m4 tests[22m[2m)[22m[90m 14[2mms[22m[39m
+ [32m✓[39m src/modules/discussion/sanitize-turn-text.test.ts [2m([22m[2m10 tests[22m[2m)[22m[90m 17[2mms[22m[39m
+ [32m✓[39m src/modules/discussion/evidence.test.ts [2m([22m[2m6 tests[22m[2m)[22m[90m 24[2mms[22m[39m
+ [32m✓[39m src/modules/agents/validation.test.ts [2m([22m[2m7 tests[22m[2m)[22m[90m 10[2mms[22m[39m
+ [32m✓[39m src/modules/discussion/synthetic-source.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 29[2mms[22m[39m
+ [32m✓[39m src/modules/access/permissions.test.ts [2m([22m[2m4 tests[22m[2m)[22m[90m 18[2mms[22m[39m
+ [32m✓[39m src/modules/schedules/compute-next-run.test.ts [2m([22m[2m6 tests[22m[2m)[22m[90m 19[2mms[22m[39m
+ [32m✓[39m src/modules/artifacts/repository.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 32[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/source-adapters/podcast-feed-adapter.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 23[2mms[22m[39m
+ [32m✓[39m src/modules/access/repository.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 23[2mms[22m[39m
+ [32m✓[39m src/modules/prompts/repository.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 9[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/response-parser.test.ts [2m([22m[2m4 tests[22m[2m)[22m[90m 13[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/source-adapters/web-url-adapter.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 13[2mms[22m[39m
+ [32m✓[39m src/modules/runs/prisma-run-store.test.ts [2m([22m[2m1 test[22m[2m)[22m[90m 14[2mms[22m[39m
+ [32m✓[39m src/modules/admin/routes.test.ts [2m([22m[2m1 test[22m[2m)[22m[90m 237[2mms[22m[39m
+ [32m✓[39m src/modules/agents/domain-split-schema.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 194[2mms[22m[39m
+ [32m✓[39m src/modules/runs/run-queue.service.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 14[2mms[22m[39m
+ [32m✓[39m src/modules/reports/unified-report.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 16[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/prompt-builder.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 12[2mms[22m[39m
+ [32m✓[39m src/modules/discussion/tts-client.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 29[2mms[22m[39m
+ [32m✓[39m src/modules/schedules/scheduler-loop.test.ts [2m([22m[2m1 test[22m[2m)[22m[90m 16[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/token-pricing.test.ts [2m([22m[2m4 tests[22m[2m)[22m[90m 9[2mms[22m[39m
+ [32m✓[39m src/modules/analysis/source-adapters/feed-detection.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 12[2mms[22m[39m
+ [32m✓[39m src/modules/auth/jwt.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 17[2mms[22m[39m
+ [32m✓[39m src/modules/auth/password.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 1138[2mms[22m[39m
+   [33m[2m✓[22m[39m password hashing[2m > [22mhashes a password and verifies the correct plaintext against it [33m615[2mms[22m[39m
+   [33m[2m✓[22m[39m password hashing[2m > [22mrejects an incorrect password [33m520[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m53 passed[39m[22m[90m (53)[39m
+[2m      Tests [22m [1m[32m379 passed[39m[22m[90m (379)[39m
+[2m   Start at [22m 00:21:33
+[2m   Duration [22m 30.73s[2m (transform 23.74s, setup 0ms, collect 58.35s, tests 14.47s, environment 29ms, prepare 24.59s)[22m
+

@@ -16,33 +16,111 @@
   display: inline-block;
 }
 
+@keyframes bell-alert-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+/* Draws attention to the notification bell while there are unread run-failure notices. */
+.ct-bell-badge-alert .ant-badge-count {
+  animation: bell-alert-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes ct-slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ct-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.ct-animate-enter {
+  animation: ct-slide-in-up 0.28s ease-out both;
+}
+
+.ct-animate-fade {
+  animation: ct-fade-in 0.35s ease-out both;
+}
+
+/* Stagger up to 10 list children */
+.ct-animate-enter:nth-child(1)    { animation-delay:   0ms; }
+.ct-animate-enter:nth-child(2)    { animation-delay:  45ms; }
+.ct-animate-enter:nth-child(3)    { animation-delay:  90ms; }
+.ct-animate-enter:nth-child(4)    { animation-delay: 135ms; }
+.ct-animate-enter:nth-child(5)    { animation-delay: 180ms; }
+.ct-animate-enter:nth-child(6)    { animation-delay: 225ms; }
+.ct-animate-enter:nth-child(7)    { animation-delay: 270ms; }
+.ct-animate-enter:nth-child(8)    { animation-delay: 315ms; }
+.ct-animate-enter:nth-child(9)    { animation-delay: 360ms; }
+.ct-animate-enter:nth-child(n+10) { animation-delay: 400ms; }
+
+/* Card hover lift — purple-tinted shadow on hover */
+.ct-card-lift {
+  transition: transform 0.18s ease-out, box-shadow 0.18s ease-out;
+}
+.ct-card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(114, 46, 209, 0.14);
+}
+
+/* Page-level route transition — replayed on every navigation via key change */
+.ct-page-enter {
+  animation: ct-slide-in-up 0.22s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ct-animate-enter,
+  .ct-animate-fade,
+  .ct-page-enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .ct-card-lift,
+  .ct-card-lift:hover {
+    transition: none;
+    transform: none;
+    box-shadow: none;
+  }
+}
+
 @layer base {
+  /* Light mode — cool off-white, not cream/sand */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 230 22% 97%;
+    --foreground: 225 40% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --card-foreground: 225 40% 12%;
+    --primary: 266 73% 48%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 230 18% 93%;
+    --muted-foreground: 225 12% 43%;
+    --border: 230 14% 87%;
+    --input: 230 14% 87%;
+    --ring: 266 73% 48%;
   }
 
+  /* Dark mode — deep slate, committed violet brand */
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 224 71.4% 4.1%;
-    --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 225 28% 8%;
+    --foreground: 220 18% 90%;
+    --card: 225 24% 12%;
+    --card-foreground: 220 18% 90%;
+    --primary: 266 73% 58%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 225 20% 18%;
+    --muted-foreground: 220 14% 60%;
+    --border: 225 18% 24%;
+    --input: 225 18% 24%;
+    --ring: 266 73% 58%;
   }
 
   * {
@@ -51,7 +129,13 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    background-image: radial-gradient(circle at top left, rgba(17, 24, 39, 0.08), transparent 35%);
+    background-image: radial-gradient(circle at top left, rgba(114, 46, 209, 0.06), transparent 40%);
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(circle at top right,  rgba(114, 46, 209, 0.14), transparent 45%),
+      radial-gradient(circle at bottom left, rgba(24, 144, 255,  0.05), transparent 40%);
   }
 }
 
@@ -67,5 +151,32 @@
   .ant-input-number-input,
   textarea.ant-input {
     font-size: 16px !important;
+  }
+
+  /* Modals fill the screen on mobile */
+  .ant-modal {
+    max-width: calc(100vw - 24px) !important;
+    margin: 12px auto !important;
+    top: 12px !important;
+  }
+
+  .ant-modal-body {
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  /* Tabs scrollable on mobile */
+  .ant-tabs-nav-wrap {
+    overflow-x: auto;
+  }
+
+  /* Reduce card body padding */
+  .ant-card-body {
+    padding: 12px !important;
+  }
+
+  /* Header actions wrap on narrow screens */
+  .ct-header-actions {
+    gap: 6px !important;
   }
 }

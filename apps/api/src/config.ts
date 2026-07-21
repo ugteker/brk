@@ -68,8 +68,31 @@ export const config = {
   },
   get appBaseUrl() {
     return process.env.APP_BASE_URL ?? 'http://localhost:4173';
+  },
+  discussion: {
+    // Number of an agent's most recent reports to fall back to for a Studio discussion
+    // participant when the user didn't explicitly pick report IDs for that participant.
+    get latestReportLimit() {
+      const raw = Number(process.env.DISCUSSION_LATEST_REPORT_LIMIT ?? '3');
+      return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 3;
+    }
+  },
+  tts: {
+    // OpenAI API key used exclusively for text-to-speech podcast rendering of Studio
+    // discussions. Leave blank to disable audio rendering (the endpoint answers 501).
+    get openaiApiKey() {
+      return process.env.OPENAI_API_KEY ?? '';
+    },
+    // Directory where rendered mp3 files are stored, relative to the API working dir.
+    get audioDir() {
+      return process.env.TTS_AUDIO_DIR ?? './data/audio';
+    }
   }
 };
+
+export function isTtsConfigured(): boolean {
+  return config.tts.openaiApiKey.length > 0;
+}
 
 export function isSmtpConfigured(): boolean {
   return config.smtp.host.length > 0;

@@ -2,23 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { validateCreateAgentInput } from './validation';
 
 describe('validateCreateAgentInput', () => {
-  it('rejects interval below 60 minutes', () => {
-    const result = validateCreateAgentInput({
-      name: 'Tech Agent',
-      sources: [{ type: 'web_urls', value: 'https://example.com' }],
-      schedule: { mode: 'interval', intervalMinutes: 30 },
-      preferences: { sector: ['tech'] }
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.errors).toContain('intervalMinutes must be >= 60');
-  });
-
   it('rejects a source maxItems outside the 1-10 range', () => {
     const result = validateCreateAgentInput({
       name: 'Tech Agent',
       sources: [{ type: 'web_urls', value: 'https://example.com', maxItems: 25 }],
-      schedule: { mode: 'interval', intervalMinutes: 60 },
       preferences: { sector: ['tech'] }
     });
 
@@ -30,7 +17,6 @@ describe('validateCreateAgentInput', () => {
     const result = validateCreateAgentInput({
       name: 'Tech Agent',
       sources: [{ type: 'web_urls', value: 'https://example.com', maxItems: 5 }],
-      schedule: { mode: 'interval', intervalMinutes: 60 },
       preferences: { sector: ['tech'] }
     });
 
@@ -43,7 +29,6 @@ describe('validateCreateAgentInput', () => {
       characterType: 'comedian' as never,
       promptConfig: {},
       sources: [{ type: 'web_urls', value: 'https://example.com' }],
-      schedule: { mode: 'interval', intervalMinutes: 60 },
       preferences: { sector: ['tech'] }
     });
 
@@ -57,7 +42,6 @@ describe('validateCreateAgentInput', () => {
       characterType: 'finance_expert',
       promptConfig: { tone: 'professional' },
       sources: [{ type: 'web_urls', value: 'https://example.com' }],
-      schedule: { mode: 'interval', intervalMinutes: 60 },
       preferences: { sector: ['finance'] }
     });
 
@@ -71,7 +55,6 @@ describe('validateCreateAgentInput', () => {
       characterType: 'teacher',
       promptConfig: { risk_level: 'moderate' },
       sources: [{ type: 'web_urls', value: 'https://example.com' }],
-      schedule: { mode: 'interval', intervalMinutes: 60 },
       preferences: { sector: ['education'] }
     });
 
@@ -85,7 +68,6 @@ describe('validateCreateAgentInput', () => {
       characterType: 'finance_expert',
       promptConfig: { risk_level: 'moderate' },
       sources: [{ type: 'web_urls', value: 'https://example.com' }],
-      schedule: { mode: 'interval', intervalMinutes: 60 },
       preferences: { sector: ['finance'] }
     });
 
@@ -96,7 +78,6 @@ describe('validateCreateAgentInput', () => {
     const result = validateCreateAgentInput({
       name: 'Tech Agent',
       sources: [{ type: 'web_urls', value: 'https://example.com' }],
-      schedule: { mode: 'interval', intervalMinutes: 60 },
       recipients: ['ops@example.com'],
       preferences: { sector: ['tech'] }
     } as any);

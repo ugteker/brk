@@ -444,6 +444,34 @@ describe('AgentRunner', () => {
     expect(send.mock.calls[0][0].to).toBe('alerts@example.com');
   });
 
+  it('suppresses the immediate per-run email when the playbook uses a daily/weekly digest cadence', async () => {
+    const send = vi.fn(async () => undefined);
+    const deps = createDeps();
+    deps.agentRepository.getAgent = vi.fn(async () => ({
+      id: 'agent-1',
+      ownerUserId: 'admin-user-id',
+      name: 'Housing Agent',
+      description: '',
+      characterType: 'summarizer',
+      promptConfig: {},
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
+      preferences: {},
+      schedule: null
+    }));
+    const runner = new AgentRunner({ ...deps, mailer: { send } } as never);
+
+    const result = await runner.run('agent-1', 'run-1', {
+      playbookRecipients: ['alerts@example.com'],
+      playbookDigestFrequency: 'daily'
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it('does not fail the run when the mailer send throws', async () => {
     const send = vi.fn(async () => { throw new Error('smtp down'); });
     const deps = createDeps();
@@ -466,5 +494,46 @@ describe('AgentRunner', () => {
     const result = await runner.run('agent-1', 'run-1');
 
     expect(result.status).toBe('succeeded');
+  });
+
+  it('fails fast with budget_exceeded before calling Claude when the owner is over budget', async () => {
+    const deps = createDeps();
+    const checkRunAllowed = vi.fn(async () => ({ allowed: false, spentUsd: 10.5, budgetUsd: 10 }));
+    const runner = new AgentRunner({ ...deps, budgetGuard: { checkRunAllowed } } as never);
+
+    const result = await runner.run('agent-1', 'run-1');
+
+    expect(result.status).toBe('failed');
+    expect(result.errorCode).toBe('budget_exceeded');
+    expect(result.errorMessage).toContain('$10.50');
+    expect(checkRunAllowed).toHaveBeenCalledWith('admin-user-id');
+    expect(deps.claudeClient.analyze).not.toHaveBeenCalled();
+    expect(deps.reportRepository.saveRunReport).not.toHaveBeenCalled();
+    // Cursors must not advance so the blocked items are retried after the budget resets.
+    expect(deps.cursorRepository.saveCursor).not.toHaveBeenCalled();
+  });
+
+  it('runs normally when the budget guard allows the run', async () => {
+    const deps = createDeps();
+    const checkRunAllowed = vi.fn(async () => ({ allowed: true, spentUsd: 1, budgetUsd: 10 }));
+    const runner = new AgentRunner({ ...deps, budgetGuard: { checkRunAllowed } } as never);
+
+    const result = await runner.run('agent-1', 'run-1');
+
+    expect(result.status).toBe('succeeded');
+    expect(deps.claudeClient.analyze).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies the watchlist notifier after a successful run', async () => {
+    const deps = createDeps();
+    const notifyForReport = vi.fn(async () => {});
+    const runner = new AgentRunner({ ...deps, watchlistNotifier: { notifyForReport } } as never);
+
+    const result = await runner.run('agent-1', 'run-1', { playbookLanguage: 'de' });
+
+    expect(result.status).toBe('succeeded');
+    expect(notifyForReport).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'agent-1', agentName: 'Housing Agent', language: 'de' })
+    );
   });
 });

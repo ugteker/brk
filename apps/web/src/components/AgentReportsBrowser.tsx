@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, Empty, Input, Progress, Tag, message } from 'antd';
-import { DownOutlined, MailOutlined, UpOutlined } from '@ant-design/icons';
+import { AudioOutlined, DownOutlined, MailOutlined, MessageOutlined, StarFilled, StarOutlined, UpOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { resendReportNotification, type RunReportDto, type SignalDto } from '../api/agents';
+import { getCharacterTypeColor } from '../data/character-types';
 import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { TradingViewSymbolChart } from './TradingViewSymbolChart';
 import { CharacterReportRenderer } from './CharacterReportRenderer';
+import { ReportChatPanel } from './ReportChatPanel';
+import { addToWatchlist, listWatchlist, removeFromWatchlist } from '../api/watchlist';
 
 interface AgentReportsBrowserProps {
   agentId: string;
@@ -17,6 +21,8 @@ interface AgentReportsBrowserProps {
   highlightedReportId?: string | null;
 }
 
+// Emoji/label only - pill color now comes from the shared getCharacterTypeColor() so it
+// stays in sync with the Agents hub instead of drifting into its own local map.
 const CHARACTER_LABELS: Record<string, { emoji: string; label: string }> = {
   finance_expert: { emoji: '📈', label: 'Finance Expert' },
   teacher:        { emoji: '🎓', label: 'Teacher' },
@@ -93,6 +99,7 @@ export function computeAiTotals(reports: RunReportDto[]): AiTotals {
 
 export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, onSelectReport, onSelectSymbol, highlightedReportId }: AgentReportsBrowserProps) {
   const { t } = useTranslation();
+  const navigate = useSafeNavigate();
   const highlightedRef = useRef<HTMLDivElement | null>(null);
   const [sendingReportId, setSendingReportId] = useState<string | null>(null);
   const [expandedReportIds, setExpandedReportIds] = useState<Set<string>>(() =>
@@ -102,6 +109,53 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
   // so re-clicking the same tag collapses it, and clicking a different tag (even on another
   // report) closes whichever chart was previously open.
   const [expandedChartKey, setExpandedChartKey] = useState<string | null>(null);
+  // Only one report's "Ask the analyst" chat is open at a time.
+  const [openChatReportId, setOpenChatReportId] = useState<string | null>(null);
+  // The user's watched symbols (uppercase). Star toggles on signal tags follow/unfollow a symbol;
+  // followed symbols trigger an email alert whenever they appear in any new report.
+  const [watchedSymbols, setWatchedSymbols] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    listWatchlist()
+      .then((entries) => {
+        if (!cancelled) setWatchedSymbols(new Set(entries.map((entry) => entry.symbol)));
+      })
+      .catch(() => {
+        // Watchlist stars are a progressive enhancement - reports stay fully usable without them.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function onToggleWatch(symbol: string, event: React.MouseEvent) {
+    event.stopPropagation();
+    const normalized = symbol.trim().toUpperCase();
+    const isWatched = watchedSymbols.has(normalized);
+    // Optimistic toggle; reverted on failure.
+    setWatchedSymbols((prev) => {
+      const next = new Set(prev);
+      if (isWatched) { next.delete(normalized); } else { next.add(normalized); }
+      return next;
+    });
+    try {
+      if (isWatched) {
+        await removeFromWatchlist(normalized);
+        message.success(t('watchlist.removed', { symbol: normalized }));
+      } else {
+        await addToWatchlist(normalized);
+        message.success(t('watchlist.added', { symbol: normalized }));
+      }
+    } catch {
+      setWatchedSymbols((prev) => {
+        const next = new Set(prev);
+        if (isWatched) { next.add(normalized); } else { next.delete(normalized); }
+        return next;
+      });
+      message.error(t('watchlist.toggleFailed'));
+    }
+  }
   // Tracks user-overridden symbols (e.g. "AAPL" → "NASDAQ:AAPL") per chart key so the user can
   // fix "This symbol doesn't exist" errors by adding the exchange prefix themselves.
   const [symbolOverrides, setSymbolOverrides] = useState<Record<string, string>>({});
@@ -155,6 +209,18 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
     }
   }
 
+  function onDiscussReport(report: RunReportDto, event: React.MouseEvent) {
+    event.stopPropagation();
+    navigate('/studio/new', {
+      state: {
+        preselect: {
+          entries: [{ agentId, reportIds: [report.id] }],
+          contextLabel: deriveReportHeadline(report.summary)
+        }
+      }
+    });
+  }
+
   if (reports.length === 0) {
     return <Empty description="No reports yet. Reports appear here after the agent's first successful run." />;
   }
@@ -162,7 +228,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
   return (
     <div className="space-y-3">
       {aiTotals.reportCountWithUsage > 0 || aiTotals.hasAnyCost ? (
-        <p className="text-xs text-gray-500" data-testid="ai-totals">
+        <p className="text-xs text-muted-foreground" data-testid="ai-totals">
           Total AI usage across {reports.length} report{reports.length === 1 ? '' : 's'}:{' '}
           {formatTokenCount(aiTotals.totalInputTokens)} in / {formatTokenCount(aiTotals.totalOutputTokens)} out tokens
           {aiTotals.hasAnyCost ? ` · ~$${aiTotals.totalEstimatedCostUsd.toFixed(4)} (est.)` : ''}
@@ -183,7 +249,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
             style={{
               width: '100%',
               cursor: onSelectReport ? 'pointer' : 'default',
-              boxShadow: isHighlighted ? '0 0 0 2px #1677ff' : undefined,
+              boxShadow: isHighlighted ? '0 0 0 2px #722ed1' : undefined,
               transition: 'box-shadow 0.3s ease'
             }}
             hoverable={Boolean(onSelectReport)}
@@ -193,20 +259,21 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   {personaLabel ? (
-                    <Tag color="blue" className="m-0">{personaEmoji} {personaLabel}</Tag>
+                    <Tag color={getCharacterTypeColor(characterType)} className="m-0">{personaEmoji} {personaLabel}</Tag>
                   ) : null}
                   {agentName ? (
-                    <span className="text-xs font-medium text-gray-600">{agentName}</span>
+                    <span className="text-xs font-medium text-muted-foreground">{agentName}</span>
                   ) : null}
-                  <span className="text-xs text-gray-400">{new Date(report.createdAt).toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground/80">{new Date(report.createdAt).toLocaleString()}</span>
                 </div>
                 <h4 className="text-base font-semibold">{deriveReportHeadline(report.summary)}</h4>
-                <p className="text-xs text-gray-400" data-testid={`ai-stats-${report.id}`}>
+                <p className="text-xs text-muted-foreground/80" data-testid={`ai-stats-${report.id}`}>
                   {formatReportAiStats(report)}
                 </p>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {report.signals.map((signal) => {
                     const chartKey = `${report.id}:${signal.symbol}`;
+                    const isWatched = watchedSymbols.has(signal.symbol.trim().toUpperCase());
                     return (
                       <Tag
                         key={chartKey}
@@ -215,6 +282,16 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                         onClick={(event) => onToggleChart(chartKey, signal.symbol, event)}
                       >
                         {signal.symbol} · {signal.side === 'long' ? 'Long' : 'Short'}
+                        <TouchSafeTooltip title={isWatched ? t('watchlist.unfollow') : t('watchlist.follow')}>
+                          <span
+                            role="button"
+                            aria-label={isWatched ? t('watchlist.unfollow') : t('watchlist.follow')}
+                            style={{ marginLeft: 6, cursor: 'pointer' }}
+                            onClick={(event) => void onToggleWatch(signal.symbol, event)}
+                          >
+                            {isWatched ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
+                          </span>
+                        </TouchSafeTooltip>
                       </Tag>
                     );
                   })}
@@ -233,6 +310,26 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                     />
                   </TouchSafeTooltip>
                 ) : null}
+                <TouchSafeTooltip title={t('reportChat.title')}>
+                  <Button
+                    aria-label={t('reportChat.title')}
+                    shape="circle"
+                    icon={<MessageOutlined />}
+                    type={openChatReportId === report.id ? 'primary' : 'default'}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenChatReportId((prev) => (prev === report.id ? null : report.id));
+                    }}
+                  />
+                </TouchSafeTooltip>
+                <TouchSafeTooltip title={t('studio.discussThisReport')}>
+                  <Button
+                    aria-label={t('studio.discussThisReport')}
+                    shape="circle"
+                    icon={<AudioOutlined />}
+                    onClick={(event) => onDiscussReport(report, event)}
+                  />
+                </TouchSafeTooltip>
                 <TouchSafeTooltip title="Re-send email notification">
                   <Button
                     aria-label="Re-send email notification"
@@ -250,7 +347,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                     strokeColor={confidenceColor(confidence)}
                     format={(percent) => `${percent}%`}
                   />
-                  <span className="mt-1 text-xs text-gray-500">Confidence</span>
+                  <span className="mt-1 text-xs text-muted-foreground">Confidence</span>
                 </div>
               </div>
             </div>
@@ -291,13 +388,18 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                         </span>
                       }
                     />
-                    <span className="text-xs text-gray-400">If the chart shows "symbol not found", add the exchange prefix and press Enter</span>
+                    <span className="text-xs text-muted-foreground/80">If the chart shows "symbol not found", add the exchange prefix and press Enter</span>
                   </div>
                   <TradingViewSymbolChart symbol={displaySymbol} interval="W" style="2" height={640} />
                 </div>
               );
             })}
-            {isExpanded && report.report ? <CharacterReportRenderer report={report.report} /> : null}
+            {openChatReportId === report.id ? <ReportChatPanel agentId={agentId} reportId={report.id} /> : null}
+            {isExpanded && report.report ? (
+              <div className="mt-3 rounded-md border border-border bg-muted/40 p-4">
+                <CharacterReportRenderer report={report.report} />
+              </div>
+            ) : null}
           </Card>
         );
       })}

@@ -16,7 +16,7 @@ export interface PromptConfig {
 }
 
 export interface CreateAgentPayload {
-  name: string;
+  name?: string;
   description?: string;
   active?: boolean;
   characterType?: CharacterType;
@@ -216,11 +216,65 @@ export interface SignalDto {
   citations: string[];
 }
 
+export type ReportResultTypeDto = 'insight' | 'summary' | 'risk' | 'recommendation' | 'question' | 'update';
+export type ReportTimeHorizonDto = 'immediate' | 'short_term' | 'medium_term' | 'long_term' | 'unspecified';
+export type ReportToneDto = 'neutral' | 'positive' | 'cautious' | 'critical' | 'urgent';
+
+export interface ReportEvidenceDto {
+  claim: string;
+  citations: string[];
+}
+
+export interface ReportEntityDto {
+  name: string;
+  type: string;
+}
+
+export interface ReportSourceReferenceDto {
+  label: string;
+  reference: string;
+}
+
+export type ReportCardEmphasisDto = 'standard' | 'attention' | 'critical' | 'positive';
+export type ReportCardPrimaryFieldDto = 'headline' | 'short_summary' | 'recommendation' | 'open_question' | 'key_takeaway';
+export type ReportCardSupportingFieldDto =
+  | 'result_type'
+  | 'keywords'
+  | 'relevance'
+  | 'confidence'
+  | 'time_horizon'
+  | 'entities'
+  | 'evidence'
+  | 'novelty';
+
+export interface CardPresentationDto {
+  emphasis: ReportCardEmphasisDto;
+  primary_field: ReportCardPrimaryFieldDto;
+  supporting_fields: ReportCardSupportingFieldDto[];
+  hide_when_empty: boolean;
+  rationale: string;
+}
+
 export interface UnifiedReportCommonFieldsDto {
   summary: string;
   key_takeaways: string[];
   sources_used: string[];
   citations: string[];
+  headline?: string;
+  short_summary?: string;
+  result_type?: ReportResultTypeDto;
+  keywords?: string[];
+  relevance?: number;
+  confidence?: number;
+  evidence?: ReportEvidenceDto[];
+  entities?: ReportEntityDto[];
+  recommendation?: string;
+  open_questions?: string[];
+  time_horizon?: ReportTimeHorizonDto;
+  tone?: ReportToneDto;
+  source_references?: ReportSourceReferenceDto[];
+  novelty?: number;
+  card_presentation?: CardPresentationDto;
 }
 
 export type UnifiedCharacterSectionDto =
@@ -240,6 +294,7 @@ export interface RunReportDto {
   id: string;
   agentId: string;
   agentRunId: string;
+  playbookId: string | null;
   promptVersionId: string;
   summary: string;
   sourceWarnings: string[];
@@ -313,6 +368,35 @@ export async function getLatestAgentPrompt(agentId: string): Promise<PromptVersi
   return parseJsonOrThrow(response, 'Failed to load latest agent prompt');
 }
 
+export interface ReportChatMessageDto {
+  id: string;
+  reportId: string;
+  userId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export async function listReportChatMessages(agentId: string, reportId: string): Promise<ReportChatMessageDto[]> {
+  const response = await fetch(`/api/agents/${agentId}/reports/${reportId}/chat`);
+  return parseJsonOrThrow(response, 'Failed to load report chat');
+}
+
+// Asks the agent a follow-up question about a specific report. Returns the two new messages
+// (the persisted question and the analyst's grounded answer).
+export async function askReportQuestion(agentId: string, reportId: string, question: string): Promise<ReportChatMessageDto[]> {
+  const response = await fetch(`/api/agents/${agentId}/reports/${reportId}/chat`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ question })
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.message ?? 'Failed to ask report question');
+  }
+  return response.json();
+}
+
 // Chronological (oldest-first) history of this agent's own reports that contain at least one
 // signal for `symbol` - used by the symbol performance view alongside the TradingView chart.
 export async function listSymbolSignalHistory(agentId: string, symbol: string): Promise<RunReportDto[]> {
@@ -326,6 +410,10 @@ export interface RunArtifactPreviewDto {
   fidelity: string;
   contentPreview: string;
   contentLength: number;
+  /** Human-readable episode/item title (e.g. a podcast episode or YouTube video title), when
+   * available. Null for sources with no such title (e.g. a plain web page) - the UI falls back
+   * to showing the raw sourceRef URL in that case. */
+  title: string | null;
 }
 
 export interface RunReportSummaryDto {

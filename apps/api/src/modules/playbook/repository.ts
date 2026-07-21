@@ -64,6 +64,9 @@ function mapPlaybook(row: any): Playbook {
     name: row.name,
     description: row.description ?? '',
     enabled: row.enabled,
+    notificationsEnabled: row.notificationsEnabled ?? true,
+    digestFrequency: row.digestFrequency ?? 'immediate',
+    lastDigestSentAt: row.lastDigestSentAt ?? null,
     schedule: scheduleFromRow(row),
     sourceIds: (row.sources ?? []).map((sourceRow: any) => sourceRow.sourceId),
     recipients: parseRecipients(row.recipientsJson),
@@ -178,6 +181,8 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
           ...(patch.name !== undefined ? { name: patch.name } : {}),
           ...(patch.description !== undefined ? { description: patch.description } : {}),
           ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+          ...(patch.notificationsEnabled !== undefined ? { notificationsEnabled: patch.notificationsEnabled } : {}),
+          ...(patch.digestFrequency !== undefined ? { digestFrequency: patch.digestFrequency } : {}),
           ...(patch.executionMode !== undefined ? { executionMode: patch.executionMode } : {}),
           ...(patch.maxSourcesPerRun !== undefined ? { maxSourcesPerRun: patch.maxSourcesPerRun } : {}),
           ...(patch.maxItemsPerSource !== undefined ? { maxItemsPerSource: patch.maxItemsPerSource } : {}),
@@ -352,8 +357,7 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
     const agent = await this.db.agent.findUnique({
       where: { id: publication.playbook.agentId },
       include: {
-        sources: true,
-        schedules: { orderBy: { createdAt: 'desc' }, take: 1 }
+        sources: true
       }
     });
     if (!agent) {
@@ -366,8 +370,7 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
         name: agent.name
       },
       include: {
-        sources: true,
-        schedules: { orderBy: { createdAt: 'desc' }, take: 1 }
+        sources: true
       }
     });
 
@@ -390,26 +393,10 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
               maxItems: source.maxItems,
               enabled: source.enabled
             }))
-          },
-          ...(agent.schedules?.[0]
-            ? {
-                schedules: {
-                  create: {
-                    mode: agent.schedules[0].mode,
-                    intervalMinutes: agent.schedules[0].intervalMinutes,
-                    dailyTime: agent.schedules[0].dailyTime,
-                    timezone: agent.schedules[0].timezone,
-                    daysOfWeekJson: agent.schedules[0].daysOfWeekJson,
-                    nextRunAt: agent.schedules[0].nextRunAt,
-                    enabled: agent.schedules[0].enabled
-                  }
-                }
-              }
-            : {})
+          }
         },
         include: {
-          sources: true,
-          schedules: { orderBy: { createdAt: 'desc' }, take: 1 }
+          sources: true
         }
       }));
 

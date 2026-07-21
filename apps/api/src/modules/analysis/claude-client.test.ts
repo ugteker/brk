@@ -184,6 +184,45 @@ describe('ClaudeClient', () => {
     );
   });
 
+  it('prefers the forced submit_report tool result over any text block', async () => {
+    let capturedParams: Record<string, unknown> | undefined;
+    const fakeClient: ClaudeMessagesClient = {
+      messages: {
+        create: async (params) => {
+          capturedParams = params as unknown as Record<string, unknown>;
+          return {
+            content: [
+              { type: 'text', text: 'ignore this prose' },
+              {
+                type: 'tool_use',
+                name: 'submit_report',
+                input: {
+                  common: {
+                    summary: 'From the tool call',
+                    key_takeaways: [],
+                    sources_used: [],
+                    citations: []
+                  },
+                  section: { character_type: 'philosopher', argument_reflection: 'He said "quotes are fine here".' },
+                  sourceWarnings: [],
+                  needsHumanReview: false
+                }
+              }
+            ]
+          };
+        }
+      }
+    };
+
+    const client = new ClaudeClient({ client: fakeClient });
+    const result = await client.analyze({ model: 'claude-sonnet-4-5', characterType: 'philosopher', systemPrompt: 'sp', evidence: [] });
+
+    expect(result.summary).toBe('From the tool call');
+    const tools = capturedParams?.tools as Array<{ name: string }> | undefined;
+    expect(tools?.[0]?.name).toBe('submit_report');
+    expect(capturedParams?.tool_choice).toEqual({ type: 'tool', name: 'submit_report' });
+  });
+
   it('throws a descriptive error (not a raw parser error) when the response text is not valid JSON', async () => {
     const fakeClient: ClaudeMessagesClient = {
       messages: {

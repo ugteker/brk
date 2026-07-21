@@ -1,3 +1,4 @@
+import type { PrismaClient } from '@prisma/client';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import { registerAgentRoutes, type AgentRepositoryLike, type SourceProbeLike, type RunTriggerLike } from './modules/agents/routes';
@@ -7,6 +8,9 @@ import { registerAuthRoutes, type AuthRoutesDeps } from './modules/auth/routes';
 import { registerAdminRoutes } from './modules/admin/routes';
 import { registerSourceRoutes, type SourceRoutesDeps } from './modules/source/routes';
 import { registerPlaybookRoutes, type PlaybookRoutesDeps } from './modules/playbook/routes';
+import { registerDiscussionRoutes, type DiscussionRoutesDeps } from './modules/discussion/routes';
+import { registerWatchlistRoutes, type WatchlistRoutesDeps } from './modules/watchlist/routes';
+import { registerUsageRoutes, type UsageRoutesDeps } from './modules/usage/routes';
 import type { DomainAccessResolver } from './modules/access/permissions';
 import { config } from './config';
 import { verifySessionToken } from './modules/auth/jwt';
@@ -26,9 +30,13 @@ export interface ServerDeps {
   auth: AuthRoutesDeps;
   source?: SourceRoutesDeps;
   playbook?: PlaybookRoutesDeps;
+  watchlist?: WatchlistRoutesDeps;
+  usage?: UsageRoutesDeps;
+  discussion?: DiscussionRoutesDeps;
   accessResolver?: DomainAccessResolver;
   sourceProbe?: SourceProbeLike;
   runTrigger?: RunTriggerLike;
+  db?: PrismaClient;
 }
 
 const PUBLIC_ROUTE_PREFIXES = ['/api/auth/'];
@@ -74,7 +82,11 @@ export async function buildServer(deps: ServerDeps) {
     runTrigger: deps.runTrigger,
     accessResolver: deps.accessResolver
   });
-  await registerAgentPromptRoutes(app, { ...deps.agents, accessResolver: deps.agents.accessResolver ?? deps.accessResolver });
+  await registerAgentPromptRoutes(app, {
+    ...deps.agents,
+    runsRepository: deps.runs?.runsRepository,
+    accessResolver: deps.agents.accessResolver ?? deps.accessResolver
+  });
   if (deps.runs) {
     await registerRunsRoutes(app, { ...deps.runs, accessResolver: deps.runs.accessResolver ?? deps.accessResolver });
   }
@@ -84,8 +96,17 @@ export async function buildServer(deps: ServerDeps) {
   if (deps.playbook) {
     await registerPlaybookRoutes(app, deps.playbook);
   }
+  if (deps.watchlist) {
+    await registerWatchlistRoutes(app, deps.watchlist);
+  }
+  if (deps.usage) {
+    await registerUsageRoutes(app, deps.usage);
+  }
+  if (deps.discussion) {
+    await registerDiscussionRoutes(app, deps.discussion);
+  }
   // Admin user-management routes reuse the same userRepository as auth - there's no separate
   // "admin service", just extra ADMIN_EMAIL-gated endpoints on top of the existing user store.
-  await registerAdminRoutes(app, { userRepository: deps.auth.userRepository });
+  await registerAdminRoutes(app, { userRepository: deps.auth.userRepository, db: deps.db });
   return app;
 }

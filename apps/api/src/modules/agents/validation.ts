@@ -29,7 +29,6 @@ export function validateCreateAgentInput(input: CreateAgentInput): ValidationRes
   const promptConfig = input.promptConfig ?? {};
   const sources = input.sources ?? [];
 
-  if (!input.name.trim()) errors.push('name is required');
   if (sources.length > 50) errors.push('sources per agent must be <= 50');
   if ('recipients' in input && input.recipients !== undefined) {
     errors.push('recipients are managed on playbooks');
@@ -38,14 +37,6 @@ export function validateCreateAgentInput(input: CreateAgentInput): ValidationRes
     if (source.maxItems !== undefined && (!Number.isInteger(source.maxItems) || source.maxItems < 1 || source.maxItems > 10)) {
       errors.push('maxItems must be an integer between 1 and 10');
     }
-  }
-
-  if (input.schedule?.mode === 'interval' && input.schedule.intervalMinutes < 60) {
-    errors.push('intervalMinutes must be >= 60');
-  }
-
-  if (input.schedule?.mode === 'weekly' && input.schedule.daysOfWeek.length === 0) {
-    errors.push('weekly schedule requires at least one day of week');
   }
 
   validateCharacterPromptRules(characterType, promptConfig, errors);

@@ -1,30 +1,51 @@
 import type { PrismaClient } from '@prisma/client';
+import { computeNextRun } from '../schedules/compute-next-run';
 import type { AgentRunRecord, RunPhase, RunStore } from './run-queue.service';
 
-type RunDb = Pick<PrismaClient, 'agentSchedule' | 'agentRun'>;
+type RunDb = Pick<PrismaClient, 'agentRun' | 'playbook'>;
+
+function parseRecipients(json: string | null | undefined): string[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((e): e is string => typeof e === 'string').map((e) => e.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 
 export class PrismaRunStore implements RunStore {
   constructor(private readonly db: RunDb) {}
 
   async getDueSchedules(now: Date) {
-    return this.db.agentSchedule.findMany({
+    const duePlaybooks = await this.db.playbook.findMany({
       where: { enabled: true, nextRunAt: { lte: now } },
-      select: { agentId: true, nextRunAt: true, enabled: true }
+      select: { id: true, agentId: true, nextRunAt: true }
     });
+    return duePlaybooks.map((pb) => ({
+      agentId: pb.agentId,
+      nextRunAt: pb.nextRunAt,
+      enabled: true,
+      playbookId: pb.id
+    }));
   }
 
-  async upsertQueuedRun(agentId: string, scheduledFor: Date): Promise<void> {
+  async upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string): Promise<void> {
     await this.db.agentRun.upsert({
       where: { agentId_scheduledFor: { agentId, scheduledFor } },
       update: {},
-      create: { agentId, scheduledFor, status: 'queued', retryCount: 0 }
+      create: { agentId, playbookId: playbookId ?? null, scheduledFor, status: 'queued', retryCount: 0 }
     });
   }
 
   async claimNextQueuedRun(workerId: string): Promise<AgentRunRecord | null> {
     const queued = await this.db.agentRun.findFirst({
       where: { status: 'queued' },
-      orderBy: { scheduledFor: 'asc' }
+      orderBy: { scheduledFor: 'asc' },
+      include: {
+        playbook: { select: { recipientsJson: true, language: true, notificationsEnabled: true, digestFrequency: true } }
+      }
     });
     if (!queued) return null;
 
@@ -32,6 +53,10 @@ export class PrismaRunStore implements RunStore {
       where: { id: queued.id },
       data: { status: 'running', workerId, startedAt: new Date() }
     });
+
+    const playbookData = (queued as typeof queued & {
+      playbook?: { recipientsJson: string; language: string; notificationsEnabled?: boolean; digestFrequency?: string } | null;
+    }).playbook;
 
     return {
       id: claimed.id,
@@ -44,7 +69,12 @@ export class PrismaRunStore implements RunStore {
       errorCode: claimed.errorCode ?? undefined,
       errorMessage: claimed.errorMessage ?? undefined,
       startedAt: claimed.startedAt ?? undefined,
-      finishedAt: claimed.finishedAt ?? undefined
+      finishedAt: claimed.finishedAt ?? undefined,
+      playbookId: (claimed as { playbookId?: string | null }).playbookId ?? undefined,
+      playbookRecipients: playbookData ? parseRecipients(playbookData.recipientsJson) : undefined,
+      playbookLanguage: playbookData?.language ?? undefined,
+      playbookNotificationsEnabled: playbookData ? (playbookData.notificationsEnabled ?? true) : undefined,
+      playbookDigestFrequency: playbookData?.digestFrequency ?? undefined
     };
   }
 
@@ -70,6 +100,34 @@ export class PrismaRunStore implements RunStore {
         errorMessage,
         finishedAt: new Date()
       }
+    });
+  }
+
+  async markPlaybookExecuted(playbookId: string): Promise<void> {
+    const playbook = await this.db.playbook.findUnique({
+      where: { id: playbookId },
+      select: { mode: true, intervalMinutes: true, dailyTime: true, timezone: true, daysOfWeekJson: true }
+    });
+    if (!playbook) return;
+
+    const schedule = (() => {
+      if (playbook.mode === 'weekly') {
+        return {
+          mode: 'weekly' as const,
+          daysOfWeek: playbook.daysOfWeekJson ? JSON.parse(playbook.daysOfWeekJson) : [],
+          dailyTime: playbook.dailyTime ?? '07:30',
+          timezone: playbook.timezone ?? 'UTC'
+        };
+      }
+      if (playbook.mode === 'daily') {
+        return { mode: 'daily' as const, dailyTime: playbook.dailyTime ?? '07:30', timezone: playbook.timezone ?? 'UTC' };
+      }
+      return { mode: 'interval' as const, intervalMinutes: playbook.intervalMinutes ?? 60 };
+    })();
+
+    await this.db.playbook.update({
+      where: { id: playbookId },
+      data: { nextRunAt: computeNextRun(schedule, new Date()) }
     });
   }
 }

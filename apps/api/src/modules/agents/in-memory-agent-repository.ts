@@ -2,6 +2,14 @@ import type { AgentRepositoryLike } from './routes';
 import { DEFAULT_CHARACTER_TYPE } from './types';
 import type { Agent, AgentListItem, CreateAgentInput, RecentRun } from './types';
 
+function deriveAgentName(characterType: string, personality?: string): string {
+  const character = characterType
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+  return `${personality?.trim() || character} · ${character}`;
+}
+
 export class InMemoryAgentRepository implements AgentRepositoryLike {
   private agents = new Map<string, Agent>();
   private runs: RecentRun[] = [];
@@ -24,19 +32,21 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
 
   async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
     const id = `agent-${this.agents.size + 1}`;
+    const characterType = input.characterType ?? DEFAULT_CHARACTER_TYPE;
+    const promptConfig = input.promptConfig ?? {};
     const agent: Agent = {
       id,
       ownerUserId,
-      name: input.name,
+      name: deriveAgentName(characterType, promptConfig.personality_label ?? promptConfig.personality_id),
       description: input.description ?? '',
-      characterType: input.characterType ?? DEFAULT_CHARACTER_TYPE,
-      promptConfig: input.promptConfig ?? {},
+      characterType,
+      promptConfig,
       status: input.active === false ? 'disabled' : 'active',
       createdAt: new Date(),
       updatedAt: new Date(),
       sources: (input.sources ?? []).map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60, maxItems: s.maxItems ?? 1 })),
       preferences: input.preferences ?? {},
-      schedule: input.schedule ?? null
+      schedule: null
     };
     this.agents.set(id, agent);
     return agent;
@@ -45,18 +55,20 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
   async updateAgent(agentId: string, patch: Partial<CreateAgentInput>): Promise<Agent> {
     const existing = this.agents.get(agentId);
     if (!existing) throw new Error('not_found');
+    const characterType = patch.characterType ?? existing.characterType;
+    const promptConfig = patch.promptConfig ?? existing.promptConfig;
     const updated: Agent = {
       ...existing,
-      name: patch.name ?? existing.name,
+      name: deriveAgentName(characterType, promptConfig.personality_label ?? promptConfig.personality_id),
       description: patch.description ?? existing.description,
-      characterType: patch.characterType ?? existing.characterType,
-      promptConfig: patch.promptConfig ?? existing.promptConfig,
+      characterType,
+      promptConfig,
       status: patch.active !== undefined ? (patch.active ? 'active' : 'disabled') : existing.status,
       sources: patch.sources
         ? patch.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60, maxItems: s.maxItems ?? 1 }))
         : existing.sources,
       preferences: patch.preferences ?? existing.preferences,
-      schedule: patch.schedule ?? existing.schedule,
+      schedule: existing.schedule,
       updatedAt: new Date()
     };
     this.agents.set(agentId, updated);
@@ -185,8 +197,7 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
       promptConfig: source.promptConfig,
       active: source.status !== 'disabled',
       sources: source.sources,
-      preferences: source.preferences,
-      schedule: source.schedule ?? undefined
+      preferences: source.preferences
     });
     return { agent: cloned, cloned: true };
   }

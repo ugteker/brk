@@ -1,9 +1,11 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { AgentsPage } from './AgentsPage';
 import { AuthProvider } from '../auth/AuthContext';
 import { ThemeProvider } from '../theme/ThemeContext';
+import { AppDataProvider } from '../context/AppDataContext';
 import { logout as apiLogout, getCurrentUser } from '../api/auth';
 import { listAgents } from '../api/agents';
 import { createSource, deleteSource, listSources, probeSource, updateSource } from '../api/sources';
@@ -79,9 +81,13 @@ vi.mock('../api/access', () => ({
 function renderPage(options?: { openAdminArea?: boolean }) {
   return render(
     <AuthProvider>
-      <ThemeProvider>
-        <AgentsPage />
-      </ThemeProvider>
+      <AppDataProvider>
+        <ThemeProvider>
+          <MemoryRouter>
+            <AgentsPage hub="sources" />
+          </MemoryRouter>
+        </ThemeProvider>
+      </AppDataProvider>
     </AuthProvider>
   );
 }
@@ -270,7 +276,7 @@ describe('AgentsPage three hub shell', () => {
     expect(agentsHeading.closest('div[class*="lg:grid-cols-[2fr_1fr]"]')).toBeNull();
   });
 
-  it('renders source library cards with fallback cover, scanned title, and sneak preview episodes', async () => {
+  it('renders source library cards with a media hero, compact preview, and agent rail', async () => {
     vi.mocked(listSources).mockResolvedValueOnce([
       {
         id: 'source-1',
@@ -281,9 +287,48 @@ describe('AgentsPage three hub shell', () => {
         config: {},
         metadata: {
           title: 'Macro Daily',
-          coverImageUrl: null,
-          previewItems: [{ title: 'Episode 4 - Rate Cut?', link: 'https://pod.example/e4', pubDate: null }]
+          coverImageUrl: 'https://pod.example/cover.jpg',
+          previewItems: [
+            { title: 'Episode 4 - Rate Cut?', link: 'https://pod.example/e4', pubDate: null },
+            { title: 'Episode 3 - Inflation?', link: 'https://pod.example/e3', pubDate: null },
+            { title: 'Episode 2 - Earnings?', link: 'https://pod.example/e2', pubDate: null }
+          ]
         },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+    vi.mocked(listAgents).mockResolvedValueOnce([
+      {
+        id: 'agent-1',
+        ownerUserId: 'user-1',
+        name: 'Macro Analyst',
+        characterType: 'finance_expert',
+        promptConfig: { personality_label: 'Long-term value investor' },
+        status: 'active',
+        sources: [],
+        schedule: null,
+        runCount: 0,
+        reportCount: 0,
+        latestReportAt: null
+      }
+    ]);
+    vi.mocked(listPlaybooks).mockResolvedValueOnce([
+      {
+        id: 'playbook-1',
+        ownerUserId: 'user-1',
+        agentId: 'agent-1',
+        name: 'Daily macro review',
+        description: '',
+        enabled: true,
+        schedule: { mode: 'daily', dailyTime: '07:30', timezone: 'UTC' },
+        sourceIds: ['source-1'],
+        recipients: [],
+        executionMode: 'latest_only',
+        maxSourcesPerRun: 5,
+        maxItemsPerSource: 2,
+        lastRunAt: null,
+        nextRunAt: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -292,8 +337,18 @@ describe('AgentsPage three hub shell', () => {
     renderPage();
 
     expect(await screen.findByText(/macro daily/i)).toBeInTheDocument();
-    expect(screen.getByText(/cover unavailable/i)).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /macro daily cover/i })).toHaveClass('object-contain');
     expect(screen.getByText(/episode 4 - rate cut\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/episode 3 - inflation\?/i)).toBeInTheDocument();
+    expect(screen.queryByText(/episode 2 - earnings\?/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/agents follow/i)).toBeInTheDocument();
+    const macroAnalyst = screen.getByRole('button', { name: /macro analyst.*finance expert.*long-term value investor/i });
+    expect(macroAnalyst).toBeInTheDocument();
+    expect(screen.getByText(/finance expert/i)).toBeInTheDocument();
+    fireEvent.mouseEnter(macroAnalyst);
+    expect(await screen.findByText(/long-term value investor/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /manage source/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /summarize this source/i })).not.toBeInTheDocument();
   });
 
   it('shows polished dashed ghost card copy in Library hub', async () => {
@@ -900,4 +955,3 @@ describe('AgentsPage three hub shell', () => {
     expect(screen.getByRole('tab', { name: /^history$/i })).toBeInTheDocument();
   });
 });
-
