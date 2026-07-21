@@ -64,3 +64,6 @@ Thumbs.db
 /.superpowers/brainstorm/1003-1784380496/state/server-instance-id
 /.superpowers/brainstorm/1018-1784396210/state/server-instance-id
 /.superpowers/brainstorm/1003-1784380496/state/server-stopped
+
+# Google service-account keys (never commit)
+apps/api/keys/
