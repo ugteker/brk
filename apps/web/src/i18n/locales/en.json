@@ -589,7 +589,7 @@
     "evidenceOriginNone": "No reports (free discussion)",
     "audioReady": "Audio podcast is ready",
     "audioFailed": "Audio rendering failed",
-    "audioNotConfigured": "Audio rendering is not configured — set OPENAI_API_KEY on the backend",
+    "audioNotConfigured": "Audio rendering is not configured — set GOOGLE_TTS_CREDENTIALS / GOOGLE_TTS_API_KEY (or OPENAI_API_KEY) on the backend",
     "minParticipants": "Select at least 2 agents",
     "voiceLabel": "Voice",
     "roleLabel": "Role",

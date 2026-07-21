@@ -122,7 +122,8 @@ Use the same key names in both environments:
 | `HETZNER_HOST` | Server IP or hostname |
 | `HETZNER_USER` | SSH user with access to `/opt/ChatTrader` and Docker |
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
-| `HETZNER_APP_ENV` | The **entire contents** of the production `.env` file (same keys as `apps/api/.env.example`, with real values) |
+| `HETZNER_APP_ENV` | The **entire contents** of the production `.env` file (same keys as `apps/api/.env.example`, with real values). For Google service-account auth set `GOOGLE_TTS_CREDENTIALS=/run/secrets/google-tts-service-account.json` here. |
+| `HETZNER_GOOGLE_TTS_SA_JSON_B64` | Optional. Base64-encoded Google service-account JSON key; CI decodes this into `$DEPLOY_PATH/secrets/google-tts-service-account.json` on the server before `docker compose up`. |
 
 ### Recommended branch protection
 
@@ -143,6 +144,13 @@ as a CLI argument or echoed — it won't appear in workflow logs. Whenever a
 value in it changes (e.g. rotating `JWT_SECRET`, updating `APP_BASE_URL` to a
 new tunnel hostname), update the secret and re-run the workflow (or push any
 commit to the target branch: `alpha` or `master`).
+
+For Google TTS service-account auth, set `HETZNER_GOOGLE_TTS_SA_JSON_B64` to:
+```bash
+base64 -w 0 google-service-account.json
+```
+Then set `GOOGLE_TTS_CREDENTIALS=/run/secrets/google-tts-service-account.json`
+inside `HETZNER_APP_ENV`. This keeps the JSON key out of git and out of the image.
 
 If these are missing in the target environment (`alpha` or `production`), the SSH deploy step fails
 early with `Error: missing server host` because `HETZNER_HOST`/`HETZNER_USER`/

@@ -588,7 +588,7 @@
     "evidenceOriginNone": "Ohne Berichte (freie Diskussion)",
     "audioReady": "Audio-Podcast ist fertig",
     "audioFailed": "Audio-Rendering fehlgeschlagen",
-    "audioNotConfigured": "Audio-Rendering ist nicht konfiguriert — OPENAI_API_KEY im Backend setzen",
+    "audioNotConfigured": "Audio-Rendering ist nicht konfiguriert — GOOGLE_TTS_CREDENTIALS / GOOGLE_TTS_API_KEY (oder OPENAI_API_KEY) im Backend setzen",
     "minParticipants": "Mindestens 2 Agenten auswählen",
     "voiceLabel": "Stimme",
     "roleLabel": "Rolle",
