@@ -11,7 +11,7 @@ export interface DiscussionRunTriggerLike {
 }
 
 export interface DiscussionTtsLike {
-  renderTurn(text: string, voice: string): Promise<Buffer>;
+  renderTurn(text: string, voice: string, language?: 'en' | 'de'): Promise<Buffer>;
 }
 
 export interface DiscussionTtsStorageLike {
@@ -267,12 +267,13 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     const ttsClient = deps.ttsClient;
     const ttsStorage = deps.ttsStorage;
     audioRenderState.set(runId, 'rendering');
+    const language = discussion.formatConfig.language ?? 'en';
     (async () => {
       const allAudio: Buffer[] = [];
       for (const turn of run.turns) {
         const participant = discussion.participants.find((p) => p.id === turn.participantId);
         const voice = participant?.voiceId ?? 'alloy';
-        const buffer = await ttsClient.renderTurn(turn.content, voice);
+        const buffer = await ttsClient.renderTurn(turn.content, voice, language);
         const turnUrl = await ttsStorage.save(`${runId}-turn-${turn.turnIndex}`, buffer);
         await deps.discussionRepository.updateTurnAudioUrl(turn.id, turnUrl);
         allAudio.push(buffer);

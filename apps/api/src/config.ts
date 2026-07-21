@@ -83,6 +83,12 @@ export const config = {
     get openaiApiKey() {
       return process.env.OPENAI_API_KEY ?? '';
     },
+    // Google Cloud Text-to-Speech REST API key (no service account needed). When set,
+    // Google TTS is preferred over OpenAI - useful where the OpenAI API is blocked by
+    // corporate network policy.
+    get googleApiKey() {
+      return process.env.GOOGLE_TTS_API_KEY ?? '';
+    },
     // Directory where rendered mp3 files are stored, relative to the API working dir.
     get audioDir() {
       return process.env.TTS_AUDIO_DIR ?? './data/audio';
@@ -90,8 +96,12 @@ export const config = {
   }
 };
 
+export function isGoogleTtsConfigured(): boolean {
+  return config.tts.googleApiKey.length > 0;
+}
+
 export function isTtsConfigured(): boolean {
-  return config.tts.openaiApiKey.length > 0;
+  return isGoogleTtsConfigured() || config.tts.openaiApiKey.length > 0;
 }
 
 export function isSmtpConfigured(): boolean {
