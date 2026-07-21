@@ -32,6 +32,19 @@ type Format = 'free_form' | 'structured' | 'hosted' | 'hybrid';
 type Voice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 
 const VOICES: Voice[] = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+
+/** Human-readable voice labels: the stored IDs are provider-neutral - the backend maps
+ * them to OpenAI voices or Google Neural2 voices (EN/DE) depending on which TTS provider
+ * is configured, so labels describe the voice character rather than a provider name. */
+const VOICE_LABELS: Record<Voice, string> = {
+  alloy: 'Alloy · neutral',
+  echo: 'Echo · male',
+  fable: 'Fable · warm',
+  onyx: 'Onyx · deep male',
+  nova: 'Nova · female',
+  shimmer: 'Shimmer · bright female'
+};
+
 const LATEST_REPORT_FALLBACK_LIMIT = 3;
 
 interface ParticipantConfig {
@@ -502,8 +515,8 @@ export function NewDiscussionWizard() {
                     <Select
                       value={p.voiceId}
                       onChange={(v) => updateParticipant(i, 'voiceId', v)}
-                      style={{ width: 110 }}
-                      options={VOICES.map((v) => ({ value: v, label: v }))}
+                      style={{ width: 190 }}
+                      options={VOICES.map((v) => ({ value: v, label: VOICE_LABELS[v] }))}
                     />
                   </div>
                 );
