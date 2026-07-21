@@ -100,6 +100,9 @@ export function NewDiscussionWizard() {
   // Defaults to the current UI language, but is independently editable - the discussion
   // language doesn't have to match the app's display language.
   const [language, setLanguage] = useState<'en' | 'de'>(i18n.language.startsWith('de') ? 'de' : 'en');
+  // How long each spoken turn should be; maps to a token budget + brevity instruction in the
+  // backend orchestrator (formatConfig.turnLength). Default 'medium' = original behavior.
+  const [turnLength, setTurnLength] = useState<'short' | 'medium' | 'long'>('medium');
 
   // Material step (reports mode only): per-agent report options.
   const [reportsByAgent, setReportsByAgent] = useState<Record<string, RunReportDto[]>>({});
@@ -259,6 +262,7 @@ export function NewDiscussionWizard() {
         formatConfig: {
           totalTurnTarget,
           language,
+          turnLength,
           grounding: {
             mode: groundingMode,
             ...(groundingMode === 'transcript' ? { artifactIds: selectedTranscriptIds } : {})
@@ -473,6 +477,17 @@ export function NewDiscussionWizard() {
                 value={totalTurnTarget}
                 onChange={setTotalTurnTarget}
                 options={[6, 8, 10, 12, 16, 20].map((n) => ({ value: n, label: `${n} turns` }))}
+              />
+            </Form.Item>
+            <Form.Item label={t('studio.turnLengthLabel')}>
+              <Select
+                value={turnLength}
+                onChange={(v) => setTurnLength(v as 'short' | 'medium' | 'long')}
+                options={[
+                  { value: 'short', label: t('studio.turnLengthShort') },
+                  { value: 'medium', label: t('studio.turnLengthMedium') },
+                  { value: 'long', label: t('studio.turnLengthLong') }
+                ]}
               />
             </Form.Item>
             <Form.Item label={t('studio.languageLabel')}>

@@ -84,6 +84,21 @@ const DISCUSSION_LANGUAGE_INSTRUCTIONS: Partial<Record<'en' | 'de', string>> = {
   de: 'WICHTIG: Antworte in diesem Redebeitrag auf Deutsch.'
 };
 
+/** Per-discussion turn length (formatConfig.turnLength): token budget + explicit style
+ * instruction per level. 'medium' matches the original hard-coded behavior (max_tokens 400,
+ * no extra instruction) so existing discussions are unaffected. */
+export const DISCUSSION_TURN_LENGTH_SETTINGS: Record<'short' | 'medium' | 'long', { maxTokens: number; instruction?: string }> = {
+  short: {
+    maxTokens: 160,
+    instruction: 'Keep each spoken turn short and punchy: 2-3 concise sentences, one clear point per turn. Never exceed 4 sentences.'
+  },
+  medium: { maxTokens: 400 },
+  long: {
+    maxTokens: 700,
+    instruction: 'You may elaborate in depth: develop your argument over several sentences with reasoning and examples.'
+  }
+};
+
 export class DiscussionOrchestrator {
   constructor(private readonly deps: DiscussionOrchestratorDeps) {}
 
@@ -195,9 +210,11 @@ export class DiscussionOrchestrator {
         }
 
         const languageInstruction = DISCUSSION_LANGUAGE_INSTRUCTIONS[discussion.formatConfig.language ?? 'en'];
+        const turnLengthSetting = DISCUSSION_TURN_LENGTH_SETTINGS[discussion.formatConfig.turnLength ?? 'medium'];
         const systemPromptSections = [
           promptVersion?.systemPrompt ?? `You are an AI analyst named ${agent?.name ?? 'Agent'}.`,
           DISCUSSION_MODE_INSTRUCTION,
+          ...(turnLengthSetting.instruction ? [turnLengthSetting.instruction] : []),
           ...(languageInstruction ? [languageInstruction] : [])
         ];
 
@@ -226,6 +243,7 @@ export class DiscussionOrchestrator {
       });
 
       const totalTurns = discussion.formatConfig.totalTurnTarget ?? 12;
+      const turnMaxTokens = DISCUSSION_TURN_LENGTH_SETTINGS[discussion.formatConfig.turnLength ?? 'medium'].maxTokens;
       const conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
       const segments = this.getSegments(discussion.format, discussion.formatConfig.segments);
       let turnIndex = 0;
@@ -251,7 +269,7 @@ export class DiscussionOrchestrator {
 
         const response = await claudeClient.messages.create({
           model: ctx.model,
-          max_tokens: 400,
+          max_tokens: turnMaxTokens,
           system: ctx.systemPrompt,
           messages
         });

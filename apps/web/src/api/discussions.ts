@@ -47,6 +47,8 @@ export interface DiscussionFormatConfigDto {
   hostInstructions?: string;
   /** Language every participant should respond in. Defaults to English when unset. */
   language?: 'en' | 'de';
+  /** How long each spoken turn should be. Defaults to medium when unset. */
+  turnLength?: 'short' | 'medium' | 'long';
   /** Absent means classic reports grounding. */
   grounding?: DiscussionGroundingConfigDto;
 }

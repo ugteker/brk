@@ -143,6 +143,48 @@ describe('DiscussionOrchestrator', () => {
     expect(lastCall[1]).toMatchObject({ status: 'error' });
   });
 
+  it('uses turnLength=short: smaller token budget and brevity instruction in system prompt', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion = vi.fn().mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: { totalTurnTarget: 2, turnLength: 'short' }
+    });
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'Short take.' }] }) } };
+    const orchestrator = makeOrchestrator({ repo, claude });
+    await orchestrator.run('d1', 'r1');
+    const call = claude.messages.create.mock.calls[0][0];
+    expect(call.max_tokens).toBe(160);
+    expect(call.system).toContain('2-3 concise sentences');
+  });
+
+  it('uses turnLength=long: larger token budget and elaboration instruction', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion = vi.fn().mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: { totalTurnTarget: 2, turnLength: 'long' }
+    });
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'Long take.' }] }) } };
+    const orchestrator = makeOrchestrator({ repo, claude });
+    await orchestrator.run('d1', 'r1');
+    const call = claude.messages.create.mock.calls[0][0];
+    expect(call.max_tokens).toBe(700);
+    expect(call.system).toContain('elaborate in depth');
+  });
+
+  it('defaults to medium turn length (max_tokens 400, no extra instruction) for legacy discussions', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'Take.' }] }) } };
+    const orchestrator = makeOrchestrator({ repo, claude });
+    await orchestrator.run('d1', 'r1');
+    const call = claude.messages.create.mock.calls[0][0];
+    expect(call.max_tokens).toBe(400);
+    expect(call.system).not.toContain('concise sentences');
+    expect(call.system).not.toContain('elaborate in depth');
+  });
+
   it('supports mixed explicit and fallback report resolution and snapshots the result', async () => {
     vi.clearAllMocks();
     const repo = makeMockRepo();

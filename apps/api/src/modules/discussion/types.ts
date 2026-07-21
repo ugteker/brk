@@ -28,6 +28,10 @@ export interface DiscussionFormatConfig {
    * (undefined) when not set - stored in the existing formatConfigJson column, no schema
    * migration needed. Mirrors the playbookLanguage convention used for single-agent reports. */
   language?: 'en' | 'de';
+  /** How long each spoken turn should be. Maps to a per-turn token budget and an explicit
+   * brevity/depth instruction in the orchestrator. Undefined means 'medium' (the original
+   * behavior). Stored in formatConfigJson, no schema migration needed. */
+  turnLength?: 'short' | 'medium' | 'long';
   /** How this discussion is grounded. Undefined means 'reports' (the original behavior:
    * per-participant report picks with latest-N fallback). Stored in formatConfigJson,
    * no schema migration needed. */
