@@ -89,6 +89,13 @@ export const config = {
     get googleApiKey() {
       return process.env.GOOGLE_TTS_API_KEY ?? '';
     },
+    // Path to (or inline JSON of) a Google service-account key. Required instead of the
+    // API key when the Google Cloud org policy rejects API keys for this API
+    // (401 "API keys are not supported by this API"). Server-side machine auth only -
+    // no user ever signs in against Google.
+    get googleCredentials() {
+      return process.env.GOOGLE_TTS_CREDENTIALS ?? '';
+    },
     // Directory where rendered mp3 files are stored, relative to the API working dir.
     get audioDir() {
       return process.env.TTS_AUDIO_DIR ?? './data/audio';
@@ -97,7 +104,7 @@ export const config = {
 };
 
 export function isGoogleTtsConfigured(): boolean {
-  return config.tts.googleApiKey.length > 0;
+  return config.tts.googleApiKey.length > 0 || config.tts.googleCredentials.length > 0;
 }
 
 export function isTtsConfigured(): boolean {

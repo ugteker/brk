@@ -214,7 +214,10 @@ async function start() {
       ...(isTtsConfigured()
         ? {
             ttsClient: isGoogleTtsConfigured()
-              ? new GoogleTtsClient({ apiKey: config.tts.googleApiKey })
+              ? new GoogleTtsClient({
+                  apiKey: config.tts.googleApiKey || undefined,
+                  serviceAccount: config.tts.googleCredentials || undefined
+                })
               : new OpenAITtsClient(new OpenAI({ apiKey: config.tts.openaiApiKey })),
             ttsStorage: new FileTtsStorage(config.tts.audioDir)
           }
