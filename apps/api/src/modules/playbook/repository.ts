@@ -10,8 +10,13 @@ import type {
   SharePlaybookInput,
   UpdatePlaybookInput
 } from './types';
+import type { RealtimeEventWriter } from '../realtime/types';
 
-type PlaybookDb = Pick<PrismaClient, 'playbook' | 'playbookSource' | 'accessGrant' | 'marketplacePublication' | 'agent' | 'source' | '$transaction'>;
+type PlaybookDb = Pick<PrismaClient, 'playbook' | 'playbookSource' | 'accessGrant' | 'marketplacePublication' | 'agent' | 'source' | 'realtimeEvent' | '$transaction'>;
+
+/** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
+ * mutation behavior identical while emitting no realtime events. */
+const noopRealtimeEventWriter: RealtimeEventWriter = { append: async () => {} };
 
 function scheduleFromRow(row: any): PlaybookScheduleInput {
   if (row.mode === 'weekly') {
@@ -99,7 +104,10 @@ export interface PlaybookRepositoryLike {
 }
 
 export class PlaybookRepository implements PlaybookRepositoryLike {
-  constructor(private readonly db: PlaybookDb) {}
+  constructor(
+    private readonly db: PlaybookDb,
+    private readonly realtime: RealtimeEventWriter = noopRealtimeEventWriter
+  ) {}
 
   async createPlaybook(_ownerUserId: string, input: CreatePlaybookInput): Promise<Playbook> {
     const now = new Date();
@@ -235,71 +243,96 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
   }
 
   async publishPlaybook(playbookId: string, publisherUserId: string, input: PublishPlaybookInput): Promise<MarketplacePlaybookListItem> {
-    const playbook = await this.getPlaybook(playbookId);
-    if (!playbook) {
-      throw new Error('not_found');
-    }
+    return this.db.$transaction(async (tx: any) => {
+      const row = await tx.playbook.findUnique({
+        where: { id: playbookId },
+        include: {
+          sources: { orderBy: { position: 'asc' } },
+          agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
+        }
+      });
+      if (!row) {
+        throw new Error('not_found');
+      }
+      const playbook = mapPlaybook(row);
+      const agent = await tx.agent.findUnique({ where: { id: playbook.agentId } });
 
-    const existing = await this.db.marketplacePublication.findFirst({
-      where: { resourceType: 'playbook', resourceId: playbookId, retiredAt: null }
+      const existing = await tx.marketplacePublication.findFirst({
+        where: { resourceType: 'playbook', resourceId: playbookId, retiredAt: null }
+      });
+
+      const publication = existing
+        ? await tx.marketplacePublication.update({
+            where: { id: existing.id },
+            data: {
+              publisherUserId,
+              title: input.title,
+              summary: input.summary ?? '',
+              visibility: input.visibility ?? 'public',
+              status: 'published',
+              publishedAt: new Date(),
+              retiredAt: null
+            }
+          })
+        : await tx.marketplacePublication.create({
+            data: {
+              publisherUserId,
+              resourceType: 'playbook',
+              resourceId: playbookId,
+              playbookId,
+              title: input.title,
+              summary: input.summary ?? '',
+              visibility: input.visibility ?? 'public',
+              status: 'published',
+              publishedAt: new Date()
+            }
+          });
+
+      if (agent) {
+        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'marketplace.changed', entityId: publication.id });
+      }
+
+      return {
+        publicationId: publication.id,
+        playbookId,
+        publisherUserId: publication.publisherUserId,
+        title: publication.title,
+        summary: publication.summary,
+        visibility: publication.visibility as MarketplacePlaybookListItem['visibility'],
+        publishedAt: publication.publishedAt ?? new Date(),
+        playbook
+      };
     });
-
-    const publication = existing
-      ? await this.db.marketplacePublication.update({
-          where: { id: existing.id },
-          data: {
-            publisherUserId,
-            title: input.title,
-            summary: input.summary ?? '',
-            visibility: input.visibility ?? 'public',
-            status: 'published',
-            publishedAt: new Date(),
-            retiredAt: null
-          }
-        })
-      : await this.db.marketplacePublication.create({
-          data: {
-            publisherUserId,
-            resourceType: 'playbook',
-            resourceId: playbookId,
-            playbookId,
-            title: input.title,
-            summary: input.summary ?? '',
-            visibility: input.visibility ?? 'public',
-            status: 'published',
-            publishedAt: new Date()
-          }
-        });
-
-    return {
-      publicationId: publication.id,
-      playbookId,
-      publisherUserId: publication.publisherUserId,
-      title: publication.title,
-      summary: publication.summary,
-      visibility: publication.visibility as MarketplacePlaybookListItem['visibility'],
-      publishedAt: publication.publishedAt ?? new Date(),
-      playbook
-    };
   }
 
   async unpublishPlaybook(playbookId: string): Promise<void> {
-    const publication = await this.db.marketplacePublication.findFirst({
-      where: {
-        resourceType: 'playbook',
-        resourceId: playbookId,
-        status: 'published',
-        retiredAt: null
+    await this.db.$transaction(async (tx: any) => {
+      const row = await tx.playbook.findUnique({ where: { id: playbookId } });
+      if (!row) {
+        throw new Error('not_found');
       }
-    });
-    if (!publication) {
-      throw new Error('not_found');
-    }
-    await this.db.marketplacePublication.update({
-      where: { id: publication.id },
-      data: {
-        status: 'draft',
-        retiredAt: new Date()
+      const publication = await tx.marketplacePublication.findFirst({
+        where: {
+          resourceType: 'playbook',
+          resourceId: playbookId,
+          status: 'published',
+          retiredAt: null
+        }
+      });
+      if (!publication) {
+        throw new Error('not_found');
+      }
+      await tx.marketplacePublication.update({
+        where: { id: publication.id },
+        data: {
+          status: 'draft',
+          retiredAt: new Date()
+        }
+      });
+
+      const agent = await tx.agent.findUnique({ where: { id: row.agentId } });
+      if (agent) {
+        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'marketplace.changed', entityId: publication.id });
       }
     });
   }
@@ -338,146 +371,150 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
   }
 
   async cloneFromMarketplace(publicationId: string, targetOwnerUserId: string): Promise<ClonePlaybookResult> {
-    const publication = await this.db.marketplacePublication.findFirst({
-      where: {
-        id: publicationId,
-        resourceType: 'playbook',
-        status: 'published',
-        visibility: 'public',
-        retiredAt: null
-      },
-      include: {
-        playbook: { include: { sources: { orderBy: { position: 'asc' } } } }
+    return this.db.$transaction(async (tx: any) => {
+      const publication = await tx.marketplacePublication.findFirst({
+        where: {
+          id: publicationId,
+          resourceType: 'playbook',
+          status: 'published',
+          visibility: 'public',
+          retiredAt: null
+        },
+        include: {
+          playbook: { include: { sources: { orderBy: { position: 'asc' } } } }
+        }
+      });
+      if (!publication?.playbook) {
+        throw new Error('not_found');
       }
-    });
-    if (!publication?.playbook) {
-      throw new Error('not_found');
-    }
 
-    const agent = await this.db.agent.findUnique({
-      where: { id: publication.playbook.agentId },
-      include: {
-        sources: true
+      const agent = await tx.agent.findUnique({
+        where: { id: publication.playbook.agentId },
+        include: {
+          sources: true
+        }
+      });
+      if (!agent) {
+        throw new Error('not_found');
       }
-    });
-    if (!agent) {
-      throw new Error('not_found');
-    }
 
-    const targetAgent = await this.db.agent.findFirst({
-      where: {
-        ownerUserId: targetOwnerUserId,
-        name: agent.name
-      },
-      include: {
-        sources: true
-      }
-    });
-
-    const resolvedAgent =
-      targetAgent ??
-      (await this.db.agent.create({
-        data: {
+      const targetAgent = await tx.agent.findFirst({
+        where: {
           ownerUserId: targetOwnerUserId,
-          name: agent.name,
-          description: agent.description,
-          characterType: agent.characterType,
-          promptConfigJson: agent.promptConfigJson,
-          status: agent.status,
-          preferencesJson: agent.preferencesJson,
-          sources: {
-            create: (agent.sources ?? []).map((source: any) => ({
-              type: source.type,
-              value: source.value,
-              frequencyMinutes: source.frequencyMinutes,
-              maxItems: source.maxItems,
-              enabled: source.enabled
-            }))
-          }
+          name: agent.name
         },
         include: {
           sources: true
         }
-      }));
-
-    const sourceIdMap = new Map<string, string>();
-    for (const sourceRow of publication.playbook.sources) {
-      const source = await this.db.source.findUnique({ where: { id: sourceRow.sourceId } });
-      if (!source) {
-        throw new Error('not_found');
-      }
-
-      const existingTargetSource = await this.db.source.findFirst({
-        where: {
-          ownerUserId: targetOwnerUserId,
-          type: source.type,
-          value: source.value
-        }
       });
 
-      const resolvedSource =
-        existingTargetSource ??
-        (await this.db.source.create({
+      const resolvedAgent =
+        targetAgent ??
+        (await tx.agent.create({
           data: {
             ownerUserId: targetOwnerUserId,
-            type: source.type,
-            value: source.value,
-            status: source.status,
-            configJson: source.configJson
+            name: agent.name,
+            description: agent.description,
+            characterType: agent.characterType,
+            promptConfigJson: agent.promptConfigJson,
+            status: agent.status,
+            preferencesJson: agent.preferencesJson,
+            sources: {
+              create: (agent.sources ?? []).map((source: any) => ({
+                type: source.type,
+                value: source.value,
+                frequencyMinutes: source.frequencyMinutes,
+                maxItems: source.maxItems,
+                enabled: source.enabled
+              }))
+            }
+          },
+          include: {
+            sources: true
           }
         }));
 
-      sourceIdMap.set(sourceRow.sourceId, resolvedSource.id);
-    }
-
-    const existing = await this.db.playbook.findFirst({
-      where: {
-        agent: { ownerUserId: targetOwnerUserId },
-        agentId: resolvedAgent.id,
-        name: publication.playbook.name
-      },
-      include: {
-        sources: { orderBy: { position: 'asc' } },
-        agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
-      }
-    });
-    if (existing) {
-      return { playbook: mapPlaybook(existing), cloned: false };
-    }
-
-    const created = await this.db.playbook.create({
-      data: {
-        agentId: resolvedAgent.id,
-        name: publication.playbook.name,
-        description: publication.playbook.description,
-        mode: publication.playbook.mode,
-        intervalMinutes: publication.playbook.intervalMinutes,
-        dailyTime: publication.playbook.dailyTime,
-        timezone: publication.playbook.timezone,
-        daysOfWeekJson: publication.playbook.daysOfWeekJson,
-        nextRunAt: publication.playbook.nextRunAt,
-        enabled: publication.playbook.enabled,
-        executionMode: publication.playbook.executionMode,
-        maxSourcesPerRun: publication.playbook.maxSourcesPerRun,
-        maxItemsPerSource: publication.playbook.maxItemsPerSource,
-        followTargetType: publication.playbook.followTargetType,
-        followTargetKey: publication.playbook.followTargetKey,
-        followTargetTitle: publication.playbook.followTargetTitle,
-        recipientsJson: publication.playbook.recipientsJson ?? '[]',
-        sources: {
-          create: publication.playbook.sources.map((sourceRow: any) => ({
-            sourceId: sourceIdMap.get(sourceRow.sourceId) ?? sourceRow.sourceId,
-            enabled: sourceRow.enabled,
-            position: sourceRow.position
-          }))
+      const sourceIdMap = new Map<string, string>();
+      for (const sourceRow of publication.playbook.sources) {
+        const source = await tx.source.findUnique({ where: { id: sourceRow.sourceId } });
+        if (!source) {
+          throw new Error('not_found');
         }
-      },
-      include: {
-        sources: { orderBy: { position: 'asc' } },
-        agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
-      }
-    });
 
-    return { playbook: mapPlaybook(created), cloned: true };
+        const existingTargetSource = await tx.source.findFirst({
+          where: {
+            ownerUserId: targetOwnerUserId,
+            type: source.type,
+            value: source.value
+          }
+        });
+
+        const resolvedSource =
+          existingTargetSource ??
+          (await tx.source.create({
+            data: {
+              ownerUserId: targetOwnerUserId,
+              type: source.type,
+              value: source.value,
+              status: source.status,
+              configJson: source.configJson
+            }
+          }));
+
+        sourceIdMap.set(sourceRow.sourceId, resolvedSource.id);
+      }
+
+      const existing = await tx.playbook.findFirst({
+        where: {
+          agent: { ownerUserId: targetOwnerUserId },
+          agentId: resolvedAgent.id,
+          name: publication.playbook.name
+        },
+        include: {
+          sources: { orderBy: { position: 'asc' } },
+          agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
+        }
+      });
+      if (existing) {
+        return { playbook: mapPlaybook(existing), cloned: false };
+      }
+
+      const created = await tx.playbook.create({
+        data: {
+          agentId: resolvedAgent.id,
+          name: publication.playbook.name,
+          description: publication.playbook.description,
+          mode: publication.playbook.mode,
+          intervalMinutes: publication.playbook.intervalMinutes,
+          dailyTime: publication.playbook.dailyTime,
+          timezone: publication.playbook.timezone,
+          daysOfWeekJson: publication.playbook.daysOfWeekJson,
+          nextRunAt: publication.playbook.nextRunAt,
+          enabled: publication.playbook.enabled,
+          executionMode: publication.playbook.executionMode,
+          maxSourcesPerRun: publication.playbook.maxSourcesPerRun,
+          maxItemsPerSource: publication.playbook.maxItemsPerSource,
+          followTargetType: publication.playbook.followTargetType,
+          followTargetKey: publication.playbook.followTargetKey,
+          followTargetTitle: publication.playbook.followTargetTitle,
+          recipientsJson: publication.playbook.recipientsJson ?? '[]',
+          sources: {
+            create: publication.playbook.sources.map((sourceRow: any) => ({
+              sourceId: sourceIdMap.get(sourceRow.sourceId) ?? sourceRow.sourceId,
+              enabled: sourceRow.enabled,
+              position: sourceRow.position
+            }))
+          }
+        },
+        include: {
+          sources: { orderBy: { position: 'asc' } },
+          agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
+        }
+      });
+
+      await this.realtime.append(tx, { userId: targetOwnerUserId, topic: 'marketplace.changed', entityId: publicationId });
+
+      return { playbook: mapPlaybook(created), cloned: true };
+    });
   }
 }

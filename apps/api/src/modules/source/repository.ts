@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import type { RealtimeEventWriter } from '../realtime/types';
 import type {
   CloneSourceResult,
   CreateSourceInput,
@@ -11,7 +12,11 @@ import type {
   UpdateSourceInput
 } from './types';
 
-type SourceDb = Pick<PrismaClient, 'source' | 'accessGrant' | 'marketplacePublication' | 'playbookSource' | '$transaction'>;
+type SourceDb = Pick<PrismaClient, 'source' | 'accessGrant' | 'marketplacePublication' | 'playbookSource' | 'realtimeEvent' | '$transaction'>;
+
+/** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
+ * mutation behavior identical while emitting no realtime events. */
+const noopRealtimeEventWriter: RealtimeEventWriter = { append: async () => {} };
 
 type SourceRow = {
   id: string;
@@ -100,18 +105,25 @@ export interface SourceRepositoryLike {
 }
 
 export class SourceRepository implements SourceRepositoryLike {
-  constructor(private readonly db: SourceDb) {}
+  constructor(
+    private readonly db: SourceDb,
+    private readonly realtime: RealtimeEventWriter = noopRealtimeEventWriter
+  ) {}
 
   async createSource(ownerUserId: string, input: CreateSourceInput): Promise<SourceRecord> {
     const config = withMetadata(input.config ?? {}, input.metadata);
-    const created = await this.db.source.create({
-      data: {
-        ownerUserId,
-        type: input.type,
-        value: input.value,
-        status: input.status ?? 'active',
-        configJson: JSON.stringify(config)
-      }
+    const created = await this.db.$transaction(async (tx) => {
+      const created = await tx.source.create({
+        data: {
+          ownerUserId,
+          type: input.type,
+          value: input.value,
+          status: input.status ?? 'active',
+          configJson: JSON.stringify(config)
+        }
+      });
+      await this.realtime.append(tx, { userId: ownerUserId, topic: 'source.changed', entityId: created.id });
+      return created;
     });
     return mapSource(created as SourceRow);
   }
@@ -138,110 +150,140 @@ export class SourceRepository implements SourceRepositoryLike {
     const configBase = patch.config ?? existingParsed.config;
     const nextConfig = patch.metadata ? withMetadata(configBase, patch.metadata) : withMetadata(configBase, existingParsed.metadata);
 
-    const updated = await this.db.source.update({
-      where: { id: sourceId },
-      data: {
-        ...(patch.value !== undefined ? { value: patch.value } : {}),
-        ...(patch.status !== undefined ? { status: patch.status } : {}),
-        configJson: JSON.stringify(nextConfig)
-      }
+    const updated = await this.db.$transaction(async (tx) => {
+      const changed = await tx.source.update({
+        where: { id: sourceId },
+        data: {
+          ...(patch.value !== undefined ? { value: patch.value } : {}),
+          ...(patch.status !== undefined ? { status: patch.status } : {}),
+          configJson: JSON.stringify(nextConfig)
+        }
+      });
+      await this.realtime.append(tx, { userId: changed.ownerUserId, topic: 'source.changed', entityId: changed.id });
+      return changed;
     });
     return mapSource(updated as SourceRow);
   }
 
   async deleteSource(sourceId: string): Promise<void> {
-    await this.db.$transaction([
-      this.db.playbookSource.deleteMany({ where: { sourceId } }),
-      this.db.accessGrant.deleteMany({ where: { sourceId } }),
-      this.db.marketplacePublication.deleteMany({ where: { sourceId } }),
-      this.db.source.delete({ where: { id: sourceId } }),
-    ]);
+    await this.db.$transaction(async (tx) => {
+      const existing = await tx.source.findUnique({ where: { id: sourceId } });
+      if (!existing) {
+        throw new Error('not_found');
+      }
+      await tx.playbookSource.deleteMany({ where: { sourceId } });
+      await tx.accessGrant.deleteMany({ where: { sourceId } });
+      await tx.marketplacePublication.deleteMany({ where: { sourceId } });
+      await tx.source.delete({ where: { id: sourceId } });
+      await this.realtime.append(tx, { userId: (existing as SourceRow).ownerUserId, topic: 'source.changed', entityId: sourceId });
+    });
   }
 
   async shareSource(sourceId: string, grantedByUserId: string, input: ShareSourceInput): Promise<void> {
-    await this.db.accessGrant.create({
-      data: {
-        grantedByUserId,
-        granteeUserId: input.granteeUserId,
-        resourceType: 'source',
-        resourceId: sourceId,
-        permission: input.permission,
-        sourceId,
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+    await this.db.$transaction(async (tx) => {
+      const source = await tx.source.findUnique({ where: { id: sourceId } });
+      if (!source) {
+        throw new Error('not_found');
       }
+      await tx.accessGrant.create({
+        data: {
+          grantedByUserId,
+          granteeUserId: input.granteeUserId,
+          resourceType: 'source',
+          resourceId: sourceId,
+          permission: input.permission,
+          sourceId,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+        }
+      });
+      await this.realtime.append(tx, { userId: (source as SourceRow).ownerUserId, topic: 'source.changed', entityId: sourceId });
     });
   }
 
   async publishSource(sourceId: string, publisherUserId: string, input: PublishSourceInput): Promise<MarketplaceSourceListItem> {
-    const source = await this.db.source.findUnique({ where: { id: sourceId } });
-    if (!source) {
-      throw new Error('not_found');
-    }
+    return this.db.$transaction(async (tx) => {
+      const source = await tx.source.findUnique({ where: { id: sourceId } });
+      if (!source) {
+        throw new Error('not_found');
+      }
 
-    const existing = await this.db.marketplacePublication.findFirst({
-      where: { resourceType: 'source', resourceId: sourceId, retiredAt: null }
+      const existing = await tx.marketplacePublication.findFirst({
+        where: { resourceType: 'source', resourceId: sourceId, retiredAt: null }
+      });
+
+      const saved = existing
+        ? await tx.marketplacePublication.update({
+            where: { id: existing.id },
+            data: {
+              publisherUserId,
+              title: input.title,
+              summary: input.summary ?? '',
+              visibility: input.visibility ?? 'public',
+              status: 'published',
+              publishedAt: new Date(),
+              retiredAt: null
+            }
+          })
+        : await tx.marketplacePublication.create({
+            data: {
+              publisherUserId,
+              resourceType: 'source',
+              resourceId: sourceId,
+              sourceId,
+              title: input.title,
+              summary: input.summary ?? '',
+              visibility: input.visibility ?? 'public',
+              status: 'published',
+              publishedAt: new Date()
+            }
+          });
+
+      const mappedSource = mapSource(source as SourceRow);
+      await this.realtime.append(tx, { userId: mappedSource.ownerUserId, topic: 'source.changed', entityId: sourceId });
+      await this.realtime.append(tx, { userId: mappedSource.ownerUserId, topic: 'marketplace.changed', entityId: saved.id });
+
+      return {
+        publicationId: saved.id,
+        sourceId,
+        publisherUserId: saved.publisherUserId,
+        type: mappedSource.type,
+        value: mappedSource.value,
+        title: saved.title,
+        summary: saved.summary,
+        visibility: saved.visibility as MarketplaceSourceListItem['visibility'],
+        publishedAt: saved.publishedAt ?? new Date(),
+        metadata: mappedSource.metadata
+      };
     });
-
-    const saved = existing
-      ? await this.db.marketplacePublication.update({
-          where: { id: existing.id },
-          data: {
-            publisherUserId,
-            title: input.title,
-            summary: input.summary ?? '',
-            visibility: input.visibility ?? 'public',
-            status: 'published',
-            publishedAt: new Date(),
-            retiredAt: null
-          }
-        })
-      : await this.db.marketplacePublication.create({
-          data: {
-            publisherUserId,
-            resourceType: 'source',
-            resourceId: sourceId,
-            sourceId,
-            title: input.title,
-            summary: input.summary ?? '',
-            visibility: input.visibility ?? 'public',
-            status: 'published',
-            publishedAt: new Date()
-          }
-        });
-
-    const mappedSource = mapSource(source as SourceRow);
-    return {
-      publicationId: saved.id,
-      sourceId,
-      publisherUserId: saved.publisherUserId,
-      type: mappedSource.type,
-      value: mappedSource.value,
-      title: saved.title,
-      summary: saved.summary,
-      visibility: saved.visibility as MarketplaceSourceListItem['visibility'],
-      publishedAt: saved.publishedAt ?? new Date(),
-      metadata: mappedSource.metadata
-    };
   }
 
   async unpublishSource(sourceId: string): Promise<void> {
-    const publication = await this.db.marketplacePublication.findFirst({
-      where: {
-        resourceType: 'source',
-        resourceId: sourceId,
-        status: 'published',
-        retiredAt: null
+    await this.db.$transaction(async (tx) => {
+      const source = await tx.source.findUnique({ where: { id: sourceId } });
+      if (!source) {
+        throw new Error('not_found');
       }
-    });
-    if (!publication) {
-      throw new Error('not_found');
-    }
-    await this.db.marketplacePublication.update({
-      where: { id: publication.id },
-      data: {
-        status: 'draft',
-        retiredAt: new Date()
+      const publication = await tx.marketplacePublication.findFirst({
+        where: {
+          resourceType: 'source',
+          resourceId: sourceId,
+          status: 'published',
+          retiredAt: null
+        }
+      });
+      if (!publication) {
+        throw new Error('not_found');
       }
+      await tx.marketplacePublication.update({
+        where: { id: publication.id },
+        data: {
+          status: 'draft',
+          retiredAt: new Date()
+        }
+      });
+      const ownerUserId = (source as SourceRow).ownerUserId;
+      await this.realtime.append(tx, { userId: ownerUserId, topic: 'source.changed', entityId: sourceId });
+      await this.realtime.append(tx, { userId: ownerUserId, topic: 'marketplace.changed', entityId: publication.id });
     });
   }
 
@@ -277,40 +319,44 @@ export class SourceRepository implements SourceRepositoryLike {
   }
 
   async cloneFromMarketplace(publicationId: string, targetOwnerUserId: string): Promise<CloneSourceResult> {
-    const publication = await this.db.marketplacePublication.findFirst({
-      where: {
-        id: publicationId,
-        resourceType: 'source',
-        status: 'published',
-        visibility: 'public',
-        retiredAt: null
-      },
-      include: { source: true }
-    });
-    if (!publication?.source) {
-      throw new Error('not_found');
-    }
-
-    const existing = await this.db.source.findFirst({
-      where: {
-        ownerUserId: targetOwnerUserId,
-        type: publication.source.type,
-        value: publication.source.value
+    return this.db.$transaction(async (tx) => {
+      const publication = await tx.marketplacePublication.findFirst({
+        where: {
+          id: publicationId,
+          resourceType: 'source',
+          status: 'published',
+          visibility: 'public',
+          retiredAt: null
+        },
+        include: { source: true }
+      });
+      if (!publication?.source) {
+        throw new Error('not_found');
       }
-    });
-    if (existing) {
-      return { source: mapSource(existing as SourceRow), cloned: false };
-    }
 
-    const created = await this.db.source.create({
-      data: {
-        ownerUserId: targetOwnerUserId,
-        type: publication.source.type,
-        value: publication.source.value,
-        status: publication.source.status,
-        configJson: publication.source.configJson
+      const existing = await tx.source.findFirst({
+        where: {
+          ownerUserId: targetOwnerUserId,
+          type: publication.source.type,
+          value: publication.source.value
+        }
+      });
+      if (existing) {
+        return { source: mapSource(existing as SourceRow), cloned: false };
       }
+
+      const created = await tx.source.create({
+        data: {
+          ownerUserId: targetOwnerUserId,
+          type: publication.source.type,
+          value: publication.source.value,
+          status: publication.source.status,
+          configJson: publication.source.configJson
+        }
+      });
+      await this.realtime.append(tx, { userId: targetOwnerUserId, topic: 'source.changed', entityId: created.id });
+      await this.realtime.append(tx, { userId: targetOwnerUserId, topic: 'marketplace.changed', entityId: publicationId });
+      return { source: mapSource(created as SourceRow), cloned: true };
     });
-    return { source: mapSource(created as SourceRow), cloned: true };
   }
 }

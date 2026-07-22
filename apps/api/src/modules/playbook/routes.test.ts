@@ -49,6 +49,7 @@ class InMemoryPlaybookRepository {
   private readonly publications = new Map<string, MarketplacePlaybookItem>();
   private nextPlaybookId = 1;
   private nextPublicationId = 1;
+  readonly events: Array<{ userId: string; topic: string; entityId?: string }> = [];
 
   async createPlaybook(ownerUserId: string, input: any): Promise<PlaybookRecord> {
     const created: PlaybookRecord = {
@@ -135,6 +136,7 @@ class InMemoryPlaybookRepository {
       playbook
     };
     this.publications.set(publication.publicationId, publication);
+    this.events.push({ userId: playbook.ownerUserId, topic: 'marketplace.changed', entityId: publication.publicationId });
     return publication;
   }
 
@@ -152,6 +154,7 @@ class InMemoryPlaybookRepository {
       return { playbook: existing, cloned: false };
     }
     const created = await this.createPlaybook(targetOwnerUserId, publication.playbook);
+    this.events.push({ userId: targetOwnerUserId, topic: 'marketplace.changed', entityId: publicationId });
     return { playbook: created, cloned: true };
   }
 
@@ -159,6 +162,10 @@ class InMemoryPlaybookRepository {
     const publication = [...this.publications.values()].find((row) => row.playbookId === playbookId && row.visibility === 'public');
     if (!publication) throw new Error('not_found');
     this.publications.set(publication.publicationId, { ...publication, visibility: 'private' });
+    const playbook = this.playbooks.get(playbookId);
+    if (playbook) {
+      this.events.push({ userId: playbook.ownerUserId, topic: 'marketplace.changed', entityId: publication.publicationId });
+    }
   }
 
   async findOwnerUserId(_resourceType: 'agent' | 'source' | 'playbook', resourceId: string): Promise<string | null> {
@@ -306,6 +313,13 @@ describe('playbook routes', () => {
     expect(cloneRes.statusCode).toBe(201);
     expect(cloneRes.json<ClonePlaybookResult>().cloned).toBe(true);
 
+    expect(playbookRepo.events).toContainEqual(
+      expect.objectContaining({ userId: 'owner-1', topic: 'marketplace.changed', entityId: publication.publicationId })
+    );
+    expect(playbookRepo.events).toContainEqual(
+      expect.objectContaining({ userId: 'user-2', topic: 'marketplace.changed' })
+    );
+
     const deleteRes = await app.inject({ method: 'DELETE', url: `/api/playbooks/${created.id}`, headers: authCookieHeader('owner-1') });
     expect(deleteRes.statusCode).toBe(204);
   });
@@ -435,5 +449,14 @@ describe('playbook routes', () => {
       payload: { title: 'No publish' }
     });
     expect(publishDenied.statusCode).toBe(403);
+
+    const cloneNotFound = await app.inject({
+      method: 'POST',
+      url: '/api/playbooks/marketplace/does-not-exist/clone',
+      headers: authCookieHeader(editor.id)
+    });
+    expect(cloneNotFound.statusCode).toBe(404);
+
+    expect(playbookRepo.events).toHaveLength(0);
   });
 });
