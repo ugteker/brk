@@ -710,6 +710,297 @@ git add apps/api/src/modules/agent-prompts/routes.ts apps/api/src/modules/discus
 git commit -m "fix(realtime): retire legacy streams and harden production proxy`n`nCo-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>"
 ```
 
+### Task 8: Correct Library report cards and expose agent management in details
+
+**Files:**
+- Modify: `apps/api/src/modules/reports/repository.ts`
+- Modify: `apps/api/src/modules/source/routes.ts`
+- Modify: `apps/api/src/modules/source/routes.test.ts`
+- Modify: `apps/web/src/api/sources.ts`
+- Modify: `apps/web/src/pages/AgentsPage.tsx`
+- Modify: `apps/web/src/i18n/locales/en.json`
+- Modify: `apps/web/src/i18n/locales/de.json`
+- Test: `apps/api/src/modules/reports/repository.test.ts`
+- Test: `apps/web/src/pages/AgentsPage.three-hub.test.tsx`
+
+**Interfaces:**
+- Consumes: the source-scoped artifact rule already implemented by
+  `ReportRepository.listReportsForSource(sourceValue)`.
+- Produces:
+
+```ts
+// apps/api/src/modules/reports/repository.ts
+countReportsForSourceValues(sourceValues: string[]): Promise<Record<string, number>>;
+
+// apps/api/src/modules/source/routes.ts response addition
+type SourceRecordWithReportCount = SourceRecord & { reportCount: number };
+```
+
+`SourceRecord.reportCount` is an optional `number` in the web API type until
+all deployments have the new response, and card UI treats missing as `0`.
+
+- [ ] **Step 1: Write the failing count tests**
+
+In `apps/api/src/modules/reports/repository.test.ts`, add a test for a new
+batched method. Build report rows with artifacts whose `payloadJson` contains
+the same evidence shape as the existing source-scoped test:
+
+```ts
+it('counts each report only for source values referenced by its evidence artifacts', async () => {
+  const result = await repository.countReportsForSourceValues([
+    'https://example.com/feed-a.xml',
+    'https://example.com/feed-b.xml'
+  ]);
+
+  expect(result).toEqual({
+    'https://example.com/feed-a.xml': 2,
+    'https://example.com/feed-b.xml': 1
+  });
+});
+```
+
+The fixture must include an unrelated report owned by one of the same agents;
+assert it is absent from both counts. Include a report with two matching
+artifacts for `feed-a` and assert it contributes `1`, not `2`.
+
+In `apps/api/src/modules/source/routes.test.ts`, use a recording
+`reportRepository` fake:
+
+```ts
+it('adds source-scoped report counts to the library list', async () => {
+  const response = await app.inject({ method: 'GET', url: '/api/sources', headers: authCookieHeader() });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual(expect.arrayContaining([
+    expect.objectContaining({ id: sourceA.id, reportCount: 2 }),
+    expect.objectContaining({ id: sourceB.id, reportCount: 0 })
+  ]));
+  expect(countReportsForSourceValues).toHaveBeenCalledWith([
+    sourceA.value, sourceB.value
+  ]);
+});
+```
+
+Also assert that an absent `reportRepository` returns `reportCount: 0` rather
+than failing the library endpoint.
+
+- [ ] **Step 2: Implement the batched source-report counter**
+
+Add this narrow capability to `ReportRepository`:
+
+```ts
+async countReportsForSourceValues(sourceValues: string[]): Promise<Record<string, number>> {
+  const counts = Object.fromEntries(sourceValues.map((value) => [value, 0]));
+  if (sourceValues.length === 0) return counts;
+
+  const rows = await this.db.agentRunReport.findMany({
+    where: {
+      agentRun: {
+        artifacts: {
+          some: { payloadJson: { contains: '"sourceId":' } }
+        }
+      }
+    },
+    select: {
+      id: true,
+      agentRun: {
+        select: {
+          artifacts: { select: { payloadJson: true } }
+        }
+      }
+    }
+  });
+
+  const requested = new Set(sourceValues);
+  for (const report of rows) {
+    const reportSourceValues = new Set<string>();
+    for (const artifact of report.agentRun.artifacts) {
+      const match = artifact.payloadJson.match(/"sourceId"\s*:\s*"((?:\\.|[^"])*)"/);
+      if (!match) continue;
+      try {
+        const value = JSON.parse(`"${match[1]}"`) as unknown;
+        if (typeof value === 'string' && requested.has(value)) reportSourceValues.add(value);
+      } catch {
+        // Malformed legacy artifact JSON cannot identify a source and is ignored.
+      }
+    }
+    for (const value of reportSourceValues) counts[value] += 1;
+  }
+  return counts;
+}
+```
+
+Extend `ReportDb` to permit the nested `agentRun.artifacts` selection. Keep
+`listReportsForSource` unchanged: it remains the detail-view source of truth.
+
+- [ ] **Step 3: Attach counts to `GET /api/sources`**
+
+Extend `SourceScopedReportRepositoryLike`:
+
+```ts
+countReportsForSourceValues(sourceValues: string[]): Promise<Record<string, number>>;
+```
+
+Replace the current `GET /api/sources` success branch with:
+
+```ts
+const rows = await deps.sourceRepository.listSources(req.userRole === 'admin' ? undefined : req.userId!);
+const counts = deps.reportRepository
+  ? await deps.reportRepository.countReportsForSourceValues(rows.map((source) => source.value))
+  : {};
+return reply.status(200).send(rows.map((source) => ({
+  ...source,
+  reportCount: counts[source.value] ?? 0
+})));
+```
+
+Update every route-test fake with `countReportsForSourceValues: vi.fn(async () => ({}))`
+where it supplies `reportRepository`.
+
+- [ ] **Step 4: Run API tests**
+
+```powershell
+cd apps/api
+npx vitest run src/modules/reports/repository.test.ts src/modules/source/routes.test.ts
+```
+
+Expected: focused report and source suites pass, including source count,
+unrelated-report exclusion, duplicate-artifact dedupe, and no-repository
+fallback assertions.
+
+- [ ] **Step 5: Update frontend source type and card rendering**
+
+In `apps/web/src/api/sources.ts`, add to `SourceRecord`:
+
+```ts
+reportCount?: number;
+```
+
+In the Library card loop in `AgentsPage.tsx`, delete:
+
+```ts
+const cardAgentIds = new Set(cardAgentLinks.map(({ agent }) => agent.id));
+const cardReports = feedReports.filter((report) => cardAgentIds.has(report.agentId));
+const latestCardReport = cardReports[0];
+```
+
+Replace it with:
+
+```ts
+const cardReportCount = source.reportCount ?? 0;
+const hasCardReports = cardReportCount > 0;
+```
+
+Use `hasCardReports` for the card class/icon/arrow and use
+`cardReportCount` for `library.openReports` and `library.reportsAvailable`.
+Do not show a stale date from another source: replace the secondary line for
+the positive case with `t('library.sourceReportsAvailableHint')`.
+
+Add identical locale keys:
+
+```json
+// en.json
+"sourceReportsAvailableHint": "Open to view reports for this source"
+
+// de.json
+"sourceReportsAvailableHint": "Öffnen, um Berichte zu dieser Quelle zu sehen"
+```
+
+- [ ] **Step 6: Add the detail-view Agent plus action**
+
+In the selected-source card, add an “Agents” subsection before the tabbed
+content. Derive linked agents exactly as the cover card does:
+
+```ts
+const linkedAgentLinks = linkedPlaybooks
+  .map((playbook) => {
+    const agent = agents.find((candidate) => candidate.id === playbook.agentId);
+    return agent ? { playbook, agent } : null;
+  })
+  .filter((link): link is { playbook: PlaybookRecord; agent: AgentSummary } => Boolean(link));
+```
+
+Render the linked agents with the existing cover-card avatar, tooltip and
+owner-only remove `Popconfirm`. Reuse:
+
+```tsx
+onConfirm={() => void onRemoveAgentFromSource(playbook, selectedSource.id)}
+```
+
+Then render the same plus button:
+
+```tsx
+<TouchSafeTooltip title={t('library.addAgent')}>
+  <Button
+    type="dashed"
+    shape="circle"
+    size="large"
+    aria-label={t('library.addAgent')}
+    icon={<PlusOutlined />}
+    onClick={(event) => onFollowSource(selectedSource, event)}
+  />
+</TouchSafeTooltip>
+```
+
+`onFollowSource` already preselects this source and all linked agents, so no
+new assignment state or API is required.
+
+- [ ] **Step 7: Make the analysis action explicit**
+
+Change the header action label from `t('library.runAnalysisNow')` to a new
+locale key. Use:
+
+```json
+// en.json
+"analyzeNewContent": "Analyze new content",
+"analyzeNewContentHelp": "Analyzes the newest items for this source that have not been processed yet. To analyze one specific episode, use its play button in the Episodes tab."
+
+// de.json
+"analyzeNewContent": "Neue Inhalte analysieren",
+"analyzeNewContentHelp": "Analysiert die neuesten noch nicht verarbeiteten Inhalte dieser Quelle. Für eine bestimmte Episode den Play-Button im Tab „Episoden“ verwenden."
+```
+
+Wrap the header button in `TouchSafeTooltip` with
+`title={t('library.analyzeNewContentHelp')}`. Keep its callback exactly:
+
+```tsx
+onClick={() => void onRunSourceEpisode(undefined)}
+```
+
+This preserves the current `latest_only` behavior. Do not change the
+per-episode button, which passes `{ title, link, pubDate }` and therefore
+forces that episode.
+
+- [ ] **Step 8: Add and run frontend tests**
+
+In `AgentsPage.three-hub.test.tsx`, add assertions that a source with
+`reportCount: 0` renders `library.noReportsYet`, while one with
+`reportCount: 2` renders `2 reports available`; the fixture must give both
+sources the same linked agent to prevent the former bug from passing by
+accident.
+
+Add a test that opens a source detail, clicks the `library.addAgent`
+aria-label, and asserts the existing follow wizard shows the source title and
+the linked agent selected.
+
+Run:
+
+```powershell
+cd apps/web
+npx vitest run src/pages/AgentsPage.three-hub.test.tsx
+npm run build
+```
+
+If the web project has no available Vitest executable, do not add one; run
+`npm run build` and record the unavailable test command.
+
+- [ ] **Step 9: Commit**
+
+```powershell
+git add apps/api/src/modules/reports/repository.ts apps/api/src/modules/reports/repository.test.ts apps/api/src/modules/source/routes.ts apps/api/src/modules/source/routes.test.ts apps/web/src/api/sources.ts apps/web/src/pages/AgentsPage.tsx apps/web/src/pages/AgentsPage.three-hub.test.tsx apps/web/src/i18n/locales/en.json apps/web/src/i18n/locales/de.json
+git commit -m "fix(library): scope report cards and manage agents in details`n`nCo-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>"
+```
+
 ## Plan Review
 
 - **Spec coverage:** Tasks 1–4 implement durable event storage and all producer
@@ -717,6 +1008,9 @@ git commit -m "fix(realtime): retire legacy streams and harden production proxy`
   Tasks 5–6 implement one client stream, persisted cursor, topic refreshes,
   legacy-hook migration, and contained picker results; Task 7 handles explicit
   nginx behavior, removal, tests and VPS verification.
+- **Library coverage:** Task 8 adds the batched source-scoped card count,
+  detail agent-plus flow, and explicit latest-content analysis wording from
+  the approved Library extension.
 - **No placeholder scan:** no deferred requirements or unspecified error paths
   remain; invalid cursors, stale cursors, disconnects, mutation failures, and
   cleanup failures have explicit behavior.
