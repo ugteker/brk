@@ -297,7 +297,7 @@ function bootstrap() {
     cluster.on('exit', (worker, code, signal) => {
       const role = rolesByWorkerId.get(worker.id) ?? 'web';
       rolesByWorkerId.delete(worker.id);
-      logger.warn(`[runtime] ${role} process ${worker.process.pid} exited (code=${code}, signal=${signal}) — respawning`);
+      logger.warn(`[runtime] ${role} process ${worker.process.pid} exited (code=${code}, signal=${signal})`);
       if (!guard.recordExit(Date.now())) {
         logger.error('[runtime] children are crash-looping — exiting so the container restart policy takes over');
         process.exit(1);
