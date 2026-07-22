@@ -376,3 +376,14 @@ model DiscussionTurn {
   run              DiscussionRun         @relation(fields: [discussionRunId], references: [id], onDelete: Cascade)
   participant      DiscussionParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
 }
+
+model RealtimeEvent {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  topic     String
+  entityId  String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, id])
+  @@index([createdAt])
+}
