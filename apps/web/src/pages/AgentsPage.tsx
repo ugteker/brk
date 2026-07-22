@@ -2290,6 +2290,12 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                    {sourcesLoadState !== 'loading' && selectedSourceId ? (() => {
                      const selectedSource = sources.find((s) => s.id === selectedSourceId);
                      const linkedPlaybooks = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
+                     const linkedAgentLinks = linkedPlaybooks
+                       .map((playbook) => {
+                         const agent = agents.find((candidate) => candidate.id === playbook.agentId);
+                         return agent ? { playbook, agent } : null;
+                       })
+                       .filter((link): link is { playbook: PlaybookRecord; agent: AgentSummary } => Boolean(link));
                      return selectedSource ? (
                        <Card
                          className="min-w-0"
@@ -2309,14 +2315,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          extra={
                            <div className="flex items-center gap-2">
                              {linkedPlaybooks.length > 0 && (selectedSource.type !== 'youtube_videos' && selectedSource.type !== 'podcast_feeds') ? (
-                               <Button
-                                 type="primary"
-                                 loading={runningAgentId === linkedPlaybooks[0]?.agentId}
-                                 icon={<CaretRightOutlined />}
-                                 onClick={() => void onRunSourceEpisode(undefined)}
-                               >
-                                 <span className="hidden sm:inline">{t('library.runAnalysisNow')}</span>
-                               </Button>
+                               <TouchSafeTooltip title={t('library.analyzeNewContentHelp')}>
+                                 <Button
+                                   type="primary"
+                                   loading={runningAgentId === linkedPlaybooks[0]?.agentId}
+                                   icon={<CaretRightOutlined />}
+                                   onClick={() => void onRunSourceEpisode(undefined)}
+                                 >
+                                   <span className="hidden sm:inline">{t('library.analyzeNewContent')}</span>
+                                 </Button>
+                               </TouchSafeTooltip>
                              ) : null}
                              {sourceDetailReports.length > 0 ? (
                                <TouchSafeTooltip title={t('studio.discussThisSource')}>
@@ -2515,6 +2523,70 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              </>
                            );
                          })()}
+                         <div className="mt-3 pt-3 border-t border-border" onClick={(event) => event.stopPropagation()}>
+                           <div className="mb-2 text-xs font-medium text-muted-foreground">{t('library.agentFollowLabel')}</div>
+                           <div className="rounded-lg border border-slate-200/80 bg-slate-50/60 p-3 dark:border-slate-700/80 dark:bg-slate-800/40">
+                             <div className="flex flex-wrap items-start gap-3">
+                               {linkedAgentLinks.map(({ agent, playbook }) => {
+                                 const characterLabel = getAgentCharacterLabel(agent);
+                                 const personalityLabel = getAgentPersonalityLabel(agent);
+                                 const canRemove = selectedSource.ownerUserId === user?.id;
+                                 return (
+                                   <div key={playbook.id} className="group relative">
+                                     <TouchSafeTooltip
+                                       title={<div><div className="font-medium">{getAgentDisplayLabel(agent)}</div><div>{humanizeCharacterType(agent.characterType)}</div><div>{personalityLabel}</div></div>}
+                                     >
+                                       <Button
+                                         type="text"
+                                         aria-label={`${getAgentDisplayLabel(agent)}: ${characterLabel}, ${humanizeCharacterType(agent.characterType)}, ${personalityLabel}`}
+                                         className="h-auto w-12 p-0"
+                                       >
+                                         <span className="flex flex-col items-center gap-1 text-center">
+                                           <span className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${PERSONA_ICON_BG_MAP[agent.characterType ?? 'summarizer']}`}>
+                                             {getCharacterIcon(agent.characterType)}
+                                           </span>
+                                           <span className="w-full truncate text-[10px] leading-tight">{characterLabel}</span>
+                                         </span>
+                                       </Button>
+                                     </TouchSafeTooltip>
+                                     {canRemove ? (
+                                       <TouchSafeTooltip title={t('library.removeAgentFromSource')}>
+                                         <Popconfirm
+                                           title={t('library.removeAgentConfirm', { name: getAgentDisplayLabel(agent) })}
+                                           description={t('library.removeAgentConfirmDescription')}
+                                           okText={t('common.remove')}
+                                           cancelText={t('common.cancel')}
+                                           onConfirm={() => void onRemoveAgentFromSource(playbook, selectedSource.id)}
+                                         >
+                                           <Button
+                                             type="primary"
+                                             danger
+                                             shape="circle"
+                                             size="small"
+                                             aria-label={t('library.removeAgentFromSource')}
+                                             icon={<CloseOutlined />}
+                                             className="absolute -right-1 -top-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                                             onClick={(event) => event.stopPropagation()}
+                                           />
+                                         </Popconfirm>
+                                       </TouchSafeTooltip>
+                                     ) : null}
+                                   </div>
+                                 );
+                               })}
+                               <TouchSafeTooltip title={t('library.addAgent')}>
+                                 <Button
+                                   type="dashed"
+                                   shape="circle"
+                                   size="large"
+                                   aria-label={t('library.addAgent')}
+                                   icon={<PlusOutlined />}
+                                   onClick={(event) => onFollowSource(selectedSource, event)}
+                                 />
+                               </TouchSafeTooltip>
+                             </div>
+                           </div>
+                         </div>
                          <Tabs
                              activeKey={activeSourceTab}
                              onChange={setActiveSourceTab}
@@ -2710,9 +2782,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            return agent ? { playbook, agent } : null;
                          })
                          .filter((link): link is { playbook: PlaybookRecord; agent: AgentSummary } => Boolean(link));
-                       const cardAgentIds = new Set(cardAgentLinks.map(({ agent }) => agent.id));
-                       const cardReports = feedReports.filter((report) => cardAgentIds.has(report.agentId));
-                       const latestCardReport = cardReports[0];
+                       const cardReportCount = source.reportCount ?? 0;
+                       const hasCardReports = cardReportCount > 0;
                        const coverImageUrl = getSourceCoverImageUrl(source);
                        return (
                        <Card
@@ -2805,11 +2876,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              type="text"
                              block
                              className={`h-auto rounded-lg border px-3 py-2 text-left ${
-                               latestCardReport
+                               hasCardReports
                                  ? 'border-violet-200 bg-violet-50/70 hover:!border-violet-300 hover:!bg-violet-100/70 dark:border-violet-500/30 dark:bg-violet-950/30 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/50'
                                  : 'border-dashed border-border bg-muted/30 hover:!border-violet-300 hover:!bg-violet-50/50 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/30'
                              }`}
-                             aria-label={latestCardReport ? t('library.openReports', { count: cardReports.length }) : t('library.noReportsYet')}
+                             aria-label={hasCardReports ? t('library.openReports', { count: cardReportCount }) : t('library.noReportsYet')}
                              onClick={() => {
                                setRecentlyUpdatedSourceId(null);
                                setSelectedSourceId(source.id);
@@ -2818,24 +2889,17 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            >
                              <span className="flex items-center gap-2">
                                <CheckCircleOutlined
-                                 className={latestCardReport ? 'text-emerald-500 dark:text-emerald-400' : 'text-muted-foreground'}
+                                 className={hasCardReports ? 'text-emerald-500 dark:text-emerald-400' : 'text-muted-foreground'}
                                />
                                <span className="min-w-0 flex-1">
                                  <span className="block text-xs font-semibold text-foreground">
-                                   {latestCardReport ? t('library.reportsAvailable', { count: cardReports.length }) : t('library.noReportsYet')}
+                                   {hasCardReports ? t('library.reportsAvailable', { count: cardReportCount }) : t('library.noReportsYet')}
                                  </span>
                                  <span className="block truncate text-[11px] text-muted-foreground">
-                                   {latestCardReport
-                                     ? t('library.latestReportAt', {
-                                         date: new Date(latestCardReport.createdAt).toLocaleDateString(i18n.language, {
-                                           day: 'numeric',
-                                           month: 'short'
-                                         })
-                                       })
-                                     : t('library.reportsWillAppearHere')}
+                                   {hasCardReports ? t('library.sourceReportsAvailableHint') : t('library.reportsWillAppearHere')}
                                  </span>
                                </span>
-                               {latestCardReport ? <span className="text-base text-violet-500 dark:text-violet-300">›</span> : null}
+                               {hasCardReports ? <span className="text-base text-violet-500 dark:text-violet-300">›</span> : null}
                              </span>
                            </Button>
                          </div>

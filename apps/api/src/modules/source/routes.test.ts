@@ -319,6 +319,69 @@ describe('source routes', () => {
     expect(adminList.json<SourceRecord[]>()).toHaveLength(1);
   });
 
+  it('adds source-scoped report counts to the library list', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    const countReportsForSourceValues = vi.fn(async () => ({
+      'https://example.com/feed-a.xml': 2
+    }));
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      source: {
+        sourceRepository: sourceRepo,
+        accessResolver: new DomainAccessResolver(sourceRepo),
+        reportRepository: { listReportsForSource: vi.fn(async () => []), countReportsForSourceValues } as never
+      }
+    });
+
+    const createA = await app.inject({
+      method: 'POST',
+      url: '/api/sources',
+      headers: authCookieHeader(),
+      payload: { type: 'podcast_feeds', value: 'https://example.com/feed-a.xml' }
+    });
+    const sourceA = createA.json<SourceRecord>();
+    const createB = await app.inject({
+      method: 'POST',
+      url: '/api/sources',
+      headers: authCookieHeader(),
+      payload: { type: 'podcast_feeds', value: 'https://example.com/feed-b.xml' }
+    });
+    const sourceB = createB.json<SourceRecord>();
+
+    const response = await app.inject({ method: 'GET', url: '/api/sources', headers: authCookieHeader() });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: sourceA.id, reportCount: 2 }),
+      expect.objectContaining({ id: sourceB.id, reportCount: 0 })
+    ]));
+    expect(countReportsForSourceValues).toHaveBeenCalledWith([sourceA.value, sourceB.value]);
+  });
+
+  it('defaults every source report count to zero when no reportRepository is configured', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      source: { sourceRepository: sourceRepo, accessResolver: new DomainAccessResolver(sourceRepo) }
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/sources',
+      headers: authCookieHeader(),
+      payload: { type: 'web_urls', value: 'https://example.com' }
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/api/sources', headers: authCookieHeader() });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([expect.objectContaining({ reportCount: 0 })]);
+  });
+
   it('lists only reports whose runs actually reference the source (source-scoped, not agent-scoped)', async () => {
     const sourceRepo = new InMemorySourceRepository();
     const listReportsForSource = vi.fn(async (sourceValue: string) =>
@@ -333,7 +396,7 @@ describe('source routes', () => {
       source: {
         sourceRepository: sourceRepo,
         accessResolver: new DomainAccessResolver(sourceRepo),
-        reportRepository: { listReportsForSource } as never
+        reportRepository: { listReportsForSource, countReportsForSourceValues: vi.fn(async () => ({})) } as never
       }
     });
 
@@ -375,7 +438,7 @@ describe('source routes', () => {
       source: {
         sourceRepository: sourceRepo,
         accessResolver: new DomainAccessResolver(sourceRepo),
-        reportRepository: { listReportsForSource } as never
+        reportRepository: { listReportsForSource, countReportsForSourceValues: vi.fn(async () => ({})) } as never
       }
     });
 

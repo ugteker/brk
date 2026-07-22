@@ -36,6 +36,10 @@ export interface SourceRecord {
   };
   createdAt: string;
   updatedAt: string;
+  /** Count of reports whose generating run referenced this source's evidence, scoped per
+   * source (not per agent). Optional client-side: absent on responses from older API
+   * deployments, so callers must default to 0 rather than treat it as always present. */
+  reportCount?: number;
 }
 
 export interface CreateSourcePayload {

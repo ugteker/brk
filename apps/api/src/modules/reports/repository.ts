@@ -153,6 +153,53 @@ export class ReportRepository {
   }
 
   /**
+   * Batched counterpart to `listReportsForSource`, used to annotate the Library list with a
+   * per-source report count without an N+1 query per card. A broad `contains: '"sourceId":'`
+   * pre-filter narrows the candidate rows at the DB level; each candidate's artifacts are then
+   * parsed in memory to extract the exact `sourceId` value (JSON-unescaped, not just a raw
+   * substring match) so counting stays correct even if one value is a substring of another.
+   * A report with multiple artifacts referencing the same source value still counts once for
+   * that value - the count is "reports referencing this source", not "artifacts referencing it".
+   */
+  async countReportsForSourceValues(sourceValues: string[]): Promise<Record<string, number>> {
+    const counts = Object.fromEntries(sourceValues.map((value) => [value, 0]));
+    if (sourceValues.length === 0) return counts;
+
+    const rows = await this.db.agentRunReport.findMany({
+      where: {
+        agentRun: {
+          artifacts: { some: { payloadJson: { contains: '"sourceId":' } } }
+        }
+      },
+      select: {
+        id: true,
+        agentRun: {
+          select: {
+            artifacts: { select: { payloadJson: true } }
+          }
+        }
+      }
+    });
+
+    const requested = new Set(sourceValues);
+    for (const report of rows) {
+      const reportSourceValues = new Set<string>();
+      for (const artifact of report.agentRun.artifacts) {
+        const match = artifact.payloadJson.match(/"sourceId"\s*:\s*"((?:\\.|[^"])*)"/);
+        if (!match) continue;
+        try {
+          const value = JSON.parse(`"${match[1]}"`) as unknown;
+          if (typeof value === 'string' && requested.has(value)) reportSourceValues.add(value);
+        } catch {
+          // Malformed legacy artifact JSON cannot identify a source and is ignored.
+        }
+      }
+      for (const value of reportSourceValues) counts[value] += 1;
+    }
+    return counts;
+  }
+
+  /**
    * Lists all reports for the given agent that contain at least one signal for `symbol`,
    * ordered oldest-first (chronological), for building a per-symbol signal history timeline.
    * Symbol matching is exact/case-sensitive, matching how symbols are stored elsewhere.

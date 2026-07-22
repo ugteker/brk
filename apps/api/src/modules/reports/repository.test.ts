@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ReportRepository } from './repository';
 
 function createFakeDb(agentCharacterTypes: Record<string, string> = {}) {
@@ -243,6 +243,65 @@ describe('ReportRepository', () => {
         artifacts: { some: { payloadJson: { contains: '"sourceId":"https://example.com/feed.xml"' } } }
       }
     });
+  });
+
+  it('counts each report only for source values referenced by its evidence artifacts', async () => {
+    const reportRows = [
+      // References feed-a via a single evidence artifact.
+      {
+        id: 'report-1',
+        agentId: 'agent-1',
+        agentRun: { artifacts: [{ payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-a.xml' }) }] }
+      },
+      // References feed-a twice (two artifacts) - must still contribute 1, not 2.
+      {
+        id: 'report-2',
+        agentId: 'agent-1',
+        agentRun: {
+          artifacts: [
+            { payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-a.xml' }) },
+            { payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-a.xml' }) }
+          ]
+        }
+      },
+      // References feed-b only.
+      {
+        id: 'report-3',
+        agentId: 'agent-2',
+        agentRun: { artifacts: [{ payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-b.xml' }) }] }
+      },
+      // Unrelated report owned by the same agent as report-1/report-2, but its evidence
+      // artifact references a source that was not requested - must be absent from both counts.
+      {
+        id: 'report-4',
+        agentId: 'agent-1',
+        agentRun: { artifacts: [{ payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-unrelated.xml' }) }] }
+      }
+    ];
+    const db = {
+      agentRunReport: {
+        findMany: async () => reportRows
+      }
+    };
+    const repo = new ReportRepository(db as never);
+
+    const result = await repo.countReportsForSourceValues([
+      'https://example.com/feed-a.xml',
+      'https://example.com/feed-b.xml'
+    ]);
+
+    expect(result).toEqual({
+      'https://example.com/feed-a.xml': 2,
+      'https://example.com/feed-b.xml': 1
+    });
+  });
+
+  it('returns a zero count for every requested source value without querying when the list is empty', async () => {
+    const findMany = vi.fn(async () => []);
+    const repo = new ReportRepository({ agentRunReport: { findMany } } as never);
+
+    expect(await repo.countReportsForSourceValues([])).toEqual({});
+    expect(findMany).not.toHaveBeenCalled();
   });
 
   it('persists AI usage/cost stats when provided', async () => {
