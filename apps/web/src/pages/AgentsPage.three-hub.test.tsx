@@ -429,7 +429,7 @@ describe('AgentsPage three hub shell', () => {
     expect(screen.getByText(/2 reports available/i)).toBeInTheDocument();
   });
 
-  it('opens the follow wizard with the source and its already-linked agent preselected from the details Add agent action', async () => {
+  it('opens the follow wizard with the source and its already-linked agent preselected from the source detail header add agent action', async () => {
     vi.mocked(listSources).mockResolvedValueOnce([
       {
         id: 'source-1',
@@ -482,7 +482,7 @@ describe('AgentsPage three hub shell', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByText(/example source/i));
+    fireEvent.click(await screen.findByRole('button', { name: /no reports yet/i }));
     fireEvent.click(await screen.findByRole('button', { name: /add agent/i }));
 
     // Two antd Modals can be mounted at once in this test environment and both title
@@ -491,6 +491,7 @@ describe('AgentsPage three hub shell', () => {
     expect(await screen.findByText(/^summarize: example source$/i)).toBeInTheDocument();
     const agentCard = screen.getByRole('button', { name: /select agent/i });
     expect(agentCard).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText(/agents follow/i)).not.toBeInTheDocument();
   });
 
   it('shows polished dashed ghost card copy in Library hub', async () => {

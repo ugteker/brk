@@ -2290,12 +2290,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                    {sourcesLoadState !== 'loading' && selectedSourceId ? (() => {
                      const selectedSource = sources.find((s) => s.id === selectedSourceId);
                      const linkedPlaybooks = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
-                     const linkedAgentLinks = linkedPlaybooks
-                       .map((playbook) => {
-                         const agent = agents.find((candidate) => candidate.id === playbook.agentId);
-                         return agent ? { playbook, agent } : null;
-                       })
-                       .filter((link): link is { playbook: PlaybookRecord; agent: AgentSummary } => Boolean(link));
                      return selectedSource ? (
                        <Card
                          className="min-w-0"
@@ -2326,6 +2320,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  </Button>
                                </TouchSafeTooltip>
                              ) : null}
+                             <TouchSafeTooltip title={t('library.addAgent')}>
+                               <Button
+                                 type="dashed"
+                                 shape="circle"
+                                 size="large"
+                                 aria-label={t('library.addAgent')}
+                                 icon={<PlusOutlined />}
+                                 onClick={(event) => onFollowSource(selectedSource, event)}
+                               />
+                             </TouchSafeTooltip>
                              {sourceDetailReports.length > 0 ? (
                                <TouchSafeTooltip title={t('studio.discussThisSource')}>
                                  <Button
@@ -2523,70 +2527,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              </>
                            );
                          })()}
-                         <div className="mt-3 pt-3 border-t border-border" onClick={(event) => event.stopPropagation()}>
-                           <div className="mb-2 text-xs font-medium text-muted-foreground">{t('library.agentFollowLabel')}</div>
-                           <div className="rounded-lg border border-slate-200/80 bg-slate-50/60 p-3 dark:border-slate-700/80 dark:bg-slate-800/40">
-                             <div className="flex flex-wrap items-start gap-3">
-                               {linkedAgentLinks.map(({ agent, playbook }) => {
-                                 const characterLabel = getAgentCharacterLabel(agent);
-                                 const personalityLabel = getAgentPersonalityLabel(agent);
-                                 const canRemove = selectedSource.ownerUserId === user?.id;
-                                 return (
-                                   <div key={playbook.id} className="group relative">
-                                     <TouchSafeTooltip
-                                       title={<div><div className="font-medium">{getAgentDisplayLabel(agent)}</div><div>{humanizeCharacterType(agent.characterType)}</div><div>{personalityLabel}</div></div>}
-                                     >
-                                       <Button
-                                         type="text"
-                                         aria-label={`${getAgentDisplayLabel(agent)}: ${characterLabel}, ${humanizeCharacterType(agent.characterType)}, ${personalityLabel}`}
-                                         className="h-auto w-12 p-0"
-                                       >
-                                         <span className="flex flex-col items-center gap-1 text-center">
-                                           <span className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${PERSONA_ICON_BG_MAP[agent.characterType ?? 'summarizer']}`}>
-                                             {getCharacterIcon(agent.characterType)}
-                                           </span>
-                                           <span className="w-full truncate text-[10px] leading-tight">{characterLabel}</span>
-                                         </span>
-                                       </Button>
-                                     </TouchSafeTooltip>
-                                     {canRemove ? (
-                                       <TouchSafeTooltip title={t('library.removeAgentFromSource')}>
-                                         <Popconfirm
-                                           title={t('library.removeAgentConfirm', { name: getAgentDisplayLabel(agent) })}
-                                           description={t('library.removeAgentConfirmDescription')}
-                                           okText={t('common.remove')}
-                                           cancelText={t('common.cancel')}
-                                           onConfirm={() => void onRemoveAgentFromSource(playbook, selectedSource.id)}
-                                         >
-                                           <Button
-                                             type="primary"
-                                             danger
-                                             shape="circle"
-                                             size="small"
-                                             aria-label={t('library.removeAgentFromSource')}
-                                             icon={<CloseOutlined />}
-                                             className="absolute -right-1 -top-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-                                             onClick={(event) => event.stopPropagation()}
-                                           />
-                                         </Popconfirm>
-                                       </TouchSafeTooltip>
-                                     ) : null}
-                                   </div>
-                                 );
-                               })}
-                               <TouchSafeTooltip title={t('library.addAgent')}>
-                                 <Button
-                                   type="dashed"
-                                   shape="circle"
-                                   size="large"
-                                   aria-label={t('library.addAgent')}
-                                   icon={<PlusOutlined />}
-                                   onClick={(event) => onFollowSource(selectedSource, event)}
-                                 />
-                               </TouchSafeTooltip>
-                             </div>
-                           </div>
-                         </div>
                          <Tabs
                              activeKey={activeSourceTab}
                              onChange={setActiveSourceTab}
