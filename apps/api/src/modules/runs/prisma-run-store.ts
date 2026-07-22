@@ -1,8 +1,13 @@
 import type { PrismaClient } from '@prisma/client';
 import { computeNextRun } from '../schedules/compute-next-run';
+import type { RealtimeEventWriter } from '../realtime/types';
 import type { AgentRunRecord, RunPhase, RunStore } from './run-queue.service';
 
-type RunDb = Pick<PrismaClient, 'agentRun' | 'playbook'>;
+type RunDb = Pick<PrismaClient, 'agentRun' | 'playbook' | 'agent' | 'realtimeEvent' | '$transaction'>;
+
+/** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
+ * mutation behavior identical while emitting no realtime events. */
+const noopRealtimeEventWriter: RealtimeEventWriter = { append: async () => {} };
 
 function parseRecipients(json: string | null | undefined): string[] {
   if (!json) return [];
@@ -16,7 +21,10 @@ function parseRecipients(json: string | null | undefined): string[] {
 }
 
 export class PrismaRunStore implements RunStore {
-  constructor(private readonly db: RunDb) {}
+  constructor(
+    private readonly db: RunDb,
+    private readonly realtime: RealtimeEventWriter = noopRealtimeEventWriter
+  ) {}
 
   async getDueSchedules(now: Date) {
     const duePlaybooks = await this.db.playbook.findMany({
@@ -49,9 +57,16 @@ export class PrismaRunStore implements RunStore {
     });
     if (!queued) return null;
 
-    const claimed = await this.db.agentRun.update({
-      where: { id: queued.id },
-      data: { status: 'running', workerId, startedAt: new Date() }
+    const claimed = await this.db.$transaction(async (tx) => {
+      const claimed = await tx.agentRun.update({
+        where: { id: queued.id },
+        data: { status: 'running', workerId, startedAt: new Date() }
+      });
+      const agent = await tx.agent.findUnique({ where: { id: claimed.agentId }, select: { ownerUserId: true } });
+      if (agent) {
+        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: claimed.id });
+      }
+      return claimed;
     });
 
     const playbookData = (queued as typeof queued & {
@@ -79,9 +94,15 @@ export class PrismaRunStore implements RunStore {
   }
 
   async setPhase(runId: string, phase: RunPhase): Promise<void> {
-    await this.db.agentRun.update({
-      where: { id: runId },
-      data: { phase }
+    await this.db.$transaction(async (tx) => {
+      const updated = await tx.agentRun.update({
+        where: { id: runId },
+        data: { phase }
+      });
+      const agent = await tx.agent.findUnique({ where: { id: updated.agentId }, select: { ownerUserId: true } });
+      if (agent) {
+        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: updated.id });
+      }
     });
   }
 
@@ -91,14 +112,20 @@ export class PrismaRunStore implements RunStore {
     errorCode?: string,
     errorMessage?: string
   ): Promise<void> {
-    await this.db.agentRun.update({
-      where: { id: runId },
-      data: {
-        status,
-        phase: null,
-        errorCode,
-        errorMessage,
-        finishedAt: new Date()
+    await this.db.$transaction(async (tx) => {
+      const updated = await tx.agentRun.update({
+        where: { id: runId },
+        data: {
+          status,
+          phase: null,
+          errorCode,
+          errorMessage,
+          finishedAt: new Date()
+        }
+      });
+      const agent = await tx.agent.findUnique({ where: { id: updated.agentId }, select: { ownerUserId: true } });
+      if (agent) {
+        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: updated.id });
       }
     });
   }

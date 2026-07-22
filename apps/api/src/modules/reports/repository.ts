@@ -2,8 +2,13 @@ import type { PrismaClient } from '@prisma/client';
 import type { CreateRunReportInput, RunReportRecord, SignalRecord } from './types';
 import { normalizeUnifiedCharacterReport } from './unified-report';
 import { DEFAULT_CHARACTER_TYPE } from '../agents/types';
+import type { RealtimeEventWriter } from '../realtime/types';
 
-type ReportDb = Pick<PrismaClient, 'agentRunReport'>;
+type ReportDb = Pick<PrismaClient, 'agentRunReport' | 'agent' | '$transaction'>;
+
+/** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
+ * mutation behavior identical while emitting no realtime events. */
+const noopRealtimeEventWriter: RealtimeEventWriter = { append: async () => {} };
 
 type SignalRow = { symbol: string; side: string; confidence: number; rationale: string; citationsJson: string };
 
@@ -28,7 +33,10 @@ type ReportRow = {
 };
 
 export class ReportRepository {
-  constructor(private readonly db: ReportDb) {}
+  constructor(
+    private readonly db: ReportDb,
+    private readonly realtime: RealtimeEventWriter = noopRealtimeEventWriter
+  ) {}
 
   async saveRunReport(input: CreateRunReportInput): Promise<RunReportRecord> {
     const characterType =
@@ -41,35 +49,44 @@ export class ReportRepository {
     });
     const normalizedSignals = normalizedReport.section.character_type === 'finance_expert' ? normalizedReport.section.signals : [];
 
-    const created = await this.db.agentRunReport.create({
-      data: {
-        agentId: input.agentId,
-        agentRunId: input.agentRunId,
-        promptVersionId: input.promptVersionId,
-        summary: input.summary,
-        reportJson: JSON.stringify(normalizedReport),
-        needsHumanReview: input.needsHumanReview,
-        sourceWarningsJson: JSON.stringify(input.sourceWarnings),
-        model: input.model ?? null,
-        promptVersionNumber: input.promptVersionNumber ?? null,
-        inputTokens: input.inputTokens ?? null,
-        outputTokens: input.outputTokens ?? null,
-        estimatedCostUsd: input.estimatedCostUsd ?? null,
-        signals: {
-          create: normalizedSignals.map((signal) => ({
-            symbol: signal.symbol,
-            side: signal.side,
-            confidence: signal.confidence,
-            rationale: signal.rationale,
-            citationsJson: JSON.stringify(signal.citations)
-          }))
-        }
-      },
-      // agent must be included here - toRecord() below derives characterType from
-      // row.agent?.characterType, and without it this always fell back to 'finance_expert'
-      // and threw a ReportShapeValidationError for any non-finance_expert agent, even though
-      // the row above had already been durably saved.
-      include: { signals: true, agent: { select: { characterType: true } }, agentRun: { select: { playbookId: true } } }
+    const created = await this.db.$transaction(async (tx) => {
+      const created = await tx.agentRunReport.create({
+        data: {
+          agentId: input.agentId,
+          agentRunId: input.agentRunId,
+          promptVersionId: input.promptVersionId,
+          summary: input.summary,
+          reportJson: JSON.stringify(normalizedReport),
+          needsHumanReview: input.needsHumanReview,
+          sourceWarningsJson: JSON.stringify(input.sourceWarnings),
+          model: input.model ?? null,
+          promptVersionNumber: input.promptVersionNumber ?? null,
+          inputTokens: input.inputTokens ?? null,
+          outputTokens: input.outputTokens ?? null,
+          estimatedCostUsd: input.estimatedCostUsd ?? null,
+          signals: {
+            create: normalizedSignals.map((signal) => ({
+              symbol: signal.symbol,
+              side: signal.side,
+              confidence: signal.confidence,
+              rationale: signal.rationale,
+              citationsJson: JSON.stringify(signal.citations)
+            }))
+          }
+        },
+        // agent must be included here - toRecord() below derives characterType from
+        // row.agent?.characterType, and without it this always fell back to 'finance_expert'
+        // and threw a ReportShapeValidationError for any non-finance_expert agent, even though
+        // the row above had already been durably saved.
+        include: { signals: true, agent: { select: { characterType: true } }, agentRun: { select: { playbookId: true } } }
+      });
+
+      const agent = await tx.agent.findUnique({ where: { id: input.agentId }, select: { ownerUserId: true } });
+      if (agent) {
+        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'report.changed', entityId: created.id });
+      }
+
+      return created;
     });
 
     return this.toRecord(created as unknown as ReportRow);

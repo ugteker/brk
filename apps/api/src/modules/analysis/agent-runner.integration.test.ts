@@ -19,7 +19,7 @@ function createFakeDb() {
   const artifacts: any[] = [];
   const reports: any[] = [];
 
-  return {
+  const db: any = {
     agents,
     agent: {
       findUnique: async ({ where }: { where: { id: string } }) => agents.get(where.id) ?? null
@@ -59,6 +59,11 @@ function createFakeDb() {
       }
     }
   };
+  // saveRunReport() wraps its create + realtime append in $transaction(tx => ...); since none of
+  // this fake's underlying collections are actually transactional, resolving the callback with the
+  // db itself keeps a single shared in-memory state, matching how the other fakes here behave.
+  db.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(db);
+  return db;
 }
 
 describe('AgentRunner (integration with real repositories)', () => {

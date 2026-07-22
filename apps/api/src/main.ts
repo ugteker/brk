@@ -95,7 +95,7 @@ async function start(role: Role) {
   const agentRepository = new AgentRepository(prisma, realtimeEventRepository);
   const promptRepository = new PromptRepository(prisma);
   const artifactRepository = new ArtifactRepository(prisma);
-  const reportRepository = new ReportRepository(prisma);
+  const reportRepository = new ReportRepository(prisma, realtimeEventRepository);
   const runsRepository = new RunsRepository(prisma);
   const claudeClient = new ClaudeClient({ apiKey: process.env.ANTHROPIC_API_KEY });
   const userRepository = new UserRepository(prisma);
@@ -116,7 +116,7 @@ async function start(role: Role) {
     siteInspector
   };
 
-  const discussionRepository = new DiscussionRepository(prisma);
+  const discussionRepository = new DiscussionRepository(prisma, realtimeEventRepository);
   const syntheticSourceService = new SyntheticSourceService(prisma);
   const discussionOrchestrator = new DiscussionOrchestrator({
     discussionRepository,
@@ -133,7 +133,7 @@ async function start(role: Role) {
     await bootstrapAdminAccount(userRepository);
   }
 
-  const runStore = new PrismaRunStore(prisma);
+  const runStore = new PrismaRunStore(prisma, realtimeEventRepository);
   const queue = new RunQueueService(runStore);
 
   const agentRunner = new AgentRunner({

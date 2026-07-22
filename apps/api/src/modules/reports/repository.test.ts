@@ -28,7 +28,10 @@ function createFakeDb(agentCharacterTypes: Record<string, string> = {}) {
     return { ...row, agent: include?.agent && agentCharacterTypes[row.agentId] ? { characterType: agentCharacterTypes[row.agentId] } : undefined };
   }
 
-  return {
+  const db: any = {
+    agent: {
+      findUnique: async ({ where }: { where: { id: string } }) => ({ id: where.id, ownerUserId: `owner-of-${where.id}` })
+    },
     agentRunReport: {
       create: async ({
         data,
@@ -107,6 +110,8 @@ function createFakeDb(agentCharacterTypes: Record<string, string> = {}) {
       }
     }
   };
+  db.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(db);
+  return db;
 }
 
 describe('ReportRepository', () => {
@@ -418,5 +423,60 @@ describe('ReportRepository', () => {
 
     const reRead = await repo.getReportById(saved.id);
     expect(reRead?.report.section.character_type).toBe('teacher');
+  });
+});
+
+describe('ReportRepository realtime event production', () => {
+  function createMockRealtime() {
+    const events: Array<{ userId: string; topic: string; entityId?: string }> = [];
+    return {
+      events,
+      append: async (_tx: unknown, event: { userId: string; topic: string; entityId?: string }) => {
+        events.push(event);
+      }
+    };
+  }
+
+  it('emits report.changed for the report agent owner in the same transaction as the create', async () => {
+    const db = createFakeDb();
+    const realtime = createMockRealtime();
+    const repo = new ReportRepository(db as never, realtime);
+
+    const saved = await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-1',
+      promptVersionId: 'prompt-1',
+      summary: 'Bullish on AAPL',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: []
+    });
+
+    expect(realtime.events).toContainEqual(
+      expect.objectContaining({ userId: 'owner-of-agent-1', topic: 'report.changed', entityId: saved.id })
+    );
+  });
+
+  it('does not emit report.changed when the domain write fails', async () => {
+    const db = createFakeDb();
+    db.agentRunReport.create = async () => {
+      throw new Error('db_error');
+    };
+    const realtime = createMockRealtime();
+    const repo = new ReportRepository(db as never, realtime);
+
+    await expect(
+      repo.saveRunReport({
+        agentId: 'agent-1',
+        agentRunId: 'run-1',
+        promptVersionId: 'prompt-1',
+        summary: 'will fail',
+        needsHumanReview: false,
+        sourceWarnings: [],
+        signals: []
+      })
+    ).rejects.toThrow('db_error');
+
+    expect(realtime.events).toHaveLength(0);
   });
 });
