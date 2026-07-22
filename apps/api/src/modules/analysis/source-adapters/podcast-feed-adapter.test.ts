@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PodcastFeedAdapter } from './podcast-feed-adapter';
 import { InMemorySourceCursorRepository } from '../../crawler/source-cursor-repository';
 import { InMemorySourceCrawlConfigRepository } from '../../crawler/crawl-config-repository';
@@ -66,5 +66,35 @@ describe('PodcastFeedAdapter', () => {
 
     const second = await adapter.fetch('agent-1', source);
     expect(second.evidence).toHaveLength(0);
+  });
+
+  it('reports parsed feed-level cover metadata during a crawl', async () => {
+    const feedXml = `<rss><channel>
+      <title>Market Pulse</title>
+      <itunes:image href="https://cdn.example.com/new-cover.jpg"/>
+      <item><guid>ep-1</guid><title>Episode 1</title><description>Notes</description></item>
+    </channel></rss>`;
+    const onFeedMetadata = vi.fn();
+    const cursorRepository = new InMemorySourceCursorRepository() as InMemorySourceCursorRepository & {
+      refreshSourceCoverImageUrl: NonNullable<SmartCrawlerDeps['cursorRepository']['refreshSourceCoverImageUrl']>;
+    };
+    cursorRepository.refreshSourceCoverImageUrl = vi.fn(async () => 1);
+    const adapter = new PodcastFeedAdapter({
+      ...createDeps(async () => feedXml),
+      cursorRepository,
+      onFeedMetadata
+    });
+
+    await adapter.fetch('agent-1', { type: 'podcast_feeds', value: 'https://example.com/feed.xml' });
+
+    expect(cursorRepository.refreshSourceCoverImageUrl).toHaveBeenCalledWith(
+      'podcast_feeds',
+      'https://example.com/feed.xml',
+      'https://cdn.example.com/new-cover.jpg'
+    );
+    expect(onFeedMetadata).toHaveBeenCalledWith(
+      { type: 'podcast_feeds', value: 'https://example.com/feed.xml' },
+      { title: 'Market Pulse', coverImageUrl: 'https://cdn.example.com/new-cover.jpg' }
+    );
   });
 });

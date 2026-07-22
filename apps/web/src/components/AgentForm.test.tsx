@@ -110,7 +110,8 @@ vi.mock('../api/agents', () => ({
 }));
 
 vi.mock('../api/sources', () => ({
-  listSources: vi.fn().mockResolvedValue([])
+  listSources: vi.fn().mockResolvedValue([]),
+  listSourceSuggestions: vi.fn().mockResolvedValue([])
 }));
 
 vi.mock('../api/playbooks', () => ({

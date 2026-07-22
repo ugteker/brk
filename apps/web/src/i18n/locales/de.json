@@ -40,7 +40,10 @@
     "bellTitle": "Benachrichtigungen",
     "bellClearAll": "Alle löschen",
     "bellEmpty": "Nichts Neues 🎉",
-    "bellNewReport": "Neuer Bericht"
+    "bellNewReport": "Neuer Bericht",
+    "bell_show_started": "Deine Show hat gerade begonnen",
+    "bell_show_finished": "Deine Show ist fertig zum Lesen",
+    "bell_audio_ready": "Audio ist bereit zum Anhören"
   },
   "language": {
     "switchTo": "Language: English",
@@ -87,6 +90,13 @@
     "countVideos": "{{count}} Videos",
     "countEpisodes": "{{count}} Episoden",
     "countPages": "{{count}} Seiten",
+    "materialTab": "Material",
+    "materialTranscripts": "{{count}} Transkripte",
+    "materialAudio": "{{count}} mit Audio",
+    "materialHasAudio": "Audio verfügbar",
+    "materialTranscriptBadge": "Transkript",
+    "materialAudioBadge": "Audio",
+    "openDiscussion": "Im Studio öffnen",
     "analyzedBadge": "Analysiert",
     "openReport": "Bericht öffnen",
     "openLink": "Link öffnen",
@@ -149,6 +159,8 @@
       "keyTakeaway": "Kernaussage"
     },
     "evidenceCount": "{{count}} Belege",
+    "new": "Neu",
+    "dismiss": "Aus dem Feed ausblenden",
     "episode": "Besprochene Folge: {{title}}",
     "openReport": "Analyse öffnen",
     "discuss": "Diskutieren",
@@ -171,6 +183,7 @@
     "thisSource": "diese Quelle",
     "stepSubtitle": "Wähle einen KI-Agenten, der diese Quelle zusammenfasst und Berichte erstellt. Noch kein Agent? Erstelle einen unten.",
     "stepPickSource": "Quelle wählen",
+    "runPickerTitle": "Welcher Agent soll starten?",
     "stepChooseAgent": "Agent wählen",
     "stepSetSchedule": "Zeitplan festlegen",
     "advancedSettings": "Erweiterte Einstellungen (Zeitplan & Empfänger)"
@@ -320,6 +333,10 @@
     "hidePreview": "Onboarding-Vorschau ausblenden",
     "showWizardPreview": "Einrichtungsassistent starten"
   },
+  "statusCard": {
+    "title": "Letzte Aktivität",
+    "noRuns": "Noch keine Aktivität."
+  },
   "runs": {
     "noRuns": "Noch kein Verlauf. Der Verlauf erscheint hier, sobald der Zeitplan des Agenten startet (oder du manuell ausführst).",
     "scheduled": "Geplant",
@@ -339,8 +356,13 @@
       "notifying": "Benachrichtigungen werden gesendet…"
     },
     "status": {
-      "succeeded_no_new_content": "kein neuer Inhalt"
-    }
+      "succeeded": "Fertig",
+      "succeeded_no_new_content": "Nichts Neues",
+      "failed": "Hat nicht geklappt",
+      "running": "Läuft gerade",
+      "queued": "Wartet auf Start"
+    },
+    "errorTitle": "Etwas ist schiefgelaufen"
   },
   "report": {
     "summary": "Zusammenfassung",
@@ -466,8 +488,6 @@
     "success": "Dein erster Bericht läuft! Schau gleich in den Feed.",
     "error": "Etwas ist schiefgelaufen. Versuche es erneut oder richte es manuell ein.",
     "skip": "Überspringen — ich richte es manuell ein"
-    ,"suggestedSource": "Mit Lanz & Precht starten"
-    ,"suggestedSourceDescription": "Vorgeschlagene Podcast-Quelle"
   },
   "admin": {
     "seedDemo": "Demo-Daten einspielen",
@@ -559,6 +579,11 @@
     "languageLabel": "Diskussionssprache",
     "languageEnglish": "Englisch",
     "languageGerman": "Deutsch",
+    "voiceApiLabel": "Stimmen-Dienst",
+    "voiceApiHint": "Welcher Dienst diese Diskussion in Audio verwandelt.",
+    "voiceApiAuto": "Automatisch (Server-Standard)",
+    "voiceApiGoogle": "Google-Cloud-Stimmen",
+    "voiceApiOpenai": "OpenAI-Stimmen",
     "format_free_form": "Freie Unterhaltung",
     "format_structured": "Strukturierte Runden",
     "format_hosted": "Moderiert (Moderator + Gäste)",
@@ -614,9 +639,17 @@
     "warmup4": "Gleich sind wir auf Sendung… 🔴",
     "discussionFinished": "Diskussion beendet",
     "evidenceOriginNone": "Ohne Berichte (freie Diskussion)",
-    "audioReady": "Audio-Podcast ist fertig",
-    "audioFailed": "Audio-Rendering fehlgeschlagen",
-    "audioNotConfigured": "Audio-Rendering ist nicht konfiguriert — GOOGLE_TTS_CREDENTIALS / GOOGLE_TTS_API_KEY (oder OPENAI_API_KEY) im Backend setzen",
+    "audioReady": "Dein Audio-Podcast ist fertig",
+    "audioFailed": "Leider hat die Audio-Erstellung nicht geklappt. Bitte versuche es noch einmal.",
+    "audioNotConfigured": "Audio ist noch nicht verfügbar — die Sprachausgabe ist auf diesem Server nicht eingerichtet. Bitte wende dich an deinen Administrator.",
+    "renderAudioNeedsRun": "Audio kann erstellt werden, sobald die Diskussion abgeschlossen ist.",
+    "detailsTitle": "Über diese Diskussion",
+    "detailsFormat": "Format",
+    "detailsLanguage": "Sprache",
+    "detailsTurnLength": "Redelänge",
+    "detailsVoiceService": "Stimmen-Dienst",
+    "detailsSpeakers": "Sprecher & Stimmen",
+    "detailsCreated": "Erstellt",
     "minParticipants": "Mindestens 2 Agenten auswählen",
     "voiceLabel": "Stimme",
     "roleLabel": "Rolle",

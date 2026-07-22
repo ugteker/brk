@@ -35,13 +35,14 @@ it('shows an empty state when there are no runs yet', () => {
 it('renders run status, duration, and scheduled time', () => {
   render(<AgentRunsBrowser agentId="agent-1" runs={[createRun()]} />);
 
-  expect(screen.getByText('succeeded')).toBeInTheDocument();
+  expect(screen.getByText('Done')).toBeInTheDocument();
   expect(screen.getByText(/Duration 5.0s/)).toBeInTheDocument();
 });
 
 it('shows an error tag for failed runs', () => {
   render(<AgentRunsBrowser agentId="agent-1" runs={[createRun({ status: 'failed', errorCode: 'fetch_timeout' })]} />);
-  expect(screen.getByText(/Error: fetch_timeout/i)).toBeInTheDocument();
+  expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument();
+  expect(screen.getByText(/fetch_timeout/i)).toBeInTheDocument();
 });
 
 it('shows the error reason (errorMessage) for failed runs, not just the opaque error code', () => {
@@ -57,7 +58,7 @@ it('shows the error reason (errorMessage) for failed runs, not just the opaque e
       ]}
     />
   );
-  expect(screen.getByText(/Error: agent_run_failed/i)).toBeInTheDocument();
+  expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument();
   expect(screen.getByText(/Claude API request timed out after 30000ms/i)).toBeInTheDocument();
 });
 

@@ -8,6 +8,7 @@ import {
   Spin,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   message
 } from 'antd';
@@ -30,6 +31,7 @@ import {
   triggerAudioRender,
   triggerDiscussionRun,
   getDiscussionCapabilities,
+  type DiscussionCapabilities,
   type DiscussionDto,
   type DiscussionRunDto,
   type DiscussionRunEvidenceSnapshotDto,
@@ -370,12 +372,13 @@ export function DiscussionDetail() {
     return () => clearInterval(interval);
   }, []);
   // Hide the "Render audio" button entirely when the backend has no TTS configured.
-  const [ttsAvailable, setTtsAvailable] = useState(false);
+  const [capabilities, setCapabilities] = useState<DiscussionCapabilities>({ tts: false, ttsProviders: [] });
+  const ttsAvailable = capabilities.tts;
 
   useEffect(() => {
     getDiscussionCapabilities()
-      .then((caps) => setTtsAvailable(caps.tts))
-      .catch(() => setTtsAvailable(false));
+      .then(setCapabilities)
+      .catch(() => setCapabilities({ tts: false, ttsProviders: [] }));
   }, []);
 
   // Live run turns/status, kept up to date by the global `discussion.changed` realtime
@@ -597,12 +600,66 @@ export function DiscussionDetail() {
             {runs.length === 0 ? t('studio.runNow') : t('studio.runAgain')}
           </Button>
           {ttsAvailable && selectedRunId && (
-            <Button loading={renderingAudio} onClick={handleRenderAudio} icon={<AudioOutlined />}>
-              {t('studio.renderAudio')}
-            </Button>
+            <Tooltip title={selectedRun?.status !== 'done' ? t('studio.renderAudioNeedsRun') : undefined}>
+              <Button
+                loading={renderingAudio}
+                disabled={selectedRun?.status !== 'done'}
+                onClick={handleRenderAudio}
+                icon={<AudioOutlined />}
+              >
+                {t('studio.renderAudio')}
+              </Button>
+            </Tooltip>
           )}
         </Space>
       </div>
+
+      <Card size="small" style={{ marginBottom: 16 }} title={t('studio.detailsTitle')}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 24px', fontSize: 13 }}>
+          <span>
+            <Text type="secondary">{t('studio.detailsFormat')}: </Text>
+            {t(`studio.format_${discussion.format}`)}
+          </span>
+          <span>
+            <Text type="secondary">{t('studio.detailsLanguage')}: </Text>
+            {(discussion.formatConfig.language ?? 'en') === 'de' ? t('studio.languageGerman') : t('studio.languageEnglish')}
+          </span>
+          {ttsAvailable && (
+            <span>
+              <Text type="secondary">{t('studio.detailsVoiceService')}: </Text>
+              {(() => {
+                const chosen = discussion.formatConfig.ttsProvider;
+                const effective =
+                  chosen === 'google' || chosen === 'openai'
+                    ? chosen
+                    : capabilities.ttsProviders.includes('google')
+                      ? 'google'
+                      : capabilities.ttsProviders.includes('openai')
+                        ? 'openai'
+                        : null;
+                if (!effective) return t('studio.voiceApiAuto');
+                const label = effective === 'google' ? t('studio.voiceApiGoogle') : t('studio.voiceApiOpenai');
+                return chosen === 'google' || chosen === 'openai' ? label : `${t('studio.voiceApiAuto')} · ${label}`;
+              })()}
+            </span>
+          )}
+          <span>
+            <Text type="secondary">{t('studio.detailsCreated')}: </Text>
+            {new Date(discussion.createdAt).toLocaleDateString()}
+          </span>
+        </div>
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <Text type="secondary" style={{ fontSize: 13 }}>{t('studio.detailsSpeakers')}: </Text>
+          {discussion.participants.map((p) => {
+            const info = participantInfoMap[p.id];
+            return (
+              <Tag key={p.id} style={{ margin: 0 }}>
+                {getCharacterTypeEmoji(info?.characterType ?? null)} {info?.name ?? p.agentId} · {p.voiceId}
+              </Tag>
+            );
+          })}
+        </div>
+      </Card>
 
       {runs.length === 0 && !liveRun ? (
         <Card>

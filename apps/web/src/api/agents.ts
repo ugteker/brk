@@ -306,6 +306,9 @@ export interface RunReportDto {
   inputTokens: number | null;
   outputTokens: number | null;
   estimatedCostUsd: number | null;
+  /** When the report was first opened; null = unread (drives the feed's "new" indicator). */
+  readAt: string | null;
+  dismissedAt: string | null;
   report?: UnifiedCharacterReportDto;
 }
 
@@ -329,6 +332,17 @@ async function parseJsonOrThrow<T>(response: Response, errorMessage: string): Pr
 export async function listAgentReports(agentId: string): Promise<RunReportDto[]> {
   const response = await fetch(`/api/agents/${agentId}/reports`);
   return parseJsonOrThrow(response, 'Failed to load agent reports');
+}
+
+/** Marks a report as read (feed unread indicator). Idempotent on the server. */
+export async function markReportRead(agentId: string, reportId: string): Promise<void> {
+  const response = await fetch(`/api/agents/${agentId}/reports/${reportId}/read`, { method: 'POST' });
+  if (!response.ok) throw new Error('Failed to mark report as read');
+}
+
+export async function dismissReport(agentId: string, reportId: string): Promise<void> {
+  const response = await fetch(`/api/agents/${agentId}/reports/${reportId}/dismiss`, { method: 'POST' });
+  if (!response.ok) throw new Error('Failed to dismiss report');
 }
 
 export async function getLatestAgentReport(agentId: string): Promise<RunReportDto | null> {

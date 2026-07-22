@@ -235,7 +235,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
               <Paragraph type="secondary">
                 Start with a character, then pick one of its personality styles.
               </Paragraph>
-              <div className="grid gap-2 md:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
                 {PROMPT_PERSONAS.map((persona) => (
                   <button
                     key={persona.id}
@@ -253,7 +253,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
               <Paragraph className="!mb-2 mt-4 text-xs text-muted-foreground">
                 Personalities for {selectedPersonaLabel}
               </Paragraph>
-              <div className="grid gap-2 md:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
                 {availableCharacters.map((character) => (
                   <button
                     key={character.id}
@@ -295,7 +295,7 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
             <Card title="Configure personality">
               <Paragraph type="secondary">Tune personality behavior, cadence, and prompt in one place.</Paragraph>
               <Form layout="vertical">
-                <div className="grid gap-2 md:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-1 md:grid-cols-2">
                   <Form.Item label="Character">
                     <Input aria-label="Selected character" value={selectedPersonaLabel} disabled />
                   </Form.Item>

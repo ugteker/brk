@@ -485,6 +485,34 @@ describe('ReportRepository', () => {
   });
 });
 
+describe('ReportRepository read/dismiss state', () => {
+  function createStateDb() {
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const db: any = { agentRunReport: { updateMany } };
+    return { db, updateMany };
+  }
+
+  it('markReportRead only stamps readAt when it is still null (idempotent)', async () => {
+    const { db, updateMany } = createStateDb();
+    const repository = new ReportRepository(db);
+    await repository.markReportRead('report-1');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'report-1', readAt: null },
+      data: { readAt: expect.any(Date) }
+    });
+  });
+
+  it('markReportDismissed only stamps dismissedAt when it is still null (idempotent)', async () => {
+    const { db, updateMany } = createStateDb();
+    const repository = new ReportRepository(db);
+    await repository.markReportDismissed('report-1');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'report-1', dismissedAt: null },
+      data: { dismissedAt: expect.any(Date) }
+    });
+  });
+});
+
 describe('ReportRepository realtime event production', () => {
   function createMockRealtime() {
     const events: Array<{ userId: string; topic: string; entityId?: string; agentId?: string }> = [];

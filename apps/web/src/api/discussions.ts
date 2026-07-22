@@ -35,6 +35,10 @@ export interface DiscussionParticipantDto {
  * 'transcript' still exist for historical discussions. 'free' is a free question only. */
 export type DiscussionGroundingMode = 'reports' | 'transcript' | 'free' | 'material';
 
+/** Which voice API renders the discussion audio. 'auto' keeps the server default
+ * (Google preferred when both are configured). */
+export type TtsProviderDto = 'auto' | 'google' | 'openai';
+
 export interface DiscussionGroundingConfigDto {
   mode: DiscussionGroundingMode;
   /** Artifact IDs of shared transcripts (transcript mode, and the transcript half of the
@@ -52,6 +56,8 @@ export interface DiscussionFormatConfigDto {
   language?: 'en' | 'de';
   /** How long each spoken turn should be. Defaults to medium when unset. */
   turnLength?: 'short' | 'medium' | 'long';
+  /** Voice API used to render this discussion as audio. Defaults to 'auto' when unset. */
+  ttsProvider?: TtsProviderDto;
   /** Absent means classic reports grounding. */
   grounding?: DiscussionGroundingConfigDto;
 }
@@ -199,10 +205,17 @@ export async function getDiscussionRun(id: string, runId: string): Promise<Discu
   return res.json();
 }
 
-export async function getDiscussionCapabilities(): Promise<{ tts: boolean }> {
+export interface DiscussionCapabilities {
+  tts: boolean;
+  /** Voice APIs the server has credentials for; empty when audio rendering is unavailable. */
+  ttsProviders: Array<'google' | 'openai'>;
+}
+
+export async function getDiscussionCapabilities(): Promise<DiscussionCapabilities> {
   const res = await fetch(`${BASE}/capabilities`, { credentials: 'include' });
-  if (!res.ok) return { tts: false };
-  return res.json();
+  if (!res.ok) return { tts: false, ttsProviders: [] };
+  const body = await res.json();
+  return { tts: Boolean(body.tts), ttsProviders: Array.isArray(body.ttsProviders) ? body.ttsProviders : [] };
 }
 
 export async function triggerAudioRender(id: string, runId: string): Promise<void> {

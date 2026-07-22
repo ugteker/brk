@@ -13,7 +13,7 @@ export interface AgentPromptRoutesDeps {
   promptRepository: Pick<PromptRepository, 'savePromptVersion' | 'getLatestPromptVersion'>;
   reportRepository: Pick<
     ReportRepository,
-    'getLatestRunReport' | 'listReportsForAgent' | 'getReportById' | 'listSignalHistoryForSymbol'
+    'getLatestRunReport' | 'listReportsForAgent' | 'getReportById' | 'listSignalHistoryForSymbol' | 'markReportRead' | 'markReportDismissed'
   >;
   runsRepository?: Pick<RunsRepository, 'listRunDetailsForAgent'>;
   agentRepository?: Pick<AgentRepositoryLike, 'getAgent'>;
@@ -60,6 +60,38 @@ export async function registerAgentPromptRoutes(app: FastifyInstance, deps: Agen
     }
     const reports = await deps.reportRepository.listReportsForAgent(agentId);
     return reply.status(200).send(reports);
+  });
+
+  // Marks a report as read for the feed's unread indicator. Idempotent - the first call
+  // stamps readAt, later calls keep the original timestamp.
+  app.post('/api/agents/:agentId/reports/:reportId/read', async (req, reply) => {
+    const { agentId, reportId } = req.params as { agentId: string; reportId: string };
+    const access = await requireAgentAccess(deps, req, agentId, 'read');
+    if (!access.ok) {
+      return reply.status(access.statusCode).send({ code: access.code, message: access.message });
+    }
+    const report = await deps.reportRepository.getReportById(reportId);
+    if (!report || report.agentId !== agentId) {
+      return reply.status(404).send({ code: 'not_found', message: 'Report not found for this agent' });
+    }
+    await deps.reportRepository.markReportRead(reportId);
+    return reply.status(200).send({ status: 'read' });
+  });
+
+  // Hides a report from the feed ("archive"). The report stays available in the source's
+  // report list. Idempotent like /read.
+  app.post('/api/agents/:agentId/reports/:reportId/dismiss', async (req, reply) => {
+    const { agentId, reportId } = req.params as { agentId: string; reportId: string };
+    const access = await requireAgentAccess(deps, req, agentId, 'read');
+    if (!access.ok) {
+      return reply.status(access.statusCode).send({ code: access.code, message: access.message });
+    }
+    const report = await deps.reportRepository.getReportById(reportId);
+    if (!report || report.agentId !== agentId) {
+      return reply.status(404).send({ code: 'not_found', message: 'Report not found for this agent' });
+    }
+    await deps.reportRepository.markReportDismissed(reportId);
+    return reply.status(200).send({ status: 'dismissed' });
   });
 
   app.get('/api/agents/:agentId/report/latest', async (req, reply) => {

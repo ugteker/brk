@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Card, Tag } from 'antd';
-import { ExportOutlined, LinkOutlined, MessageOutlined, ReadOutlined } from '@ant-design/icons';
+import { ExportOutlined, EyeInvisibleOutlined, LinkOutlined, MessageOutlined, ReadOutlined } from '@ant-design/icons';
 import type { CharacterType, RunReportDto } from '../api/agents';
 import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
 import { getReportAccent, getReportAccentClasses } from '../utils/reportAccent';
@@ -58,6 +59,8 @@ export interface FeedCardProps {
   /** Jumps to the source in the Library hub, when the source can be resolved */
   onOpenSource?: () => void;
   onDiscuss: () => void;
+  /** Hides the report from the feed (it stays in the Library's report list). */
+  onDismiss?: () => void;
 }
 
 export function FeedCard({
@@ -70,7 +73,8 @@ export function FeedCard({
   isSyntheticSource,
   onOpenFullReport,
   onOpenSource,
-  onDiscuss
+  onDiscuss,
+  onDismiss
 }: FeedCardProps) {
   const { t, i18n } = useTranslation();
   const common = report.report?.common;
@@ -90,6 +94,24 @@ export function FeedCard({
       return false;
     }
   });
+
+  // Which episode/article the report is about - shown as a visible subtitle so the
+  // AI-generated headline is anchored to its source item, not just the source.
+  const episodeTitle = (episodeReference?.label ?? common?.source_references?.[0]?.label)?.trim() || null;
+
+  const isUnread = report.readAt == null;
+  // Keeps the "new" pill mounted just long enough to fade out once the report is read,
+  // then removes it so read cards reclaim the space.
+  const [showNewBadge, setShowNewBadge] = useState(isUnread);
+  useEffect(() => {
+    if (isUnread) {
+      setShowNewBadge(true);
+      return;
+    }
+    if (!showNewBadge) return;
+    const timer = setTimeout(() => setShowNewBadge(false), 1200);
+    return () => clearTimeout(timer);
+  }, [isUnread, showNewBadge]);
 
   const fallbackHeadline = common?.headline?.trim() || report.summary;
   const primaryText = (() => {
@@ -199,12 +221,31 @@ export function FeedCard({
               <Tag className={`m-0 ml-1 shrink-0 border-0 text-[10px] font-semibold ${accent.badge}`}>
                 {t(`feedCard.resultType.${resultType}`)}
               </Tag>
+              {showNewBadge ? (
+                <span
+                  data-testid="feed-card-unread"
+                  className={`ml-auto flex shrink-0 items-center gap-1 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white transition-opacity duration-1000 motion-reduce:transition-none dark:bg-violet-500 ${isUnread ? 'opacity-100' : 'opacity-0'}`}
+                >
+                  <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-white/90" />
+                  {t('feedCard.new')}
+                </span>
+              ) : null}
             </div>
             <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
               <span className="truncate">{sourceTitle}</span>
               <span aria-hidden="true">·</span>
               <span className="whitespace-nowrap">{new Date(report.createdAt).toLocaleDateString(i18n.language)}</span>
             </div>
+            {episodeTitle && episodeTitle !== sourceTitle ? (
+              <div
+                data-testid="feed-card-episode-title"
+                className="mt-0.5 truncate text-[11px] font-medium text-gray-600 dark:text-gray-300"
+                title={episodeTitle}
+              >
+                <span aria-hidden="true">↳ </span>
+                {t('feedCard.episode', { title: episodeTitle })}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -285,6 +326,20 @@ export function FeedCard({
                 }}
               >
                 <ExportOutlined className="text-[11px]" />
+              </button>
+            ) : null}
+            {onDismiss ? (
+              <button
+                type="button"
+                aria-label={t('feedCard.dismiss')}
+                title={t('feedCard.dismiss')}
+                className="flex shrink-0 items-center justify-center rounded-full bg-muted p-1.5 text-muted-foreground transition-colors hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-950/60 dark:hover:text-rose-200"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDismiss();
+                }}
+              >
+                <EyeInvisibleOutlined className="text-[11px]" />
               </button>
             ) : null}
           </div>

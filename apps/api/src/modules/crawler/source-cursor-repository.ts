@@ -1,7 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
 import type { CrawlStrategy, SourceCursorState } from '../analysis/types';
+import { SourceRepository } from '../source/repository';
+import type { SourceType } from '../source/types';
 
-type CursorDb = Pick<PrismaClient, 'agentSourceCursor'>;
+type CursorDb = Pick<PrismaClient, 'agentSourceCursor' | 'source' | '$transaction'>;
 
 interface CursorRow {
   agentId: string;
@@ -40,6 +42,7 @@ export interface SourceCursorRepositoryLike {
    * run fully succeeds) so a source's `frequencyMinutes` crawl cadence is enforced even when the
    * fetch fails or returns no new content. */
   touchCrawlAttempt(agentId: string, sourceValue: string, timestampIso: string): Promise<void>;
+  refreshSourceCoverImageUrl?(type: SourceType, value: string, coverImageUrl: string): Promise<number>;
 }
 
 export class SourceCursorRepository implements SourceCursorRepositoryLike {
@@ -75,6 +78,10 @@ export class SourceCursorRepository implements SourceCursorRepositoryLike {
       create: { agentId, sourceValue, strategy: 'feed_items', lastCrawledAt },
       update: { lastCrawledAt }
     });
+  }
+
+  async refreshSourceCoverImageUrl(type: SourceType, value: string, coverImageUrl: string): Promise<number> {
+    return new SourceRepository(this.db as never).refreshCoverImageUrl(type, value, coverImageUrl);
   }
 }
 

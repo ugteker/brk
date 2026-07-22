@@ -47,6 +47,8 @@ function makeReport(
     inputTokens: null,
     outputTokens: null,
     estimatedCostUsd: null,
+    readAt: '2026-07-19T10:00:00.000Z',
+    dismissedAt: null,
     report: { common: fullCommon, section: { character_type: 'summarizer', bullet_digest: [] } },
     ...overrides
   };
@@ -218,6 +220,43 @@ describe('FeedCard', () => {
   it('omits the "View run" link (removed from card footer)', () => {
     renderCard();
     expect(screen.queryByText('View run')).not.toBeInTheDocument();
+  });
+
+  it('shows the "New" unread pill when the report has not been read yet', () => {
+    renderCard({ report: makeReport({}, {}, { readAt: null }) });
+    const pill = screen.getByTestId('feed-card-unread');
+    expect(pill).toHaveTextContent('New');
+    expect(pill.className).toContain('opacity-100');
+  });
+
+  it('omits the unread pill for reports that were already read', () => {
+    renderCard({ report: makeReport({}, {}, { readAt: '2026-07-19T10:00:00.000Z' }) });
+    expect(screen.queryByTestId('feed-card-unread')).not.toBeInTheDocument();
+  });
+
+  it('shows the episode title as a subtitle when a source reference exists', () => {
+    renderCard({
+      report: makeReport({ source_references: [{ label: 'Episode 12', reference: 'https://example.com/ep12' }] })
+    });
+    expect(screen.getByTestId('feed-card-episode-title')).toHaveTextContent('Episode 12');
+  });
+
+  it('omits the episode subtitle when there are no source references', () => {
+    renderCard({ report: makeReport({ source_references: [] }) });
+    expect(screen.queryByTestId('feed-card-episode-title')).not.toBeInTheDocument();
+  });
+
+  it('fires onDismiss (not onOpenFullReport) when the hide button is clicked', () => {
+    const onDismiss = vi.fn();
+    const { onOpenFullReport } = renderCard({ onDismiss });
+    fireEvent.click(screen.getByRole('button', { name: /hide from feed/i }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(onOpenFullReport).not.toHaveBeenCalled();
+  });
+
+  it('omits the hide button when onDismiss is not provided', () => {
+    renderCard();
+    expect(screen.queryByRole('button', { name: /hide from feed/i })).not.toBeInTheDocument();
   });
 });
 

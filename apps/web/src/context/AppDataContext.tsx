@@ -37,6 +37,16 @@ export interface NewReportNotice {
   timestamp: string;
 }
 
+/** Bell notices for discussion ("show") lifecycle events: started, finished, audio ready. */
+export interface DiscussionEventNotice {
+  /** Stable id (`${runId}:${kind}`) used for dedupe + dismissal. */
+  id: string;
+  kind: 'show_started' | 'show_finished' | 'audio_ready';
+  discussionId: string;
+  discussionName: string;
+  timestamp: string;
+}
+
 export interface AppDataContextValue {
   agents: AgentSummary[];
   agentsLoadState: LoadState;
@@ -61,6 +71,8 @@ export interface AppDataContextValue {
   setFailedRunNotices: React.Dispatch<React.SetStateAction<FailedRunNotice[]>>;
   newReportNotices: NewReportNotice[];
   setNewReportNotices: React.Dispatch<React.SetStateAction<NewReportNotice[]>>;
+  discussionNotices: DiscussionEventNotice[];
+  setDiscussionNotices: React.Dispatch<React.SetStateAction<DiscussionEventNotice[]>>;
   bellDismissedIds: Set<string>;
   setBellDismissedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   forceShowOnboarding: boolean;
@@ -96,6 +108,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [marketplacePlaybookCount, setMarketplacePlaybookCount] = useState(0);
   const [failedRunNotices, setFailedRunNotices] = useState<FailedRunNotice[]>([]);
   const [newReportNotices, setNewReportNotices] = useState<NewReportNotice[]>([]);
+  const [discussionNotices, setDiscussionNotices] = useState<DiscussionEventNotice[]>([]);
   const [bellDismissedIds, setBellDismissedIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('chattrader:bell:dismissed') ?? '[]')); } catch { return new Set(); }
   });
@@ -230,6 +243,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setAgents, setSources, setPlaybooks,
     failedRunNotices, setFailedRunNotices,
     newReportNotices, setNewReportNotices,
+    discussionNotices, setDiscussionNotices,
     bellDismissedIds, setBellDismissedIds,
     forceShowOnboarding, setForceShowOnboarding, forceShowGuidedWizard, setForceShowGuidedWizard,
     adminMode, setAdminMode

@@ -49,13 +49,17 @@ function normalizeMetadata(input?: SourceLibraryMetadata): SourceRecord['metadat
     itemCount: typeof input?.itemCount === 'number' && Number.isFinite(input.itemCount) && input.itemCount >= 0
       ? Math.floor(input.itemCount)
       : undefined,
+    audioCount: typeof input?.audioCount === 'number' && Number.isFinite(input.audioCount) && input.audioCount >= 0
+      ? Math.floor(input.audioCount)
+      : undefined,
     previewItems: Array.isArray(input?.previewItems)
       ? input!.previewItems
           .filter((item) => item && typeof item.title === 'string')
           .map((item) => ({
             title: item.title,
             link: typeof item.link === 'string' ? item.link : undefined,
-            pubDate: typeof item.pubDate === 'string' ? item.pubDate : null
+            pubDate: typeof item.pubDate === 'string' ? item.pubDate : null,
+            ...(typeof item.hasAudio === 'boolean' ? { hasAudio: item.hasAudio } : {})
           }))
       : []
   };
@@ -163,6 +167,33 @@ export class SourceRepository implements SourceRepositoryLike {
       return changed;
     });
     return mapSource(updated as SourceRow);
+  }
+
+  async refreshCoverImageUrl(type: SourceType, value: string, coverImageUrl: string): Promise<number> {
+    if (coverImageUrl.trim().length === 0) return 0;
+
+    const rows = await this.db.source.findMany({ where: { type, value } });
+    return this.db.$transaction(async (tx) => {
+      let updatedCount = 0;
+      for (const row of rows as SourceRow[]) {
+        const parsed = splitConfigAndMetadata(row.configJson);
+        if (parsed.metadata.coverImageUrl === coverImageUrl) {
+          continue;
+        }
+
+        const updatedConfig = withMetadata(parsed.config, {
+          ...parsed.metadata,
+          coverImageUrl
+        });
+        await tx.source.update({
+          where: { id: row.id },
+          data: { configJson: JSON.stringify(updatedConfig) }
+        });
+        await this.realtime.append(tx, { userId: row.ownerUserId, topic: 'source.changed', entityId: row.id });
+        updatedCount += 1;
+      }
+      return updatedCount;
+    });
   }
 
   async deleteSource(sourceId: string): Promise<void> {

@@ -227,15 +227,23 @@ async function start(role: Role) {
       audioDir: config.tts.audioDir,
       // TTS is optional: without a GOOGLE_TTS_API_KEY or OPENAI_API_KEY the render endpoint
       // answers 501 and the UI tells the user that audio rendering isn't configured.
-      // Google is preferred when both are set (works where corporate policy blocks OpenAI).
+      // Every configured backend is wired so each discussion can pick its provider;
+      // 'auto' prefers Google (works where corporate policy blocks OpenAI).
       ...(isTtsConfigured()
         ? {
-            ttsClient: isGoogleTtsConfigured()
-              ? new GoogleTtsClient({
-                  apiKey: config.tts.googleApiKey || undefined,
-                  serviceAccount: config.tts.googleCredentials || undefined
-                })
-              : new OpenAITtsClient(new OpenAI({ apiKey: config.tts.openaiApiKey })),
+            ttsClients: {
+              ...(isGoogleTtsConfigured()
+                ? {
+                    google: new GoogleTtsClient({
+                      apiKey: config.tts.googleApiKey || undefined,
+                      serviceAccount: config.tts.googleCredentials || undefined
+                    })
+                  }
+                : {}),
+              ...(config.tts.openaiApiKey
+                ? { openai: new OpenAITtsClient(new OpenAI({ apiKey: config.tts.openaiApiKey })) }
+                : {})
+            },
             ttsStorage: new FileTtsStorage(config.tts.audioDir)
           }
         : {})
@@ -320,3 +328,4 @@ function bootstrap() {
 }
 
 bootstrap();
+

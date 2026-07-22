@@ -32,7 +32,9 @@ export interface SourceRecord {
     title?: string;
     coverImageUrl: string | null;
     itemCount?: number;
-    previewItems: Array<{ title: string; link?: string; pubDate?: string | null }>;
+    /** Synthetic discussions: number of runs with rendered audio. */
+    audioCount?: number;
+    previewItems: Array<{ title: string; link?: string; pubDate?: string | null; hasAudio?: boolean }>;
   };
   createdAt: string;
   updatedAt: string;

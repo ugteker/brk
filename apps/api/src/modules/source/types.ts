@@ -7,6 +7,8 @@ export interface SourcePreviewItem {
   title: string;
   link?: string;
   pubDate?: string | null;
+  /** Synthetic discussions: whether this run has rendered audio. */
+  hasAudio?: boolean;
 }
 
 /** Library-card metadata stored for each source; coverImageUrl is nullable so clients can use fallback UI. */
@@ -14,6 +16,8 @@ export interface SourceLibraryMetadata {
   title?: string;
   coverImageUrl?: string | null;
   itemCount?: number;
+  /** Synthetic discussions: number of runs with rendered audio. */
+  audioCount?: number;
   previewItems?: SourcePreviewItem[];
 }
 
@@ -28,6 +32,7 @@ export interface SourceRecord {
     title?: string;
     coverImageUrl: string | null;
     itemCount?: number;
+    audioCount?: number;
     previewItems: SourcePreviewItem[];
   };
   createdAt: Date;

@@ -5,6 +5,7 @@ export interface FeedItem {
   description: string;
   pubDate: string | null;
   transcriptUrl: string | null;
+  imageUrl?: string;
 }
 
 export interface FeedMetadata {
@@ -29,6 +30,10 @@ function extractChannelOrFeedBlock(xml: string): string {
   const feedMatch = xml.match(/<feed[^>]*>([\s\S]*?)<\/feed>/i);
   if (feedMatch) return feedMatch[1];
   return xml;
+}
+
+function stripEntryBlocks(xml: string): string {
+  return xml.replace(/<item[\s\S]*?<\/item>/gi, '').replace(/<entry[\s\S]*?<\/entry>/gi, '');
 }
 
 function extractAttributeValue(block: string, tag: string, attribute: string): string | null {
@@ -60,6 +65,7 @@ function extractTranscriptUrl(block: string): string | null {
  * still be tracked even for minimal/non-conformant feeds.
  */
 export function parseFeedItems(xml: string): FeedItem[] {
+  const feedCoverImageUrl = parseFeedMetadata(xml).coverImageUrl;
   return extractItemBlocks(xml)
     .map((block): FeedItem => {
       const guid = extractGuid(block);
@@ -71,14 +77,15 @@ export function parseFeedItems(xml: string): FeedItem[] {
         title,
         description: extractTag(block, 'description') ?? extractTag(block, 'summary') ?? '',
         pubDate: extractTag(block, 'pubDate') ?? extractTag(block, 'published') ?? extractTag(block, 'updated'),
-        transcriptUrl: extractTranscriptUrl(block)
+        transcriptUrl: extractTranscriptUrl(block),
+        imageUrl: extractAttributeValue(block, 'itunes:image', 'href') ?? feedCoverImageUrl
       };
     })
     .filter((item) => item.itemId.length > 0);
 }
 
 export function parseFeedMetadata(xml: string): FeedMetadata {
-  const block = extractChannelOrFeedBlock(xml);
+  const block = stripEntryBlocks(extractChannelOrFeedBlock(xml));
   const title = extractTag(block, 'title') ?? undefined;
   const coverImageUrl =
     extractAttributeValue(block, 'itunes:image', 'href') ??

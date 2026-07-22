@@ -41,7 +41,10 @@
   "bellTitle": "Notifications",
   "bellClearAll": "Clear all",
   "bellEmpty": "Nothing new 🎉",
-  "bellNewReport": "New report"
+  "bellNewReport": "New report",
+  "bell_show_started": "Your show just started recording",
+  "bell_show_finished": "Your show is ready to read",
+  "bell_audio_ready": "Audio is ready to listen"
   },
   "language": {
     "switchTo": "Sprache: Deutsch",
@@ -88,6 +91,13 @@
     "countVideos": "{{count}} videos",
     "countEpisodes": "{{count}} episodes",
     "countPages": "{{count}} pages",
+    "materialTab": "Material",
+    "materialTranscripts": "{{count}} transcripts",
+    "materialAudio": "{{count}} with audio",
+    "materialHasAudio": "Audio available",
+    "materialTranscriptBadge": "Transcript",
+    "materialAudioBadge": "Audio",
+    "openDiscussion": "Open in Studio",
     "analyzedBadge": "Analyzed",
     "openReport": "Open report",
     "openLink": "Open link",
@@ -150,6 +160,8 @@
       "keyTakeaway": "Key takeaway"
     },
     "evidenceCount": "{{count}} evidence",
+    "new": "New",
+    "dismiss": "Hide from feed",
     "episode": "About: {{title}}",
     "openReport": "Open analysis",
     "discuss": "Discuss",
@@ -172,6 +184,7 @@
     "thisSource": "this source",
     "stepSubtitle": "Choose an AI agent to summarize this source and generate reports for you. No agents yet? Create one below.",
     "stepPickSource": "Pick source",
+    "runPickerTitle": "Which agent should run?",
     "stepChooseAgent": "Choose agent",
     "stepSetSchedule": "Set schedule",
     "advancedSettings": "Advanced settings (schedule & recipients)"
@@ -321,6 +334,10 @@
     "hidePreview": "Hide onboarding preview",
     "showWizardPreview": "Start setup wizard"
   },
+  "statusCard": {
+    "title": "Latest activity",
+    "noRuns": "No activity yet."
+  },
   "runs": {
     "noRuns": "No history yet. Analysis history appears here once the agent's schedule kicks in (or you trigger a manual run).",
     "scheduled": "Scheduled",
@@ -340,8 +357,13 @@
       "notifying": "Sending notifications…"
     },
     "status": {
-      "succeeded_no_new_content": "no new content"
-    }
+      "succeeded": "Done",
+      "succeeded_no_new_content": "Nothing new",
+      "failed": "Didn't work",
+      "running": "In progress",
+      "queued": "Waiting to start"
+    },
+    "errorTitle": "Something went wrong"
   },
   "report": {
     "summary": "Summary",
@@ -467,8 +489,6 @@
     "success": "Your first report is running! Check the Feed in a moment.",
     "error": "Something went wrong. Try again or set up manually.",
     "skip": "Skip — I'll set up manually"
-    ,"suggestedSource": "Start with Lanz & Precht"
-    ,"suggestedSourceDescription": "Suggested podcast source"
   },
   "admin": {
     "seedDemo": "Seed demo data",
@@ -560,6 +580,11 @@
     "languageLabel": "Discussion language",
     "languageEnglish": "English",
     "languageGerman": "Deutsch (German)",
+    "voiceApiLabel": "Voice service",
+    "voiceApiHint": "Which voice service turns this discussion into audio.",
+    "voiceApiAuto": "Automatic (server default)",
+    "voiceApiGoogle": "Google Cloud voices",
+    "voiceApiOpenai": "OpenAI voices",
     "format_free_form": "Free-form conversation",
     "format_structured": "Structured rounds",
     "format_hosted": "Hosted (moderator + guests)",
@@ -615,9 +640,17 @@
     "warmup4": "On air in a moment… 🔴",
     "discussionFinished": "Discussion finished",
     "evidenceOriginNone": "No reports (free discussion)",
-    "audioReady": "Audio podcast is ready",
-    "audioFailed": "Audio rendering failed",
-    "audioNotConfigured": "Audio rendering is not configured — set GOOGLE_TTS_CREDENTIALS / GOOGLE_TTS_API_KEY (or OPENAI_API_KEY) on the backend",
+    "audioReady": "Your audio podcast is ready",
+    "audioFailed": "Sorry — turning this discussion into audio didn't work. Please try again.",
+    "audioNotConfigured": "Audio isn't available yet — voice rendering hasn't been set up on this server. Please contact your administrator.",
+    "renderAudioNeedsRun": "Audio can be created once the discussion has finished.",
+    "detailsTitle": "About this discussion",
+    "detailsFormat": "Format",
+    "detailsLanguage": "Language",
+    "detailsTurnLength": "Speaking length",
+    "detailsVoiceService": "Voice service",
+    "detailsSpeakers": "Speakers & voices",
+    "detailsCreated": "Created",
     "minParticipants": "Select at least 2 agents",
     "voiceLabel": "Voice",
     "roleLabel": "Role",

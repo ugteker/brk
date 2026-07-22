@@ -30,6 +30,8 @@ type ReportRow = {
   inputTokens: number | null;
   outputTokens: number | null;
   estimatedCostUsd: number | null;
+  readAt: Date | null;
+  dismissedAt: Date | null;
 };
 
 export class ReportRepository {
@@ -214,6 +216,28 @@ export class ReportRepository {
     return rows.map((row: unknown) => this.toRecord(row as ReportRow));
   }
 
+  /**
+   * Marks a report as read (feed unread indicator). Idempotent: the first call stamps
+   * `readAt`, later calls leave the original timestamp untouched.
+   */
+  async markReportRead(reportId: string): Promise<void> {
+    await this.db.agentRunReport.updateMany({
+      where: { id: reportId, readAt: null },
+      data: { readAt: new Date() }
+    });
+  }
+
+  /**
+   * Hides a report from the feed ("archive"). The report stays available in the source's
+   * report list. Idempotent like markReportRead.
+   */
+  async markReportDismissed(reportId: string): Promise<void> {
+    await this.db.agentRunReport.updateMany({
+      where: { id: reportId, dismissedAt: null },
+      data: { dismissedAt: new Date() }
+    });
+  }
+
   private toRecord(row: ReportRow): RunReportRecord {
     const signals = row.signals.map((signal): SignalRecord => ({
       symbol: signal.symbol,
@@ -255,7 +279,9 @@ export class ReportRepository {
       promptVersionNumber: row.promptVersionNumber,
       inputTokens: row.inputTokens,
       outputTokens: row.outputTokens,
-      estimatedCostUsd: row.estimatedCostUsd
+      estimatedCostUsd: row.estimatedCostUsd,
+      readAt: row.readAt ?? null,
+      dismissedAt: row.dismissedAt ?? null
     };
   }
 }

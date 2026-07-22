@@ -34,6 +34,8 @@ function createReport(overrides: Partial<RunReportDto> = {}): RunReportDto {
     inputTokens: 1000,
     outputTokens: 200,
     estimatedCostUsd: 0.006,
+    readAt: null,
+    dismissedAt: null,
     ...overrides
   };
 }
