@@ -106,7 +106,7 @@ After a deploy, verify it end to end:
 ```bash
 # Use a real browser session cookie; expect headers immediately and ': keepalive'
 # within 15 seconds when idle.
-curl -N --cookie "chattrader_session=<value>" \
+curl -N --cookie "brokerino_session=<value>" \
   "https://<tunnel-host>/api/realtime/stream?cursor=0"
 ```
 
