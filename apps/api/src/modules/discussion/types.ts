@@ -9,14 +9,21 @@ export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimme
  * transcript or a free question instead of reports. */
 export type ReportSelectionOrigin = 'explicit' | 'fallback' | 'none';
 
-/** What the discussion is grounded in - the "Worüber?" entry point chosen in the wizard. */
-export type DiscussionGroundingMode = 'reports' | 'transcript' | 'free';
+/** What the discussion is grounded in - the "Worüber?" entry point chosen in the wizard.
+ * 'material' is the current wizard mode: one shared, agent-independent pool of reports and/or
+ * transcripts every participant discusses. 'reports' (per-participant picks) and 'transcript'
+ * remain supported so historical discussions keep running unchanged. */
+export type DiscussionGroundingMode = 'reports' | 'transcript' | 'free' | 'material';
 
 export interface DiscussionGroundingConfig {
   mode: DiscussionGroundingMode;
   /** For mode 'transcript': AgentRunArtifact ids whose raw source material (episode/page
-   * transcripts downloaded during agent runs) is shared with every participant. */
+   * transcripts downloaded during agent runs) is shared with every participant.
+   * For mode 'material': the transcript half of the shared pool. */
   artifactIds?: string[];
+  /** For mode 'material': AgentRunReport ids in the shared pool - any agent's reports may be
+   * picked, not just the participants' own. Stored as references in formatConfigJson. */
+  reportIds?: string[];
 }
 
 export interface DiscussionFormatConfig {
@@ -67,11 +74,22 @@ export interface ParticipantEvidenceSnapshot {
   transcriptWarnings: string[];
 }
 
+/** Snapshot of the shared, agent-independent material pool (grounding mode 'material') that fed
+ * a run - which reports actually resolved, which raw source items were excerpted, and any
+ * missing-material warnings. Frozen at run time like the per-participant snapshots. */
+export interface SharedMaterialSnapshot {
+  reportIds: string[];
+  sourceItemIds: string[];
+  transcriptWarnings: string[];
+}
+
 /** Snapshot of the full evidence/agenda context used to generate a given run's turns. */
 export interface DiscussionRunEvidenceSnapshot {
   /** The shared questions/topics agenda in effect for this run (Discussion.description). */
   agenda: string;
   participants: ParticipantEvidenceSnapshot[];
+  /** Present only for material-grounded runs (shared pool); absent on legacy runs. */
+  shared?: SharedMaterialSnapshot;
 }
 
 export interface Discussion {

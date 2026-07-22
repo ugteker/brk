@@ -140,6 +140,75 @@ export class DiscussionOrchestrator {
         }
       }
 
+      // Material-grounded discussions (the current wizard mode) share one agent-independent
+      // pool of reports + transcripts with every participant.
+      let sharedMaterial: {
+        summariesText: string;
+        excerptText: string;
+        reportIds: string[];
+        sourceItemIds: string[];
+        warnings: string[];
+      } | null = null;
+      if (groundingMode === 'material') {
+        const poolReportIds = discussion.formatConfig.grounding?.reportIds ?? [];
+        const poolArtifactIds = discussion.formatConfig.grounding?.artifactIds ?? [];
+        if (poolReportIds.length === 0 && poolArtifactIds.length === 0) {
+          await discussionRepository.updateRun(runId, {
+            status: 'error',
+            errorMessage: 'Cannot start discussion - no material selected for this discussion',
+            completedAt: new Date()
+          });
+          return;
+        }
+
+        const warnings: string[] = [];
+        const reportRecords = (
+          await Promise.all(poolReportIds.map((id) => reportRepository.getReportById(id)))
+        ).filter((r): r is { id: string; agentId: string; agentRunId: string; summary: string } => r !== null);
+        for (const id of poolReportIds) {
+          if (!reportRecords.some((r) => r.id === id)) warnings.push(`Report ${id} no longer exists`);
+        }
+
+        const reportEvidence = await buildTranscriptEvidence(
+          reportRecords.map((r) => ({ id: r.id, agentRunId: r.agentRunId })),
+          artifactRepository
+        );
+
+        let artifactEvidence: { excerptText: string; sourceItemIds: string[]; warnings: string[] } = {
+          excerptText: '',
+          sourceItemIds: [],
+          warnings: []
+        };
+        if (poolArtifactIds.length > 0 && typeof artifactRepository.getArtifactsByIds === 'function') {
+          artifactEvidence = await buildSharedTranscriptEvidence(
+            poolArtifactIds,
+            artifactRepository as SharedTranscriptArtifactRepo
+          );
+        }
+
+        if (reportRecords.length === 0 && !artifactEvidence.excerptText) {
+          await discussionRepository.updateRun(runId, {
+            status: 'error',
+            errorMessage: `Cannot start discussion - none of the selected material could be resolved (${[
+              ...warnings,
+              ...artifactEvidence.warnings
+            ].join('; ')})`,
+            completedAt: new Date()
+          });
+          return;
+        }
+
+        sharedMaterial = {
+          summariesText: reportRecords.length
+            ? reportRecords.map((r, i) => `Report ${i + 1}: ${r.summary}`).join('\n')
+            : 'This discussion is grounded in the shared source material below.',
+          excerptText: [reportEvidence.excerptText, artifactEvidence.excerptText].filter(Boolean).join('\n\n'),
+          reportIds: reportRecords.map((r) => r.id),
+          sourceItemIds: [...reportEvidence.sourceItemIds, ...artifactEvidence.sourceItemIds],
+          warnings: [...warnings, ...reportEvidence.warnings, ...artifactEvidence.warnings]
+        };
+      }
+
       // Transcript-grounded discussions share one bounded excerpt set with every participant.
       let sharedEvidence: { excerptText: string; sourceItemIds: string[]; warnings: string[] } | null = null;
       if (groundingMode === 'transcript') {
@@ -203,6 +272,11 @@ export class DiscussionOrchestrator {
           transcriptExcerpt = sharedEvidence?.excerptText ?? '';
           snapshotSourceItemIds = sharedEvidence?.sourceItemIds ?? [];
           snapshotWarnings = sharedEvidence?.warnings ?? [];
+        } else if (groundingMode === 'material') {
+          // Shared pool: identical context for every participant; the pool itself is
+          // snapshotted once at the run level (see `shared` below), not per participant.
+          recentReportsSummary = sharedMaterial?.summariesText ?? '';
+          transcriptExcerpt = sharedMaterial?.excerptText ?? '';
         } else {
           recentReportsSummary =
             'There are no source reports for this discussion - argue from your own expertise and the agenda question.';
@@ -239,7 +313,16 @@ export class DiscussionOrchestrator {
 
       await discussionRepository.setRunEvidenceSnapshot(runId, {
         agenda: discussion.description,
-        participants: evidenceParticipants
+        participants: evidenceParticipants,
+        ...(sharedMaterial
+          ? {
+              shared: {
+                reportIds: sharedMaterial.reportIds,
+                sourceItemIds: sharedMaterial.sourceItemIds,
+                transcriptWarnings: sharedMaterial.warnings
+              }
+            }
+          : {})
       });
 
       const totalTurns = discussion.formatConfig.totalTurnTarget ?? 12;

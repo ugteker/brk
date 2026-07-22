@@ -461,4 +461,123 @@ describe('DiscussionOrchestrator', () => {
     expect(lastCall[1].status).toBe('error');
     expect(lastCall[1].errorMessage).toMatch(/no transcript/i);
   });
+
+  it('shares a mixed material pool (reports + transcripts) with every participant and snapshots it', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion = vi.fn().mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: {
+        totalTurnTarget: 4,
+        grounding: { mode: 'material', reportIds: ['r-a1-explicit'], artifactIds: ['artifact-9'] }
+      }
+    });
+    const artifactRepo = {
+      // Report r-a1-explicit belongs to run-a1-1 which has raw material (see makeMockArtifactRepo).
+      listArtifactsForRun: vi.fn().mockImplementation(async (agentRunId: string) =>
+        agentRunId === 'run-a1-1'
+          ? [{ id: 'artifact-1', sourceRef: 'https://example.com/a', payloadJson: JSON.stringify({ content: 'Raw NVDA transcript.', itemId: 'item-1' }), fidelity: 'high' }]
+          : []
+      ),
+      getArtifactsByIds: vi.fn().mockResolvedValue([
+        {
+          id: 'artifact-9',
+          sourceRef: 'https://example.com/episode',
+          payloadJson: JSON.stringify({ content: 'Lanz and Precht debate AI ethics at length.', itemId: 'item-9', title: 'Lanz & Precht #42' }),
+          fidelity: 'high'
+        }
+      ])
+    };
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }) } };
+    const orchestrator = makeOrchestrator({ repo, artifactRepo, claude });
+
+    await orchestrator.run('d1', 'r1');
+
+    // Every turn prompt (both participants) carries the report summary AND both excerpts,
+    // even though the report belongs to agent a1 only - the pool is agent-independent.
+    for (const call of claude.messages.create.mock.calls) {
+      const prompt = call[0].messages.at(-1).content as string;
+      expect(prompt).toContain('NVDA is a buy.');
+      expect(prompt).toContain('Raw NVDA transcript.');
+      expect(prompt).toContain('Lanz and Precht debate AI ethics at length.');
+    }
+    expect(repo.setRunEvidenceSnapshot).toHaveBeenCalledWith('r1', expect.objectContaining({
+      shared: expect.objectContaining({
+        reportIds: ['r-a1-explicit'],
+        sourceItemIds: expect.arrayContaining(['item-1', 'item-9'])
+      }),
+      participants: expect.arrayContaining([
+        expect.objectContaining({ participantId: 'p1', reportIds: [], origin: 'none' }),
+        expect.objectContaining({ participantId: 'p2', reportIds: [], origin: 'none' })
+      ])
+    }));
+    const lastCall = repo.updateRun.mock.calls.at(-1)!;
+    expect(lastCall[1]).toMatchObject({ status: 'done' });
+  });
+
+  it('rejects a material-grounded run with a clear error when the pool is empty', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion = vi.fn().mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: { totalTurnTarget: 4, grounding: { mode: 'material', reportIds: [], artifactIds: [] } }
+    });
+    const orchestrator = makeOrchestrator({ repo });
+
+    await orchestrator.run('d1', 'r1');
+
+    expect(repo.createTurn).not.toHaveBeenCalled();
+    const lastCall = repo.updateRun.mock.calls.at(-1)!;
+    expect(lastCall[1].status).toBe('error');
+    expect(lastCall[1].errorMessage).toMatch(/no material/i);
+  });
+
+  it('rejects a material-grounded run when nothing in the pool is resolvable', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion = vi.fn().mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: { totalTurnTarget: 4, grounding: { mode: 'material', reportIds: ['gone-report'], artifactIds: ['gone-artifact'] } }
+    });
+    const artifactRepo = {
+      listArtifactsForRun: vi.fn().mockResolvedValue([]),
+      getArtifactsByIds: vi.fn().mockResolvedValue([])
+    };
+    const orchestrator = makeOrchestrator({ repo, artifactRepo });
+
+    await orchestrator.run('d1', 'r1');
+
+    expect(repo.createTurn).not.toHaveBeenCalled();
+    const lastCall = repo.updateRun.mock.calls.at(-1)!;
+    expect(lastCall[1].status).toBe('error');
+    expect(lastCall[1].errorMessage).toMatch(/material/i);
+  });
+
+  it('records a warning (not a failure) when a pool report has no raw transcript material', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion = vi.fn().mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: { totalTurnTarget: 2, grounding: { mode: 'material', reportIds: ['r-a2-1'] } }
+    });
+    // r-a2-1 resolves but its run (run-a2-1) has no artifacts.
+    const artifactRepo = {
+      listArtifactsForRun: vi.fn().mockResolvedValue([]),
+      getArtifactsByIds: vi.fn().mockResolvedValue([])
+    };
+    const claude = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }) } };
+    const orchestrator = makeOrchestrator({ repo, artifactRepo, claude });
+
+    await orchestrator.run('d1', 'r1');
+
+    expect(repo.createTurn).toHaveBeenCalledTimes(2);
+    expect(repo.setRunEvidenceSnapshot).toHaveBeenCalledWith('r1', expect.objectContaining({
+      shared: expect.objectContaining({
+        reportIds: ['r-a2-1'],
+        transcriptWarnings: expect.arrayContaining([expect.stringContaining('r-a2-1')])
+      })
+    }));
+    const lastCall = repo.updateRun.mock.calls.at(-1)!;
+    expect(lastCall[1]).toMatchObject({ status: 'done' });
+  });
 });

@@ -127,6 +127,13 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     if (!input.name || !input.format || !Array.isArray(input.participants) || input.participants.length < 2) {
       return reply.status(400).send({ code: 'invalid_input', message: 'name, format, and at least 2 participants required' });
     }
+    const grounding = input.formatConfig?.grounding;
+    if (grounding?.mode === 'material' && (grounding.reportIds?.length ?? 0) + (grounding.artifactIds?.length ?? 0) === 0) {
+      return reply.status(400).send({
+        code: 'invalid_input',
+        message: 'material-grounded discussions need at least one report or transcript selected'
+      });
+    }
     const discussion = await deps.discussionRepository.createDiscussion(req.userId!, input);
     return reply.status(201).send(discussion);
   });
@@ -183,6 +190,15 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     }
 
     const groundingMode = discussion.formatConfig?.grounding?.mode ?? 'reports';
+    if (groundingMode === 'material') {
+      const g = discussion.formatConfig?.grounding;
+      if ((g?.reportIds?.length ?? 0) + (g?.artifactIds?.length ?? 0) === 0) {
+        return reply.status(422).send({
+          code: 'no_material_selected',
+          message: 'Cannot start discussion - no material selected for this discussion'
+        });
+      }
+    }
     if (deps.reportRepository && groundingMode === 'reports') {
       const resolution = await resolveParticipantReports(
         discussion.participants.map((p) => ({ id: p.id, agentId: p.agentId, reportIds: p.reportIds })),
