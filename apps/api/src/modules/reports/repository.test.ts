@@ -428,10 +428,10 @@ describe('ReportRepository', () => {
 
 describe('ReportRepository realtime event production', () => {
   function createMockRealtime() {
-    const events: Array<{ userId: string; topic: string; entityId?: string }> = [];
+    const events: Array<{ userId: string; topic: string; entityId?: string; agentId?: string }> = [];
     return {
       events,
-      append: async (_tx: unknown, event: { userId: string; topic: string; entityId?: string }) => {
+      append: async (_tx: unknown, event: { userId: string; topic: string; entityId?: string; agentId?: string }) => {
         events.push(event);
       }
     };
@@ -453,7 +453,7 @@ describe('ReportRepository realtime event production', () => {
     });
 
     expect(realtime.events).toContainEqual(
-      expect.objectContaining({ userId: 'owner-of-agent-1', topic: 'report.changed', entityId: saved.id })
+      expect.objectContaining({ userId: 'owner-of-agent-1', topic: 'report.changed', entityId: saved.id, agentId: 'agent-1' })
     );
   });
 

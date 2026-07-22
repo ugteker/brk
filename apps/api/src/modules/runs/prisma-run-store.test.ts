@@ -54,10 +54,10 @@ describe('PrismaRunStore', () => {
 
 describe('PrismaRunStore realtime event production', () => {
   function createMockRealtime() {
-    const events: Array<{ userId: string; topic: string; entityId?: string }> = [];
+    const events: Array<{ userId: string; topic: string; entityId?: string; agentId?: string }> = [];
     return {
       events,
-      append: vi.fn(async (_tx: unknown, event: { userId: string; topic: string; entityId?: string }) => {
+      append: vi.fn(async (_tx: unknown, event: { userId: string; topic: string; entityId?: string; agentId?: string }) => {
         events.push(event);
       })
     };
@@ -92,7 +92,11 @@ describe('PrismaRunStore realtime event production', () => {
     await store.completeRun('run-1', 'succeeded');
 
     expect(realtime.events).toHaveLength(3);
-    expect(realtime.events.every((e) => e.userId === 'owner-1' && e.topic === 'run.changed' && e.entityId === 'run-1')).toBe(true);
+    expect(
+      realtime.events.every(
+        (e) => e.userId === 'owner-1' && e.topic === 'run.changed' && e.entityId === 'run-1' && e.agentId === 'agent-1'
+      )
+    ).toBe(true);
   });
 
   it('does not emit run.changed when the domain write throws', async () => {

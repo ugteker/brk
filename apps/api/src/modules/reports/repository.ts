@@ -88,7 +88,7 @@ export class ReportRepository {
         // skipping the realtime event.
         throw new Error(`invariant_violation: report ${created.id} references missing agent ${input.agentId}`);
       }
-      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'report.changed', entityId: created.id });
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'report.changed', entityId: created.id, agentId: input.agentId });
 
       return created;
     });

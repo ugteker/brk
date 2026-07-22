@@ -813,20 +813,19 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     reloadExecutionAgentData();
   }, [reloadExecutionAgentData]);
 
-  // Replaces the old per-agent stream: reload only when the changed run/report already
-  // belongs to the execution agent (present in its currently loaded runs/reports) or a
-  // manual run for this same agent is in flight, so other agents' activity elsewhere in
-  // the account doesn't trigger extra fetches here.
+  // Replaces the old per-agent stream: reload only when the changed run/report's agentId
+  // (present on run.changed/report.changed events since the backend event payload was
+  // extended to carry it) matches the execution agent currently being viewed, so other
+  // agents' activity elsewhere in the account doesn't trigger extra fetches here. This
+  // works uniformly for brand-new runs/reports too (entityId alone couldn't identify a
+  // not-yet-loaded run/report, but agentId is stamped on the event regardless).
   useRealtimeSubscription(['run.changed', 'report.changed'], (event) => {
     if (event.topic === 'resync') {
       reloadExecutionAgentData();
       return;
     }
     if (!executionAgentId) return;
-    const knownIds = event.topic === 'run.changed' ? runs.map((r) => r.id) : reports.map((r) => r.id);
-    const belongsToExecutionAgent =
-      (event.entityId !== null && knownIds.includes(event.entityId)) || runningAgentId === executionAgentId;
-    if (belongsToExecutionAgent) {
+    if (event.agentId === executionAgentId) {
       reloadExecutionAgentData();
     }
   });

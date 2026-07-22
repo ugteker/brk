@@ -6,6 +6,7 @@ export interface RealtimeEventRepository {
     id: number;
     topic: string;
     entityId: string | null;
+    agentId: string | null;
     createdAt: Date;
   }>>;
   oldestIdForUser(userId: string): Promise<number | null>;
@@ -81,6 +82,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance, deps: Realtim
           id: event.id,
           topic: event.topic as RealtimeTopic,
           entityId: event.entityId,
+          agentId: event.agentId,
           createdAt: event.createdAt.toISOString(),
         };
         write(formatSse('change', dto, event.id));
@@ -104,6 +106,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance, deps: Realtim
                 id: event.id,
                 topic: event.topic as RealtimeTopic,
                 entityId: event.entityId,
+                agentId: event.agentId,
                 createdAt: event.createdAt.toISOString(),
               };
               write(formatSse('change', dto, event.id));

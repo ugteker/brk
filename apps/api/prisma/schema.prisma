@@ -382,6 +382,11 @@ model RealtimeEvent {
   userId    String
   topic     String
   entityId  String?
+  // Optional owning agent id, populated for run.changed/report.changed so subscribers can
+  // match events to a specific agent without relying on entityId (which remains the
+  // run/report id, not the agent id). Left null for topics that don't have agent ownership
+  // (source.changed, marketplace.changed, discussion.changed, agent.changed, playbook.changed).
+  agentId   String?
   createdAt DateTime @default(now())
 
   @@index([userId, id])

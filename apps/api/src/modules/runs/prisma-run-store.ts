@@ -69,7 +69,7 @@ export class PrismaRunStore implements RunStore {
         // instead of silently skipping the realtime event.
         throw new Error(`invariant_violation: run ${claimed.id} references missing agent ${claimed.agentId}`);
       }
-      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: claimed.id });
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: claimed.id, agentId: claimed.agentId });
       return claimed;
     });
 
@@ -107,7 +107,7 @@ export class PrismaRunStore implements RunStore {
       if (!agent) {
         throw new Error(`invariant_violation: run ${updated.id} references missing agent ${updated.agentId}`);
       }
-      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: updated.id });
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: updated.id, agentId: updated.agentId });
     });
   }
 
@@ -132,7 +132,7 @@ export class PrismaRunStore implements RunStore {
       if (!agent) {
         throw new Error(`invariant_violation: run ${updated.id} references missing agent ${updated.agentId}`);
       }
-      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: updated.id });
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: updated.id, agentId: updated.agentId });
     });
   }
 

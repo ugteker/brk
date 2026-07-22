@@ -5,12 +5,15 @@ interface RealtimeEventRow {
   userId: string;
   topic: string;
   entityId: string | null;
+  agentId: string | null;
   createdAt: Date;
 }
 
 interface RealtimeDb {
   realtimeEvent: {
-    create(args: { data: { userId: string; topic: string; entityId: string | null } }): Promise<RealtimeEventRow>;
+    create(args: {
+      data: { userId: string; topic: string; entityId: string | null; agentId: string | null };
+    }): Promise<RealtimeEventRow>;
     findMany(args: {
       where: { userId: string; id: { gt: number } };
       orderBy: { id: 'asc' };
@@ -28,13 +31,14 @@ export class RealtimeRepository {
 
   async append(
     tx: RealtimeEventTransaction,
-    input: { userId: string; topic: RealtimeTopic; entityId?: string }
+    input: { userId: string; topic: RealtimeTopic; entityId?: string; agentId?: string }
   ): Promise<void> {
     await tx.realtimeEvent.create({
       data: {
         userId: input.userId,
         topic: input.topic,
-        entityId: input.entityId ?? null
+        entityId: input.entityId ?? null,
+        agentId: input.agentId ?? null
       }
     });
   }

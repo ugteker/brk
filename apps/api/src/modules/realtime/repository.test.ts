@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RealtimeRepository } from './repository';
 
-function makeRow(id: number, userId: string, topic: string, entityId: string | null, createdAt: Date) {
-  return { id, userId, topic, entityId, createdAt };
+function makeRow(
+  id: number,
+  userId: string,
+  topic: string,
+  entityId: string | null,
+  createdAt: Date,
+  agentId: string | null = null
+) {
+  return { id, userId, topic, entityId, agentId, createdAt };
 }
 
 describe('RealtimeRepository', () => {
@@ -29,7 +36,7 @@ describe('RealtimeRepository', () => {
     const repository = new RealtimeRepository(db as never);
 
     await expect(repository.listAfter('user-a', 1)).resolves.toEqual([
-      { id: 3, userId: 'user-a', topic: 'source.changed', entityId: 'source-1', createdAt: expect.any(Date) }
+      { id: 3, userId: 'user-a', topic: 'source.changed', entityId: 'source-1', agentId: null, createdAt: expect.any(Date) }
     ]);
   });
 
@@ -51,7 +58,7 @@ describe('RealtimeRepository', () => {
     });
   });
 
-  it('append calls tx.realtimeEvent.create with entityId null when omitted', async () => {
+  it('append calls tx.realtimeEvent.create with entityId and agentId null when omitted', async () => {
     const tx = {
       realtimeEvent: {
         create: vi.fn().mockResolvedValue({})
@@ -71,7 +78,7 @@ describe('RealtimeRepository', () => {
     await repository.append(tx, { userId: 'user-a', topic: 'run.changed' });
 
     expect(tx.realtimeEvent.create).toHaveBeenCalledWith({
-      data: { userId: 'user-a', topic: 'run.changed', entityId: null }
+      data: { userId: 'user-a', topic: 'run.changed', entityId: null, agentId: null }
     });
     // append must use the injected tx, not open its own transaction on db
     expect(db.realtimeEvent.create).not.toHaveBeenCalled();
@@ -97,7 +104,31 @@ describe('RealtimeRepository', () => {
     await repository.append(tx, { userId: 'user-a', topic: 'source.changed', entityId: 'source-42' });
 
     expect(tx.realtimeEvent.create).toHaveBeenCalledWith({
-      data: { userId: 'user-a', topic: 'source.changed', entityId: 'source-42' }
+      data: { userId: 'user-a', topic: 'source.changed', entityId: 'source-42', agentId: null }
+    });
+  });
+
+  it('append passes agentId when provided, alongside entityId', async () => {
+    const tx = {
+      realtimeEvent: {
+        create: vi.fn().mockResolvedValue({})
+      }
+    };
+
+    const db = {
+      realtimeEvent: {
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+        deleteMany: vi.fn(),
+        create: vi.fn()
+      }
+    };
+
+    const repository = new RealtimeRepository(db as never);
+    await repository.append(tx, { userId: 'user-a', topic: 'run.changed', entityId: 'run-42', agentId: 'agent-7' });
+
+    expect(tx.realtimeEvent.create).toHaveBeenCalledWith({
+      data: { userId: 'user-a', topic: 'run.changed', entityId: 'run-42', agentId: 'agent-7' }
     });
   });
 

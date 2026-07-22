@@ -15,17 +15,23 @@ export interface RealtimeEventDto {
   id: number;
   topic: RealtimeTopic;
   entityId: string | null;
+  // Owning agent id for run.changed/report.changed (entityId stays the run/report id).
+  // Absent/null for topics without agent ownership (source.changed, marketplace.changed,
+  // discussion.changed, agent.changed, playbook.changed).
+  agentId: string | null;
   createdAt: string;
 }
 
 export interface RealtimeEventTransaction {
   realtimeEvent: {
-    create(args: { data: { userId: string; topic: string; entityId: string | null } }): Promise<unknown>;
+    create(args: {
+      data: { userId: string; topic: string; entityId: string | null; agentId: string | null };
+    }): Promise<unknown>;
   };
 }
 
 export interface RealtimeEventWriter {
   append(tx: RealtimeEventTransaction, input: {
-    userId: string; topic: RealtimeTopic; entityId?: string;
+    userId: string; topic: RealtimeTopic; entityId?: string; agentId?: string;
   }): Promise<void>;
 }

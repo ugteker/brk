@@ -154,4 +154,47 @@ describe('realtime stream route', () => {
     expect(response.headers['x-accel-buffering']).toBe('no');
     expect(response.headers['cache-control']).toContain('no-transform');
   });
+
+  it('includes agentId in the emitted change event dto, alongside entityId', async () => {
+    const repo = makeRepo({
+      oldestIdForUser: vi.fn().mockResolvedValue(null),
+      listAfter: vi
+        .fn()
+        .mockResolvedValueOnce([
+          { id: 1, topic: 'run.changed', entityId: 'run-1', agentId: 'agent-1', createdAt: new Date('2026-07-22T10:00:00.000Z') },
+        ])
+        .mockRejectedValue(new Error('test-end')),
+    });
+    const app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/realtime/stream',
+      headers: authCookieHeader(),
+    });
+
+    expect(response.body).toContain('"entityId":"run-1"');
+    expect(response.body).toContain('"agentId":"agent-1"');
+  });
+
+  it('emits agentId null for topics without agent ownership (e.g. source.changed)', async () => {
+    const repo = makeRepo({
+      oldestIdForUser: vi.fn().mockResolvedValue(null),
+      listAfter: vi
+        .fn()
+        .mockResolvedValueOnce([
+          { id: 1, topic: 'source.changed', entityId: 'source-1', agentId: null, createdAt: new Date('2026-07-22T10:00:00.000Z') },
+        ])
+        .mockRejectedValue(new Error('test-end')),
+    });
+    const app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/realtime/stream',
+      headers: authCookieHeader(),
+    });
+
+    expect(response.body).toContain('"agentId":null');
+  });
 });
