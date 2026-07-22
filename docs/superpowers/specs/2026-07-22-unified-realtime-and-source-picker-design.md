@@ -34,8 +34,9 @@ Add a SQLite-backed `RealtimeEvent` table with:
 
 - Monotonic numeric event ID.
 - Target `userId`.
-- `topic`: `source.changed`, `marketplace.changed`, `run.changed`,
-  `report.changed`, or `discussion.changed`.
+- `topic`: `agent.changed`, `playbook.changed`, `source.changed`,
+  `marketplace.changed`, `run.changed`, `report.changed`, or
+  `discussion.changed`.
 - Optional `entityId`.
 - `createdAt`.
 
@@ -87,6 +88,8 @@ the global feed covers their topics.
 
 | Topic | Producer actions | Consumers |
 | --- | --- | --- |
+| `agent.changed` | create, edit, delete, share, enable/disable | Agent lists/details |
+| `playbook.changed` | create, edit, delete, share, enable/disable | Playbook lists/details |
 | `run.changed` | queue, phase, completion, failure | Runs views, notifications |
 | `report.changed` | report creation/update | Report lists/details |
 | `discussion.changed` | run/turn/status changes | Discussion detail |

@@ -72,6 +72,8 @@ one React provider persists its cursor and routes typed events to consumers.
 ```ts
 export const REALTIME_RETENTION_MS = 24 * 60 * 60 * 1000;
 export type RealtimeTopic =
+  | 'agent.changed'
+  | 'playbook.changed'
   | 'source.changed'
   | 'marketplace.changed'
   | 'run.changed'
@@ -310,8 +312,8 @@ git commit -m "feat(realtime): expose cluster-safe global SSE stream`n`nCo-autho
 
 **Interfaces:**
 - Consumes: `RealtimeEventWriter` from Task 1.
-- Produces: `source.changed` and `marketplace.changed` events for every
-  affected owner/clone target.
+- Produces: `agent.changed`, `playbook.changed`, `source.changed`, and
+  `marketplace.changed` events for every affected owner/clone target.
 
 - [ ] **Step 1: Extend repository database types**
 
@@ -364,8 +366,11 @@ Apply the exact transaction pattern to:
 - Agent create/update/delete/publish/unpublish/marketplace clone.
 - Playbook create/update/delete/publish/unpublish/marketplace clone.
 
-Use `marketplace.changed` for publication lifecycle and clone actions; use the
-resource's own change topic only where a visible user-owned list exists.
+Use `marketplace.changed` for publication lifecycle and clone actions.
+Agent create/update/delete/share/enable/disable emit `agent.changed`; Playbook
+create/update/delete/share/enable/disable emit `playbook.changed`, always
+targeting the resource owner. Publication and clone actions emit both their
+resource topic and `marketplace.changed` where they change both visible views.
 
 - [ ] **Step 4: Run focused tests**
 
@@ -473,7 +478,8 @@ git commit -m "feat(realtime): publish run report and discussion changes atomica
 
 ```ts
 export type RealtimeTopic =
-  | 'source.changed' | 'marketplace.changed' | 'run.changed'
+  | 'agent.changed' | 'playbook.changed' | 'source.changed'
+  | 'marketplace.changed' | 'run.changed'
   | 'report.changed' | 'discussion.changed';
 export interface RealtimeChange { id: number; topic: RealtimeTopic; entityId: string | null; createdAt: string; }
 export function useRealtimeSubscription(
@@ -529,11 +535,13 @@ initial-load code and expose it. Inside `RealtimeProvider` (nested inside
 `AppDataProvider`) subscribe:
 
 ```ts
+['agent.changed']       => refreshAgents()
+['playbook.changed']    => refreshPlaybooks()
 ['source.changed']      => refreshSources()
 ['marketplace.changed'] => refreshMarketplace()
 ```
 
-Keep `refreshAgents` and `refreshPlaybooks` available for Task 6. Mount:
+Mount:
 
 ```tsx
 <AppDataProvider>
