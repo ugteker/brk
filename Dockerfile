@@ -13,6 +13,7 @@ WORKDIR /app/api
 COPY apps/api/package.json apps/api/package-lock.json ./
 RUN npm ci
 COPY apps/api/prisma ./prisma
+COPY apps/api/scripts ./scripts
 RUN npx prisma generate
 COPY apps/api/tsconfig.json apps/api/tsconfig.build.json ./
 COPY apps/api/src ./src
