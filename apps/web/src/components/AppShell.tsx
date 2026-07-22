@@ -23,13 +23,14 @@ import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { useAuth } from '../auth/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { useTheme } from '../theme/ThemeContext';
+import { getBuildStampLabel } from '../lib/build-info';
 import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { WatchlistMenu } from './WatchlistMenu';
 import { UsageBudgetModal } from './UsageBudgetModal';
 import { seedDemoData } from '../api/admin';
 
 const { Header, Content } = Layout;
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 // Always visible to every user, in both normal and admin mode.
 const COMMON_NAV_ITEMS = [
@@ -143,6 +144,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [usageModalOpen, setUsageModalOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const buildStampLabel = getBuildStampLabel();
 
   useEffect(() => {
     function handleScroll() {
@@ -251,28 +253,35 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Header style={headerStyle(theme, isScrolled)}>
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 flex-wrap">
           {/* Logo */}
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Title
-              level={2}
-              onClick={() => navigate('/')}
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/'); }}
-              style={{
-                margin: 0,
-                whiteSpace: 'nowrap',
-                fontSize: 'clamp(1.25rem, 5vw, 1.875rem)',
-                letterSpacing: '-0.01em',
-                cursor: 'pointer',
-                transition: 'opacity 0.15s ease'
-              }}
-            >
-              ChatTrader
-            </Title>
-            {isAdmin && adminMode && (
-              <Tag color="orange" icon={<TeamOutlined />} style={{ fontSize: 12, borderRadius: 999 }}>
-                {t('nav.modeAdmin')}
-              </Tag>
-            )}
+          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Title
+                level={2}
+                onClick={() => navigate('/')}
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/'); }}
+                style={{
+                  margin: 0,
+                  whiteSpace: 'nowrap',
+                  fontSize: 'clamp(1.25rem, 5vw, 1.875rem)',
+                  letterSpacing: '-0.01em',
+                  cursor: 'pointer',
+                  transition: 'opacity 0.15s ease'
+                }}
+              >
+                ChatTrader
+              </Title>
+              {isAdmin && adminMode && (
+                <Tag color="orange" icon={<TeamOutlined />} style={{ fontSize: 12, borderRadius: 999 }}>
+                  {t('nav.modeAdmin')}
+                </Tag>
+              )}
+            </div>
+            {buildStampLabel ? (
+              <Text type="secondary" style={{ fontSize: 12 }} data-testid="app-build-stamp">
+                {buildStampLabel}
+              </Text>
+            ) : null}
           </div>
 
           {/* Nav — hidden on mobile, visible on sm+ */}
