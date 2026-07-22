@@ -98,6 +98,10 @@ Web dev proxies `/api` → API `:3000`; web served on `:4173`.
 
 - **Source** (`Source`, shared library): YouTube video/channel/playlist, podcast RSS,
   or web URL. Has probe ("Test source" with preview items), crawl config, `maxItems`.
+  New sources can be found by name (`GET /api/sources/search`: iTunes podcast search +
+  YouTube channel search via optional `YOUTUBE_API_KEY` or scraping fallback) with
+  curated/marketplace suggestions (`GET /api/sources/suggestions`); pasting a URL
+  directly remains the fallback path.
   A synthetic `synthetic_discussion` source type is produced by the Studio hub (§8).
 - **Agent** (character/personality): name, character type + system prompt (versioned
   `AgentPromptVersion`), language. Owns identity only — *not* schedule or sources.
