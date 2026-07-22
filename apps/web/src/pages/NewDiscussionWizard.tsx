@@ -359,7 +359,7 @@ export function NewDiscussionWizard() {
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: '0 auto' }}>
+    <div style={{ maxWidth: 700, margin: '0 auto', padding: '0 clamp(8px, 4vw, 16px)' }}>
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>
           <AudioOutlined style={{ marginRight: 8 }} />
@@ -372,6 +372,7 @@ export function NewDiscussionWizard() {
 
       <Steps
         current={currentIndex}
+        size="small"
         items={stepKeys.map((key) => ({ title: stepTitles[key] }))}
         style={{ marginBottom: 32 }}
       />
@@ -380,7 +381,7 @@ export function NewDiscussionWizard() {
       {currentKey === 'topic' && (
         <Card>
           <p style={{ color: '#888', marginTop: 0 }}>{t('studio.topicStepIntro')}</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
             {GROUNDING_MODES.map(({ mode, emoji }) => {
               const selected = groundingMode === mode;
               return (
@@ -447,7 +448,7 @@ export function NewDiscussionWizard() {
             />
           )}
           <Form.Item label={t('studio.expertsStepLabel')}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
               {loadingAgents ? (
                 <span>Loading agents…</span>
               ) : (
@@ -556,33 +557,35 @@ export function NewDiscussionWizard() {
               {participants.map((p, i) => {
                 const agent = agents.find((a) => a.id === p.agentId);
                 return (
-                  <div key={p.agentId} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                    <strong style={{ minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div key={p.agentId} style={{ marginBottom: 8 }}>
+                    <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>
                       {agent ? getAgentDisplayLabel(agent) : p.agentId}
                     </strong>
-                    <Select
-                      value={p.role}
-                      onChange={(v) => updateParticipant(i, 'role', v)}
-                      style={{ width: 110 }}
-                      options={[
-                        { value: 'speaker', label: t('studio.roleSpeaker') },
-                        { value: 'host', label: t('studio.roleHost') }
-                      ]}
-                    />
-                    <Select
-                      value={p.voiceId}
-                      onChange={(v) => updateParticipant(i, 'voiceId', v)}
-                      style={{ width: 230 }}
-                      options={VOICES.map((v) => ({
-                        value: v,
-                        // When Google renders the audio, show the actual Google voice each
-                        // character maps to so the picker matches the underlying API.
-                        label:
-                          effectiveTtsProvider === 'google'
-                            ? `${VOICE_LABELS[v]} · ${GOOGLE_VOICE_NAMES[language][v]}`
-                            : VOICE_LABELS[v]
-                      }))}
-                    />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      <Select
+                        value={p.role}
+                        onChange={(v) => updateParticipant(i, 'role', v)}
+                        style={{ width: 110 }}
+                        options={[
+                          { value: 'speaker', label: t('studio.roleSpeaker') },
+                          { value: 'host', label: t('studio.roleHost') }
+                        ]}
+                      />
+                      <Select
+                        value={p.voiceId}
+                        onChange={(v) => updateParticipant(i, 'voiceId', v)}
+                        style={{ flex: '1 1 160px', minWidth: 160, maxWidth: 230 }}
+                        options={VOICES.map((v) => ({
+                          value: v,
+                          // When Google renders the audio, show the actual Google voice each
+                          // character maps to so the picker matches the underlying API.
+                          label:
+                            effectiveTtsProvider === 'google'
+                              ? `${VOICE_LABELS[v]} · ${GOOGLE_VOICE_NAMES[language][v]}`
+                              : VOICE_LABELS[v]
+                        }))}
+                      />
+                    </div>
                   </div>
                 );
               })}

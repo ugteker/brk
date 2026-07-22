@@ -3813,6 +3813,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           {showInlineAgentCreate ? (
             <Steps
                 size="small"
+                labelPlacement="vertical"
                 current={inlineAgentStep}
                 items={[
                   { title: t('agent.stepCharacter') },
@@ -3823,6 +3824,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           ) : (
             <Steps
               size="small"
+              labelPlacement="vertical"
               current={followWizardSourcePreselected ? playbookCreateStep - 1 : playbookCreateStep}
               items={[
                 ...(followWizardSourcePreselected ? [] : [{ title: t('listen.stepPickSource') }]),
