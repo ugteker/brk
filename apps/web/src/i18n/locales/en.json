@@ -277,7 +277,16 @@
       "podcast": "Podcast",
       "youtube": "YouTube",
       "web": "Web"
-    }
+    },
+    "probeError": "Could not detect this source yet. Please try another URL."
+  },
+  "sourcePicker": {
+    "searchPlaceholder": "Search podcasts or YouTube channels by name…",
+    "popularSources": "Popular sources",
+    "useUrlInstead": "Paste a URL instead",
+    "noResults": "No matches found. Try a different name or paste a URL below.",
+    "searchError": "Search is unavailable right now. Try again or paste a URL below.",
+    "partialResults": "Some providers didn't respond — results may be incomplete."
   },
   "marketplace": {
     "heading": "Marketplace",
@@ -445,7 +454,7 @@
     "step1": "Add a source",
     "step2": "Choose a persona",
     "step3": "Run",
-    "step1Desc": "Paste a YouTube channel URL, podcast feed, or any website you want to track.",
+    "step1Desc": "Search for a podcast or YouTube channel by name — or paste a URL you want to track.",
     "step2Desc": "Pick an analyst persona — each has a different focus and style.",
     "step3Desc": "We'll create your source, analyst, and playbook, then run the first analysis now.",
     "detectSource": "Detect source",

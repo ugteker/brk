@@ -190,3 +190,45 @@ export async function probeSource(source: { type: SourceType; value: string; max
   }
   return primaryResponse.json();
 }
+
+export interface SourceSearchResultItem {
+  type: 'podcast_feeds' | 'youtube_videos';
+  value: string;
+  title: string;
+  author?: string;
+  coverImageUrl: string | null;
+}
+
+export interface SourceSearchResponse {
+  results: SourceSearchResultItem[];
+  warnings: string[];
+}
+
+/** Name-based source search: podcasts (iTunes) + YouTube channels. */
+export async function searchSources(query: string): Promise<SourceSearchResponse> {
+  const response = await fetch(`/api/sources/search?q=${encodeURIComponent(query)}`);
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response, 'Failed to search sources'));
+  }
+  return response.json();
+}
+
+export interface SourceSuggestion {
+  type: SourceType;
+  value: string;
+  title: string;
+  author?: string;
+  coverImageUrl: string | null;
+  origin: 'marketplace' | 'curated';
+  publicationId?: string;
+}
+
+/** Curated "popular sources" (marketplace-first, minus sources the user already follows). */
+export async function listSourceSuggestions(): Promise<SourceSuggestion[]> {
+  const response = await fetch('/api/sources/suggestions');
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response, 'Failed to load source suggestions'));
+  }
+  return response.json();
+}
+

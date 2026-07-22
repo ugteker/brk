@@ -36,6 +36,7 @@ import {
   ToolOutlined
 } from '@ant-design/icons';
 import { AgentForm } from '../components/AgentForm';
+import { SourceSearchPicker, type SourcePickerSelection } from '../components/SourceSearchPicker';
 import { AgentStatusCard } from '../components/AgentStatusCard';
 import { AgentReportsBrowser } from '../components/AgentReportsBrowser';
 import { AgentRunsBrowser } from '../components/AgentRunsBrowser';
@@ -1650,6 +1651,75 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     try { new URL(withProto); return withProto; } catch { return null; }
   }
 
+  /** Search-picker selection: the source type is already known, so probe it directly
+   * (single probe for preview items/cover) instead of candidate-guessing from the URL. */
+  async function onPickSearchedSource(selection: SourcePickerSelection) {
+    const nonce = ++detectNonceRef.current;
+    if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+    setSourceUrlDraft(selection.value);
+    setIsSourceDetecting(true);
+    setAutoDetectedSource(null);
+    try {
+      const probe = await probeSource({ type: selection.type, value: selection.value, maxItems: 5 });
+      if (detectNonceRef.current !== nonce) return;
+      setAutoDetectedSource({
+        type: selection.type,
+        url: selection.value,
+        kind: probe.kind,
+        title: probe.title ?? selection.title,
+        coverImageUrl: probe.coverImageUrl ?? selection.coverImageUrl ?? undefined,
+        itemCount: probe.itemCount,
+        previewItems: (probe.previewItems ?? []).slice(0, 5)
+      });
+    } catch {
+      if (detectNonceRef.current === nonce) message.error(t('source.probeError'));
+    } finally {
+      if (detectNonceRef.current === nonce) setIsSourceDetecting(false);
+    }
+  }
+
+  /** Guided-wizard URL fallback: candidate-guess the source type from the pasted URL. */
+  async function detectGuidedWizardSource() {
+    const url = guidedWizardUrl.trim();
+    if (!url) return;
+    setGuidedWizardDetecting(true);
+    try {
+      const candidates = detectSourceTypeCandidates(url);
+      let best: AutoDetectedSource | null = null;
+      let bestScore = -1;
+      for (const candidate of candidates) {
+        try {
+          const probe = await probeSource({ type: candidate, value: url, maxItems: 5 });
+          const score = probeRankScore(probe as { reachable: boolean; kind: ProbeKind; confidence?: number }, candidate);
+          if (score > bestScore) { bestScore = score; best = { type: candidate, url, kind: probe.kind, title: probe.title, coverImageUrl: probe.coverImageUrl, itemCount: probe.itemCount, previewItems: (probe.previewItems ?? []).slice(0, 5) }; }
+          if (probe.reachable && probe.kind !== 'unknown') break;
+        } catch { /* try next */ }
+      }
+      if (!best) { message.error(t('source.probeError')); return; }
+      setGuidedWizardSource(best);
+    } catch { message.error(t('source.probeError')); }
+    finally { setGuidedWizardDetecting(false); }
+  }
+
+  /** Guided-wizard search pick: type is known, single probe for preview metadata. */
+  async function onPickGuidedWizardSource(selection: SourcePickerSelection) {
+    setGuidedWizardUrl('');
+    setGuidedWizardDetecting(true);
+    try {
+      const probe = await probeSource({ type: selection.type, value: selection.value, maxItems: 5 });
+      setGuidedWizardSource({
+        type: selection.type,
+        url: selection.value,
+        kind: probe.kind,
+        title: probe.title ?? selection.title,
+        coverImageUrl: probe.coverImageUrl ?? selection.coverImageUrl ?? undefined,
+        itemCount: probe.itemCount,
+        previewItems: (probe.previewItems ?? []).slice(0, 5)
+      });
+    } catch { message.error(t('source.probeError')); }
+    finally { setGuidedWizardDetecting(false); }
+  }
+
   function onSourceUrlChange(value: string) {
     setSourceUrlDraft(value);
     setAutoDetectedSource(null);
@@ -2869,7 +2939,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                      destroyOnHidden
                    >
                      <div className="space-y-3">
-                       <Input
+                       {(() => {
+                        const urlField = (
+                          <Input
                          aria-label="Source URL"
                          value={sourceUrlDraft}
                          placeholder="https://..."
@@ -2894,7 +2966,18 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                ? <CheckCircleOutlined className="text-green-500" />
                                : null
                          }
-                       />
+                          />
+                        );
+                        // Editing keeps the plain URL field; creating starts with name search
+                        // and offers the URL field as a collapsible fallback.
+                        return editingSource ? urlField : (
+                          <SourceSearchPicker
+                            selectedValue={autoDetectedSource?.url ?? null}
+                            onSelect={(selection) => void onPickSearchedSource(selection)}
+                            urlFallback={urlField}
+                          />
+                        );
+                       })()}
                        {isSourceDetecting ? (
                          <Card size="small">
                            <div className="flex items-start gap-3">
@@ -4406,63 +4489,34 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
               <span className="font-semibold">{t('guided.suggestedSource')}</span>
               <span className="ml-2 text-xs text-muted-foreground">{t('guided.suggestedSourceDescription')}</span>
             </Button>
-            <Input
-              size="large"
-              placeholder="https://www.youtube.com/watch?v=..."
-              value={guidedWizardUrl}
-              onChange={(e) => setGuidedWizardUrl(e.currentTarget.value)}
-              prefix={<LinkOutlined />}
-              onPressEnter={async () => {
-                const url = guidedWizardUrl.trim();
-                if (!url) return;
-                setGuidedWizardDetecting(true);
-                try {
-                  const candidates = detectSourceTypeCandidates(url);
-                  let best: AutoDetectedSource | null = null;
-                  let bestScore = -1;
-                  for (const candidate of candidates) {
-                    try {
-                      const probe = await probeSource({ type: candidate, value: url, maxItems: 5 });
-                      const score = probeRankScore(probe as { reachable: boolean; kind: ProbeKind; confidence?: number }, candidate);
-                      if (score > bestScore) { bestScore = score; best = { type: candidate, url, kind: probe.kind, title: probe.title, coverImageUrl: probe.coverImageUrl, itemCount: probe.itemCount, previewItems: (probe.previewItems ?? []).slice(0, 5) }; }
-                      if (probe.reachable && probe.kind !== 'unknown') break;
-                    } catch { /* try next */ }
-                  }
-                  if (!best) { message.error(t('source.probeError')); return; }
-                  setGuidedWizardSource(best);
-                } catch { message.error(t('source.probeError')); }
-                finally { setGuidedWizardDetecting(false); }
-              }}
+            <SourceSearchPicker
+              selectedValue={guidedWizardSource.url !== GUIDED_SUGGESTED_SOURCE.url ? guidedWizardSource.url : null}
+              onSelect={(selection) => void onPickGuidedWizardSource(selection)}
+              urlFallback={
+                <>
+                  <Input
+                    size="large"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={guidedWizardUrl}
+                    onChange={(e) => setGuidedWizardUrl(e.currentTarget.value)}
+                    prefix={<LinkOutlined />}
+                    onPressEnter={() => void detectGuidedWizardSource()}
+                  />
+                  <Button
+                    type="primary"
+                    block
+                    loading={guidedWizardDetecting}
+                    disabled={!guidedWizardUrl.trim()}
+                    onClick={() => void detectGuidedWizardSource()}
+                  >
+                    {t('guided.detectSource')}
+                  </Button>
+                </>
+              }
             />
-            <Button
-              type="primary"
-              block
-              loading={guidedWizardDetecting}
-              disabled={!guidedWizardUrl.trim()}
-              onClick={async () => {
-                const url = guidedWizardUrl.trim();
-                if (!url) return;
-                setGuidedWizardDetecting(true);
-                try {
-                  const candidates = detectSourceTypeCandidates(url);
-                  let best: AutoDetectedSource | null = null;
-                  let bestScore = -1;
-                  for (const candidate of candidates) {
-                    try {
-                      const probe = await probeSource({ type: candidate, value: url, maxItems: 5 });
-                      const score = probeRankScore(probe as { reachable: boolean; kind: ProbeKind; confidence?: number }, candidate);
-                      if (score > bestScore) { bestScore = score; best = { type: candidate, url, kind: probe.kind, title: probe.title, coverImageUrl: probe.coverImageUrl, itemCount: probe.itemCount, previewItems: (probe.previewItems ?? []).slice(0, 5) }; }
-                      if (probe.reachable && probe.kind !== 'unknown') break;
-                    } catch { /* try next */ }
-                  }
-                  if (!best) { message.error(t('source.probeError')); return; }
-                  setGuidedWizardSource(best);
-                } catch { message.error(t('source.probeError')); }
-                finally { setGuidedWizardDetecting(false); }
-              }}
-            >
-              {t('guided.detectSource')}
-            </Button>
+            {guidedWizardDetecting && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoadingOutlined spin /> {t('guided.detectSource')}…</div>
+            )}
             {guidedWizardSource.url !== GUIDED_SUGGESTED_SOURCE.url && (
               <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
                 <p className="text-sm font-semibold text-green-800 dark:text-green-200">✅ {guidedWizardSource.title ?? guidedWizardSource.url}</p>
