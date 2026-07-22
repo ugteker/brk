@@ -82,9 +82,13 @@ export class ReportRepository {
       });
 
       const agent = await tx.agent.findUnique({ where: { id: input.agentId }, select: { ownerUserId: true } });
-      if (agent) {
-        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'report.changed', entityId: created.id });
+      if (!agent) {
+        // AgentRunReport.agentId is a required, FK-enforced column, so a missing agent here
+        // means the data invariant has been violated. Surface it loudly instead of silently
+        // skipping the realtime event.
+        throw new Error(`invariant_violation: report ${created.id} references missing agent ${input.agentId}`);
       }
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'report.changed', entityId: created.id });
 
       return created;
     });

@@ -63,9 +63,13 @@ export class PrismaRunStore implements RunStore {
         data: { status: 'running', workerId, startedAt: new Date() }
       });
       const agent = await tx.agent.findUnique({ where: { id: claimed.agentId }, select: { ownerUserId: true } });
-      if (agent) {
-        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: claimed.id });
+      if (!agent) {
+        // AgentRun.agentId is a required, FK-enforced column (onDelete: Restrict), so a
+        // missing agent here means the data invariant has been violated. Surface it loudly
+        // instead of silently skipping the realtime event.
+        throw new Error(`invariant_violation: run ${claimed.id} references missing agent ${claimed.agentId}`);
       }
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: claimed.id });
       return claimed;
     });
 
@@ -100,9 +104,10 @@ export class PrismaRunStore implements RunStore {
         data: { phase }
       });
       const agent = await tx.agent.findUnique({ where: { id: updated.agentId }, select: { ownerUserId: true } });
-      if (agent) {
-        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: updated.id });
+      if (!agent) {
+        throw new Error(`invariant_violation: run ${updated.id} references missing agent ${updated.agentId}`);
       }
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: updated.id });
     });
   }
 
@@ -124,9 +129,10 @@ export class PrismaRunStore implements RunStore {
         }
       });
       const agent = await tx.agent.findUnique({ where: { id: updated.agentId }, select: { ownerUserId: true } });
-      if (agent) {
-        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: updated.id });
+      if (!agent) {
+        throw new Error(`invariant_violation: run ${updated.id} references missing agent ${updated.agentId}`);
       }
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'run.changed', entityId: updated.id });
     });
   }
 

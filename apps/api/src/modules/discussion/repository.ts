@@ -167,9 +167,13 @@ export class DiscussionRepository {
         include: { turns: true }
       });
       const discussion = await tx.discussion.findUnique({ where: { id: discussionId }, select: { ownerUserId: true } });
-      if (discussion) {
-        await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: discussionId });
+      if (!discussion) {
+        // DiscussionRun.discussionId is a required, FK-enforced column (onDelete: Cascade), so
+        // a missing discussion here means the data invariant has been violated. Surface it
+        // loudly instead of silently skipping the realtime event.
+        throw new Error(`invariant_violation: discussion run ${created.id} references missing discussion ${discussionId}`);
       }
+      await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: discussionId });
       return created;
     });
     return mapRun(row);
@@ -199,9 +203,10 @@ export class DiscussionRepository {
     await (this.db as any).$transaction(async (tx: any) => {
       const updated = await tx.discussionRun.update({ where: { id: runId }, data: patch });
       const discussion = await tx.discussion.findUnique({ where: { id: updated.discussionId }, select: { ownerUserId: true } });
-      if (discussion) {
-        await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: updated.discussionId });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${runId} references missing discussion ${updated.discussionId}`);
       }
+      await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: updated.discussionId });
     });
   }
 
@@ -217,12 +222,16 @@ export class DiscussionRepository {
         data: { discussionRunId: runId, participantId, turnIndex, content, segmentLabel }
       });
       const run = await tx.discussionRun.findUnique({ where: { id: runId }, select: { discussionId: true } });
-      if (run) {
-        const discussion = await tx.discussion.findUnique({ where: { id: run.discussionId }, select: { ownerUserId: true } });
-        if (discussion) {
-          await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: run.discussionId });
-        }
+      if (!run) {
+        // DiscussionTurn.discussionRunId is a required, FK-enforced column (onDelete: Cascade),
+        // so a missing run here means the data invariant has been violated.
+        throw new Error(`invariant_violation: discussion turn ${created.id} references missing run ${runId}`);
       }
+      const discussion = await tx.discussion.findUnique({ where: { id: run.discussionId }, select: { ownerUserId: true } });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${runId} references missing discussion ${run.discussionId}`);
+      }
+      await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: run.discussionId });
       return created;
     });
     return mapTurn(row);
@@ -232,12 +241,14 @@ export class DiscussionRepository {
     await (this.db as any).$transaction(async (tx: any) => {
       const updated = await tx.discussionTurn.update({ where: { id: turnId }, data: { audioUrl } });
       const run = await tx.discussionRun.findUnique({ where: { id: updated.discussionRunId }, select: { discussionId: true } });
-      if (run) {
-        const discussion = await tx.discussion.findUnique({ where: { id: run.discussionId }, select: { ownerUserId: true } });
-        if (discussion) {
-          await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: run.discussionId });
-        }
+      if (!run) {
+        throw new Error(`invariant_violation: discussion turn ${turnId} references missing run ${updated.discussionRunId}`);
       }
+      const discussion = await tx.discussion.findUnique({ where: { id: run.discussionId }, select: { ownerUserId: true } });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${updated.discussionRunId} references missing discussion ${run.discussionId}`);
+      }
+      await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: run.discussionId });
     });
   }
 
@@ -252,9 +263,10 @@ export class DiscussionRepository {
         data: { evidenceSnapshotJson: JSON.stringify(snapshot) }
       });
       const discussion = await tx.discussion.findUnique({ where: { id: updated.discussionId }, select: { ownerUserId: true } });
-      if (discussion) {
-        await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: updated.discussionId });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${runId} references missing discussion ${updated.discussionId}`);
       }
+      await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: updated.discussionId });
     });
   }
 }

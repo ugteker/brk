@@ -107,4 +107,37 @@ describe('PrismaRunStore realtime event production', () => {
 
     expect(realtime.events).toHaveLength(0);
   });
+
+  it('throws invariant_violation instead of silently skipping the event when the owning agent is missing on claim', async () => {
+    const db = createFakeDb();
+    db.agent.findUnique = vi.fn(async () => null);
+    const realtime = createMockRealtime();
+    const store = new PrismaRunStore(db as never, realtime);
+
+    await expect(store.claimNextQueuedRun('worker-a')).rejects.toThrow(/invariant_violation/);
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when the owning agent is missing on phase change', async () => {
+    const db = createFakeDb();
+    db.agent.findUnique = vi.fn(async () => null);
+    const realtime = createMockRealtime();
+    const store = new PrismaRunStore(db as never, realtime);
+
+    await expect(store.setPhase('run-1', 'crawling')).rejects.toThrow(/invariant_violation: run run-1 references missing agent agent-1/);
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when the owning agent is missing on completion', async () => {
+    const db = createFakeDb();
+    db.agent.findUnique = vi.fn(async () => null);
+    const realtime = createMockRealtime();
+    const store = new PrismaRunStore(db as never, realtime);
+
+    await expect(store.completeRun('run-1', 'succeeded')).rejects.toThrow(/invariant_violation: run run-1 references missing agent agent-1/);
+
+    expect(realtime.events).toHaveLength(0);
+  });
 });

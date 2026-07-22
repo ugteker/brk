@@ -479,4 +479,25 @@ describe('ReportRepository realtime event production', () => {
 
     expect(realtime.events).toHaveLength(0);
   });
+
+  it('throws invariant_violation instead of silently skipping the event when the owning agent is missing', async () => {
+    const db = createFakeDb();
+    db.agent = { findUnique: async () => null };
+    const realtime = createMockRealtime();
+    const repo = new ReportRepository(db as never, realtime);
+
+    await expect(
+      repo.saveRunReport({
+        agentId: 'agent-missing',
+        agentRunId: 'run-1',
+        promptVersionId: 'prompt-1',
+        summary: 'orphaned report',
+        needsHumanReview: false,
+        sourceWarnings: [],
+        signals: []
+      })
+    ).rejects.toThrow(/invariant_violation: report report_1 references missing agent agent-missing/);
+
+    expect(realtime.events).toHaveLength(0);
+  });
 });

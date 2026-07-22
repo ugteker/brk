@@ -200,4 +200,86 @@ describe('DiscussionRepository realtime event production', () => {
 
     expect(realtime.events).toHaveLength(0);
   });
+
+  it('throws invariant_violation instead of silently skipping the event when createRun cannot find the owning discussion', async () => {
+    const db = makeDb({ discussion: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.createRun('d1', 'manual')).rejects.toThrow(/invariant_violation: discussion run r1 references missing discussion d1/);
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when updateRun cannot find the owning discussion', async () => {
+    const db = makeDb({ discussion: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.updateRun('r1', { status: 'running' })).rejects.toThrow(
+      /invariant_violation: discussion run r1 references missing discussion d1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when setRunEvidenceSnapshot cannot find the owning discussion', async () => {
+    const db = makeDb({ discussion: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.setRunEvidenceSnapshot('r1', { agenda: 'Discuss', participants: [] })).rejects.toThrow(
+      /invariant_violation: discussion run r1 references missing discussion d1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when createTurn cannot find the owning run', async () => {
+    const db = makeDb({ discussionRun: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.createTurn('r1', 'p1', 0, 'Hello', null)).rejects.toThrow(
+      /invariant_violation: discussion turn t1 references missing run r1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when createTurn cannot find the owning discussion', async () => {
+    const db = makeDb({ discussion: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.createTurn('r1', 'p1', 0, 'Hello', null)).rejects.toThrow(
+      /invariant_violation: discussion run r1 references missing discussion d1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when updateTurnAudioUrl cannot find the owning run', async () => {
+    const db = makeDb({ discussionRun: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.updateTurnAudioUrl('t1', 'https://audio/1.mp3')).rejects.toThrow(
+      /invariant_violation: discussion turn t1 references missing run r1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when updateTurnAudioUrl cannot find the owning discussion', async () => {
+    const db = makeDb({ discussion: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.updateTurnAudioUrl('t1', 'https://audio/1.mp3')).rejects.toThrow(
+      /invariant_violation: discussion run r1 references missing discussion d1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
 });
