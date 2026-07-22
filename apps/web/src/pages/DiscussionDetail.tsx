@@ -205,14 +205,18 @@ function EvidencePanel({
   participantInfoMap: Record<string, ParticipantInfo>;
 }) {
   const { t } = useTranslation();
+  const { agents: allAgents } = useAppData();
   const agendaText = evidenceSnapshot ? evidenceSnapshot.agenda : legacyAgenda;
 
   // Resolve raw report IDs to human-readable headlines by fetching each involved
-  // agent's reports once. Falls back to the bare ID for reports we can't resolve.
+  // agent's reports once. Shared-pool reports may come from any agent, so in that
+  // case we scan all agents. Falls back to the bare ID for reports we can't resolve.
   const [reportLabels, setReportLabels] = useState<Record<string, string>>({});
   useEffect(() => {
     if (!evidenceSnapshot) return;
-    const agentIds = [...new Set(evidenceSnapshot.participants.map((p) => p.agentId))];
+    const agentIds = evidenceSnapshot.shared
+      ? allAgents.map((a) => a.id)
+      : [...new Set(evidenceSnapshot.participants.map((p) => p.agentId))];
     Promise.all(
       agentIds.map(async (agentId) => {
         try {
@@ -229,7 +233,8 @@ function EvidencePanel({
       }
       setReportLabels(labels);
     });
-  }, [evidenceSnapshot]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evidenceSnapshot, allAgents]);
 
   function originTag(origin: string) {
     if (origin === 'explicit') return <Tag color="blue">{t('studio.evidenceOriginExplicit')}</Tag>;
@@ -243,9 +248,48 @@ function EvidencePanel({
         <Text strong>{t('studio.evidenceAgendaLabel')}: </Text>
         <Text>{agendaText || t('studio.evidenceNoAgenda')}</Text>
       </Card>
+      {evidenceSnapshot?.shared && (
+        <Card size="small" style={{ marginBottom: 12 }}>
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <strong>{t('studio.evidenceSharedLabel')}</strong>
+            {evidenceSnapshot.shared.reportIds.length > 0 && (
+              <div>
+                <Text type="secondary">{t('studio.evidenceReportsLabel')}: </Text>
+                {evidenceSnapshot.shared.reportIds.map((id) => (
+                  <Tag key={id} style={{ maxWidth: '100%', whiteSpace: 'normal' }}>
+                    {reportLabels[id] ?? id}
+                  </Tag>
+                ))}
+              </div>
+            )}
+            {evidenceSnapshot.shared.sourceItemIds.length > 0 && (
+              <div>
+                <Text type="secondary">{t('studio.evidenceSourceItemsLabel')}: </Text>
+                {evidenceSnapshot.shared.sourceItemIds.map((id) => (
+                  <Tag key={id} color="green">
+                    {id}
+                  </Tag>
+                ))}
+              </div>
+            )}
+            {evidenceSnapshot.shared.transcriptWarnings.length > 0 && (
+              <div>
+                <Text type="warning">{t('studio.evidenceWarningsLabel')}: </Text>
+                <ul style={{ margin: '4px 0 0 0', paddingLeft: 20 }}>
+                  {evidenceSnapshot.shared.transcriptWarnings.map((w) => (
+                    <li key={w}>
+                      <Text type="warning">{w}</Text>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Space>
+        </Card>
+      )}
       {!evidenceSnapshot ? (
         <Text type="secondary">{t('studio.evidenceLegacyRun')}</Text>
-      ) : (
+      ) : evidenceSnapshot.shared ? null : (
         evidenceSnapshot.participants.map((p) => {
           const info = participantInfoMap[p.participantId];
           return (

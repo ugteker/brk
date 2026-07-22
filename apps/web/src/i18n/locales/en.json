@@ -628,6 +628,7 @@
     "evidenceOriginExplicit": "Manually selected",
     "evidenceOriginFallback": "Latest reports",
     "evidenceReportsLabel": "Reports used",
+    "evidenceSharedLabel": "Shared material (all participants)",
     "evidenceSourceItemsLabel": "Source material",
     "evidenceWarningsLabel": "Warnings",
     "evidenceLegacyRun": "This run was created before evidence tracking was added — no snapshot is available.",

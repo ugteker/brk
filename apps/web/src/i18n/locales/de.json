@@ -627,6 +627,7 @@
     "evidenceOriginExplicit": "Manuell ausgewählt",
     "evidenceOriginFallback": "Aktuellste Berichte",
     "evidenceReportsLabel": "Verwendete Berichte",
+    "evidenceSharedLabel": "Gemeinsames Material (alle Teilnehmer)",
     "evidenceSourceItemsLabel": "Quellmaterial",
     "evidenceWarningsLabel": "Warnungen",
     "evidenceLegacyRun": "Dieser Lauf wurde erstellt, bevor die Beleg-Erfassung eingeführt wurde — es ist kein Snapshot verfügbar.",
