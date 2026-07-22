@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../../server';
 import { authCookieHeader, createTestAuthDeps } from '../../test-utils/auth';
 import { InMemoryUserRepository } from '../auth/in-memory-user-repository';
@@ -296,6 +296,76 @@ describe('source routes', () => {
     });
     expect(adminList.statusCode).toBe(200);
     expect(adminList.json<SourceRecord[]>()).toHaveLength(1);
+  });
+
+  it('lists only reports whose runs actually reference the source (source-scoped, not agent-scoped)', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    const listReportsForSource = vi.fn(async (sourceValue: string) =>
+      sourceValue === 'https://example.com/feed.xml'
+        ? [{ id: 'report-1', agentId: 'agent-1', summary: 'about this source' }]
+        : []
+    );
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      source: {
+        sourceRepository: sourceRepo,
+        accessResolver: new DomainAccessResolver(sourceRepo),
+        reportRepository: { listReportsForSource } as never
+      }
+    });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/sources',
+      headers: authCookieHeader(),
+      payload: { type: 'podcast_feeds', value: 'https://example.com/feed.xml' }
+    });
+    const source = createRes.json<SourceRecord>();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sources/${source.id}/reports`,
+      headers: authCookieHeader()
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(listReportsForSource).toHaveBeenCalledWith('https://example.com/feed.xml');
+    const body = res.json<Array<{ id: string }>>();
+    expect(body).toHaveLength(1);
+    expect(body[0]?.id).toBe('report-1');
+  });
+
+  it('denies source-scoped report listing to users without access to the source', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner@example.com', 'hash', 'Owner', 'user');
+    const other = await userRepository.createWithPassword('other@example.com', 'hash', 'Other', 'user');
+    await userRepository.setEmailVerified(owner.id, true);
+    await userRepository.setEmailVerified(other.id, true);
+    const source = await sourceRepo.createSource(owner.id, { type: 'web_urls', value: 'https://example.com' });
+
+    const listReportsForSource = vi.fn(async () => []);
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: { ...createTestAuthDeps(), userRepository },
+      source: {
+        sourceRepository: sourceRepo,
+        accessResolver: new DomainAccessResolver(sourceRepo),
+        reportRepository: { listReportsForSource } as never
+      }
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sources/${source.id}/reports`,
+      headers: authCookieHeader(other.id)
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(listReportsForSource).not.toHaveBeenCalled();
   });
 
   it('supports share, publish, marketplace listing and clone behavior', async () => {

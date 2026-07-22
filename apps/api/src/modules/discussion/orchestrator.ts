@@ -84,6 +84,21 @@ const DISCUSSION_LANGUAGE_INSTRUCTIONS: Partial<Record<'en' | 'de', string>> = {
   de: 'WICHTIG: Antworte in diesem Redebeitrag auf Deutsch.'
 };
 
+/** Per-discussion turn length (formatConfig.turnLength): token budget + explicit style
+ * instruction per level. 'medium' matches the original hard-coded behavior (max_tokens 400,
+ * no extra instruction) so existing discussions are unaffected. */
+export const DISCUSSION_TURN_LENGTH_SETTINGS: Record<'short' | 'medium' | 'long', { maxTokens: number; instruction?: string }> = {
+  short: {
+    maxTokens: 160,
+    instruction: 'Keep each spoken turn short and punchy: 2-3 concise sentences, one clear point per turn. Never exceed 4 sentences.'
+  },
+  medium: { maxTokens: 400 },
+  long: {
+    maxTokens: 700,
+    instruction: 'You may elaborate in depth: develop your argument over several sentences with reasoning and examples.'
+  }
+};
+
 export class DiscussionOrchestrator {
   constructor(private readonly deps: DiscussionOrchestratorDeps) {}
 
@@ -123,6 +138,75 @@ export class DiscussionOrchestrator {
           await discussionRepository.updateRun(runId, { status: 'error', errorMessage: message, completedAt: new Date() });
           return;
         }
+      }
+
+      // Material-grounded discussions (the current wizard mode) share one agent-independent
+      // pool of reports + transcripts with every participant.
+      let sharedMaterial: {
+        summariesText: string;
+        excerptText: string;
+        reportIds: string[];
+        sourceItemIds: string[];
+        warnings: string[];
+      } | null = null;
+      if (groundingMode === 'material') {
+        const poolReportIds = discussion.formatConfig.grounding?.reportIds ?? [];
+        const poolArtifactIds = discussion.formatConfig.grounding?.artifactIds ?? [];
+        if (poolReportIds.length === 0 && poolArtifactIds.length === 0) {
+          await discussionRepository.updateRun(runId, {
+            status: 'error',
+            errorMessage: 'Cannot start discussion - no material selected for this discussion',
+            completedAt: new Date()
+          });
+          return;
+        }
+
+        const warnings: string[] = [];
+        const reportRecords = (
+          await Promise.all(poolReportIds.map((id) => reportRepository.getReportById(id)))
+        ).filter((r): r is { id: string; agentId: string; agentRunId: string; summary: string } => r !== null);
+        for (const id of poolReportIds) {
+          if (!reportRecords.some((r) => r.id === id)) warnings.push(`Report ${id} no longer exists`);
+        }
+
+        const reportEvidence = await buildTranscriptEvidence(
+          reportRecords.map((r) => ({ id: r.id, agentRunId: r.agentRunId })),
+          artifactRepository
+        );
+
+        let artifactEvidence: { excerptText: string; sourceItemIds: string[]; warnings: string[] } = {
+          excerptText: '',
+          sourceItemIds: [],
+          warnings: []
+        };
+        if (poolArtifactIds.length > 0 && typeof artifactRepository.getArtifactsByIds === 'function') {
+          artifactEvidence = await buildSharedTranscriptEvidence(
+            poolArtifactIds,
+            artifactRepository as SharedTranscriptArtifactRepo
+          );
+        }
+
+        if (reportRecords.length === 0 && !artifactEvidence.excerptText) {
+          await discussionRepository.updateRun(runId, {
+            status: 'error',
+            errorMessage: `Cannot start discussion - none of the selected material could be resolved (${[
+              ...warnings,
+              ...artifactEvidence.warnings
+            ].join('; ')})`,
+            completedAt: new Date()
+          });
+          return;
+        }
+
+        sharedMaterial = {
+          summariesText: reportRecords.length
+            ? reportRecords.map((r, i) => `Report ${i + 1}: ${r.summary}`).join('\n')
+            : 'This discussion is grounded in the shared source material below.',
+          excerptText: [reportEvidence.excerptText, artifactEvidence.excerptText].filter(Boolean).join('\n\n'),
+          reportIds: reportRecords.map((r) => r.id),
+          sourceItemIds: [...reportEvidence.sourceItemIds, ...artifactEvidence.sourceItemIds],
+          warnings: [...warnings, ...reportEvidence.warnings, ...artifactEvidence.warnings]
+        };
       }
 
       // Transcript-grounded discussions share one bounded excerpt set with every participant.
@@ -188,6 +272,11 @@ export class DiscussionOrchestrator {
           transcriptExcerpt = sharedEvidence?.excerptText ?? '';
           snapshotSourceItemIds = sharedEvidence?.sourceItemIds ?? [];
           snapshotWarnings = sharedEvidence?.warnings ?? [];
+        } else if (groundingMode === 'material') {
+          // Shared pool: identical context for every participant; the pool itself is
+          // snapshotted once at the run level (see `shared` below), not per participant.
+          recentReportsSummary = sharedMaterial?.summariesText ?? '';
+          transcriptExcerpt = sharedMaterial?.excerptText ?? '';
         } else {
           recentReportsSummary =
             'There are no source reports for this discussion - argue from your own expertise and the agenda question.';
@@ -195,9 +284,11 @@ export class DiscussionOrchestrator {
         }
 
         const languageInstruction = DISCUSSION_LANGUAGE_INSTRUCTIONS[discussion.formatConfig.language ?? 'en'];
+        const turnLengthSetting = DISCUSSION_TURN_LENGTH_SETTINGS[discussion.formatConfig.turnLength ?? 'medium'];
         const systemPromptSections = [
           promptVersion?.systemPrompt ?? `You are an AI analyst named ${agent?.name ?? 'Agent'}.`,
           DISCUSSION_MODE_INSTRUCTION,
+          ...(turnLengthSetting.instruction ? [turnLengthSetting.instruction] : []),
           ...(languageInstruction ? [languageInstruction] : [])
         ];
 
@@ -222,10 +313,20 @@ export class DiscussionOrchestrator {
 
       await discussionRepository.setRunEvidenceSnapshot(runId, {
         agenda: discussion.description,
-        participants: evidenceParticipants
+        participants: evidenceParticipants,
+        ...(sharedMaterial
+          ? {
+              shared: {
+                reportIds: sharedMaterial.reportIds,
+                sourceItemIds: sharedMaterial.sourceItemIds,
+                transcriptWarnings: sharedMaterial.warnings
+              }
+            }
+          : {})
       });
 
       const totalTurns = discussion.formatConfig.totalTurnTarget ?? 12;
+      const turnMaxTokens = DISCUSSION_TURN_LENGTH_SETTINGS[discussion.formatConfig.turnLength ?? 'medium'].maxTokens;
       const conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
       const segments = this.getSegments(discussion.format, discussion.formatConfig.segments);
       let turnIndex = 0;
@@ -251,7 +352,7 @@ export class DiscussionOrchestrator {
 
         const response = await claudeClient.messages.create({
           model: ctx.model,
-          max_tokens: 400,
+          max_tokens: turnMaxTokens,
           system: ctx.systemPrompt,
           messages
         });

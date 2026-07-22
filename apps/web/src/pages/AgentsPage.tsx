@@ -94,6 +94,7 @@ import {
 import {
   createSource,
   deleteSource,
+  listSourceReports,
   listSources,
   probeSource,
   publishSource,
@@ -149,7 +150,7 @@ function SourceTypeBadge({ type }: { type: string }) {
     <Tag icon={<AudioOutlined />} color="purple" className="m-0">Podcast</Tag>
   );
   if (type === 'synthetic_discussion') return (
-    <Tag icon={<AudioOutlined />} color="geekblue" className="m-0">🎙 Synthetic</Tag>
+    <Tag icon={<AudioOutlined />} color="geekblue" className="m-0">Discussion</Tag>
   );
   return <Tag icon={<GlobalOutlined />} className="m-0">Web</Tag>;
 }
@@ -835,14 +836,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       return;
     }
     setSourceDetailLoading(true);
-    const reportPromises = linked.map((pb) => listAgentReports(pb.agentId));
+    // Reports come from the source-scoped endpoint (only reports whose run actually crawled
+    // this source); runs are still per-agent since they have no source-level endpoint.
     const runPromises = linked.map((pb) => listAgentRuns(pb.agentId));
-    Promise.all([...reportPromises, ...runPromises])
+    Promise.all([listSourceReports<RunReportDto>(selectedSourceId), ...runPromises])
       .then((results) => {
         if (!alive) return;
-        const n = linked.length;
-        const allReports = (results.slice(0, n) as RunReportDto[][]).flat();
-        const allRuns = (results.slice(n) as RunDetailDto[][]).flat();
+        const allReports = results[0] as RunReportDto[];
+        const allRuns = (results.slice(1) as RunDetailDto[][]).flat();
         allReports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         allRuns.sort((a, b) => new Date(b.scheduledFor).getTime() - new Date(a.scheduledFor).getTime());
         setSourceDetailReports(allReports);
@@ -2645,6 +2646,18 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              <div className="text-base font-semibold leading-snug">{getSourceDisplayTitle(source)}</div>
                              {source.type !== 'synthetic_discussion' && (
                                <Text type="secondary" className="block truncate text-xs">{source.value}</Text>
+                             )}
+                             {getSourceSpeakers(source).length > 0 && (
+                               <div className="mt-2 flex flex-wrap gap-1.5">
+                                 {getSourceSpeakers(source).map((speaker) => (
+                                   <span
+                                     key={speaker}
+                                     className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50/80 px-2 py-0.5 text-[11px] font-medium text-violet-800 dark:border-violet-500/30 dark:bg-violet-950/40 dark:text-violet-200"
+                                   >
+                                     🎙 {speaker}
+                                   </span>
+                                 ))}
+                               </div>
                              )}
                            </div>
                          <div className="mt-4 text-xs">

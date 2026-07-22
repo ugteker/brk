@@ -205,4 +205,65 @@ describe('Discussion routes', () => {
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual([]);
   });
+
+  it('POST /api/discussions returns 400 for a material-grounded discussion with an empty pool', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST', url: '/api/discussions',
+      payload: {
+        name: 'Test', format: 'free_form',
+        formatConfig: { grounding: { mode: 'material', reportIds: [], artifactIds: [] } },
+        participants: [
+          { agentId: 'a1', role: 'speaker', voiceId: 'alloy', speakerOrder: 0 },
+          { agentId: 'a2', role: 'speaker', voiceId: 'echo', speakerOrder: 1 }
+        ]
+      }
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /api/discussions returns 201 for a material-grounded discussion with any agent\'s report in the pool', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST', url: '/api/discussions',
+      payload: {
+        name: 'Test', format: 'free_form',
+        formatConfig: { grounding: { mode: 'material', reportIds: ['report-from-any-agent'] } },
+        participants: [
+          { agentId: 'a1', role: 'speaker', voiceId: 'alloy', speakerOrder: 0 },
+          { agentId: 'a2', role: 'speaker', voiceId: 'echo', speakerOrder: 1 }
+        ]
+      }
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('POST /api/discussions/:id/runs returns 422 for a material-grounded discussion whose pool is empty', async () => {
+    const materialDisc = {
+      ...discRow,
+      formatConfig: { grounding: { mode: 'material', reportIds: [], artifactIds: [] } },
+      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, reportIds: [] }]
+    };
+    const reportRepository = {
+      listReportsForAgent: vi.fn().mockResolvedValue([]),
+      getReportById: vi.fn().mockResolvedValue(null)
+    };
+    const app = await buildApp({ getDiscussion: vi.fn().mockResolvedValue(materialDisc) }, { reportRepository });
+    const res = await app.inject({ method: 'POST', url: '/api/discussions/d1/runs', payload: {} });
+    expect(res.statusCode).toBe(422);
+    expect(JSON.parse(res.body).code).toBe('no_material_selected');
+    // Material mode never consults per-participant report resolution.
+    expect(reportRepository.listReportsForAgent).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/discussions/:id/runs returns 202 for a material-grounded discussion with a non-empty pool', async () => {
+    const materialDisc = {
+      ...discRow,
+      formatConfig: { grounding: { mode: 'material', artifactIds: ['art1'] } },
+      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, reportIds: [] }]
+    };
+    const app = await buildApp({ getDiscussion: vi.fn().mockResolvedValue(materialDisc) });
+    const res = await app.inject({ method: 'POST', url: '/api/discussions/d1/runs', payload: {} });
+    expect(res.statusCode).toBe(202);
+  });
 });

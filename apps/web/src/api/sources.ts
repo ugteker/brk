@@ -112,6 +112,16 @@ export async function getSource(sourceId: string): Promise<SourceRecord> {
   return response.json();
 }
 
+/** Reports whose generating run actually crawled this source (across all agents) - not
+ * every report of every agent whose playbook merely links the source. */
+export async function listSourceReports<T = unknown>(sourceId: string): Promise<T[]> {
+  const response = await fetch(`/api/sources/${sourceId}/reports`);
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response, 'Failed to load source reports'));
+  }
+  return response.json();
+}
+
 export async function updateSource(sourceId: string, payload: UpdateSourcePayload): Promise<SourceRecord> {
   const response = await fetch(`/api/sources/${sourceId}`, {
     method: 'PATCH',

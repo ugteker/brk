@@ -30,15 +30,18 @@ export interface DiscussionParticipantDto {
   reportIds: string[];
 }
 
-/** How a discussion sources its material: agent reports (default), a shared
- * episode transcript, or nothing at all (free question, experts argue from
- * their own expertise). */
-export type DiscussionGroundingMode = 'reports' | 'transcript' | 'free';
+/** How a discussion sources its material. 'material' is the current wizard mode: one shared,
+ * agent-independent pool of reports and/or transcripts. 'reports' (per-participant picks) and
+ * 'transcript' still exist for historical discussions. 'free' is a free question only. */
+export type DiscussionGroundingMode = 'reports' | 'transcript' | 'free' | 'material';
 
 export interface DiscussionGroundingConfigDto {
   mode: DiscussionGroundingMode;
-  /** Artifact IDs of the shared transcripts (transcript mode only). */
+  /** Artifact IDs of shared transcripts (transcript mode, and the transcript half of the
+   * material pool). */
   artifactIds?: string[];
+  /** Report IDs in the shared material pool - any agent's reports, not just participants'. */
+  reportIds?: string[];
 }
 
 export interface DiscussionFormatConfigDto {
@@ -47,6 +50,8 @@ export interface DiscussionFormatConfigDto {
   hostInstructions?: string;
   /** Language every participant should respond in. Defaults to English when unset. */
   language?: 'en' | 'de';
+  /** How long each spoken turn should be. Defaults to medium when unset. */
+  turnLength?: 'short' | 'medium' | 'long';
   /** Absent means classic reports grounding. */
   grounding?: DiscussionGroundingConfigDto;
 }
@@ -90,6 +95,12 @@ export interface ParticipantEvidenceSnapshotDto {
 export interface DiscussionRunEvidenceSnapshotDto {
   agenda: string;
   participants: ParticipantEvidenceSnapshotDto[];
+  /** Present only for material-grounded runs: the shared, agent-independent pool. */
+  shared?: {
+    reportIds: string[];
+    sourceItemIds: string[];
+    transcriptWarnings: string[];
+  };
 }
 
 export interface DiscussionRunDto {

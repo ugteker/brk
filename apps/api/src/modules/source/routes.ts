@@ -9,10 +9,15 @@ export interface SourceProbeLike {
   probeSource(source: SourceConfig, previewLimit?: number): Promise<SourceProbeResult>;
 }
 
+export interface SourceScopedReportRepositoryLike {
+  listReportsForSource(sourceValue: string): Promise<unknown[]>;
+}
+
 export interface SourceRoutesDeps {
   sourceRepository: SourceRepositoryLike;
   accessResolver: DomainAccessResolver;
   sourceProbe?: SourceProbeLike;
+  reportRepository?: SourceScopedReportRepositoryLike;
 }
 
 function isSupportedSourceType(value: unknown): value is SourceConfig['type'] {
@@ -73,6 +78,19 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
       return reply.status(access.statusCode).send({ code: access.code, message: access.message });
     }
     return reply.status(200).send(access.source);
+  });
+
+  /** Reports scoped to this concrete source: only reports whose generating run saved evidence
+   * artifacts referencing this source's value. Prevents an agent's unrelated reports from
+   * leaking onto every source its playbook happens to link to. */
+  app.get('/api/sources/:sourceId/reports', async (req, reply) => {
+    const { sourceId } = req.params as { sourceId: string };
+    const access = await requireSourceAccess(deps, req, sourceId, 'read');
+    if (!access.ok) {
+      return reply.status(access.statusCode).send({ code: access.code, message: access.message });
+    }
+    const reports = deps.reportRepository ? await deps.reportRepository.listReportsForSource(access.source.value) : [];
+    return reply.status(200).send(reports);
   });
 
   app.patch('/api/sources/:sourceId', async (req, reply) => {

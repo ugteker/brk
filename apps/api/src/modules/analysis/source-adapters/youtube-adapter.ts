@@ -49,8 +49,22 @@ const YOUTUBE_WATCH_PAGE_HEADERS: Record<string, string> = {
  * guaranteed fallback lever if YouTube's IP-based blocking of datacenter/VPS ranges (like
  * Hetzner's) persists despite the header/client impersonation below: routing just these requests
  * through a non-datacenter IP reliably bypasses it. Left undefined (direct requests) if unset.
+ * A malformed value (undici requires an http:// or https:// URL) must not crash API startup -
+ * it only disables the proxy with a loud warning, since YouTube crawling is a non-core feature.
  */
-const youtubeProxyDispatcher = process.env.YOUTUBE_PROXY_URL ? new ProxyAgent(process.env.YOUTUBE_PROXY_URL) : undefined;
+function createYoutubeProxyDispatcher(): ProxyAgent | undefined {
+  const url = process.env.YOUTUBE_PROXY_URL;
+  if (!url) return undefined;
+  try {
+    return new ProxyAgent(url);
+  } catch (error) {
+    logger.warn(
+      `[youtube-adapter] Ignoring invalid YOUTUBE_PROXY_URL (must start with http:// or https://, e.g. http://user:pass@host:port): ${error instanceof Error ? error.message : String(error)}`
+    );
+    return undefined;
+  }
+}
+const youtubeProxyDispatcher = createYoutubeProxyDispatcher();
 
 /** `httpGet`/`httpPostJson` wrappers that route through `YOUTUBE_PROXY_URL` when configured -
  * use these (instead of the generic `defaultHttpGet`/`defaultHttpPostJson`) for any YouTube

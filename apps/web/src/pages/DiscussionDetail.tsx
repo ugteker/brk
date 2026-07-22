@@ -96,7 +96,7 @@ function TurnBubble({ turn, participant }: { turn: DiscussionTurnDto; participan
   const color = SPEAKER_COLORS[participant.index % SPEAKER_COLORS.length];
   const displayContent = sanitizeTurnContent(turn.content);
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
+    <div className="turn-fade-in" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
       <div
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${getCharacterTypeIconBg(participant.characterType)}`}
       >
@@ -124,6 +124,74 @@ function TurnBubble({ turn, participant }: { turn: DiscussionTurnDto; participan
   );
 }
 
+/** Speech-bubble-shaped placeholder with animated dots shown while the AI generates the next
+ * speaker's turn - turn generation takes many seconds and without this the transcript looks
+ * finished/stuck between turns. */
+function TypingIndicator({ participant, label }: { participant: ParticipantInfo; label: string }) {
+  const color = SPEAKER_COLORS[participant.index % SPEAKER_COLORS.length];
+  return (
+    <div className="turn-fade-in" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
+      <div
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${getCharacterTypeIconBg(participant.characterType)}`}
+      >
+        {getCharacterTypeEmoji(participant.characterType)}
+      </div>
+      <Card size="small" style={{ background: `${color}0d`, border: 'none' }} bodyStyle={{ padding: '8px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <strong style={{ fontSize: 12, color }}>{participant.name}</strong>
+          <Text type="secondary" style={{ fontSize: 12 }}>{label}</Text>
+          <span className="typing-dots" aria-hidden="true">
+            <span /><span /><span />
+          </span>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/** Podcast-studio style header above the live transcript: every participant as an avatar,
+ * with the currently speaking/thinking participant highlighted with a pulsing ring. */
+function StudioPanel({
+  participants,
+  activeParticipantId
+}: {
+  participants: Array<{ id: string; info: ParticipantInfo }>;
+  activeParticipantId: string | null;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 20,
+        justifyContent: 'center',
+        flexWrap: 'wrap',
+        padding: '14px 12px',
+        marginBottom: 16,
+        borderRadius: 12,
+        background: 'linear-gradient(135deg, rgba(114,46,209,0.07), rgba(22,119,255,0.07))'
+      }}
+    >
+      {participants.map(({ id, info }) => {
+        const color = SPEAKER_COLORS[info.index % SPEAKER_COLORS.length];
+        const active = id === activeParticipantId;
+        return (
+          <div key={id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 64 }}>
+            <div
+              className={`flex h-12 w-12 items-center justify-center rounded-full text-xl ${getCharacterTypeIconBg(info.characterType)} ${active ? 'speaker-active' : ''}`}
+              style={active ? ({ '--speaker-color': color } as React.CSSProperties) : { opacity: 0.75 }}
+            >
+              {getCharacterTypeEmoji(info.characterType)}
+            </div>
+            <Text style={{ fontSize: 11, fontWeight: active ? 600 : 400, color: active ? color : undefined, maxWidth: 84 }} ellipsis>
+              {info.name}
+            </Text>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function EvidencePanel({
   evidenceSnapshot,
   legacyAgenda,
@@ -137,14 +205,18 @@ function EvidencePanel({
   participantInfoMap: Record<string, ParticipantInfo>;
 }) {
   const { t } = useTranslation();
+  const { agents: allAgents } = useAppData();
   const agendaText = evidenceSnapshot ? evidenceSnapshot.agenda : legacyAgenda;
 
   // Resolve raw report IDs to human-readable headlines by fetching each involved
-  // agent's reports once. Falls back to the bare ID for reports we can't resolve.
+  // agent's reports once. Shared-pool reports may come from any agent, so in that
+  // case we scan all agents. Falls back to the bare ID for reports we can't resolve.
   const [reportLabels, setReportLabels] = useState<Record<string, string>>({});
   useEffect(() => {
     if (!evidenceSnapshot) return;
-    const agentIds = [...new Set(evidenceSnapshot.participants.map((p) => p.agentId))];
+    const agentIds = evidenceSnapshot.shared
+      ? allAgents.map((a) => a.id)
+      : [...new Set(evidenceSnapshot.participants.map((p) => p.agentId))];
     Promise.all(
       agentIds.map(async (agentId) => {
         try {
@@ -161,7 +233,8 @@ function EvidencePanel({
       }
       setReportLabels(labels);
     });
-  }, [evidenceSnapshot]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evidenceSnapshot, allAgents]);
 
   function originTag(origin: string) {
     if (origin === 'explicit') return <Tag color="blue">{t('studio.evidenceOriginExplicit')}</Tag>;
@@ -175,9 +248,48 @@ function EvidencePanel({
         <Text strong>{t('studio.evidenceAgendaLabel')}: </Text>
         <Text>{agendaText || t('studio.evidenceNoAgenda')}</Text>
       </Card>
+      {evidenceSnapshot?.shared && (
+        <Card size="small" style={{ marginBottom: 12 }}>
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <strong>{t('studio.evidenceSharedLabel')}</strong>
+            {evidenceSnapshot.shared.reportIds.length > 0 && (
+              <div>
+                <Text type="secondary">{t('studio.evidenceReportsLabel')}: </Text>
+                {evidenceSnapshot.shared.reportIds.map((id) => (
+                  <Tag key={id} style={{ maxWidth: '100%', whiteSpace: 'normal' }}>
+                    {reportLabels[id] ?? id}
+                  </Tag>
+                ))}
+              </div>
+            )}
+            {evidenceSnapshot.shared.sourceItemIds.length > 0 && (
+              <div>
+                <Text type="secondary">{t('studio.evidenceSourceItemsLabel')}: </Text>
+                {evidenceSnapshot.shared.sourceItemIds.map((id) => (
+                  <Tag key={id} color="green">
+                    {id}
+                  </Tag>
+                ))}
+              </div>
+            )}
+            {evidenceSnapshot.shared.transcriptWarnings.length > 0 && (
+              <div>
+                <Text type="warning">{t('studio.evidenceWarningsLabel')}: </Text>
+                <ul style={{ margin: '4px 0 0 0', paddingLeft: 20 }}>
+                  {evidenceSnapshot.shared.transcriptWarnings.map((w) => (
+                    <li key={w}>
+                      <Text type="warning">{w}</Text>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Space>
+        </Card>
+      )}
       {!evidenceSnapshot ? (
         <Text type="secondary">{t('studio.evidenceLegacyRun')}</Text>
-      ) : (
+      ) : evidenceSnapshot.shared ? null : (
         evidenceSnapshot.participants.map((p) => {
           const info = participantInfoMap[p.participantId];
           return (
@@ -238,7 +350,7 @@ export function DiscussionDetail() {
   const { discussionId } = useParams<{ discussionId: string }>();
   const navigate = useSafeNavigate();
   const location = useLocation();
-  const { agents } = useAppData();
+  const { agents, refreshSources } = useAppData();
 
   const [discussion, setDiscussion] = useState<DiscussionDto | null>(null);
   const [runs, setRuns] = useState<DiscussionRunDto[]>([]);
@@ -247,6 +359,15 @@ export function DiscussionDetail() {
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [renderingAudio, setRenderingAudio] = useState(false);
+  // Rotating "warming up the studio" copy shown while a live run has produced no
+  // turns yet - generating the first turn can take a while and a bare spinner
+  // reads like a hang.
+  const WARMUP_MESSAGE_COUNT = 5;
+  const [warmupIndex, setWarmupIndex] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setWarmupIndex((i) => (i + 1) % WARMUP_MESSAGE_COUNT), 4000);
+    return () => clearInterval(interval);
+  }, []);
   // Hide the "Render audio" button entirely when the backend has no TTS configured.
   const [ttsAvailable, setTtsAvailable] = useState(false);
 
@@ -305,6 +426,11 @@ export function DiscussionDetail() {
     if (liveStatus === 'done' || liveStatus === 'error') {
       setLiveRun(null);
       loadData();
+    }
+    if (liveStatus === 'done') {
+      // The completed run just (re)created/updated the synthetic library card;
+      // refresh the app-wide sources so the Library shows it without a reload.
+      void refreshSources();
     }
   }, [liveStatus]);
 
@@ -384,6 +510,18 @@ export function DiscussionDetail() {
     liveRun && liveRun === selectedRunId ? liveTurns : selectedRun?.turns ?? [];
   const isLive = liveStatus === 'running' && liveRun === selectedRunId;
   const turnTarget = discussion.formatConfig.totalTurnTarget ?? 12;
+  // Participants in speaking order for the studio panel and round-robin prediction of the
+  // next speaker (mirrors the orchestrator's contexts[turn % contexts.length]).
+  const orderedParticipants = discussion.participants
+    .slice()
+    .sort((a, b) => a.speakerOrder - b.speakerOrder)
+    .map((p) => ({ id: p.id, info: participantInfoMap[p.id] ?? { name: 'Agent', characterType: null, index: 0 } }));
+  const thinkingParticipant =
+    isLive && orderedParticipants.length > 0 && displayTurns.length < turnTarget
+      ? orderedParticipants[displayTurns.length % orderedParticipants.length]
+      : null;
+  const activeParticipantId =
+    thinkingParticipant?.id ?? (isLive && displayTurns.length > 0 ? displayTurns[displayTurns.length - 1].participantId : null);
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -452,9 +590,14 @@ export function DiscussionDetail() {
                     <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Spin size="small" />
                       <Text type="secondary">
-                        {t('studio.turnProgress', { current: displayTurns.length, target: turnTarget })}
+                        {displayTurns.length === 0
+                          ? t(`studio.warmup${warmupIndex}`)
+                          : t('studio.turnProgress', { current: displayTurns.length, target: turnTarget })}
                       </Text>
                     </div>
+                  )}
+                  {isLive && orderedParticipants.length > 0 && (
+                    <StudioPanel participants={orderedParticipants} activeParticipantId={activeParticipantId} />
                   )}
                   {displayTurns.length === 0 && !isLive ? (
                     selectedRun?.status === 'error' ? (
@@ -484,6 +627,12 @@ export function DiscussionDetail() {
                           />
                         )}
                       />
+                      {isLive && thinkingParticipant && displayTurns.length > 0 && (
+                        <TypingIndicator
+                          participant={thinkingParticipant.info}
+                          label={t('studio.speakerThinking')}
+                        />
+                      )}
                       {!isLive && selectedRun?.status === 'done' && displayTurns.length > 0 && (
                         <div style={{ textAlign: 'center', margin: '16px 0 8px' }}>
                           <Text type="secondary" style={{ fontSize: 13 }}>
