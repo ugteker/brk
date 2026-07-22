@@ -44,6 +44,7 @@ function createFakeRepo() {
         schedule: null
       };
       agents.set(agent.id, agent);
+      events.push({ userId: ownerUserId, topic: 'agent.changed', entityId: agent.id });
       return agent;
     },
     async updateAgent(agentId: string, patch: Partial<CreateAgentInput>): Promise<Agent> {
@@ -63,21 +64,26 @@ function createFakeRepo() {
         updatedAt: new Date('2026-07-10T01:00:00.000Z')
       };
       agents.set(agentId, updated);
+      events.push({ userId: updated.ownerUserId, topic: 'agent.changed', entityId: agentId });
       return updated;
     },
     async disableAgent(agentId: string): Promise<void> {
       const existing = agents.get(agentId);
       if (!existing) throw new Error('not_found');
       agents.set(agentId, { ...existing, status: 'disabled' });
+      events.push({ userId: existing.ownerUserId, topic: 'agent.changed', entityId: agentId });
     },
     async enableAgent(agentId: string): Promise<void> {
       const existing = agents.get(agentId);
       if (!existing) throw new Error('not_found');
       agents.set(agentId, { ...existing, status: 'active' });
+      events.push({ userId: existing.ownerUserId, topic: 'agent.changed', entityId: agentId });
     },
     async deleteAgent(agentId: string): Promise<void> {
-      if (!agents.has(agentId)) throw new Error('not_found');
+      const existing = agents.get(agentId);
+      if (!existing) throw new Error('not_found');
       agents.delete(agentId);
+      events.push({ userId: existing.ownerUserId, topic: 'agent.changed', entityId: agentId });
     },
     async listAgents(ownerUserId?: string): Promise<Agent[]> {
       return ownerUserId ? [...agents.values()].filter((agent) => agent.ownerUserId === ownerUserId) : [...agents.values()];
@@ -99,16 +105,18 @@ function createFakeRepo() {
         .slice(0, limit);
     },
     async shareAgent(agentId: string, grantedByUserId: string, input: { granteeUserId: string; permission: 'read' | 'edit' | 'delete'; expiresAt?: string }) {
-      if (!agents.has(agentId)) throw new Error('not_found');
-      const existing = grants.get(agentId) ?? [];
-      existing.push({
+      const existing = agents.get(agentId);
+      if (!existing) throw new Error('not_found');
+      const existingGrants = grants.get(agentId) ?? [];
+      existingGrants.push({
         id: `grant-${nextGrantId++}`,
         grantedByUserId,
         granteeUserId: input.granteeUserId,
         permission: input.permission,
         expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
       });
-      grants.set(agentId, existing);
+      grants.set(agentId, existingGrants);
+      events.push({ userId: existing.ownerUserId, topic: 'agent.changed', entityId: agentId });
     },
     async listAgentShares(agentId: string) {
       return (grants.get(agentId) ?? []).map((g) => ({ ...g, createdAt: new Date('2026-07-10T00:00:00.000Z') }));
@@ -134,6 +142,7 @@ function createFakeRepo() {
         retiredAt: null
       };
       publications.set(publication.publicationId, publication);
+      events.push({ userId: existingAgent.ownerUserId, topic: 'agent.changed', entityId: agentId });
       events.push({ userId: existingAgent.ownerUserId, topic: 'marketplace.changed', entityId: publication.publicationId });
       return {
         publicationId: publication.publicationId,
@@ -169,6 +178,7 @@ function createFakeRepo() {
       });
       const agent = agents.get(agentId);
       if (agent) {
+        events.push({ userId: agent.ownerUserId, topic: 'agent.changed', entityId: agentId });
         events.push({ userId: agent.ownerUserId, topic: 'marketplace.changed', entityId: publication.publicationId });
       }
     },
@@ -902,7 +912,13 @@ describe('agent routes', () => {
     expect(cloneRes.json().agent.ownerUserId).toBe(teammate.id);
 
     expect(agentRepository.events).toContainEqual(
+      expect.objectContaining({ userId: owner.id, topic: 'agent.changed', entityId: agentId })
+    );
+    expect(agentRepository.events).toContainEqual(
       expect.objectContaining({ userId: owner.id, topic: 'marketplace.changed', entityId: publicationId })
+    );
+    expect(agentRepository.events).toContainEqual(
+      expect.objectContaining({ userId: teammate.id, topic: 'agent.changed' })
     );
     expect(agentRepository.events).toContainEqual(
       expect.objectContaining({ userId: teammate.id, topic: 'marketplace.changed', entityId: publicationId })
@@ -952,6 +968,8 @@ describe('agent routes', () => {
       payload: { granteeUserId: editor.id, permission: 'edit' }
     });
 
+    const eventsBeforeFailures = agentRepository.events.length;
+
     const publishDenied = await app.inject({
       method: 'POST',
       url: `/api/agents/${agentId}/publish`,
@@ -967,7 +985,92 @@ describe('agent routes', () => {
     });
     expect(cloneNotFound.statusCode).toBe(404);
 
-    expect(agentRepository.events).toHaveLength(0);
+    const updateNotFound = await app.inject({
+      method: 'PATCH',
+      url: '/api/agents/does-not-exist',
+      headers: authCookieHeader(owner.id),
+      payload: { name: 'Nope' }
+    });
+    expect(updateNotFound.statusCode).toBe(404);
+
+    const deleteDenied = await app.inject({
+      method: 'DELETE',
+      url: `/api/agents/${agentId}`,
+      headers: authCookieHeader(editor.id)
+    });
+    expect(deleteDenied.statusCode).toBe(403);
+
+    // The create + share calls above are legitimate successes and are expected to have
+    // already emitted their own agent.changed events; only the denied/not-found calls
+    // below must add no further events.
+    expect(agentRepository.events).toHaveLength(eventsBeforeFailures);
+  });
+
+  it('emits agent.changed to the resource owner for create/update/share/enable/disable/delete', async () => {
+    const agentRepository = createFakeRepo();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner6@example.com', 'hash', 'Owner6', 'user');
+    const teammate = await userRepository.createWithPassword('teammate6@example.com', 'hash', 'Teammate6', 'user');
+    await userRepository.setEmailVerified(owner.id, true);
+    await userRepository.setEmailVerified(teammate.id, true);
+
+    const app = await buildServer({
+      agentRepository,
+      agents: createFakeAgentsDeps(),
+      auth: { ...createTestAuthDeps(), userRepository },
+      accessResolver: new DomainAccessResolver(agentRepository)
+    });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      headers: authCookieHeader(owner.id),
+      payload: { name: 'Own Topic Agent' }
+    });
+    const agentId = createRes.json().id as string;
+    expect(agentRepository.events).toContainEqual(
+      expect.objectContaining({ userId: owner.id, topic: 'agent.changed', entityId: agentId })
+    );
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/agents/${agentId}`,
+      headers: authCookieHeader(owner.id),
+      payload: { description: 'Updated' }
+    });
+    expect(agentRepository.events).toContainEqual(
+      expect.objectContaining({ userId: owner.id, topic: 'agent.changed', entityId: agentId })
+    );
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/shares`,
+      headers: authCookieHeader(owner.id),
+      payload: { granteeUserId: teammate.id, permission: 'read' }
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/disable`,
+      headers: authCookieHeader(owner.id)
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/enable`,
+      headers: authCookieHeader(owner.id)
+    });
+
+    const agentChangedEvents = agentRepository.events.filter((event) => event.topic === 'agent.changed');
+    expect(agentChangedEvents.every((event) => event.userId === owner.id)).toBe(true);
+    expect(agentChangedEvents.length).toBeGreaterThanOrEqual(5);
+
+    await app.inject({
+      method: 'DELETE',
+      url: `/api/agents/${agentId}`,
+      headers: authCookieHeader(owner.id)
+    });
+    expect(agentRepository.events).toContainEqual(
+      expect.objectContaining({ userId: owner.id, topic: 'agent.changed', entityId: agentId })
+    );
   });
 
   it('restricts agent publish/unpublish to owner or admin', async () => {

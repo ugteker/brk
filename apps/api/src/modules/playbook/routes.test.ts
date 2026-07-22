@@ -75,6 +75,7 @@ class InMemoryPlaybookRepository {
       updatedAt: new Date('2026-07-13T00:00:00.000Z')
     };
     this.playbooks.set(created.id, created);
+    this.events.push({ userId: ownerUserId, topic: 'playbook.changed', entityId: created.id });
     return created;
   }
 
@@ -98,12 +99,15 @@ class InMemoryPlaybookRepository {
       updatedAt: new Date('2026-07-13T01:00:00.000Z')
     };
     this.playbooks.set(playbookId, updated);
+    this.events.push({ userId: updated.ownerUserId, topic: 'playbook.changed', entityId: playbookId });
     return updated;
   }
 
   async deletePlaybook(playbookId: string): Promise<void> {
-    if (!this.playbooks.has(playbookId)) throw new Error('not_found');
+    const existing = this.playbooks.get(playbookId);
+    if (!existing) throw new Error('not_found');
     this.playbooks.delete(playbookId);
+    this.events.push({ userId: existing.ownerUserId, topic: 'playbook.changed', entityId: playbookId });
   }
 
   async markExecuted(playbookId: string): Promise<void> {
@@ -117,9 +121,11 @@ class InMemoryPlaybookRepository {
   }
 
   async sharePlaybook(playbookId: string, grantedByUserId: string, input: any): Promise<void> {
-    if (!this.playbooks.has(playbookId)) throw new Error('not_found');
+    const existing = this.playbooks.get(playbookId);
+    if (!existing) throw new Error('not_found');
     this.grants.add(`${input.granteeUserId}:${playbookId}:${input.permission}`);
     this.grants.add(`${grantedByUserId}:${playbookId}:*`);
+    this.events.push({ userId: existing.ownerUserId, topic: 'playbook.changed', entityId: playbookId });
   }
 
   async publishPlaybook(playbookId: string, publisherUserId: string, input: any): Promise<MarketplacePlaybookItem> {
@@ -136,6 +142,7 @@ class InMemoryPlaybookRepository {
       playbook
     };
     this.publications.set(publication.publicationId, publication);
+    this.events.push({ userId: playbook.ownerUserId, topic: 'playbook.changed', entityId: playbookId });
     this.events.push({ userId: playbook.ownerUserId, topic: 'marketplace.changed', entityId: publication.publicationId });
     return publication;
   }
@@ -163,9 +170,11 @@ class InMemoryPlaybookRepository {
     if (!publication) throw new Error('not_found');
     this.publications.set(publication.publicationId, { ...publication, visibility: 'private' });
     const playbook = this.playbooks.get(playbookId);
-    if (playbook) {
-      this.events.push({ userId: playbook.ownerUserId, topic: 'marketplace.changed', entityId: publication.publicationId });
-    }
+    // Fall back to the publication's recorded publisher if the playbook lookup is
+    // unexpectedly missing, rather than silently omitting the realtime events.
+    const targetUserId = playbook ? playbook.ownerUserId : publication.publisherUserId;
+    this.events.push({ userId: targetUserId, topic: 'playbook.changed', entityId: playbookId });
+    this.events.push({ userId: targetUserId, topic: 'marketplace.changed', entityId: publication.publicationId });
   }
 
   async findOwnerUserId(_resourceType: 'agent' | 'source' | 'playbook', resourceId: string): Promise<string | null> {
@@ -314,7 +323,13 @@ describe('playbook routes', () => {
     expect(cloneRes.json<ClonePlaybookResult>().cloned).toBe(true);
 
     expect(playbookRepo.events).toContainEqual(
+      expect.objectContaining({ userId: 'owner-1', topic: 'playbook.changed', entityId: created.id })
+    );
+    expect(playbookRepo.events).toContainEqual(
       expect.objectContaining({ userId: 'owner-1', topic: 'marketplace.changed', entityId: publication.publicationId })
+    );
+    expect(playbookRepo.events).toContainEqual(
+      expect.objectContaining({ userId: 'user-2', topic: 'playbook.changed' })
     );
     expect(playbookRepo.events).toContainEqual(
       expect.objectContaining({ userId: 'user-2', topic: 'marketplace.changed' })
@@ -442,6 +457,8 @@ describe('playbook routes', () => {
       payload: { granteeUserId: editor.id, permission: 'edit' }
     });
 
+    const eventsBeforeFailures = playbookRepo.events.length;
+
     const publishDenied = await app.inject({
       method: 'POST',
       url: `/api/playbooks/${playbook.id}/publish`,
@@ -457,6 +474,81 @@ describe('playbook routes', () => {
     });
     expect(cloneNotFound.statusCode).toBe(404);
 
-    expect(playbookRepo.events).toHaveLength(0);
+    const updateNotFound = await app.inject({
+      method: 'PATCH',
+      url: '/api/playbooks/does-not-exist',
+      headers: authCookieHeader(owner.id),
+      payload: { name: 'Nope' }
+    });
+    expect(updateNotFound.statusCode).toBe(404);
+
+    const deleteDenied = await app.inject({
+      method: 'DELETE',
+      url: `/api/playbooks/${playbook.id}`,
+      headers: authCookieHeader(editor.id)
+    });
+    expect(deleteDenied.statusCode).toBe(403);
+
+    // The create + share calls above are legitimate successes and are expected to have
+    // already emitted their own playbook.changed events; only the denied/not-found calls
+    // below must add no further events.
+    expect(playbookRepo.events).toHaveLength(eventsBeforeFailures);
+  });
+
+  it('emits playbook.changed to the resource owner for create/update/share/delete', async () => {
+    const playbookRepo = new InMemoryPlaybookRepository();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner-topic@example.com', 'hash', 'Owner', 'user');
+    const teammate = await userRepository.createWithPassword('teammate-topic@example.com', 'hash', 'Teammate', 'user');
+    await userRepository.setEmailVerified(owner.id, true);
+    await userRepository.setEmailVerified(teammate.id, true);
+
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: { ...createTestAuthDeps(), userRepository },
+      playbook: { playbookRepository: playbookRepo, accessResolver: new DomainAccessResolver(playbookRepo), runTrigger: { triggerRun: async () => ({ status: 'queued' }) } }
+    } as any);
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/playbooks',
+      headers: authCookieHeader(owner.id),
+      payload: { agentId: 'agent-1', name: 'Own Topic Playbook', sourceIds: ['source-1'] }
+    });
+    const playbook = createRes.json<PlaybookRecord>();
+    expect(playbookRepo.events).toContainEqual(
+      expect.objectContaining({ userId: owner.id, topic: 'playbook.changed', entityId: playbook.id })
+    );
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/playbooks/${playbook.id}`,
+      headers: authCookieHeader(owner.id),
+      payload: { description: 'Updated' }
+    });
+    expect(playbookRepo.events).toContainEqual(
+      expect.objectContaining({ userId: owner.id, topic: 'playbook.changed', entityId: playbook.id })
+    );
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/playbooks/${playbook.id}/share`,
+      headers: authCookieHeader(owner.id),
+      payload: { granteeUserId: teammate.id, permission: 'read' }
+    });
+
+    const playbookChangedEvents = playbookRepo.events.filter((event) => event.topic === 'playbook.changed');
+    expect(playbookChangedEvents.every((event) => event.userId === owner.id)).toBe(true);
+    expect(playbookChangedEvents.length).toBeGreaterThanOrEqual(3);
+
+    await app.inject({
+      method: 'DELETE',
+      url: `/api/playbooks/${playbook.id}`,
+      headers: authCookieHeader(owner.id)
+    });
+    expect(playbookRepo.events).toContainEqual(
+      expect.objectContaining({ userId: owner.id, topic: 'playbook.changed', entityId: playbook.id })
+    );
   });
 });
