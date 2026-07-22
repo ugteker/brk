@@ -83,16 +83,18 @@ market-data platform.
 
 | Layer | Tech |
 |---|---|
-| API | Node.js + TypeScript, Fastify 4, Prisma 6, SQLite (dev + prod volume) |
+| API | Node.js + TypeScript, Fastify 4, Prisma 6, SQLite with WAL mode (dev + prod volume) |
 | AI | `@anthropic-ai/sdk` (Claude Sonnet), DI-able client, fenced-JSON tolerant parsing |
 | Web | React 18 + Vite, **Ant Design 6** (+ a few legacy shadcn primitives), Tailwind, i18next (en/de) |
 | Auth | JWT in httpOnly cookie; email+password w/ 2-step confirmation, Google OAuth, password reset, admin user management (`ADMIN_EMAIL`) |
 | Email | nodemailer SMTP, bilingual templates |
 | Tests | Vitest (API ~300+, Web ~100+), Playwright e2e |
-| Deploy | Single all-in-one Docker container (API + nginx SPA + cloudflared) on Hetzner, GitHub Actions deploy over SSH |
+| Deploy | Single all-in-one Docker container (API + nginx SPA + cloudflared) on Hetzner, GitHub Actions deploy over SSH; API supports multi-process clustering via `WEB_CONCURRENCY` |
 
 Monorepo: `apps/api` + `apps/web` (npm scripts proxied from root `package.json`).
 Web dev proxies `/api` → API `:3000`; web served on `:4173`.
+
+The API can scale to multiple processes: set `WEB_CONCURRENCY` to N (default 1 = single process like before) to fork N HTTP worker processes sharing port 3000, plus one dedicated scheduler process for background jobs (digest loop, discussion scheduler, admin bootstrap). SQLite runs in WAL mode with a 5-second busy timeout on all processes at startup, enabling safe concurrent writes without contention. Process management via Node's `cluster` module with automatic respawn on crash (e.g., same role if a worker dies).
 
 ## 4. Domain model (3-hub architecture)
 

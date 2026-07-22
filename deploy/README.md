@@ -58,6 +58,10 @@ Internet ──(Cloudflare edge, Quick Tunnel)── cloudflared (same container
   `docker compose up`/rebuilds, but has no separate backup mechanism yet.
   Fine for a single instance / low concurrency; revisit if usage grows.
 
+### SQLite & WAL
+
+SQLite runs in **WAL (Write-Ahead Logging) mode** with a 5-second busy timeout on startup, enabling safe concurrent access by multiple processes. WAL mode requires a local filesystem — the named volume `api-data` on the VPS is local, so this works fine. **Do not** move the database onto NFS, CIFS, or any network-shared filesystem; WAL file locking does not work correctly over the network and will cause data corruption. If the app grows to require shared database access across hosts, migrate to PostgreSQL.
+
 ## One-time manual setup on the server
 
 Requires SSH access to the existing Ubuntu 24.04 Hetzner server (Docker
