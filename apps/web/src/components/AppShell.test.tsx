@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import type { ReactNode } from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AppShell } from './AppShell';
 
@@ -101,4 +101,32 @@ it('does not show build stamp when metadata is missing', () => {
   );
 
   expect(screen.queryByTestId('app-build-stamp')).not.toBeInTheDocument();
+});
+
+it('renders primary navigation as a mobile footer', () => {
+  render(
+    <AppShell>
+      <div>child</div>
+    </AppShell>
+  );
+
+  const mobileNavigation = screen.getByRole('navigation', { name: /mobile navigation/i });
+  expect(mobileNavigation).toHaveClass('fixed', 'bottom-0', 'sm:hidden');
+  expect(within(mobileNavigation).getAllByRole('button')).toHaveLength(3);
+  expect(within(mobileNavigation).getByText('nav.feed')).toBeInTheDocument();
+  expect(within(mobileNavigation).getByText('nav.library')).toBeInTheDocument();
+  expect(within(mobileNavigation).getByText('studio.title')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'nav.mobileMenu' })).toBeInTheDocument();
+});
+
+it('keeps route content clear of the fixed mobile footer', () => {
+  render(
+    <AppShell>
+      <div data-testid="route-content">child</div>
+    </AppShell>
+  );
+
+  const content = screen.getByTestId('route-content').closest('.ant-layout-content');
+  expect(content).toHaveClass('pb-24', 'sm:pb-6');
+  expect(content).not.toHaveAttribute('style');
 });

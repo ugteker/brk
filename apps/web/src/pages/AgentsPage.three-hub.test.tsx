@@ -11,6 +11,7 @@ import { logout as apiLogout, getCurrentUser } from '../api/auth';
 import { listAgents } from '../api/agents';
 import { createSource, deleteSource, listSources, probeSource, updateSource } from '../api/sources';
 import { createPlaybook, listPlaybooks } from '../api/playbooks';
+import { getDiscussionRun } from '../api/discussions';
 
 vi.mock('../api/auth', () => ({
   getCurrentUser: vi.fn().mockResolvedValue({
@@ -64,6 +65,10 @@ vi.mock('../api/playbooks', () => ({
   runPlaybookNow: vi.fn(),
   sharePlaybook: vi.fn(),
   publishPlaybook: vi.fn()
+}));
+
+vi.mock('../api/discussions', () => ({
+  getDiscussionRun: vi.fn()
 }));
 
 vi.mock('../api/marketplace', () => ({
@@ -492,6 +497,59 @@ describe('AgentsPage three hub shell', () => {
     const agentCard = screen.getByRole('button', { name: /select agent/i });
     expect(agentCard).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByText(/agents follow/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a listen button for synthetic material items with audio and plays inline audio', async () => {
+    vi.mocked(listSources).mockResolvedValueOnce([
+      {
+        id: 'source-synthetic-1',
+        ownerUserId: 'user-1',
+        type: 'synthetic_discussion',
+        value: 'synthetic_discussion:discussion-1',
+        status: 'active',
+        config: { discussionId: 'discussion-1' },
+        metadata: {
+          title: 'Debate source',
+          coverImageUrl: null,
+          itemCount: 2,
+          audioCount: 1,
+          previewItems: [
+            { title: 'Run with audio', link: 'discussion-run:run-1', pubDate: null, hasAudio: true },
+            { title: 'Run without audio', link: 'discussion-run:run-0', pubDate: null, hasAudio: false }
+          ]
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+    vi.mocked(getDiscussionRun).mockResolvedValueOnce({
+      id: 'run-1',
+      discussionId: 'discussion-1',
+      status: 'done',
+      triggeredBy: 'manual',
+      errorMessage: null,
+      startedAt: null,
+      completedAt: null,
+      syntheticSourceItemId: null,
+      audioUrl: 'https://cdn.example.com/run-1.mp3',
+      createdAt: new Date().toISOString(),
+      turns: [],
+      evidenceSnapshot: null
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /no reports yet/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /material/i }));
+
+    const listenButtons = await screen.findAllByRole('button', { name: /listen to/i });
+    expect(listenButtons).toHaveLength(1);
+    fireEvent.click(listenButtons[0]);
+
+    await waitFor(() => {
+      expect(getDiscussionRun).toHaveBeenCalledWith('discussion-1', 'run-1');
+    });
+    const inlineAudio = await screen.findByTestId('library-material-inline-audio');
+    expect(inlineAudio).toHaveAttribute('src', 'https://cdn.example.com/run-1.mp3');
   });
 
   it('shows polished dashed ghost card copy in Library hub', async () => {

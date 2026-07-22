@@ -6,6 +6,7 @@ import {
   Checkbox,
   Form,
   Input,
+  Progress,
   Select,
   Space,
   Steps,
@@ -163,6 +164,7 @@ export function NewDiscussionWizard() {
   );
   const [currentKey, setCurrentKey] = useState<StepKey>('topic');
   const currentIndex = stepKeys.indexOf(currentKey);
+  const stepProgress = ((currentIndex + 1) / stepKeys.length) * 100;
 
   useEffect(() => {
     listAgents()
@@ -375,6 +377,14 @@ export function NewDiscussionWizard() {
         size="small"
         items={stepKeys.map((key) => ({ title: stepTitles[key] }))}
         style={{ marginBottom: 32 }}
+        className="hidden sm:flex"
+      />
+      <Progress
+        percent={stepProgress}
+        showInfo={false}
+        size="small"
+        style={{ marginBottom: 24 }}
+        className="sm:hidden"
       />
 
       {/* Topic: what should the experts talk about? */}
@@ -447,8 +457,9 @@ export function NewDiscussionWizard() {
               }
             />
           )}
-          <Form.Item label={t('studio.expertsStepLabel')}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+          <div className="space-y-2">
+            <p className="m-0 text-sm font-medium">{t('studio.expertsStepLabel')}</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {loadingAgents ? (
                 <span>Loading agents…</span>
               ) : (
@@ -464,26 +475,31 @@ export function NewDiscussionWizard() {
                     }}
                     onClick={() => handleAgentToggle(agent.id, !selectedAgentIds.includes(agent.id))}
                   >
-                    <Checkbox checked={selectedAgentIds.includes(agent.id)} style={{ marginRight: 8 }} />
-                    <strong>{getAgentDisplayLabel(agent)}</strong>
-                    {agent.characterType && (
-                      <Tag style={{ marginLeft: 6 }} color="default">
-                        {agent.characterType}
-                      </Tag>
-                    )}
+                    <div
+                      data-testid={`studio-expert-card-meta-${agent.id}`}
+                      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}
+                    >
+                      <Checkbox checked={selectedAgentIds.includes(agent.id)} />
+                      <strong style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{getAgentDisplayLabel(agent)}</strong>
+                      {agent.characterType && (
+                        <Tag color="default">
+                          {agent.characterType}
+                        </Tag>
+                      )}
+                    </div>
                   </Card>
                 ))
               )}
             </div>
-          </Form.Item>
-          <Space style={{ display: 'flex', justifyContent: 'space-between' }}>
+          </div>
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
             <Button onClick={() => setCurrentKey(groundingMode === 'material' ? 'material' : 'topic')}>
               {t('common.back')}
             </Button>
             <Button type="primary" onClick={goToSetup} disabled={selectedAgentIds.length < 2}>
               {t('common.next')}
             </Button>
-          </Space>
+          </div>
         </Card>
       )}
 
@@ -683,17 +699,23 @@ export function NewDiscussionWizard() {
         <Card>
           <Form layout="vertical">
             <Form.Item>
-              <Checkbox checked={runNow} onChange={(e) => setRunNow(e.target.checked)}>
+              <Checkbox
+                checked={runNow}
+                onChange={(e) => setRunNow(e.target.checked)}
+                className="flex items-start leading-5 [&_.ant-checkbox]:mt-0.5"
+              >
                 {t('studio.runNow')} (run the discussion immediately after creating)
               </Checkbox>
             </Form.Item>
           </Form>
-          <Space>
-            <Button onClick={() => setCurrentKey('setup')}>{t('common.back')}</Button>
-            <StudioPrimaryButton loading={submitting} onClick={handleSubmit}>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <Button className="w-full sm:w-auto" onClick={() => setCurrentKey('setup')}>
+              {t('common.back')}
+            </Button>
+            <StudioPrimaryButton className="w-full sm:w-auto" loading={submitting} onClick={handleSubmit}>
               {t('studio.newDiscussion')}
             </StudioPrimaryButton>
-          </Space>
+          </div>
         </Card>
       )}
     </div>
