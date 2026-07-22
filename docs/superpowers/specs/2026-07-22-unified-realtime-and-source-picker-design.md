@@ -105,6 +105,38 @@ scroll inside that region. The URL fallback remains below it. The library modal
 footer and guided wizard's final action remain outside this internal scroller,
 so they remain reachable without scrolling through a long result list.
 
+## Library Card Accuracy and Agent Management
+
+### Source-scoped report count
+
+Library cover cards must show reports only when those reports actually crawled
+the concrete source. The current card derives its count from all reports of any
+agent linked to the source, which includes unrelated reports and disagrees with
+the source detail view.
+
+The source-list API will include `reportCount`, calculated in one batched
+backend query using the same saved-artifact `sourceId` criterion as
+`GET /api/sources/:sourceId/reports`. The frontend displays “X reports
+available” only when this value is greater than zero. Its card preview report
+must come from the same source-scoped set.
+
+### Detail-view agent management
+
+The source detail view will expose the existing linked-agent area and add the
+same plus action available on the cover card. The action opens the existing
+follow-source wizard with the source preselected and already linked agents
+selected. Users can add or remove agents without returning to the cover grid.
+No duplicate agent-assignment workflow is introduced.
+
+### Analysis start semantics
+
+The source-detail header action is renamed to “Analyse new content” (localized
+in German and English). It continues to run the first selected Playbook in its
+normal `latest_only` mode: the crawler analyzes the newest not-yet-processed
+items for the source. If multiple agents are linked, the existing agent picker
+opens first. A tooltip explains this behavior and directs users to the Episodes
+tab’s play action when they want to force a specific episode.
+
 ## Production Configuration
 
 Keep the existing `/api/` nginx SSE configuration and add an explicit
