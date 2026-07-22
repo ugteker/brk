@@ -25,6 +25,7 @@ import { useSafeNavigate } from '../utils/useSafeNavigate';
 import {
   getAudioRenderStatus,
   getDiscussion,
+  getDiscussionRun,
   listDiscussionRuns,
   triggerAudioRender,
   triggerDiscussionRun,
@@ -34,8 +35,8 @@ import {
   type DiscussionRunEvidenceSnapshotDto,
   type DiscussionTurnDto
 } from '../api/discussions';
-import { useDiscussionStream } from '../hooks/useDiscussionStream';
 import { useAppData } from '../context/AppDataContext';
+import { useRealtimeSubscription } from '../context/RealtimeContext';
 
 const { Text, Paragraph } = Typography;
 
@@ -377,7 +378,47 @@ export function DiscussionDetail() {
       .catch(() => setTtsAvailable(false));
   }, []);
 
-  const { turns: liveTurns, status: liveStatus } = useDiscussionStream(discussionId ?? '', liveRun);
+  // Live run turns/status, kept up to date by the global `discussion.changed` realtime
+  // subscription below instead of a per-run EventSource (`/api/discussions/:id/runs/:runId/stream`,
+  // now removed).
+  const [liveTurns, setLiveTurns] = useState<DiscussionTurnDto[]>([]);
+  const [liveStatus, setLiveStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+
+  // Refetches the tracked live run and merges its turns (by turn id) into local state, then
+  // maps its status onto the UI's running/done/error states. 'pending' is treated the same
+  // as 'running' since the transcript view has no separate "queued" UI.
+  const refreshLiveRun = useCallback(async (runId: string) => {
+    if (!discussionId) return;
+    try {
+      const run = await getDiscussionRun(discussionId, runId);
+      setLiveTurns((prev) => {
+        const byId = new Map(prev.map((turn) => [turn.id, turn]));
+        for (const turn of run.turns) byId.set(turn.id, turn);
+        return [...byId.values()].sort((a, b) => a.turnIndex - b.turnIndex);
+      });
+      setLiveStatus(run.status === 'pending' ? 'running' : run.status);
+    } catch {
+      setLiveStatus('error');
+    }
+  }, [discussionId]);
+
+  useEffect(() => {
+    if (!liveRun) return;
+    setLiveStatus('running');
+    setLiveTurns([]);
+    refreshLiveRun(liveRun);
+  }, [liveRun, refreshLiveRun]);
+
+  useRealtimeSubscription(['discussion.changed'], (event) => {
+    if (!liveRun) return;
+    if (event.topic === 'resync') {
+      refreshLiveRun(liveRun);
+      return;
+    }
+    if (event.entityId === discussionId) {
+      refreshLiveRun(liveRun);
+    }
+  });
 
   // The wizard's "run now" already triggered a run and hands its ID over via
   // navigation state - attach to that run's live stream instead of requiring

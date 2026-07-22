@@ -43,6 +43,32 @@ if (typeof window !== 'undefined' && !('ResizeObserver' in window)) {
   (globalThis as any).ResizeObserver = ResizeObserverStub;
 }
 
+// RealtimeProvider opens an EventSource for authenticated users; jsdom does not implement
+// EventSource at all. Stub it so components that mount inside RealtimeProvider (e.g.
+// AgentsPage/DiscussionDetail, which subscribe via useRealtimeSubscription) don't crash in
+// tests that don't otherwise care about the realtime stream itself.
+if (typeof window !== 'undefined' && !('EventSource' in window)) {
+  class EventSourceStub {
+    static readonly CONNECTING = 0;
+    static readonly OPEN = 1;
+    static readonly CLOSED = 2;
+    onopen: (() => void) | null = null;
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    onerror: (() => void) | null = null;
+    constructor(_url: string, _init?: EventSourceInit) {}
+    addEventListener() {}
+    removeEventListener() {}
+    close() {}
+    dispatchEvent() {
+      return false;
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).EventSource = EventSourceStub;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).EventSource = EventSourceStub;
+}
+
 // Initialize i18next with English translations so t() calls resolve to real strings in tests.
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';

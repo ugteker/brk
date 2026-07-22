@@ -49,8 +49,8 @@ import { TouchSafeTooltip } from '../components/TouchSafeTooltip';
 import { ListenActiveButton, ListenIdleButton } from '../components/ListenButtons';
 import { SymbolPerformancePage } from './SymbolPerformancePage';
 import { seedDemoData } from '../api/admin';
-import { useAgentStream } from '../hooks/useAgentStream';
 import { useAppData } from '../context/AppDataContext';
+import { useRealtimeSubscription } from '../context/RealtimeContext';
 import {
   createAgent,
   deleteAgent,
@@ -784,13 +784,58 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const selectedPlaybook = playbooks.find((playbook) => playbook.id === selectedPlaybookId) ?? null;
   const executionAgentId = selectedPlaybook?.agentId ?? null;
 
-  // SSE stream — replaces the old 4s polling interval
-  const { runs, setRuns, reports, setReports } = useAgentStream(executionAgentId);
+  // REST-loaded runs/reports for the execution agent, kept live by the global
+  // `run.changed`/`report.changed` realtime subscription below instead of a per-agent
+  // EventSource (`/api/agents/:id/stream`, now removed).
+  const [runs, setRuns] = useState<RunDetailDto[]>([]);
+  const [reports, setReports] = useState<RunReportDto[]>([]);
+
+  const reloadExecutionAgentData = useCallback(async () => {
+    if (!executionAgentId) {
+      setRuns([]);
+      setReports([]);
+      return;
+    }
+    try {
+      const [nextRuns, nextReports] = await Promise.all([
+        listAgentRuns(executionAgentId),
+        listAgentReports(executionAgentId)
+      ]);
+      setRuns(nextRuns);
+      setReports(nextReports);
+    } catch {
+      // Keep the last known snapshot on transient failure; the next matching realtime
+      // event or an agent switch will retry the fetch.
+    }
+  }, [executionAgentId]);
+
+  useEffect(() => {
+    reloadExecutionAgentData();
+  }, [reloadExecutionAgentData]);
+
+  // Replaces the old per-agent stream: reload only when the changed run/report already
+  // belongs to the execution agent (present in its currently loaded runs/reports) or a
+  // manual run for this same agent is in flight, so other agents' activity elsewhere in
+  // the account doesn't trigger extra fetches here.
+  useRealtimeSubscription(['run.changed', 'report.changed'], (event) => {
+    if (event.topic === 'resync') {
+      reloadExecutionAgentData();
+      return;
+    }
+    if (!executionAgentId) return;
+    const knownIds = event.topic === 'run.changed' ? runs.map((r) => r.id) : reports.map((r) => r.id);
+    const belongsToExecutionAgent =
+      (event.entityId !== null && knownIds.includes(event.entityId)) || runningAgentId === executionAgentId;
+    if (belongsToExecutionAgent) {
+      reloadExecutionAgentData();
+    }
+  });
+
   const selectedPlaybookReports = selectedPlaybook
     ? reports.filter((report) => report.playbookId === selectedPlaybook.id)
     : reports;
 
-  // Accumulate failed runs into the bell notification centre (driven by SSE updates)
+  // Accumulate failed runs into the bell notification centre (driven by realtime updates)
   useEffect(() => {
     const failedRuns = runs.filter((r) => r.status === 'failed');
     if (failedRuns.length === 0) return;
@@ -807,7 +852,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }, [runs]);
 
   // Accumulate newly-created reports into the bell notification centre too (driven by the
-  // same SSE stream), so users don't have to keep an agent selected/open to notice new output.
+  // same realtime-refreshed data), so users don't have to keep an agent selected/open to
+  // notice new output.
   useEffect(() => {
     if (reports.length === 0) return;
     const executionAgent = agents.find((agent) => agent.id === executionAgentId);
@@ -855,14 +901,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     return () => { alive = false; };
   }, [selectedSourceId, playbooks, sourceDetailRefreshKey]);
 
-  // While a run is in progress, immediately show the queued run then poll every 5 s so
-  // the Runs tab stays live without requiring a page reload.
-  useEffect(() => {
-    if (!runningAgentId) return;
-    setSourceDetailRefreshKey((k) => k + 1);
-    const id = setInterval(() => setSourceDetailRefreshKey((k) => k + 1), 5000);
-    return () => clearInterval(id);
-  }, [runningAgentId]);
+  // Refresh the selected source's detail runs/reports only when its own source record
+  // changes — replaces the previous 5s polling interval that ran for as long as any
+  // agent run was in progress.
+  useRealtimeSubscription(['source.changed'], (event) => {
+    if (!selectedSourceId) return;
+    if (event.topic === 'resync' || event.entityId === selectedSourceId) {
+      setSourceDetailRefreshKey((k) => k + 1);
+    }
+  });
 
   useEffect(() => {
     if (!selectedAgentId) {
@@ -908,7 +955,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   async function executeRun(agent: AgentSummary, forcedEpisode?: ForcedEpisodeSelection) {
     setRunningAgentId(agent.id);
-    // SSE stream drives live updates; no manual polling re-arm needed
+    // Realtime `run.changed`/`report.changed` events drive live updates elsewhere on the
+    // page; explicitly reload here too so the panel for this agent (when it's also the
+    // currently viewed execution agent) reflects the just-finished run without waiting on
+    // the realtime delivery round-trip.
     try {
       const result = await runAgentNow(agent.id, forcedEpisode);
       if (result.status === 'failed') {
@@ -918,6 +968,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       } else {
         message.success('Agent run completed');
         setSourceDetailRefreshKey((k) => k + 1);
+      }
+      if (result.status !== 'no_run_claimed' && agent.id === executionAgentId) {
+        await reloadExecutionAgentData();
       }
       await refreshAgents();
     } catch (err) {

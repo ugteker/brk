@@ -6,6 +6,7 @@ import { AgentsPage } from './AgentsPage';
 import { AuthProvider } from '../auth/AuthContext';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { AppDataProvider } from '../context/AppDataContext';
+import { RealtimeProvider } from '../context/RealtimeContext';
 import { logout as apiLogout, getCurrentUser } from '../api/auth';
 import { listAgents } from '../api/agents';
 import { createSource, deleteSource, listSources, probeSource, updateSource } from '../api/sources';
@@ -82,11 +83,13 @@ function renderPage(options?: { openAdminArea?: boolean }) {
   return render(
     <AuthProvider>
       <AppDataProvider>
-        <ThemeProvider>
-          <MemoryRouter>
-            <AgentsPage hub="sources" />
-          </MemoryRouter>
-        </ThemeProvider>
+        <RealtimeProvider>
+          <ThemeProvider>
+            <MemoryRouter>
+              <AgentsPage hub="sources" />
+            </MemoryRouter>
+          </ThemeProvider>
+        </RealtimeProvider>
       </AppDataProvider>
     </AuthProvider>
   );

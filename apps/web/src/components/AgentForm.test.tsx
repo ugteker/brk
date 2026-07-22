@@ -10,6 +10,7 @@ import { AgentsPage } from '../pages/AgentsPage';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
 import { AppDataProvider } from '../context/AppDataContext';
+import { RealtimeProvider } from '../context/RealtimeContext';
 import { AppShell } from '../components/AppShell';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -28,13 +29,15 @@ async function renderAgentsPage(options?: { openAgentsHub?: boolean }) {
   const utils = render(
     <AuthProvider>
       <AppDataProvider>
-        <ThemeProvider>
-          <MemoryRouter>
-            <AppShell>
-              <AgentsPage hub={options?.openAgentsHub ? 'agents' : undefined} />
-            </AppShell>
-          </MemoryRouter>
-        </ThemeProvider>
+        <RealtimeProvider>
+          <ThemeProvider>
+            <MemoryRouter>
+              <AppShell>
+                <AgentsPage hub={options?.openAgentsHub ? 'agents' : undefined} />
+              </AppShell>
+            </MemoryRouter>
+          </ThemeProvider>
+        </RealtimeProvider>
       </AppDataProvider>
     </AuthProvider>
   );
