@@ -8,6 +8,7 @@ import {
   FileTextOutlined,
   GlobalOutlined,
   LogoutOutlined,
+  MenuOutlined,
   MoonOutlined,
   RobotOutlined,
   RocketOutlined,
@@ -15,7 +16,7 @@ import {
   TeamOutlined,
   UserOutlined
 } from '@ant-design/icons';
-import { Badge, Button, Dropdown, Layout, Popover, Tag, Typography, message } from 'antd';
+import { Badge, Button, Divider, Drawer, Dropdown, Layout, Menu, Popover, Tag, Typography, message } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
@@ -141,6 +142,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [bellOpen, setBellOpen] = useState(false);
   const [usageModalOpen, setUsageModalOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     function handleScroll() {
@@ -273,27 +275,29 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </div>
 
-          {/* Nav */}
-          <nav style={navRailStyle(theme)}>
-            {navItems.map((item) => {
-              const isActive = current === item.key;
-              const isStudio = item.key === 'studio';
-              return (
-                <Button
-                  key={item.key}
-                  type={isActive ? 'primary' : 'text'}
-                  icon={item.icon}
-                  onClick={() => navigate(item.path)}
-                  size="middle"
-                  style={navButtonStyle(isActive, isStudio, theme)}
-                >
-                  {t(item.labelKey)}
-                </Button>
-              );
-            })}
-          </nav>
+          {/* Nav — hidden on mobile, visible on sm+ */}
+          <div className="hidden sm:block">
+            <nav style={navRailStyle(theme)}>
+              {navItems.map((item) => {
+                const isActive = current === item.key;
+                const isStudio = item.key === 'studio';
+                return (
+                  <Button
+                    key={item.key}
+                    type={isActive ? 'primary' : 'text'}
+                    icon={item.icon}
+                    onClick={() => navigate(item.path)}
+                    size="middle"
+                    style={navButtonStyle(isActive, isStudio, theme)}
+                  >
+                    {t(item.labelKey)}
+                  </Button>
+                );
+              })}
+            </nav>
+          </div>
 
-          {/* Right actions — kept to 3 icons; theme & language moved to user menu */}
+          {/* Right actions — Bell always visible; account icon + hamburger toggle by breakpoint */}
           <div className="ct-header-actions flex items-center gap-2 flex-wrap justify-end" style={actionClusterStyle}>
             <WatchlistMenu />
 
@@ -359,12 +363,25 @@ export function AppShell({ children }: { children: ReactNode }) {
               </TouchSafeTooltip>
             </Popover>
 
-            {/* User menu */}
-            <Dropdown trigger={['click']} menu={{ items: userMenuItems }}>
-              <TouchSafeTooltip title={t('nav.accountMenu')}>
-                <Button shape="circle" icon={<UserOutlined />} aria-label={t('nav.accountMenu')} style={circleActionStyle} />
-              </TouchSafeTooltip>
-            </Dropdown>
+            {/* User menu — desktop only */}
+            <span className="hidden sm:inline-flex">
+              <Dropdown trigger={['click']} menu={{ items: userMenuItems }}>
+                <TouchSafeTooltip title={t('nav.accountMenu')}>
+                  <Button shape="circle" icon={<UserOutlined />} aria-label={t('nav.accountMenu')} style={circleActionStyle} />
+                </TouchSafeTooltip>
+              </Dropdown>
+            </span>
+
+            {/* Hamburger — mobile only */}
+            <span className="flex sm:hidden">
+              <Button
+                shape="circle"
+                icon={<MenuOutlined />}
+                aria-label={t('nav.mobileMenu') || 'Menu'}
+                style={circleActionStyle}
+                onClick={() => setMobileMenuOpen(true)}
+              />
+            </span>
 
             <UsageBudgetModal open={usageModalOpen} onClose={() => setUsageModalOpen(false)} />
           </div>
@@ -373,6 +390,62 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Content style={{ padding: 'clamp(12px, 3vw, 24px)' }}>
         {children}
       </Content>
+
+      {/* Mobile navigation drawer — combines nav + account actions */}
+      <Drawer
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        placement="right"
+        title={t('nav.mobileMenu') || 'Menu'}
+        width={280}
+        styles={{ body: { padding: '8px 0' } }}
+      >
+        {/* Nav items */}
+        <div style={{ padding: '0 8px', marginBottom: 8 }}>
+          {navItems.map((item) => {
+            const isActive = current === item.key;
+            const isStudio = item.key === 'studio';
+            return (
+              <Button
+                key={item.key}
+                type={isActive ? 'primary' : 'text'}
+                icon={item.icon}
+                block
+                onClick={() => { navigate(item.path); setMobileMenuOpen(false); }}
+                style={{
+                  textAlign: 'left',
+                  height: 44,
+                  justifyContent: 'flex-start',
+                  paddingLeft: 16,
+                  marginBottom: 2,
+                  ...navButtonStyle(isActive, isStudio, theme)
+                }}
+              >
+                {t(item.labelKey)}
+              </Button>
+            );
+          })}
+        </div>
+
+        <Divider style={{ margin: '8px 0' }} />
+
+        {/* Account section */}
+        {user && (
+          <div style={{ padding: '4px 24px 8px' }}>
+            <span style={{ fontSize: 12, color: '#888' }}>{user.displayName ?? user.email}</span>
+          </div>
+        )}
+        <Menu
+          mode="inline"
+          selectable={false}
+          items={userMenuItems.filter((item) => !('key' in item && item.key === 'user-label')).map((item) => {
+            if (!('onClick' in item) || typeof (item as { onClick?: () => void }).onClick !== 'function') return item;
+            const orig = (item as { onClick: () => void }).onClick;
+            return { ...item, onClick: () => { orig(); setMobileMenuOpen(false); } };
+          })}
+          style={{ border: 'none' }}
+        />
+      </Drawer>
     </Layout>
   );
 }
