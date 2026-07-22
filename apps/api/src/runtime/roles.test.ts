@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseWebConcurrency, planClusterProcesses, resolveRole, rolePlan } from './roles';
+import { createCrashLoopGuard, parseWebConcurrency, planClusterProcesses, resolveRole, rolePlan } from './roles';
 
 describe('parseWebConcurrency', () => {
   it('defaults to 1 when unset', () => {
@@ -54,5 +54,31 @@ describe('rolePlan', () => {
 
   it('all starts both', () => {
     expect(rolePlan('all')).toEqual({ startHttp: true, startSchedulers: true });
+  });
+});
+
+describe('createCrashLoopGuard', () => {
+  it('allows up to maxExits within the window', () => {
+    const guard = createCrashLoopGuard(5, 60_000);
+    for (let i = 0; i < 5; i++) {
+      expect(guard.recordExit(0)).toBe(true);
+    }
+  });
+
+  it('returns false on the exit after maxExits within the window', () => {
+    const guard = createCrashLoopGuard(5, 60_000);
+    for (let i = 0; i < 5; i++) {
+      guard.recordExit(0);
+    }
+    expect(guard.recordExit(0)).toBe(false);
+  });
+
+  it('forgets exits older than the window and allows respawn again', () => {
+    const guard = createCrashLoopGuard(5, 60_000);
+    for (let i = 0; i < 6; i++) {
+      guard.recordExit(0);
+    }
+    // Advance well past the window so all prior exits fall outside it
+    expect(guard.recordExit(60_001)).toBe(true);
   });
 });

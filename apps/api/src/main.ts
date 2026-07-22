@@ -9,7 +9,7 @@ import { ManualRunTrigger } from './modules/runs/manual-run-trigger';
 import { ensureSqliteSchemaCompatibility, prisma } from './lib/db';
 import cluster from 'node:cluster';
 import { applySqlitePragmas } from './lib/sqlite-pragmas';
-import { parseWebConcurrency, planClusterProcesses, resolveRole, rolePlan, type Role } from './runtime/roles';
+import { parseWebConcurrency, planClusterProcesses, resolveRole, rolePlan, createCrashLoopGuard, type Role } from './runtime/roles';
 import { PromptRepository } from './modules/prompts/repository';
 import { ArtifactRepository } from './modules/artifacts/repository';
 import { ReportRepository } from './modules/reports/repository';
@@ -289,6 +289,7 @@ function bootstrap() {
   if (children.length > 0 && cluster.isPrimary) {
     logger.info(`[runtime] cluster primary: forking ${concurrency} web process(es) + 1 worker process`);
     const rolesByWorkerId = new Map<number, Role>();
+    const guard = createCrashLoopGuard();
     for (const role of children) {
       const child = cluster.fork({ ...process.env, ROLE: role });
       rolesByWorkerId.set(child.id, role);
@@ -297,13 +298,20 @@ function bootstrap() {
       const role = rolesByWorkerId.get(worker.id) ?? 'web';
       rolesByWorkerId.delete(worker.id);
       logger.warn(`[runtime] ${role} process ${worker.process.pid} exited (code=${code}, signal=${signal}) — respawning`);
+      if (!guard.recordExit(Date.now())) {
+        logger.error('[runtime] children are crash-looping — exiting so the container restart policy takes over');
+        process.exit(1);
+      }
       const replacement = cluster.fork({ ...process.env, ROLE: role });
       rolesByWorkerId.set(replacement.id, role);
     });
     return;
   }
 
-  start(resolveRole(process.env.ROLE));
+  start(resolveRole(process.env.ROLE)).catch((err) => {
+    logger.error(`[runtime] fatal startup error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    process.exit(1);
+  });
 }
 
 bootstrap();
