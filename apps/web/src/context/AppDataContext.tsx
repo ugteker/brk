@@ -53,6 +53,7 @@ export interface AppDataContextValue {
   refreshAgents: () => Promise<void>;
   refreshSources: () => Promise<void>;
   refreshPlaybooks: () => Promise<void>;
+  refreshMarketplace: () => Promise<void>;
   setAgents: React.Dispatch<React.SetStateAction<AgentSummary[]>>;
   setSources: React.Dispatch<React.SetStateAction<SourceRecord[]>>;
   setPlaybooks: React.Dispatch<React.SetStateAction<PlaybookRecord[]>>;
@@ -146,6 +147,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Marketplace data is best-effort and never blocks main data or triggers a sign-out —
+  // failures here just leave the marketplace lists empty.
+  async function refreshMarketplace() {
+    const [mkAgents, mkSources, mkPlaybooks] = await Promise.all([
+      listMarketplaceAgents().catch(() => [] as MarketplaceAgentListItem[]),
+      listMarketplaceSources().catch(() => [] as MarketplaceSourceListItem[]),
+      listMarketplacePlaybooks().catch(() => [] as MarketplacePlaybookListItem[])
+    ]);
+    setMarketplaceAgents(mkAgents);
+    setMarketplaceSources(mkSources);
+    setMarketplacePlaybooks(mkPlaybooks);
+    setMarketplaceAgentCount(mkAgents.length);
+    setMarketplaceSourceCount(mkSources.length);
+    setMarketplacePlaybookCount(mkPlaybooks.length);
+  }
+
   useEffect(() => {
     if (initialLoadRef.current) return;
     initialLoadRef.current = true;
@@ -187,18 +204,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }
 
         // Load marketplace data separately — don't block main data on this
-        Promise.all([
-          listMarketplaceAgents().catch(() => [] as MarketplaceAgentListItem[]),
-          listMarketplaceSources().catch(() => [] as MarketplaceSourceListItem[]),
-          listMarketplacePlaybooks().catch(() => [] as MarketplacePlaybookListItem[])
-        ]).then(([mkAgents, mkSources, mkPlaybooks]) => {
-          setMarketplaceAgents(mkAgents);
-          setMarketplaceSources(mkSources);
-          setMarketplacePlaybooks(mkPlaybooks);
-          setMarketplaceAgentCount(mkAgents.length);
-          setMarketplaceSourceCount(mkSources.length);
-          setMarketplacePlaybookCount(mkPlaybooks.length);
-        }).catch(() => { /* non-fatal */ });
+        refreshMarketplace().catch(() => { /* non-fatal */ });
       } catch (error) {
         if (isSignInRequiredError(error)) { await logout(); return; }
         setAgentsLoadState('error');
@@ -220,7 +226,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     playbooks, playbooksLoadState,
     marketplaceAgents, marketplaceSources, marketplacePlaybooks,
     marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
-    refreshAgents, refreshSources, refreshPlaybooks,
+    refreshAgents, refreshSources, refreshPlaybooks, refreshMarketplace,
     setAgents, setSources, setPlaybooks,
     failedRunNotices, setFailedRunNotices,
     newReportNotices, setNewReportNotices,

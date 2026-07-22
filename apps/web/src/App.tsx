@@ -6,7 +6,8 @@ import { AgentsPage } from './pages/AgentsPage';
 import { AuthPage } from './pages/AuthPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
-import { AppDataProvider } from './context/AppDataContext';
+import { AppDataProvider, useAppData } from './context/AppDataContext';
+import { RealtimeProvider, useRealtimeSubscription } from './context/RealtimeContext';
 import { AppShell } from './components/AppShell';
 import { StudioHub } from './pages/StudioHub';
 import { DiscussionDetail } from './pages/DiscussionDetail';
@@ -24,6 +25,17 @@ function RequireAdmin({ children }: { children: ReactNode }) {
 function AdminUsersRoute() {
   const navigate = useSafeNavigate();
   return <AdminUsersPage onBack={() => navigate('/')} />;
+}
+
+// Subscribes global app data to the topics this task scopes for cross-tab/cross-device
+// refresh. Mounted inside both AppDataProvider and RealtimeProvider so it can bridge the two
+// without either context needing to know about the other. Agents/playbooks refreshes are
+// deliberately not subscribed yet — Task 6 wires those up.
+function RealtimeDataBridge({ children }: { children: ReactNode }) {
+  const { refreshSources, refreshMarketplace } = useAppData();
+  useRealtimeSubscription(['source.changed'], () => { refreshSources(); });
+  useRealtimeSubscription(['marketplace.changed'], () => { refreshMarketplace(); });
+  return <>{children}</>;
 }
 
 function AnimatedRoutes() {
@@ -62,9 +74,13 @@ function AuthGate() {
 
   return (
     <AppDataProvider>
-      <AppShell>
-        <AnimatedRoutes />
-      </AppShell>
+      <RealtimeProvider>
+        <RealtimeDataBridge>
+          <AppShell>
+            <AnimatedRoutes />
+          </AppShell>
+        </RealtimeDataBridge>
+      </RealtimeProvider>
     </AppDataProvider>
   );
 }
