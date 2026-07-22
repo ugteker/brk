@@ -96,6 +96,26 @@ tunnel URL in a browser to confirm the SPA loads.
 
 After this, all future deploys are handled automatically by CI (see GitHub Actions below), or can be triggered manually — see the "Ongoing deploys" section.
 
+## Verifying the realtime stream in production
+
+The app has exactly one production SSE transport: the authenticated global
+stream at `GET /api/realtime/stream` (see `deploy/nginx.conf`'s
+`location = /api/realtime/stream`, matched before the generic `/api/` proxy).
+After a deploy, verify it end to end:
+
+```bash
+# Use a real browser session cookie; expect headers immediately and ': keepalive'
+# within 15 seconds when idle.
+curl -N --cookie "chattrader_session=<value>" \
+  "https://<tunnel-host>/api/realtime/stream?cursor=0"
+```
+
+Also run the two-tab browser acceptance test: in tab A, create/clone a
+source, trigger a run/report, and start a discussion; in tab B (same
+account, already open on the affected view — the source list, the
+agent/run/report view, or the discussion), confirm the view updates live
+without a manual reload.
+
 ## GitHub Actions (`.github/workflows/deploy.yml`)
 
 Release/deploy policy:

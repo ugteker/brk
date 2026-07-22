@@ -235,45 +235,6 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     return reply.status(200).send(run);
   });
 
-  // SSE stream for a live run
-  app.get('/api/discussions/:id/runs/:runId/stream', async (req, reply) => {
-    const { id, runId } = req.params as { id: string; runId: string };
-    const discussion = await deps.discussionRepository.getDiscussion(id);
-    if (!discussion || discussion.ownerUserId !== req.userId) {
-      return reply.status(404).send({ code: 'not_found', message: 'Discussion not found' });
-    }
-    reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
-    reply.raw.setHeader('Connection', 'keep-alive');
-    // Tell nginx (and compatible proxies) not to buffer this stream.
-    reply.raw.setHeader('X-Accel-Buffering', 'no');
-    reply.raw.flushHeaders();
-
-    let lastTurnIndex = -1;
-    const interval = setInterval(async () => {
-      const run = await deps.discussionRepository.getRunWithTurns(runId);
-      if (!run) {
-        clearInterval(interval);
-        reply.raw.end();
-        return;
-      }
-      for (const turn of run.turns) {
-        if (turn.turnIndex > lastTurnIndex) {
-          reply.raw.write(`event: turn\ndata: ${JSON.stringify(turn)}\n\n`);
-          lastTurnIndex = turn.turnIndex;
-        }
-      }
-      if (run.status === 'done' || run.status === 'error') {
-        reply.raw.write(`event: ${run.status}\ndata: ${JSON.stringify({ runId })}\n\n`);
-        clearInterval(interval);
-        reply.raw.end();
-      }
-    }, 2000);
-
-    req.raw.on('close', () => clearInterval(interval));
-    return reply;
-  });
-
   // Trigger TTS audio render for a completed run
   app.post('/api/discussions/:id/runs/:runId/audio', async (req, reply) => {
     const { id, runId } = req.params as { id: string; runId: string };
