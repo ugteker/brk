@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { useTranslation } from 'react-i18next';
-import { Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
+import { Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Progress, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
@@ -3145,7 +3145,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                      onOk={onCreateDetectedSource}
                      okText={editingSource ? 'Save source' : 'Add source'}
                      okButtonProps={{ disabled: !autoDetectedSource, loading: isSourceSaving }}
-                     footer={(_, { OkBtn, CancelBtn }) => (
+                     footer={(_, { OkBtn }) => (
                        <div className="flex items-center justify-between gap-2">
                          {editingSource && editingSource.ownerUserId === user?.id ? (
                            <Button
@@ -3159,10 +3159,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              Remove source
                            </Button>
                          ) : <span />}
-                         <div className="flex gap-2">
-                           <CancelBtn />
-                           <OkBtn />
-                         </div>
+                         <OkBtn />
                        </div>
                      )}
                      destroyOnHidden
@@ -3889,6 +3886,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         footer={null}
         destroyOnHidden
         width="min(720px, 95vw)"
+        className="follow-source-modal"
+        styles={{ body: { maxHeight: 'calc(100dvh - 9rem)', overflowX: 'hidden', overflowY: 'auto' } }}
       >
         <div className="space-y-3">
           {/* Unified steps indicator — morphs between pick-agent path and create-agent path */}
@@ -3902,6 +3901,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                   { title: t('agent.stepPersonality') },
                   { title: t('agent.stepSchedule') }
                 ]}
+                className="hidden sm:flex"
               />
           ) : (
             <Steps
@@ -3913,8 +3913,22 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 { title: t('listen.stepChooseAgent') },
                 { title: t('listen.stepSetSchedule') }
               ]}
+              className="hidden sm:flex"
             />
           )}
+          <Progress
+            data-testid="follow-wizard-mobile-progress"
+            percent={
+              showInlineAgentCreate
+                ? ((inlineAgentStep + 1) / 3) * 100
+                : followWizardSourcePreselected
+                  ? playbookCreateStep === 1 ? 50 : 100
+                  : ((playbookCreateStep + 1) / 3) * 100
+            }
+            showInfo={false}
+            size="small"
+            className="sm:hidden"
+          />
           {/* Step 1 subtitle — shown when picking an agent (not inside sub-wizard) */}
           {playbookCreateStep === 1 && !showInlineAgentCreate ? (
             <p className="text-sm text-gray-500">
@@ -3989,7 +4003,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             <div className="space-y-3">
               {/* Hide agent selection grid when the inline creation sub-wizard is active */}
               {!showInlineAgentCreate ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {agents.map((agent) => {
                   const selected = playbookAgentIdsDraft.includes(agent.id);
                   const anySelected = playbookAgentIdsDraft.length > 0;
@@ -4023,14 +4037,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                       }}
                     >
                       {/* Row 1: icon pill + agent name + controls */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex min-w-0 flex-1 items-start gap-2">
                           <span className={`shrink-0 rounded-md p-1.5 text-base leading-none ${iconBgClass}`}>
                             {icon}
                           </span>
-                          <span className="text-sm font-semibold truncate">
-                            <Badge status={agent.status === 'disabled' ? 'default' : 'success'} text={getAgentDisplayLabel(agent)} />
-                          </span>
+                          <div className="min-w-0 flex-1">
+                            <Badge status={agent.status === 'disabled' ? 'default' : 'success'} className="mr-1 align-top" />
+                            <span className="break-words text-sm font-semibold">{getAgentDisplayLabel(agent)}</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           {isFocused ? (
@@ -4469,14 +4484,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             </>
           ) : null}
         </div>
-        <div className="mt-4 flex items-center justify-between gap-2 border-t pt-3">
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={showInlineAgentCreate ? onInlineAgentBack : onBackPlaybookCreateStep}
-              disabled={showInlineAgentCreate ? false : (followWizardSourcePreselected ? playbookCreateStep <= 1 : playbookCreateStep === 0)}
-            >
-                {showInlineAgentCreate && inlineAgentStep === 0 ? `← ${t('listen.stepChooseAgent')}` : t('common.back')}
-            </Button>
+        <div className={`sticky bottom-0 mt-4 flex gap-2 border-t bg-card pt-3 pb-1 ${
+          showInlineAgentCreate ? 'flex-row items-center justify-between' : 'flex-col sm:flex-row sm:items-center sm:justify-between'
+        }`}>
+          {showInlineAgentCreate || (!followWizardSourcePreselected && playbookCreateStep > 0) || editingPlaybookId ? (
+          <div className={`flex flex-wrap items-center gap-2 ${showInlineAgentCreate ? 'shrink-0' : 'w-full sm:w-auto'}`}>
+            {showInlineAgentCreate || (!followWizardSourcePreselected && playbookCreateStep > 0) ? (
+              <Button onClick={showInlineAgentCreate ? onInlineAgentBack : onBackPlaybookCreateStep}>
+                  {showInlineAgentCreate && inlineAgentStep === 0 ? `← ${t('listen.stepChooseAgent')}` : t('common.back')}
+              </Button>
+            ) : null}
             {/* Stop listening — only shown when editing a playbook and NOT inside the agent sub-wizard */}
             {editingPlaybookId && !showInlineAgentCreate ? (
               confirmingUnfollow ? (
@@ -4505,32 +4522,35 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
               )
             ) : null}
           </div>
-          <div className="flex items-center gap-2">
-              <Button onClick={onCancelPlaybookCreate}>{t('common.cancel')}</Button>
+          ) : null}
+          <div className={`flex items-center gap-2 sm:justify-end ${showInlineAgentCreate ? 'min-w-0 flex-1 justify-end' : 'w-full sm:w-auto'}`}>
+            {!showInlineAgentCreate ? (
+              <Button className="flex-1 sm:flex-none" onClick={onCancelPlaybookCreate}>{t('common.cancel')}</Button>
+            ) : null}
             {showInlineAgentCreate ? (
               inlineAgentStep < 2 ? (
-                <Button type="primary" onClick={onInlineAgentNext}>
+                <Button className="flex-1 sm:flex-none" type="primary" onClick={onInlineAgentNext}>
                     {t('common.next')}
                 </Button>
               ) : (
-                <Button type="primary" loading={isInlineAgentSaving} onClick={() => void onSaveInlineAgent()}>
+                <Button className="flex-1 sm:flex-none" type="primary" loading={isInlineAgentSaving} onClick={() => void onSaveInlineAgent()}>
                     {t('agent.create')}
                 </Button>
               )
             ) : playbookCreateStep < 2 && !followWizardSourcePreselected ? (
-              <Button type="primary" onClick={onNextPlaybookCreateStep}>
+              <Button className="flex-1 sm:flex-none" type="primary" onClick={onNextPlaybookCreateStep}>
                   {t('common.next')}
               </Button>
             ) : playbookCreateStep === 1 && followWizardSourcePreselected ? (
-              <Button type="primary" loading={isPlaybookSaving} onClick={() => void onCreatePlaybook()}>
+              <Button className="flex-1 sm:flex-none" type="primary" loading={isPlaybookSaving} onClick={() => void onCreatePlaybook()}>
                   {t('common.save')}
               </Button>
             ) : playbookCreateStep < 2 ? (
-              <Button type="primary" onClick={onNextPlaybookCreateStep}>
+              <Button className="flex-1 sm:flex-none" type="primary" onClick={onNextPlaybookCreateStep}>
                   {t('common.next')}
               </Button>
             ) : (
-              <Button type="primary" loading={isPlaybookSaving} onClick={onCreatePlaybook}>
+              <Button className="flex-1 sm:flex-none" type="primary" loading={isPlaybookSaving} onClick={onCreatePlaybook}>
                   {editingPlaybookId ? t('playbook.updatePlaybook') : t('playbook.createPlaybook')}
               </Button>
             )}

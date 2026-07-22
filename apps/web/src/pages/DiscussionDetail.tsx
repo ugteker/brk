@@ -569,8 +569,8 @@ export function DiscussionDetail() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <Button
             type="text"
             icon={<ArrowLeftOutlined />}
@@ -579,7 +579,7 @@ export function DiscussionDetail() {
           >
             {t('studio.title')}
           </Button>
-          <h2 style={{ margin: 0 }}>
+          <h2 className="m-0 break-words text-[clamp(1.25rem,6vw,1.5rem)]">
             <AudioOutlined style={{ marginRight: 8 }} />
             {discussion.name}
           </h2>
@@ -590,8 +590,9 @@ export function DiscussionDetail() {
             </Text>
           </Space>
         </div>
-        <Space>
+        <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
           <Button
+            className="flex-1 sm:flex-none"
             icon={<PlayCircleOutlined />}
             type="primary"
             loading={triggering}
@@ -602,6 +603,7 @@ export function DiscussionDetail() {
           {ttsAvailable && selectedRunId && (
             <Tooltip title={selectedRun?.status !== 'done' ? t('studio.renderAudioNeedsRun') : undefined}>
               <Button
+                className="flex-1 sm:flex-none"
                 loading={renderingAudio}
                 disabled={selectedRun?.status !== 'done'}
                 onClick={handleRenderAudio}
@@ -611,7 +613,7 @@ export function DiscussionDetail() {
               </Button>
             </Tooltip>
           )}
-        </Space>
+        </div>
       </div>
 
       <Card size="small" style={{ marginBottom: 16 }} title={t('studio.detailsTitle')}>

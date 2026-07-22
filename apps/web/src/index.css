@@ -167,6 +167,17 @@
     overflow-y: auto;
   }
 
+  .follow-source-modal {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    margin: 8px !important;
+    top: 0 !important;
+  }
+
+  .follow-source-modal .ant-modal-content {
+    min-height: calc(100dvh - 16px);
+  }
+
   /* Tabs scrollable on mobile */
   .ant-tabs-nav-wrap {
     overflow-x: auto;
