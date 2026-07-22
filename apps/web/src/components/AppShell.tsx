@@ -16,7 +16,7 @@ import {
   TeamOutlined,
   UserOutlined
 } from '@ant-design/icons';
-import { Badge, Button, Divider, Drawer, Dropdown, Layout, Menu, Popover, Tag, Typography, message } from 'antd';
+import { Badge, Button, Drawer, Dropdown, Layout, Menu, Popover, Tag, Typography, message } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
@@ -381,7 +381,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Dropdown>
             </span>
 
-            {/* Hamburger — mobile only */}
+            {/* Account and admin actions — mobile only */}
             <span className="flex sm:hidden">
               <Button
                 shape="circle"
@@ -396,11 +396,37 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </Header>
-      <Content style={{ padding: 'clamp(12px, 3vw, 24px)' }}>
+      <Content className="p-[clamp(12px,3vw,24px)] pb-24 sm:pb-6">
         {children}
       </Content>
 
-      {/* Mobile navigation drawer — combines nav + account actions */}
+      <nav
+        aria-label="Mobile navigation"
+        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-violet-200 bg-white/95 px-2 pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.1)] backdrop-blur-lg dark:border-violet-900 dark:bg-slate-950/95 sm:hidden"
+        style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
+      >
+        {COMMON_NAV_ITEMS.map((item) => {
+          const isActive = current === item.key;
+          return (
+            <Button
+              key={item.key}
+              type="text"
+              icon={item.icon}
+              aria-current={isActive ? 'page' : undefined}
+              onClick={() => navigate(item.path)}
+              className={`h-auto flex-1 !rounded-lg !px-1 !py-1.5 text-xs ${
+                isActive
+                  ? '!bg-violet-100 !text-violet-700 dark:!bg-violet-950/70 dark:!text-violet-200'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              <span className="mt-0.5 block text-[11px]">{t(item.labelKey)}</span>
+            </Button>
+          );
+        })}
+      </nav>
+
+      {/* Mobile account and admin actions */}
       <Drawer
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
@@ -409,35 +435,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         width={280}
         styles={{ body: { padding: '8px 0' } }}
       >
-        {/* Nav items */}
-        <div style={{ padding: '0 8px', marginBottom: 8 }}>
-          {navItems.map((item) => {
-            const isActive = current === item.key;
-            const isStudio = item.key === 'studio';
-            return (
-              <Button
-                key={item.key}
-                type={isActive ? 'primary' : 'text'}
-                icon={item.icon}
-                block
-                onClick={() => { navigate(item.path); setMobileMenuOpen(false); }}
-                style={{
-                  textAlign: 'left',
-                  height: 44,
-                  justifyContent: 'flex-start',
-                  paddingLeft: 16,
-                  marginBottom: 2,
-                  ...navButtonStyle(isActive, isStudio, theme)
-                }}
-              >
-                {t(item.labelKey)}
-              </Button>
-            );
-          })}
-        </div>
-
-        <Divider style={{ margin: '8px 0' }} />
-
         {/* Account section */}
         {user && (
           <div style={{ padding: '4px 24px 8px' }}>

@@ -71,7 +71,7 @@ import {
 } from '../api/agents';
 import { dismissReport, getLatestAgentPrompt, listAgentReports, markReportRead, type PromptVersionDto, type RunReportDto } from '../api/agents';
 import { grantAgentAccess, listAgentAccessGrants } from '../api/access';
-import type { DiscussionPreselect } from '../api/discussions';
+import { getDiscussionRun, type DiscussionPreselect } from '../api/discussions';
 import { getCharacterTypeColor, getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
 import {
   cloneMarketplaceAgent,
@@ -478,6 +478,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [sourceDetailRuns, setSourceDetailRuns] = useState<RunDetailDto[]>([]);
   const [sourceDetailLoading, setSourceDetailLoading] = useState(false);
   const [sourceDetailRefreshKey, setSourceDetailRefreshKey] = useState(0);
+  const [materialAudioByItemKey, setMaterialAudioByItemKey] = useState<Record<string, string>>({});
+  const [openMaterialAudioItemKey, setOpenMaterialAudioItemKey] = useState<string | null>(null);
+  const [materialAudioLoadingItemKey, setMaterialAudioLoadingItemKey] = useState<string | null>(null);
   const [isPlaybookCreateOpen, setIsPlaybookCreateOpen] = useState(false);
   // When true the wizard was opened via "Follow this source" on a specific card;
   // step 0 (Pick source) is skipped because the source is already known.
@@ -736,6 +739,34 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setActiveHub('sources');
     setSelectedSourceId(source.id);
     setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports');
+  }
+
+  function parseSyntheticRunId(link: string | null | undefined): string | null {
+    if (!link?.startsWith('discussion-run:')) return null;
+    const runId = link.slice('discussion-run:'.length).trim();
+    return runId.length > 0 ? runId : null;
+  }
+
+  async function onPlaySyntheticMaterialAudio(itemKey: string, runId: string, discussionId: string) {
+    const cachedAudioUrl = materialAudioByItemKey[itemKey];
+    if (cachedAudioUrl) {
+      setOpenMaterialAudioItemKey((current) => (current === itemKey ? null : itemKey));
+      return;
+    }
+    setMaterialAudioLoadingItemKey(itemKey);
+    try {
+      const run = await getDiscussionRun(discussionId, runId);
+      if (!run.audioUrl) {
+        message.warning('Audio is not available for this run yet');
+        return;
+      }
+      setMaterialAudioByItemKey((current) => ({ ...current, [itemKey]: run.audioUrl! }));
+      setOpenMaterialAudioItemKey(itemKey);
+    } catch {
+      message.error('Failed to load run audio');
+    } finally {
+      setMaterialAudioLoadingItemKey(null);
+    }
   }
 
   // Applies a symbol deep link from a report notification email (?agentId=&symbol=), which opens
@@ -2047,7 +2078,36 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 children: (
                   <Card
                     className="min-w-0"
-                    title={<Title level={4} style={{ margin: 0 }}><DatabaseOutlined /> {t('nav.library')}</Title>}
+                    styles={{ header: { overflow: 'visible' }, title: { overflow: 'visible' } }}
+                    title={
+                      <div className="flex items-center justify-between gap-3">
+                        <Title level={4} style={{ margin: 0 }}><DatabaseOutlined /> {t('nav.library')}</Title>
+                        {showSourcesMarketplace ? (
+                          <Button
+                            aria-label={t('library.backToLibrary')}
+                            icon={<ArrowLeftOutlined />}
+                            size="small"
+                            onClick={() => setShowSourcesMarketplace(false)}
+                          >
+                            <span className="hidden sm:inline">{t('library.backToLibrary')}</span>
+                          </Button>
+                        ) : (
+                          <Badge count={marketplaceSourceCount} size="small" className="mr-2">
+                            <Button
+                              aria-label={t('library.browseMarketplace')}
+                              icon={<CompassOutlined />}
+                              size="small"
+                              onClick={async () => {
+                                await refreshMarketplaceCounts();
+                                setShowSourcesMarketplace(true);
+                              }}
+                            >
+                              <span className="hidden sm:inline">{t('library.browseMarketplace')}</span>
+                            </Button>
+                          </Badge>
+                        )}
+                      </div>
+                    }
                   >
                    {/* First-run onboarding checklist — shown until all 4 steps complete or dismissed */}
                    {(forceShowOnboarding || (!onboardingDismissed && !showAdminWorkspace && onboardingDataLoaded && !onboardingAllDone)) ? (
@@ -2155,38 +2215,33 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                    </div>
 
                    {/* Search row — always visible */}
-                   <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                   <div className="mb-4 flex items-center justify-between gap-2">
                      <Input
                        aria-label="Search sources"
                        value={sourcesSearch}
                        onChange={(event) => setSourcesSearch(event.currentTarget.value)}
                        placeholder="Search title, URL, or preview episode"
                        prefix={<SearchOutlined />}
+                       className="min-w-0 flex-1 sm:w-auto sm:flex-none"
                        style={{ maxWidth: 420 }}
                      />
-                     {showSourcesMarketplace ? (
-                       <Button
-                         aria-label={t('library.backToLibrary')}
-                         icon={<ArrowLeftOutlined />}
-                         size="small"
-                         onClick={() => setShowSourcesMarketplace(false)}
-                       >
-                         {t('library.backToLibrary')}
-                       </Button>
-                     ) : (
-                       <Badge count={marketplaceSourceCount} size="small">
+                     <div className="flex shrink-0 items-center justify-end gap-2">
+                       {!showSourcesMarketplace ? (
                          <Button
-                           aria-label={t('library.browseMarketplace')}
-                           icon={<CompassOutlined />}
-                           onClick={async () => {
-                             await refreshMarketplaceCounts();
-                             setShowSourcesMarketplace(true);
+                           type="primary"
+                           icon={<PlusOutlined />}
+                           aria-label={t('library.addSource')}
+                           onClick={() => {
+                             setEditingSource(null);
+                             setIsSourceCreateOpen(true);
+                             setSourceUrlDraft('');
+                             setAutoDetectedSource(null);
                            }}
                          >
-                           {t('library.browseMarketplace')}
+                           <span className="hidden sm:inline">{t('library.addSource')}</span>
                          </Button>
-                       </Badge>
-                     )}
+                       ) : null}
+                     </div>
                    </div>
 
                    {/* Marketplace grid — same rich card layout as library, Clone button only */}
@@ -2663,40 +2718,67 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                          <Empty description={<span className="text-sm text-muted-foreground">{t('library.noRuns')}</span>} />
                                        ) : (
                                          <ul className="divide-y divide-border" data-testid="library-material-list">
-                                           {materialItems.map((item) => (
-                                             <li key={item.link ?? item.title} className="flex items-center gap-3 py-2.5">
-                                               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-base dark:bg-violet-950/40">📄</div>
-                                               <div className="min-w-0 flex-1">
-                                                 <div className="flex min-w-0 items-center gap-2">
-                                                   <span className="truncate text-sm font-medium">{item.title}</span>
-                                                   <Tag className="m-0 shrink-0 border-0 bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">
-                                                     {t('library.materialTranscriptBadge')}
-                                                   </Tag>
-                                                   {item.hasAudio ? (
-                                                     <Tag className="m-0 shrink-0 border-0 bg-violet-100 text-[10px] font-semibold text-violet-700 dark:bg-violet-950/70 dark:text-violet-200">
-                                                       🔊 {t('library.materialAudioBadge')}
-                                                     </Tag>
-                                                   ) : null}
+                                           {materialItems.map((item) => {
+                                             const itemKey = item.link ?? item.title;
+                                             const runId = parseSyntheticRunId(item.link);
+                                             const audioUrl = materialAudioByItemKey[itemKey];
+                                             const isAudioOpen = openMaterialAudioItemKey === itemKey && Boolean(audioUrl);
+                                             return (
+                                               <li key={itemKey} className="py-2.5">
+                                                 <div className="flex items-center gap-3">
+                                                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-base dark:bg-violet-950/40">📄</div>
+                                                   <div className="min-w-0 flex-1">
+                                                     <div className="flex min-w-0 items-center gap-2">
+                                                       <span className="truncate text-sm font-medium">{item.title}</span>
+                                                       <Tag className="m-0 shrink-0 border-0 bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">
+                                                         {t('library.materialTranscriptBadge')}
+                                                       </Tag>
+                                                       {item.hasAudio ? (
+                                                         <Tag className="m-0 shrink-0 border-0 bg-violet-100 text-[10px] font-semibold text-violet-700 dark:bg-violet-950/70 dark:text-violet-200">
+                                                           🔊 {t('library.materialAudioBadge')}
+                                                         </Tag>
+                                                       ) : null}
+                                                     </div>
+                                                     {item.pubDate ? (
+                                                       <div className="mt-0.5 text-xs text-muted-foreground">
+                                                         {new Date(item.pubDate).toLocaleDateString(i18n.language)}
+                                                       </div>
+                                                     ) : null}
+                                                   </div>
+                                                   <div className="flex shrink-0 items-center gap-1">
+                                                     {discussionId && item.hasAudio && runId ? (
+                                                       <TouchSafeTooltip title={isAudioOpen ? 'Hide audio player' : 'Listen'}>
+                                                         <Button
+                                                           size="small"
+                                                           shape="circle"
+                                                           aria-label={isAudioOpen ? 'Hide audio player' : `Listen to ${item.title}`}
+                                                           icon={<AudioOutlined />}
+                                                           loading={materialAudioLoadingItemKey === itemKey}
+                                                           onClick={() => onPlaySyntheticMaterialAudio(itemKey, runId, discussionId)}
+                                                         />
+                                                       </TouchSafeTooltip>
+                                                     ) : null}
+                                                     {discussionId ? (
+                                                       <TouchSafeTooltip title={t('library.openDiscussion')}>
+                                                         <Button
+                                                           size="small"
+                                                           shape="circle"
+                                                           aria-label={t('library.openDiscussion')}
+                                                           icon={<CaretRightOutlined />}
+                                                           onClick={() => navigate(`/studio/${discussionId}`)}
+                                                         />
+                                                       </TouchSafeTooltip>
+                                                     ) : null}
+                                                   </div>
                                                  </div>
-                                                 {item.pubDate ? (
-                                                   <div className="mt-0.5 text-xs text-muted-foreground">
-                                                     {new Date(item.pubDate).toLocaleDateString(i18n.language)}
+                                                 {isAudioOpen && audioUrl ? (
+                                                   <div className="pl-11 pt-2">
+                                                     <audio data-testid="library-material-inline-audio" src={audioUrl} controls autoPlay style={{ width: '100%' }} />
                                                    </div>
                                                  ) : null}
-                                               </div>
-                                               {discussionId ? (
-                                                 <TouchSafeTooltip title={t('library.openDiscussion')}>
-                                                   <Button
-                                                     size="small"
-                                                     shape="circle"
-                                                     aria-label={t('library.openDiscussion')}
-                                                     icon={<CaretRightOutlined />}
-                                                     onClick={() => navigate(`/studio/${discussionId}`)}
-                                                   />
-                                                 </TouchSafeTooltip>
-                                               ) : null}
-                                             </li>
-                                           ))}
+                                               </li>
+                                             );
+                                           })}
                                          </ul>
                                        );
                                      })()

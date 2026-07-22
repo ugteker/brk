@@ -147,6 +147,8 @@
   .ant-input,
   .ant-input-affix-wrapper,
   .ant-select-selector,
+  .ant-select-input,
+  .ant-select-selection-search-input,
   .ant-input-number,
   .ant-input-number-input,
   textarea.ant-input {
