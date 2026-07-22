@@ -4,6 +4,8 @@ import type { SourceProbeResult } from '../analysis/source-adapters/smart-crawle
 import type { DomainAccessResolver } from '../access/permissions';
 import type { SourceRepositoryLike } from './repository';
 import type { CreateSourceInput, PublishSourceInput, ShareSourceInput, UpdateSourceInput } from './types';
+import type { SourceSearchLike } from './search';
+import { CURATED_SOURCES } from './curated-sources';
 
 export interface SourceProbeLike {
   probeSource(source: SourceConfig, previewLimit?: number): Promise<SourceProbeResult>;
@@ -17,6 +19,7 @@ export interface SourceRoutesDeps {
   sourceRepository: SourceRepositoryLike;
   accessResolver: DomainAccessResolver;
   sourceProbe?: SourceProbeLike;
+  sourceSearch?: SourceSearchLike;
   reportRepository?: SourceScopedReportRepositoryLike;
 }
 
@@ -177,6 +180,57 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
   app.get('/api/sources/marketplace', async (_req, reply) => {
     const rows = await deps.sourceRepository.listMarketplaceSources();
     return reply.status(200).send(rows);
+  });
+
+  /** Name-based source search (podcasts via iTunes, YouTube channels via API/scraping). */
+  app.get('/api/sources/search', async (req, reply) => {
+    if (!deps.sourceSearch) {
+      return reply.status(503).send({ code: 'search_unavailable', message: 'Source search is not available' });
+    }
+    const { q } = req.query as { q?: string };
+    if (typeof q !== 'string' || q.trim().length === 0) {
+      return reply.status(400).send({ code: 'validation_error', message: 'A non-empty query parameter q is required' });
+    }
+    const result = await deps.sourceSearch.searchSources(q.trim());
+    return reply.status(200).send(result);
+  });
+
+  /** Curated "popular sources" suggestions: marketplace publications first, static curated
+   * fallback appended, deduped by value, minus sources the user already follows. */
+  app.get('/api/sources/suggestions', async (req, reply) => {
+    const [marketplace, own] = await Promise.all([
+      deps.sourceRepository.listMarketplaceSources(),
+      deps.sourceRepository.listSources(req.userId!)
+    ]);
+    const ownValues = new Set(own.map((source) => source.value));
+    const seenValues = new Set<string>();
+    const suggestions: Array<{
+      type: SourceConfig['type'];
+      value: string;
+      title: string;
+      author?: string;
+      coverImageUrl: string | null;
+      origin: 'marketplace' | 'curated';
+      publicationId?: string;
+    }> = [];
+    for (const publication of marketplace) {
+      if (ownValues.has(publication.value) || seenValues.has(publication.value)) continue;
+      seenValues.add(publication.value);
+      suggestions.push({
+        type: publication.type,
+        value: publication.value,
+        title: publication.title,
+        coverImageUrl: publication.metadata.coverImageUrl ?? null,
+        origin: 'marketplace',
+        publicationId: publication.publicationId
+      });
+    }
+    for (const curated of CURATED_SOURCES) {
+      if (ownValues.has(curated.value) || seenValues.has(curated.value)) continue;
+      seenValues.add(curated.value);
+      suggestions.push({ ...curated, origin: 'curated' });
+    }
+    return reply.status(200).send(suggestions);
   });
 
   app.post('/api/sources/marketplace/:publicationId/clone', async (req, reply) => {

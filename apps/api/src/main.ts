@@ -31,6 +31,7 @@ import { config, isTtsConfigured, isGoogleTtsConfigured } from './config';
 import { AccessRepository } from './modules/access/repository';
 import { DomainAccessResolver } from './modules/access/permissions';
 import { SourceRepository } from './modules/source/repository';
+import { createSourceSearch } from './modules/source/search';
 import { PlaybookRepository } from './modules/playbook/repository';
 import { PrismaDigestStore, startDigestLoop } from './modules/playbook/digest';
 import { ReportChatRepository, ReportChatService } from './modules/reports/chat';
@@ -164,6 +165,11 @@ async function start() {
       sourceRepository,
       accessResolver,
       reportRepository,
+      sourceSearch: createSourceSearch({
+        httpGet: defaultHttpGet,
+        youtubeHttpGet,
+        youtubeApiKey: process.env.YOUTUBE_API_KEY
+      }),
       sourceProbe: {
         probeSource: (source, previewLimit) =>
           source.type === 'youtube_videos'

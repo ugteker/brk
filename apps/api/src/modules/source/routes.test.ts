@@ -14,6 +14,8 @@ import type {
   UpdateSourceInput
 } from './types';
 import type { SourceRepositoryLike } from './repository';
+import type { SourceRoutesDeps } from './routes';
+import { CURATED_SOURCES } from './curated-sources';
 
 class InMemorySourceRepository implements SourceRepositoryLike, AccessRepositoryLike {
   private readonly sources = new Map<string, SourceRecord>();
@@ -540,5 +542,118 @@ describe('source routes', () => {
       title: 'Smart Probe Title',
       coverImageUrl: 'https://cdn.example.com/cover.png'
     });
+  });
+});
+
+describe('source search route', () => {
+  async function buildAppWithSearch(sourceRepo: InMemorySourceRepository, sourceSearch?: SourceRoutesDeps['sourceSearch']) {
+    return buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      source: { sourceRepository: sourceRepo, accessResolver: new DomainAccessResolver(sourceRepo), sourceSearch }
+    });
+  }
+
+  it('returns mapped results and warnings from the search service', async () => {
+    const searchSources = vi.fn(async () => ({
+      results: [
+        { type: 'podcast_feeds' as const, value: 'https://example.com/feed.xml', title: 'Market Pulse', author: 'Jane', coverImageUrl: null },
+        { type: 'youtube_videos' as const, value: 'https://www.youtube.com/channel/UC1', title: 'Finance TV', coverImageUrl: 'https://img.example.com/c.jpg' }
+      ],
+      warnings: ['youtube_search_failed']
+    }));
+    const app = await buildAppWithSearch(new InMemorySourceRepository(), { searchSources });
+
+    const res = await app.inject({ method: 'GET', url: '/api/sources/search?q=market', headers: authCookieHeader() });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      results: [{ title: 'Market Pulse' }, { title: 'Finance TV' }],
+      warnings: ['youtube_search_failed']
+    });
+    expect(searchSources).toHaveBeenCalledWith('market');
+  });
+
+  it('rejects an empty query with 400', async () => {
+    const app = await buildAppWithSearch(new InMemorySourceRepository(), { searchSources: async () => ({ results: [], warnings: [] }) });
+
+    const missing = await app.inject({ method: 'GET', url: '/api/sources/search', headers: authCookieHeader() });
+    expect(missing.statusCode).toBe(400);
+
+    const blank = await app.inject({ method: 'GET', url: '/api/sources/search?q=%20%20', headers: authCookieHeader() });
+    expect(blank.statusCode).toBe(400);
+  });
+
+  it('returns 503 when no search service is configured', async () => {
+    const app = await buildAppWithSearch(new InMemorySourceRepository());
+
+    const res = await app.inject({ method: 'GET', url: '/api/sources/search?q=market', headers: authCookieHeader() });
+    expect(res.statusCode).toBe(503);
+  });
+
+  it('requires authentication', async () => {
+    const app = await buildAppWithSearch(new InMemorySourceRepository(), { searchSources: async () => ({ results: [], warnings: [] }) });
+
+    const res = await app.inject({ method: 'GET', url: '/api/sources/search?q=market' });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('source suggestions route', () => {
+  async function buildApp(sourceRepo: InMemorySourceRepository) {
+    return buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      source: { sourceRepository: sourceRepo, accessResolver: new DomainAccessResolver(sourceRepo) }
+    });
+  }
+
+  it('lists marketplace publications first, then curated fallback entries, deduped by value', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    // Publish a marketplace source that shadows a curated entry by value
+    const curatedShadowValue = CURATED_SOURCES[0].value;
+    const publisherSource = await sourceRepo.createSource('publisher-1', { type: CURATED_SOURCES[0].type, value: curatedShadowValue });
+    await sourceRepo.publishSource(publisherSource.id, 'publisher-1', { title: 'Marketplace Wins', visibility: 'public' });
+
+    const app = await buildApp(sourceRepo);
+    const res = await app.inject({ method: 'GET', url: '/api/sources/suggestions', headers: authCookieHeader('user-1') });
+
+    expect(res.statusCode).toBe(200);
+    const suggestions = res.json<Array<{ value: string; title: string; origin: string }>>();
+    // Marketplace entry comes first and wins the dedupe against the curated entry with the same value
+    expect(suggestions[0]).toMatchObject({ value: curatedShadowValue, title: 'Marketplace Wins', origin: 'marketplace' });
+    expect(suggestions.filter((item) => item.value === curatedShadowValue)).toHaveLength(1);
+    // Remaining curated entries are appended
+    expect(suggestions.filter((item) => item.origin === 'curated')).toHaveLength(CURATED_SOURCES.length - 1);
+  });
+
+  it('falls back to the curated list when the marketplace is empty', async () => {
+    const app = await buildApp(new InMemorySourceRepository());
+
+    const res = await app.inject({ method: 'GET', url: '/api/sources/suggestions', headers: authCookieHeader('user-1') });
+
+    expect(res.statusCode).toBe(200);
+    const suggestions = res.json<Array<{ value: string; origin: string }>>();
+    expect(suggestions).toHaveLength(CURATED_SOURCES.length);
+    expect(suggestions.every((item) => item.origin === 'curated')).toBe(true);
+  });
+
+  it('filters out sources the user already follows', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    await sourceRepo.createSource('user-1', { type: CURATED_SOURCES[0].type, value: CURATED_SOURCES[0].value });
+
+    const app = await buildApp(sourceRepo);
+    const res = await app.inject({ method: 'GET', url: '/api/sources/suggestions', headers: authCookieHeader('user-1') });
+
+    expect(res.statusCode).toBe(200);
+    const suggestions = res.json<Array<{ value: string }>>();
+    expect(suggestions.some((item) => item.value === CURATED_SOURCES[0].value)).toBe(false);
+    expect(suggestions).toHaveLength(CURATED_SOURCES.length - 1);
+
+    // A different user still sees the full curated list
+    const otherRes = await app.inject({ method: 'GET', url: '/api/sources/suggestions', headers: authCookieHeader('user-2') });
+    expect(otherRes.json<unknown[]>()).toHaveLength(CURATED_SOURCES.length);
   });
 });
