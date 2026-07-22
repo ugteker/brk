@@ -12,10 +12,10 @@
  * playbook.changed) — treated as `null` here for backward compatibility with events emitted
  * before this field existed.
  *
- * NOTE: the backend now also emits `agent.changed` and `playbook.changed` as own-resource
+ * NOTE: the backend also emits `agent.changed` and `playbook.changed` as own-resource
  * topics, in addition to the five topics originally scoped for this task. Both are
- * included here so parsing does not reject them; `RealtimeProvider` only subscribes
- * `refreshAgents`/`refreshPlaybooks` to them in Task 6.
+ * included here so parsing does not reject them; `RealtimeDataBridge` (in App.tsx) subscribes
+ * `refreshAgents`/`refreshPlaybooks` to them.
  */
 
 export type RealtimeTopic =

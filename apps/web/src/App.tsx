@@ -29,12 +29,13 @@ function AdminUsersRoute() {
 
 // Subscribes global app data to the topics this task scopes for cross-tab/cross-device
 // refresh. Mounted inside both AppDataProvider and RealtimeProvider so it can bridge the two
-// without either context needing to know about the other. Agents/playbooks refreshes are
-// deliberately not subscribed yet — Task 6 wires those up.
+// without either context needing to know about the other.
 function RealtimeDataBridge({ children }: { children: ReactNode }) {
-  const { refreshSources, refreshMarketplace } = useAppData();
+  const { refreshSources, refreshMarketplace, refreshAgents, refreshPlaybooks } = useAppData();
   useRealtimeSubscription(['source.changed'], () => { refreshSources(); });
   useRealtimeSubscription(['marketplace.changed'], () => { refreshMarketplace(); });
+  useRealtimeSubscription(['agent.changed'], () => { refreshAgents(); });
+  useRealtimeSubscription(['playbook.changed'], () => { refreshPlaybooks(); });
   return <>{children}</>;
 }
 
