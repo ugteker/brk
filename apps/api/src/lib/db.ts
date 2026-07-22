@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
+import { withConnectionLimit } from './db-url';
 
-export const prisma = new PrismaClient();
+const datasourceUrl = withConnectionLimit(process.env.DATABASE_URL);
+export const prisma = new PrismaClient(datasourceUrl ? { datasourceUrl } : undefined);
 
 interface SqliteTableNameRow {
   name: string;

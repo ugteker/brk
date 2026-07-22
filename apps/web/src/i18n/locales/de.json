@@ -276,7 +276,16 @@
       "podcast": "Podcast",
       "youtube": "YouTube",
       "web": "Web"
-    }
+    },
+    "probeError": "Diese Quelle konnte noch nicht erkannt werden. Bitte eine andere URL versuchen."
+  },
+  "sourcePicker": {
+    "searchPlaceholder": "Podcast oder YouTube-Kanal per Name suchen…",
+    "popularSources": "Beliebte Quellen",
+    "useUrlInstead": "URL direkt einfügen",
+    "noResults": "Keine Treffer. Anderen Namen versuchen oder unten eine URL einfügen.",
+    "searchError": "Suche ist gerade nicht verfügbar. Erneut versuchen oder unten eine URL einfügen.",
+    "partialResults": "Einige Anbieter haben nicht geantwortet — Ergebnisse ggf. unvollständig."
   },
   "marketplace": {
     "heading": "Marketplace",
@@ -444,7 +453,7 @@
     "step1": "Quelle hinzufügen",
     "step2": "Persona wählen",
     "step3": "Starten",
-    "step1Desc": "Füge eine YouTube-Kanal-URL, einen Podcast-Feed oder eine beliebige Website ein, die du verfolgen möchtest.",
+    "step1Desc": "Suche einen Podcast oder YouTube-Kanal per Name — oder füge eine URL ein, die du verfolgen möchtest.",
     "step2Desc": "Wähle eine Analysten-Persona — jede hat einen anderen Fokus und Stil.",
     "step3Desc": "Wir erstellen deine Quelle, deinen Analysten und dein Playbook und starten die erste Analyse jetzt.",
     "detectSource": "Quelle erkennen",

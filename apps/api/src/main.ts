@@ -7,6 +7,9 @@ import type { ForcedEpisodeSelection } from './modules/analysis/agent-runner';
 import { startSchedulerLoop } from './modules/schedules/scheduler-loop';
 import { ManualRunTrigger } from './modules/runs/manual-run-trigger';
 import { ensureSqliteSchemaCompatibility, prisma } from './lib/db';
+import cluster from 'node:cluster';
+import { applySqlitePragmas } from './lib/sqlite-pragmas';
+import { parseWebConcurrency, planClusterProcesses, resolveRole, rolePlan, createCrashLoopGuard, type Role } from './runtime/roles';
 import { PromptRepository } from './modules/prompts/repository';
 import { ArtifactRepository } from './modules/artifacts/repository';
 import { ReportRepository } from './modules/reports/repository';
@@ -31,6 +34,7 @@ import { config, isTtsConfigured, isGoogleTtsConfigured } from './config';
 import { AccessRepository } from './modules/access/repository';
 import { DomainAccessResolver } from './modules/access/permissions';
 import { SourceRepository } from './modules/source/repository';
+import { createSourceSearch } from './modules/source/search';
 import { PlaybookRepository } from './modules/playbook/repository';
 import { PrismaDigestStore, startDigestLoop } from './modules/playbook/digest';
 import { ReportChatRepository, ReportChatService } from './modules/reports/chat';
@@ -80,8 +84,10 @@ async function bootstrapAdminAccount(userRepository: UserRepository) {
   logger.info(`[auth] Bootstrapped admin account for ${email} from backend config`);
 }
 
-async function start() {
+async function start(role: Role) {
+  const plan = rolePlan(role);
   await ensureSqliteSchemaCompatibility();
+  await applySqlitePragmas(prisma);
 
   const agentRepository = new AgentRepository(prisma);
   const promptRepository = new PromptRepository(prisma);
@@ -120,7 +126,9 @@ async function start() {
     latestReportLimit: config.discussion.latestReportLimit
   });
 
-  await bootstrapAdminAccount(userRepository);
+  if (plan.startSchedulers) {
+    await bootstrapAdminAccount(userRepository);
+  }
 
   const runStore = new PrismaRunStore(prisma);
   const queue = new RunQueueService(runStore);
@@ -164,6 +172,11 @@ async function start() {
       sourceRepository,
       accessResolver,
       reportRepository,
+      sourceSearch: createSourceSearch({
+        httpGet: defaultHttpGet,
+        youtubeHttpGet,
+        youtubeApiKey: process.env.YOUTUBE_API_KEY
+      }),
       sourceProbe: {
         probeSource: (source, previewLimit) =>
           source.type === 'youtube_videos'
@@ -227,40 +240,78 @@ async function start() {
     db: prisma
   });
 
-  startSchedulerLoop({ intervalMs: 60_000, queue, runner: agentRunner });
-  startDigestLoop({ store: new PrismaDigestStore(prisma), mailer });
+  if (plan.startSchedulers) {
+    startSchedulerLoop({ intervalMs: 60_000, queue, runner: agentRunner });
+    startDigestLoop({ store: new PrismaDigestStore(prisma), mailer });
 
-  // Discussion scheduler: check every 60s for scheduled discussions due to run
-  setInterval(async () => {
-    try {
-      const scheduled = await discussionRepository.listScheduledDiscussions();
-      const now = Date.now();
-      for (const d of scheduled) {
-        if (!d.scheduleJson) continue;
-        let schedule: { mode: string; intervalMinutes?: number; dailyTime?: string; timezone?: string; lastRunAt?: number };
-        try { schedule = JSON.parse(d.scheduleJson); } catch { continue; }
-        const lastRun = schedule.lastRunAt ?? 0;
-        let dueMs = Infinity;
-        if (schedule.mode === 'interval' && schedule.intervalMinutes) {
-          dueMs = lastRun + schedule.intervalMinutes * 60_000;
-        } else if (schedule.mode === 'daily' && schedule.dailyTime) {
-          const [hh, mm] = schedule.dailyTime.split(':').map(Number);
-          const nextRun = new Date();
-          nextRun.setHours(hh, mm, 0, 0);
-          if (nextRun.getTime() <= lastRun) nextRun.setDate(nextRun.getDate() + 1);
-          dueMs = nextRun.getTime();
+    // Discussion scheduler: check every 60s for scheduled discussions due to run
+    setInterval(async () => {
+      try {
+        const scheduled = await discussionRepository.listScheduledDiscussions();
+        const now = Date.now();
+        for (const d of scheduled) {
+          if (!d.scheduleJson) continue;
+          let schedule: { mode: string; intervalMinutes?: number; dailyTime?: string; timezone?: string; lastRunAt?: number };
+          try { schedule = JSON.parse(d.scheduleJson); } catch { continue; }
+          const lastRun = schedule.lastRunAt ?? 0;
+          let dueMs = Infinity;
+          if (schedule.mode === 'interval' && schedule.intervalMinutes) {
+            dueMs = lastRun + schedule.intervalMinutes * 60_000;
+          } else if (schedule.mode === 'daily' && schedule.dailyTime) {
+            const [hh, mm] = schedule.dailyTime.split(':').map(Number);
+            const nextRun = new Date();
+            nextRun.setHours(hh, mm, 0, 0);
+            if (nextRun.getTime() <= lastRun) nextRun.setDate(nextRun.getDate() + 1);
+            dueMs = nextRun.getTime();
+          }
+          if (now >= dueMs) {
+            const run = await discussionRepository.createRun(d.id, 'scheduled');
+            await discussionOrchestrator.run(d.id, run.id);
+            const updated = { ...JSON.parse(d.scheduleJson), lastRunAt: now };
+            await discussionRepository.updateDiscussion(d.id, { scheduleJson: JSON.stringify(updated) });
+          }
         }
-        if (now >= dueMs) {
-          const run = await discussionRepository.createRun(d.id, 'scheduled');
-          await discussionOrchestrator.run(d.id, run.id);
-          const updated = { ...JSON.parse(d.scheduleJson), lastRunAt: now };
-          await discussionRepository.updateDiscussion(d.id, { scheduleJson: JSON.stringify(updated) });
-        }
-      }
-    } catch { /* non-fatal */ }
-  }, 60_000);
+      } catch { /* non-fatal */ }
+    }, 60_000);
+  }
 
-  await app.listen({ port: 3000, host: '0.0.0.0' });
+  if (plan.startHttp) {
+    await app.listen({ port: 3000, host: '0.0.0.0' });
+  } else {
+    logger.info(`[runtime] role=${role}: scheduler-only process (no HTTP listener)`);
+  }
 }
 
-start();
+function bootstrap() {
+  const concurrency = parseWebConcurrency(process.env.WEB_CONCURRENCY);
+  const children = planClusterProcesses(concurrency);
+
+  if (children.length > 0 && cluster.isPrimary) {
+    logger.info(`[runtime] cluster primary: forking ${concurrency} web process(es) + 1 worker process`);
+    const rolesByWorkerId = new Map<number, Role>();
+    const guard = createCrashLoopGuard();
+    for (const role of children) {
+      const child = cluster.fork({ ...process.env, ROLE: role });
+      rolesByWorkerId.set(child.id, role);
+    }
+    cluster.on('exit', (worker, code, signal) => {
+      const role = rolesByWorkerId.get(worker.id) ?? 'web';
+      rolesByWorkerId.delete(worker.id);
+      logger.warn(`[runtime] ${role} process ${worker.process.pid} exited (code=${code}, signal=${signal})`);
+      if (!guard.recordExit(Date.now())) {
+        logger.error('[runtime] children are crash-looping — exiting so the container restart policy takes over');
+        process.exit(1);
+      }
+      const replacement = cluster.fork({ ...process.env, ROLE: role });
+      rolesByWorkerId.set(replacement.id, role);
+    });
+    return;
+  }
+
+  start(resolveRole(process.env.ROLE)).catch((err) => {
+    logger.error(`[runtime] fatal startup error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    process.exit(1);
+  });
+}
+
+bootstrap();

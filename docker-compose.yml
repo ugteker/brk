@@ -20,6 +20,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: "file:/app/api/prisma/dev.db"
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
     volumes:
       - api-data:/app/api/prisma
       # Server-side secrets materialized by CI (not stored in git); mounted read-only
