@@ -30,6 +30,7 @@ export interface SmartCrawlerDeps {
   crawlConfigRepository: SourceCrawlConfigRepositoryLike;
   siteInspector: Pick<SiteInspectorClient, 'inspect'>;
   now?: () => Date;
+  onFeedMetadata?: (source: SourceConfig, metadata: ReturnType<typeof parseFeedMetadata>) => Promise<void> | void;
 }
 
 function hashContent(content: string): string {
@@ -354,6 +355,13 @@ export async function crawlSource(
   const initial = await deps.httpGet(source.value);
 
   if (isFeedDocument(initial)) {
+    const metadata = parseFeedMetadata(initial);
+    if (metadata.coverImageUrl) {
+      if (source.type === 'podcast_feeds') {
+        await deps.cursorRepository.refreshSourceCoverImageUrl?.(source.type, source.value, metadata.coverImageUrl);
+      }
+      await deps.onFeedMetadata?.(source, metadata);
+    }
     return crawlFeed(deps, agentId, source, initial, options);
   }
 

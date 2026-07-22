@@ -116,7 +116,7 @@ describe('Discussion routes', () => {
     const app = await buildApp();
     const res = await app.inject({ method: 'GET', url: '/api/discussions/capabilities' });
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ tts: false });
+    expect(JSON.parse(res.body)).toEqual({ tts: false, ttsProviders: [] });
   });
 
   it('GET /api/discussions/capabilities reports tts=true when client and storage are wired', async () => {
@@ -130,7 +130,8 @@ describe('Discussion routes', () => {
     });
     const res = await app.inject({ method: 'GET', url: '/api/discussions/capabilities' });
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ tts: true });
+    // Legacy single-client wiring: TTS works but no named providers are advertised.
+    expect(JSON.parse(res.body)).toEqual({ tts: true, ttsProviders: [] });
   });
 
   it('POST /api/discussions/:id/runs returns 422 when a participant resolves no reports', async () => {

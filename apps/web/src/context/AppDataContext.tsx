@@ -37,6 +37,16 @@ export interface NewReportNotice {
   timestamp: string;
 }
 
+/** Bell notices for discussion ("show") lifecycle events: started, finished, audio ready. */
+export interface DiscussionEventNotice {
+  /** Stable id (`${runId}:${kind}`) used for dedupe + dismissal. */
+  id: string;
+  kind: 'show_started' | 'show_finished' | 'audio_ready';
+  discussionId: string;
+  discussionName: string;
+  timestamp: string;
+}
+
 export interface AppDataContextValue {
   agents: AgentSummary[];
   agentsLoadState: LoadState;
@@ -53,6 +63,7 @@ export interface AppDataContextValue {
   refreshAgents: () => Promise<void>;
   refreshSources: () => Promise<void>;
   refreshPlaybooks: () => Promise<void>;
+  refreshMarketplace: () => Promise<void>;
   setAgents: React.Dispatch<React.SetStateAction<AgentSummary[]>>;
   setSources: React.Dispatch<React.SetStateAction<SourceRecord[]>>;
   setPlaybooks: React.Dispatch<React.SetStateAction<PlaybookRecord[]>>;
@@ -60,6 +71,8 @@ export interface AppDataContextValue {
   setFailedRunNotices: React.Dispatch<React.SetStateAction<FailedRunNotice[]>>;
   newReportNotices: NewReportNotice[];
   setNewReportNotices: React.Dispatch<React.SetStateAction<NewReportNotice[]>>;
+  discussionNotices: DiscussionEventNotice[];
+  setDiscussionNotices: React.Dispatch<React.SetStateAction<DiscussionEventNotice[]>>;
   bellDismissedIds: Set<string>;
   setBellDismissedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   forceShowOnboarding: boolean;
@@ -95,6 +108,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [marketplacePlaybookCount, setMarketplacePlaybookCount] = useState(0);
   const [failedRunNotices, setFailedRunNotices] = useState<FailedRunNotice[]>([]);
   const [newReportNotices, setNewReportNotices] = useState<NewReportNotice[]>([]);
+  const [discussionNotices, setDiscussionNotices] = useState<DiscussionEventNotice[]>([]);
   const [bellDismissedIds, setBellDismissedIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('chattrader:bell:dismissed') ?? '[]')); } catch { return new Set(); }
   });
@@ -146,6 +160,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Marketplace data is best-effort and never blocks main data or triggers a sign-out —
+  // failures here just leave the marketplace lists empty.
+  async function refreshMarketplace() {
+    const [mkAgents, mkSources, mkPlaybooks] = await Promise.all([
+      listMarketplaceAgents().catch(() => [] as MarketplaceAgentListItem[]),
+      listMarketplaceSources().catch(() => [] as MarketplaceSourceListItem[]),
+      listMarketplacePlaybooks().catch(() => [] as MarketplacePlaybookListItem[])
+    ]);
+    setMarketplaceAgents(mkAgents);
+    setMarketplaceSources(mkSources);
+    setMarketplacePlaybooks(mkPlaybooks);
+    setMarketplaceAgentCount(mkAgents.length);
+    setMarketplaceSourceCount(mkSources.length);
+    setMarketplacePlaybookCount(mkPlaybooks.length);
+  }
+
   useEffect(() => {
     if (initialLoadRef.current) return;
     initialLoadRef.current = true;
@@ -187,18 +217,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }
 
         // Load marketplace data separately — don't block main data on this
-        Promise.all([
-          listMarketplaceAgents().catch(() => [] as MarketplaceAgentListItem[]),
-          listMarketplaceSources().catch(() => [] as MarketplaceSourceListItem[]),
-          listMarketplacePlaybooks().catch(() => [] as MarketplacePlaybookListItem[])
-        ]).then(([mkAgents, mkSources, mkPlaybooks]) => {
-          setMarketplaceAgents(mkAgents);
-          setMarketplaceSources(mkSources);
-          setMarketplacePlaybooks(mkPlaybooks);
-          setMarketplaceAgentCount(mkAgents.length);
-          setMarketplaceSourceCount(mkSources.length);
-          setMarketplacePlaybookCount(mkPlaybooks.length);
-        }).catch(() => { /* non-fatal */ });
+        refreshMarketplace().catch(() => { /* non-fatal */ });
       } catch (error) {
         if (isSignInRequiredError(error)) { await logout(); return; }
         setAgentsLoadState('error');
@@ -220,10 +239,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     playbooks, playbooksLoadState,
     marketplaceAgents, marketplaceSources, marketplacePlaybooks,
     marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
-    refreshAgents, refreshSources, refreshPlaybooks,
+    refreshAgents, refreshSources, refreshPlaybooks, refreshMarketplace,
     setAgents, setSources, setPlaybooks,
     failedRunNotices, setFailedRunNotices,
     newReportNotices, setNewReportNotices,
+    discussionNotices, setDiscussionNotices,
     bellDismissedIds, setBellDismissedIds,
     forceShowOnboarding, setForceShowOnboarding, forceShowGuidedWizard, setForceShowGuidedWizard,
     adminMode, setAdminMode

@@ -23,6 +23,11 @@ class InMemorySourceRepository implements SourceRepositoryLike, AccessRepository
   private readonly publications = new Map<string, MarketplaceSourceListItem>();
   private nextSourceId = 1;
   private nextPublicationId = 1;
+  readonly events: Array<{ userId: string; topic: string; entityId?: string }> = [];
+
+  private emit(userId: string, topic: string, entityId?: string) {
+    this.events.push({ userId, topic, entityId });
+  }
 
   async createSource(ownerUserId: string, input: CreateSourceInput): Promise<SourceRecord> {
     const source: SourceRecord = {
@@ -41,6 +46,7 @@ class InMemorySourceRepository implements SourceRepositoryLike, AccessRepository
       updatedAt: new Date('2026-07-13T00:00:00.000Z')
     };
     this.sources.set(source.id, source);
+    this.emit(ownerUserId, 'source.changed', source.id);
     return source;
   }
 
@@ -72,23 +78,28 @@ class InMemorySourceRepository implements SourceRepositoryLike, AccessRepository
       updatedAt: new Date('2026-07-13T01:00:00.000Z')
     };
     this.sources.set(sourceId, updated);
+    this.emit(updated.ownerUserId, 'source.changed', sourceId);
     return updated;
   }
 
   async deleteSource(sourceId: string): Promise<void> {
-    if (!this.sources.has(sourceId)) {
+    const existing = this.sources.get(sourceId);
+    if (!existing) {
       throw new Error('not_found');
     }
     this.sources.delete(sourceId);
+    this.emit(existing.ownerUserId, 'source.changed', sourceId);
   }
 
   async shareSource(sourceId: string, grantedByUserId: string, input: ShareSourceInput): Promise<void> {
-    if (!this.sources.has(sourceId)) {
+    const existing = this.sources.get(sourceId);
+    if (!existing) {
       throw new Error('not_found');
     }
     this.grants.add(`${input.granteeUserId}:${sourceId}:${input.permission}`);
     this.grants.add(`${input.granteeUserId}:${sourceId}:*`);
     this.grants.add(`${grantedByUserId}:${sourceId}:*`);
+    this.emit(existing.ownerUserId, 'source.changed', sourceId);
   }
 
   async publishSource(sourceId: string, publisherUserId: string, input: PublishSourceInput): Promise<MarketplaceSourceListItem> {
@@ -109,6 +120,8 @@ class InMemorySourceRepository implements SourceRepositoryLike, AccessRepository
       metadata: source.metadata
     };
     this.publications.set(publication.publicationId, publication);
+    this.emit(source.ownerUserId, 'source.changed', sourceId);
+    this.emit(source.ownerUserId, 'marketplace.changed', publication.publicationId);
     return publication;
   }
 
@@ -132,6 +145,7 @@ class InMemorySourceRepository implements SourceRepositoryLike, AccessRepository
       value: publication.value,
       metadata: publication.metadata
     });
+    this.emit(targetOwnerUserId, 'marketplace.changed', publicationId);
     return { source: cloned, cloned: true };
   }
 
@@ -139,6 +153,11 @@ class InMemorySourceRepository implements SourceRepositoryLike, AccessRepository
     const publication = [...this.publications.values()].find((row) => row.sourceId === sourceId && row.visibility === 'public');
     if (!publication) throw new Error('not_found');
     this.publications.set(publication.publicationId, { ...publication, visibility: 'private' });
+    const source = this.sources.get(sourceId);
+    if (source) {
+      this.emit(source.ownerUserId, 'source.changed', sourceId);
+      this.emit(source.ownerUserId, 'marketplace.changed', publication.publicationId);
+    }
   }
 
   async findOwnerUserId(_resourceType: 'agent' | 'source' | 'playbook', resourceId: string): Promise<string | null> {
@@ -300,6 +319,69 @@ describe('source routes', () => {
     expect(adminList.json<SourceRecord[]>()).toHaveLength(1);
   });
 
+  it('adds source-scoped report counts to the library list', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    const countReportsForSourceValues = vi.fn(async () => ({
+      'https://example.com/feed-a.xml': 2
+    }));
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      source: {
+        sourceRepository: sourceRepo,
+        accessResolver: new DomainAccessResolver(sourceRepo),
+        reportRepository: { listReportsForSource: vi.fn(async () => []), countReportsForSourceValues } as never
+      }
+    });
+
+    const createA = await app.inject({
+      method: 'POST',
+      url: '/api/sources',
+      headers: authCookieHeader(),
+      payload: { type: 'podcast_feeds', value: 'https://example.com/feed-a.xml' }
+    });
+    const sourceA = createA.json<SourceRecord>();
+    const createB = await app.inject({
+      method: 'POST',
+      url: '/api/sources',
+      headers: authCookieHeader(),
+      payload: { type: 'podcast_feeds', value: 'https://example.com/feed-b.xml' }
+    });
+    const sourceB = createB.json<SourceRecord>();
+
+    const response = await app.inject({ method: 'GET', url: '/api/sources', headers: authCookieHeader() });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: sourceA.id, reportCount: 2 }),
+      expect.objectContaining({ id: sourceB.id, reportCount: 0 })
+    ]));
+    expect(countReportsForSourceValues).toHaveBeenCalledWith([sourceA.value, sourceB.value]);
+  });
+
+  it('defaults every source report count to zero when no reportRepository is configured', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      source: { sourceRepository: sourceRepo, accessResolver: new DomainAccessResolver(sourceRepo) }
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/sources',
+      headers: authCookieHeader(),
+      payload: { type: 'web_urls', value: 'https://example.com' }
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/api/sources', headers: authCookieHeader() });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([expect.objectContaining({ reportCount: 0 })]);
+  });
+
   it('lists only reports whose runs actually reference the source (source-scoped, not agent-scoped)', async () => {
     const sourceRepo = new InMemorySourceRepository();
     const listReportsForSource = vi.fn(async (sourceValue: string) =>
@@ -314,7 +396,7 @@ describe('source routes', () => {
       source: {
         sourceRepository: sourceRepo,
         accessResolver: new DomainAccessResolver(sourceRepo),
-        reportRepository: { listReportsForSource } as never
+        reportRepository: { listReportsForSource, countReportsForSourceValues: vi.fn(async () => ({})) } as never
       }
     });
 
@@ -356,7 +438,7 @@ describe('source routes', () => {
       source: {
         sourceRepository: sourceRepo,
         accessResolver: new DomainAccessResolver(sourceRepo),
-        reportRepository: { listReportsForSource } as never
+        reportRepository: { listReportsForSource, countReportsForSourceValues: vi.fn(async () => ({})) } as never
       }
     });
 
@@ -430,6 +512,126 @@ describe('source routes', () => {
     const cloneBody = cloneRes.json<CloneSourceResult>();
     expect(cloneBody.cloned).toBe(true);
     expect(cloneBody.source.ownerUserId).toBe(teammate.id);
+
+    expect(sourceRepo.events).toContainEqual(expect.objectContaining({ userId: owner.id, topic: 'source.changed' }));
+    expect(sourceRepo.events).toContainEqual(expect.objectContaining({ userId: teammate.id, topic: 'source.changed' }));
+    expect(sourceRepo.events).toContainEqual(expect.objectContaining({ userId: owner.id, topic: 'marketplace.changed' }));
+    expect(sourceRepo.events).toContainEqual(expect.objectContaining({ userId: teammate.id, topic: 'marketplace.changed' }));
+  });
+
+  it('emits source.changed for a newly created source owner', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      source: { sourceRepository: sourceRepo, accessResolver: new DomainAccessResolver(sourceRepo) }
+    });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/sources',
+      headers: authCookieHeader(),
+      payload: { type: 'podcast_feeds', value: 'https://example.com/feed.xml' }
+    });
+    expect(createRes.statusCode).toBe(201);
+
+    expect(sourceRepo.events).toContainEqual(
+      expect.objectContaining({ userId: 'test-user', topic: 'source.changed' })
+    );
+  });
+
+  it('emits source.changed and marketplace.changed after a successful marketplace clone', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner2@example.com', 'hash', 'Owner', 'user');
+    const requester = await userRepository.createWithPassword('requester@example.com', 'hash', 'Requester', 'user');
+    await userRepository.setEmailVerified(owner.id, true);
+    await userRepository.setEmailVerified(requester.id, true);
+
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: { ...createTestAuthDeps(), userRepository },
+      source: { sourceRepository: sourceRepo, accessResolver: new DomainAccessResolver(sourceRepo) }
+    });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/sources',
+      headers: authCookieHeader(owner.id),
+      payload: { type: 'youtube_videos', value: 'https://www.youtube.com/@clonable', metadata: { title: 'Clonable Channel' } }
+    });
+    const source = createRes.json<SourceRecord>();
+
+    const publishRes = await app.inject({
+      method: 'POST',
+      url: `/api/sources/${source.id}/publish`,
+      headers: authCookieHeader(owner.id),
+      payload: { title: 'Clonable Pack', summary: 'Clonable', visibility: 'public' } satisfies PublishSourceInput
+    });
+    const publication = publishRes.json<MarketplaceSourceListItem>();
+
+    sourceRepo.events.length = 0;
+
+    const cloneRes = await app.inject({
+      method: 'POST',
+      url: `/api/sources/marketplace/${publication.publicationId}/clone`,
+      headers: authCookieHeader(requester.id)
+    });
+    expect(cloneRes.statusCode).toBe(201);
+    expect(cloneRes.json<CloneSourceResult>().cloned).toBe(true);
+
+    expect(sourceRepo.events).toContainEqual(
+      expect.objectContaining({ userId: requester.id, topic: 'source.changed' })
+    );
+    expect(sourceRepo.events).toContainEqual(
+      expect.objectContaining({ userId: requester.id, topic: 'marketplace.changed' })
+    );
+    expect(sourceRepo.events.every((event) => event.userId === requester.id)).toBe(true);
+  });
+
+  it('does not emit realtime events for failed, denied, not-found or already-cloned requests', async () => {
+    const sourceRepo = new InMemorySourceRepository();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner3@example.com', 'hash', 'Owner', 'user');
+    const other = await userRepository.createWithPassword('other3@example.com', 'hash', 'Other', 'user');
+    await userRepository.setEmailVerified(owner.id, true);
+    await userRepository.setEmailVerified(other.id, true);
+
+    const source = await sourceRepo.createSource(owner.id, { type: 'web_urls', value: 'https://example.com' });
+    sourceRepo.events.length = 0;
+
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: { ...createTestAuthDeps(), userRepository },
+      source: { sourceRepository: sourceRepo, accessResolver: new DomainAccessResolver(sourceRepo) }
+    });
+
+    const denied = await app.inject({
+      method: 'PATCH',
+      url: `/api/sources/${source.id}`,
+      headers: authCookieHeader(other.id),
+      payload: { value: 'https://example.com/blocked.xml' }
+    });
+    expect(denied.statusCode).toBe(403);
+
+    const notFound = await app.inject({
+      method: 'DELETE',
+      url: '/api/sources/does-not-exist',
+      headers: authCookieHeader(owner.id)
+    });
+    expect(notFound.statusCode).toBe(404);
+
+    const cloneNotFound = await app.inject({
+      method: 'POST',
+      url: '/api/sources/marketplace/does-not-exist/clone',
+      headers: authCookieHeader(other.id)
+    });
+    expect(cloneNotFound.statusCode).toBe(404);
+
+    expect(sourceRepo.events).toHaveLength(0);
   });
 
   it('supports unpublish for source marketplace publications', async () => {

@@ -49,8 +49,8 @@ import { TouchSafeTooltip } from '../components/TouchSafeTooltip';
 import { ListenActiveButton, ListenIdleButton } from '../components/ListenButtons';
 import { SymbolPerformancePage } from './SymbolPerformancePage';
 import { seedDemoData } from '../api/admin';
-import { useAgentStream } from '../hooks/useAgentStream';
 import { useAppData } from '../context/AppDataContext';
+import { useRealtimeSubscription } from '../context/RealtimeContext';
 import {
   createAgent,
   deleteAgent,
@@ -69,7 +69,7 @@ import {
   type ForcedEpisodeSelection,
   type RunDetailDto
 } from '../api/agents';
-import { getLatestAgentPrompt, listAgentReports, type PromptVersionDto, type RunReportDto } from '../api/agents';
+import { dismissReport, getLatestAgentPrompt, listAgentReports, markReportRead, type PromptVersionDto, type RunReportDto } from '../api/agents';
 import { grantAgentAccess, listAgentAccessGrants } from '../api/access';
 import type { DiscussionPreselect } from '../api/discussions';
 import { getCharacterTypeColor, getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
@@ -168,14 +168,6 @@ interface AutoDetectedSource {
   itemCount?: number;
   previewItems: Array<{ title: string; link: string | null; pubDate: string | null }>;
 }
-
-const GUIDED_SUGGESTED_SOURCE: AutoDetectedSource = {
-  type: 'youtube_videos',
-  url: 'https://www.youtube.com/playlist?list=PLdPrKDvwrog6nXguUXjQcTIw685Xa6Bg5',
-  kind: 'listing_page',
-  title: 'Lanz & Precht',
-  previewItems: []
-};
 
 function GhostCreateCard({
   ariaLabel,
@@ -543,7 +535,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [guidedWizardOpen, setGuidedWizardOpen] = useState(false);
   const [guidedWizardUrl, setGuidedWizardUrl] = useState('');
   const [guidedWizardDetecting, setGuidedWizardDetecting] = useState(false);
-  const [guidedWizardSource, setGuidedWizardSource] = useState<AutoDetectedSource>(GUIDED_SUGGESTED_SOURCE);
+  const [guidedWizardSource, setGuidedWizardSource] = useState<AutoDetectedSource | null>(null);
   const [guidedWizardPersonaId, setGuidedWizardPersonaId] = useState('finance_expert');
   const [guidedWizardRunning, setGuidedWizardRunning] = useState(false);
   const [guidedWizardDismissed, setGuidedWizardDismissed] = useState(() =>
@@ -720,7 +712,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       })
     ).then((nested) => {
       if (!alive) return;
-      const flat = nested.flat().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const flat = nested.flat().filter((report) => !report.dismissedAt).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setFeedReports(flat);
       setFeedLoading(false);
     }).catch(() => { if (alive) setFeedLoading(false); });
@@ -784,13 +776,57 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const selectedPlaybook = playbooks.find((playbook) => playbook.id === selectedPlaybookId) ?? null;
   const executionAgentId = selectedPlaybook?.agentId ?? null;
 
-  // SSE stream — replaces the old 4s polling interval
-  const { runs, setRuns, reports, setReports } = useAgentStream(executionAgentId);
+  // REST-loaded runs/reports for the execution agent, kept live by the global
+  // `run.changed`/`report.changed` realtime subscription below instead of a per-agent
+  // EventSource (`/api/agents/:id/stream`, now removed).
+  const [runs, setRuns] = useState<RunDetailDto[]>([]);
+  const [reports, setReports] = useState<RunReportDto[]>([]);
+
+  const reloadExecutionAgentData = useCallback(async () => {
+    if (!executionAgentId) {
+      setRuns([]);
+      setReports([]);
+      return;
+    }
+    try {
+      const [nextRuns, nextReports] = await Promise.all([
+        listAgentRuns(executionAgentId),
+        listAgentReports(executionAgentId)
+      ]);
+      setRuns(nextRuns);
+      setReports(nextReports);
+    } catch {
+      // Keep the last known snapshot on transient failure; the next matching realtime
+      // event or an agent switch will retry the fetch.
+    }
+  }, [executionAgentId]);
+
+  useEffect(() => {
+    reloadExecutionAgentData();
+  }, [reloadExecutionAgentData]);
+
+  // Replaces the old per-agent stream: reload only when the changed run/report's agentId
+  // (present on run.changed/report.changed events since the backend event payload was
+  // extended to carry it) matches the execution agent currently being viewed, so other
+  // agents' activity elsewhere in the account doesn't trigger extra fetches here. This
+  // works uniformly for brand-new runs/reports too (entityId alone couldn't identify a
+  // not-yet-loaded run/report, but agentId is stamped on the event regardless).
+  useRealtimeSubscription(['run.changed', 'report.changed'], (event) => {
+    if (event.topic === 'resync') {
+      reloadExecutionAgentData();
+      return;
+    }
+    if (!executionAgentId) return;
+    if (event.agentId === executionAgentId) {
+      reloadExecutionAgentData();
+    }
+  });
+
   const selectedPlaybookReports = selectedPlaybook
     ? reports.filter((report) => report.playbookId === selectedPlaybook.id)
     : reports;
 
-  // Accumulate failed runs into the bell notification centre (driven by SSE updates)
+  // Accumulate failed runs into the bell notification centre (driven by realtime updates)
   useEffect(() => {
     const failedRuns = runs.filter((r) => r.status === 'failed');
     if (failedRuns.length === 0) return;
@@ -807,7 +843,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }, [runs]);
 
   // Accumulate newly-created reports into the bell notification centre too (driven by the
-  // same SSE stream), so users don't have to keep an agent selected/open to notice new output.
+  // same realtime-refreshed data), so users don't have to keep an agent selected/open to
+  // notice new output.
   useEffect(() => {
     if (reports.length === 0) return;
     const executionAgent = agents.find((agent) => agent.id === executionAgentId);
@@ -855,14 +892,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     return () => { alive = false; };
   }, [selectedSourceId, playbooks, sourceDetailRefreshKey]);
 
-  // While a run is in progress, immediately show the queued run then poll every 5 s so
-  // the Runs tab stays live without requiring a page reload.
-  useEffect(() => {
-    if (!runningAgentId) return;
-    setSourceDetailRefreshKey((k) => k + 1);
-    const id = setInterval(() => setSourceDetailRefreshKey((k) => k + 1), 5000);
-    return () => clearInterval(id);
-  }, [runningAgentId]);
+  // Refresh the selected source's detail runs/reports only when its own source record
+  // changes — replaces the previous 5s polling interval that ran for as long as any
+  // agent run was in progress.
+  useRealtimeSubscription(['source.changed'], (event) => {
+    if (!selectedSourceId) return;
+    if (event.topic === 'resync' || event.entityId === selectedSourceId) {
+      setSourceDetailRefreshKey((k) => k + 1);
+    }
+  });
 
   useEffect(() => {
     if (!selectedAgentId) {
@@ -908,7 +946,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   async function executeRun(agent: AgentSummary, forcedEpisode?: ForcedEpisodeSelection) {
     setRunningAgentId(agent.id);
-    // SSE stream drives live updates; no manual polling re-arm needed
+    // Realtime `run.changed`/`report.changed` events drive live updates elsewhere on the
+    // page; explicitly reload here too so the panel for this agent (when it's also the
+    // currently viewed execution agent) reflects the just-finished run without waiting on
+    // the realtime delivery round-trip.
     try {
       const result = await runAgentNow(agent.id, forcedEpisode);
       if (result.status === 'failed') {
@@ -918,6 +959,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       } else {
         message.success('Agent run completed');
         setSourceDetailRefreshKey((k) => k + 1);
+      }
+      if (result.status !== 'no_run_claimed' && agent.id === executionAgentId) {
+        await reloadExecutionAgentData();
       }
       await refreshAgents();
     } catch (err) {
@@ -1334,6 +1378,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   /** Opens the shared full-report drawer (report + stats + chat) from any tab. */
   function openReportDrawer(report: RunReportDto & Partial<{ agentName: string; playbookName: string }>) {
+    markFeedReportRead(report);
     const reportAgent = agents.find((a) => a.id === report.agentId);
     const playbook = report.playbookId ? playbooks.find((p) => p.id === report.playbookId) : undefined;
     setViewingFullReport({
@@ -1341,6 +1386,20 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       agentName: report.agentName ?? (reportAgent ? getAgentDisplayLabel(reportAgent) : ''),
       playbookName: report.playbookName ?? playbook?.name ?? ''
     });
+  }
+
+  /** Marks a report as read (optimistically in the feed, persisted via the API). */
+  function markFeedReportRead(report: Pick<RunReportDto, 'id' | 'agentId' | 'readAt'>) {
+    if (report.readAt) return;
+    const readAt = new Date().toISOString();
+    setFeedReports((prev) => prev.map((r) => (r.id === report.id ? { ...r, readAt } : r)));
+    markReportRead(report.agentId, report.id).catch(() => undefined);
+  }
+
+  /** Hides a report from the feed (optimistically, persisted via the API). It stays in the Library's report lists. */
+  function dismissFeedReport(report: Pick<RunReportDto, 'id' | 'agentId'>) {
+    setFeedReports((prev) => prev.filter((r) => r.id !== report.id));
+    dismissReport(report.agentId, report.id).catch(() => undefined);
   }
 
   async function onEditSource(source: SourceRecord) {
@@ -1964,9 +2023,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                           sourceTitle={source ? getSourceDisplayTitle(source) : report.playbookName}
                                           sourceCoverImageUrl={(source ? getSourceCoverImageUrl(source) : null) ?? getReportEpisodeThumbnailUrl(report)}
                                           isSyntheticSource={source?.type === 'synthetic_discussion'}
-                                          onOpenFullReport={() => setViewingFullReport(report)}
+                                          onOpenFullReport={() => openReportDrawer(report)}
                                           onOpenSource={source ? () => openSourceInLibrary(source) : undefined}
                                           onDiscuss={() => openDiscussionFromReport(report)}
+                                          onDismiss={() => dismissFeedReport(report)}
                                         />
                                       );
                                     })}
@@ -2177,7 +2237,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                    />
                                  ) : (
                                    <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-muted-foreground">
-                                     Cover unavailable
+                                     {t('library.coverUnavailable')}
                                    </div>
                                  )}
                                  <div className="min-w-0">
@@ -2187,7 +2247,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      <SourceTypeBadge type={item.type} />
                                      <Tag>{getSourceKindLabel(src)}</Tag>
                                      {(item.type === 'podcast_feeds' || item.type === 'youtube_videos') ? (
-                                       <Tag color="blue">Episodes: {getSourceEpisodeCount(src)}</Tag>
+                                       <Tag color="purple">{t('library.episodes', { count: getSourceEpisodeCount(src) })}</Tag>
                                      ) : null}
                                    </div>
                                  </div>
@@ -2195,7 +2255,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                <div className="mt-3 text-xs text-muted-foreground">
                                  {item.metadata.previewItems.length > 0 ? (
                                    <>
-                                     <div className="mb-1 font-medium">Recent episodes preview</div>
+                                     <div className="mb-1 font-medium">{t('library.recentEpisodes')}</div>
                                      <ul className="list-inside list-disc space-y-1">
                                        {item.metadata.previewItems.slice(0, 3).map((pi) => (
                                          <li key={`${item.publicationId}:${pi.link ?? pi.title}`}>{pi.title}</li>
@@ -2203,7 +2263,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      </ul>
                                    </>
                                  ) : (
-                                   'No scanned episodes/items yet'
+                                   t('library.noEpisodes')
                                  )}
                                </div>
                              </Card>
@@ -2257,15 +2317,27 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          extra={
                            <div className="flex items-center gap-2">
                              {linkedPlaybooks.length > 0 && (selectedSource.type !== 'youtube_videos' && selectedSource.type !== 'podcast_feeds') ? (
-                               <Button
-                                 type="primary"
-                                 loading={runningAgentId === linkedPlaybooks[0]?.agentId}
-                                 icon={<CaretRightOutlined />}
-                                 onClick={() => void onRunSourceEpisode(undefined)}
-                               >
-                                 <span className="hidden sm:inline">{t('library.runAnalysisNow')}</span>
-                               </Button>
+                               <TouchSafeTooltip title={t('library.analyzeNewContentHelp')}>
+                                 <Button
+                                   type="primary"
+                                   loading={runningAgentId === linkedPlaybooks[0]?.agentId}
+                                   icon={<CaretRightOutlined />}
+                                   onClick={() => void onRunSourceEpisode(undefined)}
+                                 >
+                                   <span className="hidden sm:inline">{t('library.analyzeNewContent')}</span>
+                                 </Button>
+                               </TouchSafeTooltip>
                              ) : null}
+                             <TouchSafeTooltip title={t('library.addAgent')}>
+                               <Button
+                                 type="dashed"
+                                 shape="circle"
+                                 size="large"
+                                 aria-label={t('library.addAgent')}
+                                 icon={<PlusOutlined />}
+                                 onClick={(event) => onFollowSource(selectedSource, event)}
+                               />
+                             </TouchSafeTooltip>
                              {sourceDetailReports.length > 0 ? (
                                <TouchSafeTooltip title={t('studio.discussThisSource')}>
                                  <Button
@@ -2304,31 +2376,40 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            try { hostname = new URL(selectedSource.value).hostname; } catch { hostname = selectedSource.value; }
                            return (
                              <>
-                             <div className="flex gap-4 mb-4 pb-4 border-b border-border">
+                             <div className="flex flex-col sm:flex-row gap-4 mb-4 pb-4 border-b border-border">
                                {coverUrl ? (
-                                 <img src={coverUrl} alt="" className="h-24 w-24 shrink-0 rounded-xl object-cover shadow-sm ring-1 ring-gray-200 dark:ring-gray-700" />
+                                 <img src={coverUrl} alt="" className="w-full sm:w-24 h-auto sm:h-24 shrink-0 rounded-xl object-cover shadow-sm ring-1 ring-gray-200 dark:ring-gray-700" />
                                ) : (
-                                 <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-muted text-4xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700">
+                                 <div className="flex h-24 w-full sm:w-24 sm:h-24 shrink-0 items-center justify-center rounded-xl bg-muted text-4xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700">
                                    {selectedSource.type === 'youtube_videos' ? '📺' : selectedSource.type === 'podcast_feeds' ? '🎙' : '🌐'}
                                  </div>
                                )}
                                <div className="min-w-0 flex-1">
-                                 <a
-                                   href={selectedSource.value}
-                                   target="_blank"
-                                   rel="noopener noreferrer"
-                                   className="text-sm text-[#9d6fe8] hover:underline flex items-center gap-1"
-                                   onClick={(e) => e.stopPropagation()}
-                                 >
-                                   {hostname} <LinkOutlined className="text-xs" />
-                                 </a>
+                                 {selectedSource.type !== 'synthetic_discussion' ? (
+                                   <a
+                                     href={selectedSource.value}
+                                     target="_blank"
+                                     rel="noopener noreferrer"
+                                     className="text-sm text-[#9d6fe8] hover:underline flex items-center gap-1"
+                                     onClick={(e) => e.stopPropagation()}
+                                   >
+                                     {hostname} <LinkOutlined className="text-xs" />
+                                   </a>
+                                 ) : null}
                                  {episodeCount > 0 ? (
                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                     {selectedSource.type === 'youtube_videos'
-                                       ? t('library.countVideos', { count: episodeCount })
-                                       : selectedSource.type === 'podcast_feeds'
-                                         ? t('library.countEpisodes', { count: episodeCount })
-                                         : t('library.countPages', { count: episodeCount })}
+                                     {selectedSource.type === 'synthetic_discussion'
+                                       ? [
+                                           t('library.materialTranscripts', { count: episodeCount }),
+                                           (selectedSource.metadata.audioCount ?? 0) > 0
+                                             ? t('library.materialAudio', { count: selectedSource.metadata.audioCount })
+                                             : null
+                                         ].filter(Boolean).join(' · ')
+                                       : selectedSource.type === 'youtube_videos'
+                                         ? t('library.countVideos', { count: episodeCount })
+                                         : selectedSource.type === 'podcast_feeds'
+                                           ? t('library.countEpisodes', { count: episodeCount })
+                                           : t('library.countPages', { count: episodeCount })}
                                    </p>
                                  ) : null}
                                  {selectedSource.type === 'youtube_videos' ? (
@@ -2494,19 +2575,19 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                              const videoId = selectedSource.type === 'youtube_videos' ? extractYoutubeVideoId(ep.link) : null;
                                              const episodeReport = findEpisodeReport(ep.link);
                                              return (
-                                               <li key={ep.link} className="flex items-center gap-3 py-2.5">
+                                               <li key={ep.link} className="flex flex-col sm:flex-row sm:items-center gap-3 py-2.5">
                                                  {videoId ? (
                                                    <img
                                                      src={getYoutubeThumbnailUrl(videoId, 'mqdefault')}
                                                      alt=""
-                                                     className="w-16 h-11 rounded object-cover flex-shrink-0 bg-muted"
+                                                     className="w-full sm:w-16 h-auto sm:h-11 rounded object-cover flex-shrink-0 bg-muted sm:max-w-16"
                                                    />
                                                  ) : null}
                                                  <div className="min-w-0 flex-1">
-                                                   <div className="flex items-center gap-2 min-w-0">
+                                                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
                                                      <span className="truncate text-sm font-medium">{ep.title}</span>
                                                      {episodeReport ? (
-                                                       <Tag className="m-0 shrink-0 border-0 bg-emerald-100 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200">
+                                                       <Tag className="m-0 shrink-0 border-0 bg-emerald-100 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200 w-fit">
                                                          ✓ {t('library.analyzedBadge')}
                                                        </Tag>
                                                      ) : null}
@@ -2517,46 +2598,105 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                      </div>
                                                    ) : null}
                                                  </div>
-                                                 {episodeReport ? (
-                                                   <TouchSafeTooltip title={t('library.openReport')}>
-                                                     <Button
-                                                       size="small"
-                                                       shape="circle"
-                                                       aria-label={t('library.openReport')}
-                                                       icon={<ReadOutlined />}
-                                                       onClick={() => openReportDrawer(episodeReport)}
-                                                     />
-                                                   </TouchSafeTooltip>
-                                                 ) : null}
-                                                 {ep.link ? (
-                                                   <TouchSafeTooltip title={t('library.openLink')}>
-                                                     <Button
-                                                       size="small"
-                                                       shape="circle"
-                                                       aria-label={t('library.openLink')}
-                                                       icon={<LinkOutlined />}
-                                                       href={ep.link}
-                                                       target="_blank"
-                                                       rel="noopener noreferrer"
-                                                       onClick={(e) => e.stopPropagation()}
-                                                     />
-                                                   </TouchSafeTooltip>
-                                                 ) : null}
-                                                 {linkedAgent && !episodeReport ? (
-                                                   <TouchSafeTooltip title={t('library.runAnalysisNow')}>
-                                                     <Button
-                                                       size="small"
-                                                       shape="circle"
-                                                       aria-label={t('library.runAnalysisNow')}
-                                                       icon={<CaretRightOutlined />}
-                                                       loading={runningAgentId === linkedAgent.id}
-                                                       onClick={() => void onRunSourceEpisode({ title: ep.title, link: ep.link!, pubDate: ep.pubDate })}
-                                                     />
-                                                   </TouchSafeTooltip>
-                                                 ) : null}
+                                                 <div className="flex gap-1 shrink-0">
+                                                   {episodeReport ? (
+                                                     <TouchSafeTooltip title={t('library.openReport')}>
+                                                       <Button
+                                                         size="small"
+                                                         shape="circle"
+                                                         aria-label={t('library.openReport')}
+                                                         icon={<ReadOutlined />}
+                                                         onClick={() => openReportDrawer(episodeReport)}
+                                                       />
+                                                     </TouchSafeTooltip>
+                                                   ) : null}
+                                                   {ep.link ? (
+                                                     <TouchSafeTooltip title={t('library.openLink')}>
+                                                       <Button
+                                                         size="small"
+                                                         shape="circle"
+                                                         aria-label={t('library.openLink')}
+                                                         icon={<LinkOutlined />}
+                                                         href={ep.link}
+                                                         target="_blank"
+                                                         rel="noopener noreferrer"
+                                                         onClick={(e) => e.stopPropagation()}
+                                                       />
+                                                     </TouchSafeTooltip>
+                                                   ) : null}
+                                                   {linkedAgent && !episodeReport ? (
+                                                     <TouchSafeTooltip title={t('library.runAnalysisNow')}>
+                                                       <Button
+                                                         size="small"
+                                                         shape="circle"
+                                                         aria-label={t('library.runAnalysisNow')}
+                                                         icon={<CaretRightOutlined />}
+                                                         loading={runningAgentId === linkedAgent.id}
+                                                         onClick={() => void onRunSourceEpisode({ title: ep.title, link: ep.link!, pubDate: ep.pubDate })}
+                                                       />
+                                                     </TouchSafeTooltip>
+                                                   ) : null}
+                                                 </div>
                                                </li>
                                              );
                                            })}
+                                         </ul>
+                                       );
+                                     })()
+                                   }]
+                                 : []),
+                               ...(selectedSource.type === 'synthetic_discussion'
+                                 ? [{
+                                     key: 'material',
+                                     label: (
+                                       <span className="flex items-center gap-1.5">
+                                         {t('library.materialTab')}
+                                         {selectedSource.metadata.previewItems.length > 0 ? (
+                                           <Badge count={selectedSource.metadata.itemCount ?? selectedSource.metadata.previewItems.length} color="purple" size="small" overflowCount={99} />
+                                         ) : null}
+                                       </span>
+                                     ),
+                                     children: (() => {
+                                       const materialItems = selectedSource.metadata.previewItems;
+                                       const discussionId = typeof selectedSource.config.discussionId === 'string' ? selectedSource.config.discussionId : null;
+                                       return materialItems.length === 0 ? (
+                                         <Empty description={<span className="text-sm text-muted-foreground">{t('library.noRuns')}</span>} />
+                                       ) : (
+                                         <ul className="divide-y divide-border" data-testid="library-material-list">
+                                           {materialItems.map((item) => (
+                                             <li key={item.link ?? item.title} className="flex items-center gap-3 py-2.5">
+                                               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-base dark:bg-violet-950/40">📄</div>
+                                               <div className="min-w-0 flex-1">
+                                                 <div className="flex min-w-0 items-center gap-2">
+                                                   <span className="truncate text-sm font-medium">{item.title}</span>
+                                                   <Tag className="m-0 shrink-0 border-0 bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">
+                                                     {t('library.materialTranscriptBadge')}
+                                                   </Tag>
+                                                   {item.hasAudio ? (
+                                                     <Tag className="m-0 shrink-0 border-0 bg-violet-100 text-[10px] font-semibold text-violet-700 dark:bg-violet-950/70 dark:text-violet-200">
+                                                       🔊 {t('library.materialAudioBadge')}
+                                                     </Tag>
+                                                   ) : null}
+                                                 </div>
+                                                 {item.pubDate ? (
+                                                   <div className="mt-0.5 text-xs text-muted-foreground">
+                                                     {new Date(item.pubDate).toLocaleDateString(i18n.language)}
+                                                   </div>
+                                                 ) : null}
+                                               </div>
+                                               {discussionId ? (
+                                                 <TouchSafeTooltip title={t('library.openDiscussion')}>
+                                                   <Button
+                                                     size="small"
+                                                     shape="circle"
+                                                     aria-label={t('library.openDiscussion')}
+                                                     icon={<CaretRightOutlined />}
+                                                     onClick={() => navigate(`/studio/${discussionId}`)}
+                                                   />
+                                                 </TouchSafeTooltip>
+                                               ) : null}
+                                             </li>
+                                           ))}
                                          </ul>
                                        );
                                      })()
@@ -2658,9 +2798,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            return agent ? { playbook, agent } : null;
                          })
                          .filter((link): link is { playbook: PlaybookRecord; agent: AgentSummary } => Boolean(link));
-                       const cardAgentIds = new Set(cardAgentLinks.map(({ agent }) => agent.id));
-                       const cardReports = feedReports.filter((report) => cardAgentIds.has(report.agentId));
-                       const latestCardReport = cardReports[0];
+                       const cardReportCount = source.reportCount ?? 0;
+                       const hasCardReports = cardReportCount > 0;
                        const coverImageUrl = getSourceCoverImageUrl(source);
                        return (
                        <Card
@@ -2731,6 +2870,18 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              )}
                            </div>
                          <div className="mt-4 text-xs">
+                           {source.type === 'synthetic_discussion' && (source.metadata.itemCount ?? source.metadata.previewItems.length) > 0 ? (
+                             <div className="mb-2 flex flex-wrap gap-1.5" data-testid="library-material-chips">
+                               <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:border-slate-600/60 dark:bg-slate-800/60 dark:text-slate-200">
+                                 📄 {t('library.materialTranscripts', { count: source.metadata.itemCount ?? source.metadata.previewItems.length })}
+                               </span>
+                               {(source.metadata.audioCount ?? 0) > 0 ? (
+                                 <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50/80 px-2 py-0.5 text-[11px] font-medium text-violet-800 dark:border-violet-500/30 dark:bg-violet-950/40 dark:text-violet-200">
+                                   🔊 {t('library.materialAudio', { count: source.metadata.audioCount })}
+                                 </span>
+                               ) : null}
+                             </div>
+                           ) : null}
                            {source.metadata.previewItems.length > 0 ? (
                              <>
                                <div className="mb-1 font-medium text-muted-foreground">
@@ -2738,7 +2889,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                </div>
                                <ul className="space-y-1 text-foreground">
                                  {source.metadata.previewItems.slice(0, 2).map((item) => (
-                                   <li key={`${source.id}:${item.link ?? item.title}`} className="truncate">▶ {item.title}</li>
+                                   <li key={`${source.id}:${item.link ?? item.title}`} className="truncate">
+                                     ▶ {item.title}
+                                     {item.hasAudio ? <span className="ml-1" title={t('library.materialHasAudio')} aria-label={t('library.materialHasAudio')}>🔊</span> : null}
+                                   </li>
                                  ))}
                                </ul>
                              </>
@@ -2753,11 +2907,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              type="text"
                              block
                              className={`h-auto rounded-lg border px-3 py-2 text-left ${
-                               latestCardReport
+                               hasCardReports
                                  ? 'border-violet-200 bg-violet-50/70 hover:!border-violet-300 hover:!bg-violet-100/70 dark:border-violet-500/30 dark:bg-violet-950/30 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/50'
                                  : 'border-dashed border-border bg-muted/30 hover:!border-violet-300 hover:!bg-violet-50/50 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/30'
                              }`}
-                             aria-label={latestCardReport ? t('library.openReports', { count: cardReports.length }) : t('library.noReportsYet')}
+                             aria-label={hasCardReports ? t('library.openReports', { count: cardReportCount }) : t('library.noReportsYet')}
                              onClick={() => {
                                setRecentlyUpdatedSourceId(null);
                                setSelectedSourceId(source.id);
@@ -2766,24 +2920,17 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                            >
                              <span className="flex items-center gap-2">
                                <CheckCircleOutlined
-                                 className={latestCardReport ? 'text-emerald-500 dark:text-emerald-400' : 'text-muted-foreground'}
+                                 className={hasCardReports ? 'text-emerald-500 dark:text-emerald-400' : 'text-muted-foreground'}
                                />
                                <span className="min-w-0 flex-1">
                                  <span className="block text-xs font-semibold text-foreground">
-                                   {latestCardReport ? t('library.reportsAvailable', { count: cardReports.length }) : t('library.noReportsYet')}
+                                   {hasCardReports ? t('library.reportsAvailable', { count: cardReportCount }) : t('library.noReportsYet')}
                                  </span>
                                  <span className="block truncate text-[11px] text-muted-foreground">
-                                   {latestCardReport
-                                     ? t('library.latestReportAt', {
-                                         date: new Date(latestCardReport.createdAt).toLocaleDateString(i18n.language, {
-                                           day: 'numeric',
-                                           month: 'short'
-                                         })
-                                       })
-                                     : t('library.reportsWillAppearHere')}
+                                   {hasCardReports ? t('library.sourceReportsAvailableHint') : t('library.reportsWillAppearHere')}
                                  </span>
                                </span>
-                               {latestCardReport ? <span className="text-base text-violet-500 dark:text-violet-300">›</span> : null}
+                               {hasCardReports ? <span className="text-base text-violet-500 dark:text-violet-300">›</span> : null}
                              </span>
                            </Button>
                          </div>
@@ -3612,7 +3759,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             ].filter((stat) => stat.value !== null);
             if (stats.length === 0) return null;
             return (
-              <div className="grid grid-cols-2 gap-4 border-b border-border px-6 py-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-b border-border px-6 py-4">
                 {stats.map((stat) => (
                   <div key={stat.key}>
                     <div className="flex items-baseline justify-between text-[11px]">
@@ -3711,13 +3858,13 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                         />
                       ) : (
                         <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
-                          Cover unavailable
+                          {t('library.coverUnavailable')}
                         </div>
                       )}
                       <div className="min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div className="text-sm font-semibold">{getSourceDisplayTitle(source)}</div>
-                          {selected ? <Tag color="blue">Selected</Tag> : null}
+                          {selected ? <Tag color="purple">{t('common.selected')}</Tag> : null}
                         </div>
                         <Text type="secondary" className="text-xs">
                           {source.value}
@@ -3726,7 +3873,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           <SourceTypeBadge type={source.type} />
                           <Tag>{getSourceKindLabel(source)}</Tag>
                           {(source.type === 'podcast_feeds' || source.type === 'youtube_videos') ? (
-                            <Tag color="blue">Episodes: {getSourceEpisodeCount(source)}</Tag>
+                            <Tag color="purple">{t('library.episodes', { count: getSourceEpisodeCount(source) })}</Tag>
                           ) : null}
                         </div>
                       </div>
@@ -3735,7 +3882,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                       {source.metadata.previewItems.length > 0 ? (
                         <>
                           <div className="mb-1 font-medium">
-                            {selected ? 'Episodes preview' : 'Recent episodes preview'}
+                            {selected ? t('library.episodesPreview') : t('library.recentEpisodes')}
                           </div>
                           <ul className="list-inside list-disc space-y-1">
                             {(selected ? source.metadata.previewItems : source.metadata.previewItems.slice(0, 3)).map((item) => (
@@ -3744,7 +3891,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           </ul>
                         </>
                       ) : (
-                        'No scanned episodes/items yet'
+                        t('library.noEpisodes')
                       )}
                     </div>
                   </WizardSelectableCard>
@@ -3803,7 +3950,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           {isFocused ? (
-                            <Tag color="blue" className="m-0 text-xs">{t('common.editing') || 'Editing'}</Tag>
+                            <Tag color="purple" className="m-0 text-xs">{t('common.editing') || 'Editing'}</Tag>
                           ) : (
                             <InlineDeleteButton
                                 ariaLabel={`Delete agent ${getAgentDisplayLabel(agent)}`}
@@ -3882,7 +4029,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           <BulbOutlined />
                           {t('agent.chooseCharacter')}
                         </div>
-                        <div className="grid gap-2 md:grid-cols-3">
+                        <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
                           {PROMPT_PERSONAS.map((persona) => (
                             <button
                               key={persona.id}
@@ -3915,7 +4062,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           {t('agent.choosePersonality')}
                           <span className="ml-1 font-normal text-muted-foreground">{t('agent.forCharacter', { character: inlinePersonaLabel })}</span>
                         </div>
-                        <div className="grid gap-2 md:grid-cols-3">
+                        <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
                           {inlineChars.map((char) => (
                             <button
                               key={char.id}
@@ -3936,7 +4083,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           {/* Report detail level picker */}
                           <div>
                             <p className="mb-2 text-xs text-muted-foreground">{t('report.detail.label')}</p>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                               {([
                                 { id: 'brief' as const, label: t('report.detail.brief'), desc: t('report.detail.briefDesc'), icon: '⚡' },
                                 { id: 'standard' as const, label: t('report.detail.standard'), desc: t('report.detail.standardDesc'), icon: '📊' },
@@ -4316,7 +4463,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       />
       {/* Agent picker: shown when multiple agents watch the same source and user clicks ▶ */}
       <Modal
-        title="Which agent should run?"
+        title={t('listen.runPickerTitle')}
         open={runPickerOpen}
         onCancel={() => setRunPickerOpen(false)}
         footer={null}
@@ -4474,23 +4621,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         <div className="space-y-5">
           <section className="space-y-3">
             <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step1Desc')}</p>
-            <Button
-              block
-              size="large"
-              aria-pressed={guidedWizardSource.url === GUIDED_SUGGESTED_SOURCE.url}
-              className={`h-auto py-3 text-left ${guidedWizardSource.url === GUIDED_SUGGESTED_SOURCE.url
-                ? 'border-[#722ed1] bg-[#f9f0ff] dark:bg-[#2a1645]'
-                : 'border-[#722ed1]/30 bg-[#f9f0ff] hover:!border-[#722ed1] dark:bg-[#2a1645]'}`}
-              onClick={() => {
-                setGuidedWizardUrl('');
-                setGuidedWizardSource(GUIDED_SUGGESTED_SOURCE);
-              }}
-            >
-              <span className="font-semibold">{t('guided.suggestedSource')}</span>
-              <span className="ml-2 text-xs text-muted-foreground">{t('guided.suggestedSourceDescription')}</span>
-            </Button>
             <SourceSearchPicker
-              selectedValue={guidedWizardSource.url !== GUIDED_SUGGESTED_SOURCE.url ? guidedWizardSource.url : null}
+              selectedValue={guidedWizardSource?.url ?? null}
               onSelect={(selection) => void onPickGuidedWizardSource(selection)}
               urlFallback={
                 <>
@@ -4517,7 +4649,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             {guidedWizardDetecting && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoadingOutlined spin /> {t('guided.detectSource')}…</div>
             )}
-            {guidedWizardSource.url !== GUIDED_SUGGESTED_SOURCE.url && (
+            {guidedWizardSource && (
               <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
                 <p className="text-sm font-semibold text-green-800 dark:text-green-200">✅ {guidedWizardSource.title ?? guidedWizardSource.url}</p>
                 <p className="mt-0.5 text-xs text-green-600 dark:text-green-400">{guidedWizardSource.type}</p>
@@ -4551,7 +4683,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             size="large"
             icon={<CaretRightOutlined />}
             loading={guidedWizardRunning}
+            disabled={!guidedWizardSource}
             onClick={async () => {
+              if (!guidedWizardSource) return;
               setGuidedWizardRunning(true);
               try {
                 const newSource = await createSource({

@@ -148,4 +148,7 @@ export interface RunReportRecord {
   inputTokens: number | null;
   outputTokens: number | null;
   estimatedCostUsd: number | null;
+  /** When the owner first opened this report in the feed; null = unread. */
+  readAt: Date | null;
+  dismissedAt: Date | null;
 }

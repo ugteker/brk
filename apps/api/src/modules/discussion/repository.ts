@@ -9,11 +9,16 @@ import type {
   DiscussionTrigger,
   DiscussionRunEvidenceSnapshot
 } from './types';
+import type { RealtimeEventWriter } from '../realtime/types';
 
 type DiscussionDb = Pick<
   PrismaClient,
-  'discussion' | 'discussionParticipant' | 'discussionRun' | 'discussionTurn' | '$transaction'
+  'discussion' | 'discussionParticipant' | 'discussionRun' | 'discussionTurn' | 'realtimeEvent' | '$transaction'
 >;
+
+/** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
+ * mutation behavior identical while emitting no realtime events. */
+const noopRealtimeEventWriter: RealtimeEventWriter = { append: async () => {} };
 
 function mapParticipant(row: any): DiscussionParticipant {
   return {
@@ -74,7 +79,10 @@ function mapDiscussion(row: any): Discussion {
 }
 
 export class DiscussionRepository {
-  constructor(private readonly db: DiscussionDb) {}
+  constructor(
+    private readonly db: DiscussionDb,
+    private readonly realtime: RealtimeEventWriter = noopRealtimeEventWriter
+  ) {}
 
   async createDiscussion(ownerUserId: string, input: CreateDiscussionInput): Promise<Discussion> {
     const row = await (this.db as any).$transaction(async (tx: any) => {
@@ -153,9 +161,20 @@ export class DiscussionRepository {
   }
 
   async createRun(discussionId: string, triggeredBy: DiscussionTrigger): Promise<DiscussionRun> {
-    const row = await (this.db as any).discussionRun.create({
-      data: { discussionId, triggeredBy, status: 'pending' },
-      include: { turns: true }
+    const row = await (this.db as any).$transaction(async (tx: any) => {
+      const created = await tx.discussionRun.create({
+        data: { discussionId, triggeredBy, status: 'pending' },
+        include: { turns: true }
+      });
+      const discussion = await tx.discussion.findUnique({ where: { id: discussionId }, select: { ownerUserId: true } });
+      if (!discussion) {
+        // DiscussionRun.discussionId is a required, FK-enforced column (onDelete: Cascade), so
+        // a missing discussion here means the data invariant has been violated. Surface it
+        // loudly instead of silently skipping the realtime event.
+        throw new Error(`invariant_violation: discussion run ${created.id} references missing discussion ${discussionId}`);
+      }
+      await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: discussionId });
+      return created;
     });
     return mapRun(row);
   }
@@ -181,7 +200,14 @@ export class DiscussionRepository {
     runId: string,
     patch: Partial<Pick<DiscussionRun, 'status' | 'errorMessage' | 'startedAt' | 'completedAt' | 'syntheticSourceItemId' | 'audioUrl'>>
   ): Promise<void> {
-    await (this.db as any).discussionRun.update({ where: { id: runId }, data: patch });
+    await (this.db as any).$transaction(async (tx: any) => {
+      const updated = await tx.discussionRun.update({ where: { id: runId }, data: patch });
+      const discussion = await tx.discussion.findUnique({ where: { id: updated.discussionId }, select: { ownerUserId: true } });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${runId} references missing discussion ${updated.discussionId}`);
+      }
+      await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: updated.discussionId });
+    });
   }
 
   async createTurn(
@@ -191,14 +217,39 @@ export class DiscussionRepository {
     content: string,
     segmentLabel: string | null
   ): Promise<DiscussionTurn> {
-    const row = await (this.db as any).discussionTurn.create({
-      data: { discussionRunId: runId, participantId, turnIndex, content, segmentLabel }
+    const row = await (this.db as any).$transaction(async (tx: any) => {
+      const created = await tx.discussionTurn.create({
+        data: { discussionRunId: runId, participantId, turnIndex, content, segmentLabel }
+      });
+      const run = await tx.discussionRun.findUnique({ where: { id: runId }, select: { discussionId: true } });
+      if (!run) {
+        // DiscussionTurn.discussionRunId is a required, FK-enforced column (onDelete: Cascade),
+        // so a missing run here means the data invariant has been violated.
+        throw new Error(`invariant_violation: discussion turn ${created.id} references missing run ${runId}`);
+      }
+      const discussion = await tx.discussion.findUnique({ where: { id: run.discussionId }, select: { ownerUserId: true } });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${runId} references missing discussion ${run.discussionId}`);
+      }
+      await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: run.discussionId });
+      return created;
     });
     return mapTurn(row);
   }
 
   async updateTurnAudioUrl(turnId: string, audioUrl: string): Promise<void> {
-    await (this.db as any).discussionTurn.update({ where: { id: turnId }, data: { audioUrl } });
+    await (this.db as any).$transaction(async (tx: any) => {
+      const updated = await tx.discussionTurn.update({ where: { id: turnId }, data: { audioUrl } });
+      const run = await tx.discussionRun.findUnique({ where: { id: updated.discussionRunId }, select: { discussionId: true } });
+      if (!run) {
+        throw new Error(`invariant_violation: discussion turn ${turnId} references missing run ${updated.discussionRunId}`);
+      }
+      const discussion = await tx.discussion.findUnique({ where: { id: run.discussionId }, select: { ownerUserId: true } });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${updated.discussionRunId} references missing discussion ${run.discussionId}`);
+      }
+      await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: run.discussionId });
+    });
   }
 
   /**
@@ -206,9 +257,16 @@ export class DiscussionRepository {
    * run remains readable later even if reports change or the fallback limit is reconfigured.
    */
   async setRunEvidenceSnapshot(runId: string, snapshot: DiscussionRunEvidenceSnapshot): Promise<void> {
-    await (this.db as any).discussionRun.update({
-      where: { id: runId },
-      data: { evidenceSnapshotJson: JSON.stringify(snapshot) }
+    await (this.db as any).$transaction(async (tx: any) => {
+      const updated = await tx.discussionRun.update({
+        where: { id: runId },
+        data: { evidenceSnapshotJson: JSON.stringify(snapshot) }
+      });
+      const discussion = await tx.discussion.findUnique({ where: { id: updated.discussionId }, select: { ownerUserId: true } });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${runId} references missing discussion ${updated.discussionId}`);
+      }
+      await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: updated.discussionId });
     });
   }
 }

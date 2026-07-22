@@ -83,15 +83,21 @@ export class SyntheticSourceService implements OrchestratorSyntheticSource {
     } catch {
       // keep empty config
     }
-    const [items, itemCount] = await Promise.all([
+    const [items, itemCount, runs] = await Promise.all([
       (this.db as any).sourceItem.findMany({
         where: { sourceId },
         orderBy: { publishedAt: 'desc' },
         take: 3,
         select: { title: true, link: true, publishedAt: true }
       }),
-      (this.db as any).sourceItem.count({ where: { sourceId } })
+      (this.db as any).sourceItem.count({ where: { sourceId } }),
+      // All materialized runs of this discussion, to flag which episodes have rendered audio.
+      (this.db as any).discussionRun.findMany({
+        where: { syntheticSourceItemId: { not: null }, discussion: { syntheticSourceId: sourceId } },
+        select: { id: true, audioUrl: true }
+      }) as Promise<Array<{ id: string; audioUrl: string | null }>>
     ]);
+    const runsWithAudio = new Set(runs.filter((run) => run.audioUrl).map((run) => run.id));
     const previousCard = (config.libraryCard && typeof config.libraryCard === 'object' && !Array.isArray(config.libraryCard))
       ? config.libraryCard as Record<string, unknown>
       : {};
@@ -99,11 +105,16 @@ export class SyntheticSourceService implements OrchestratorSyntheticSource {
       ...previousCard,
       title: typeof previousCard.title === 'string' && previousCard.title.trim() ? previousCard.title : title,
       itemCount,
-      previewItems: items.map((item: { title: string; link: string | null; publishedAt: Date | null }) => ({
-        title: item.title,
-        link: item.link ?? undefined,
-        pubDate: item.publishedAt ? item.publishedAt.toISOString() : null
-      }))
+      audioCount: runsWithAudio.size,
+      previewItems: items.map((item: { title: string; link: string | null; publishedAt: Date | null }) => {
+        const runId = item.link?.startsWith('discussion-run:') ? item.link.slice('discussion-run:'.length) : null;
+        return {
+          title: item.title,
+          link: item.link ?? undefined,
+          pubDate: item.publishedAt ? item.publishedAt.toISOString() : null,
+          hasAudio: runId ? runsWithAudio.has(runId) : false
+        };
+      })
     };
     await (this.db as any).source.update({
       where: { id: sourceId },

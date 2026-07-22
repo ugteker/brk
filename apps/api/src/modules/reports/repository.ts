@@ -2,8 +2,13 @@ import type { PrismaClient } from '@prisma/client';
 import type { CreateRunReportInput, RunReportRecord, SignalRecord } from './types';
 import { normalizeUnifiedCharacterReport } from './unified-report';
 import { DEFAULT_CHARACTER_TYPE } from '../agents/types';
+import type { RealtimeEventWriter } from '../realtime/types';
 
-type ReportDb = Pick<PrismaClient, 'agentRunReport'>;
+type ReportDb = Pick<PrismaClient, 'agentRunReport' | 'agent' | '$transaction'>;
+
+/** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
+ * mutation behavior identical while emitting no realtime events. */
+const noopRealtimeEventWriter: RealtimeEventWriter = { append: async () => {} };
 
 type SignalRow = { symbol: string; side: string; confidence: number; rationale: string; citationsJson: string };
 
@@ -25,10 +30,15 @@ type ReportRow = {
   inputTokens: number | null;
   outputTokens: number | null;
   estimatedCostUsd: number | null;
+  readAt: Date | null;
+  dismissedAt: Date | null;
 };
 
 export class ReportRepository {
-  constructor(private readonly db: ReportDb) {}
+  constructor(
+    private readonly db: ReportDb,
+    private readonly realtime: RealtimeEventWriter = noopRealtimeEventWriter
+  ) {}
 
   async saveRunReport(input: CreateRunReportInput): Promise<RunReportRecord> {
     const characterType =
@@ -41,35 +51,48 @@ export class ReportRepository {
     });
     const normalizedSignals = normalizedReport.section.character_type === 'finance_expert' ? normalizedReport.section.signals : [];
 
-    const created = await this.db.agentRunReport.create({
-      data: {
-        agentId: input.agentId,
-        agentRunId: input.agentRunId,
-        promptVersionId: input.promptVersionId,
-        summary: input.summary,
-        reportJson: JSON.stringify(normalizedReport),
-        needsHumanReview: input.needsHumanReview,
-        sourceWarningsJson: JSON.stringify(input.sourceWarnings),
-        model: input.model ?? null,
-        promptVersionNumber: input.promptVersionNumber ?? null,
-        inputTokens: input.inputTokens ?? null,
-        outputTokens: input.outputTokens ?? null,
-        estimatedCostUsd: input.estimatedCostUsd ?? null,
-        signals: {
-          create: normalizedSignals.map((signal) => ({
-            symbol: signal.symbol,
-            side: signal.side,
-            confidence: signal.confidence,
-            rationale: signal.rationale,
-            citationsJson: JSON.stringify(signal.citations)
-          }))
-        }
-      },
-      // agent must be included here - toRecord() below derives characterType from
-      // row.agent?.characterType, and without it this always fell back to 'finance_expert'
-      // and threw a ReportShapeValidationError for any non-finance_expert agent, even though
-      // the row above had already been durably saved.
-      include: { signals: true, agent: { select: { characterType: true } }, agentRun: { select: { playbookId: true } } }
+    const created = await this.db.$transaction(async (tx) => {
+      const created = await tx.agentRunReport.create({
+        data: {
+          agentId: input.agentId,
+          agentRunId: input.agentRunId,
+          promptVersionId: input.promptVersionId,
+          summary: input.summary,
+          reportJson: JSON.stringify(normalizedReport),
+          needsHumanReview: input.needsHumanReview,
+          sourceWarningsJson: JSON.stringify(input.sourceWarnings),
+          model: input.model ?? null,
+          promptVersionNumber: input.promptVersionNumber ?? null,
+          inputTokens: input.inputTokens ?? null,
+          outputTokens: input.outputTokens ?? null,
+          estimatedCostUsd: input.estimatedCostUsd ?? null,
+          signals: {
+            create: normalizedSignals.map((signal) => ({
+              symbol: signal.symbol,
+              side: signal.side,
+              confidence: signal.confidence,
+              rationale: signal.rationale,
+              citationsJson: JSON.stringify(signal.citations)
+            }))
+          }
+        },
+        // agent must be included here - toRecord() below derives characterType from
+        // row.agent?.characterType, and without it this always fell back to 'finance_expert'
+        // and threw a ReportShapeValidationError for any non-finance_expert agent, even though
+        // the row above had already been durably saved.
+        include: { signals: true, agent: { select: { characterType: true } }, agentRun: { select: { playbookId: true } } }
+      });
+
+      const agent = await tx.agent.findUnique({ where: { id: input.agentId }, select: { ownerUserId: true } });
+      if (!agent) {
+        // AgentRunReport.agentId is a required, FK-enforced column, so a missing agent here
+        // means the data invariant has been violated. Surface it loudly instead of silently
+        // skipping the realtime event.
+        throw new Error(`invariant_violation: report ${created.id} references missing agent ${input.agentId}`);
+      }
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'report.changed', entityId: created.id, agentId: input.agentId });
+
+      return created;
     });
 
     return this.toRecord(created as unknown as ReportRow);
@@ -132,6 +155,53 @@ export class ReportRepository {
   }
 
   /**
+   * Batched counterpart to `listReportsForSource`, used to annotate the Library list with a
+   * per-source report count without an N+1 query per card. A broad `contains: '"sourceId":'`
+   * pre-filter narrows the candidate rows at the DB level; each candidate's artifacts are then
+   * parsed in memory to extract the exact `sourceId` value (JSON-unescaped, not just a raw
+   * substring match) so counting stays correct even if one value is a substring of another.
+   * A report with multiple artifacts referencing the same source value still counts once for
+   * that value - the count is "reports referencing this source", not "artifacts referencing it".
+   */
+  async countReportsForSourceValues(sourceValues: string[]): Promise<Record<string, number>> {
+    const counts = Object.fromEntries(sourceValues.map((value) => [value, 0]));
+    if (sourceValues.length === 0) return counts;
+
+    const rows = await this.db.agentRunReport.findMany({
+      where: {
+        agentRun: {
+          artifacts: { some: { payloadJson: { contains: '"sourceId":' } } }
+        }
+      },
+      select: {
+        id: true,
+        agentRun: {
+          select: {
+            artifacts: { select: { payloadJson: true } }
+          }
+        }
+      }
+    });
+
+    const requested = new Set(sourceValues);
+    for (const report of rows) {
+      const reportSourceValues = new Set<string>();
+      for (const artifact of report.agentRun.artifacts) {
+        const match = artifact.payloadJson.match(/"sourceId"\s*:\s*"((?:\\.|[^"])*)"/);
+        if (!match) continue;
+        try {
+          const value = JSON.parse(`"${match[1]}"`) as unknown;
+          if (typeof value === 'string' && requested.has(value)) reportSourceValues.add(value);
+        } catch {
+          // Malformed legacy artifact JSON cannot identify a source and is ignored.
+        }
+      }
+      for (const value of reportSourceValues) counts[value] += 1;
+    }
+    return counts;
+  }
+
+  /**
    * Lists all reports for the given agent that contain at least one signal for `symbol`,
    * ordered oldest-first (chronological), for building a per-symbol signal history timeline.
    * Symbol matching is exact/case-sensitive, matching how symbols are stored elsewhere.
@@ -144,6 +214,28 @@ export class ReportRepository {
     });
 
     return rows.map((row: unknown) => this.toRecord(row as ReportRow));
+  }
+
+  /**
+   * Marks a report as read (feed unread indicator). Idempotent: the first call stamps
+   * `readAt`, later calls leave the original timestamp untouched.
+   */
+  async markReportRead(reportId: string): Promise<void> {
+    await this.db.agentRunReport.updateMany({
+      where: { id: reportId, readAt: null },
+      data: { readAt: new Date() }
+    });
+  }
+
+  /**
+   * Hides a report from the feed ("archive"). The report stays available in the source's
+   * report list. Idempotent like markReportRead.
+   */
+  async markReportDismissed(reportId: string): Promise<void> {
+    await this.db.agentRunReport.updateMany({
+      where: { id: reportId, dismissedAt: null },
+      data: { dismissedAt: new Date() }
+    });
   }
 
   private toRecord(row: ReportRow): RunReportRecord {
@@ -187,7 +279,9 @@ export class ReportRepository {
       promptVersionNumber: row.promptVersionNumber,
       inputTokens: row.inputTokens,
       outputTokens: row.outputTokens,
-      estimatedCostUsd: row.estimatedCostUsd
+      estimatedCostUsd: row.estimatedCostUsd,
+      readAt: row.readAt ?? null,
+      dismissedAt: row.dismissedAt ?? null
     };
   }
 }

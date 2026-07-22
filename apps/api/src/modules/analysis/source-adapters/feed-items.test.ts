@@ -70,6 +70,43 @@ describe('parseFeedItems', () => {
     expect(items[0].transcriptUrl).toBe('https://example.com/transcript.txt');
   });
 
+  it('extracts episode-level itunes images and falls back to the feed-level cover', () => {
+    const xml = `<rss><channel>
+      <title>Market Pulse</title>
+      <itunes:image href="https://cdn.example.com/show-cover.jpg"/>
+      <item>
+        <guid>ep-12</guid>
+        <title>Episode 12</title>
+        <itunes:image href="https://cdn.example.com/ep-12.jpg"/>
+      </item>
+      <item>
+        <guid>ep-11</guid>
+        <title>Episode 11</title>
+      </item>
+    </channel></rss>`;
+
+    const items = parseFeedItems(xml);
+
+    expect(items[0].imageUrl).toBe('https://cdn.example.com/ep-12.jpg');
+    expect(items[1].imageUrl).toBe('https://cdn.example.com/show-cover.jpg');
+  });
+
+  it('does not treat episode-level itunes images as feed metadata', () => {
+    const xml = `<rss><channel>
+      <title>Market Pulse</title>
+      <item>
+        <guid>ep-12</guid>
+        <title>Episode 12</title>
+        <itunes:image href="https://cdn.example.com/ep-12.jpg"/>
+      </item>
+    </channel></rss>`;
+
+    expect(parseFeedMetadata(xml)).toEqual({
+      title: 'Market Pulse',
+      coverImageUrl: undefined
+    });
+  });
+
   it('falls back to link when guid is missing, and to title when both are missing', () => {
     const xml = `<rss><channel>
       <item><title>No guid</title><link>https://example.com/no-guid</link></item>

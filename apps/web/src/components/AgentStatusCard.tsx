@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, Tag, Typography } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { listRecentRuns, type RecentRunDto } from '../api/agents';
 
 const { Title, Text } = Typography;
@@ -19,6 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export function AgentStatusCard() {
+  const { t } = useTranslation();
   const [runs, setRuns] = useState<RecentRunDto[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -51,16 +53,16 @@ export function AgentStatusCard() {
   return (
     <Card>
       <Title level={5} style={{ marginTop: 0 }}>
-        Latest agent runtime status
+        {t('statusCard.title')}
       </Title>
       {runs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No runs yet.</p>
+        <p className="text-sm text-muted-foreground">{t('statusCard.noRuns')}</p>
       ) : (
         <>
           <p className="text-sm">
             <Text strong>{activeRun.agentName}:</Text>{' '}
             <Tag color={STATUS_COLORS[activeRun.status] ?? 'default'}>
-              {STATUS_LABELS[activeRun.status] ?? activeRun.status}
+              {t(`runs.status.${activeRun.status}`, { defaultValue: STATUS_LABELS[activeRun.status] ?? activeRun.status })}
             </Tag>{' '}
             {activeRun.finishedAt
               ? new Date(activeRun.finishedAt).toLocaleString()

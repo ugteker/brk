@@ -3,6 +3,10 @@ export type DiscussionRunStatus = 'pending' | 'running' | 'done' | 'error';
 export type DiscussionTrigger = 'manual' | 'auto_suggested' | 'scheduled';
 export type ParticipantRole = 'speaker' | 'host';
 export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
+/** Which text-to-speech backend renders this discussion's audio. 'auto' (or undefined) keeps
+ * the server default (Google preferred when both are configured). Stored in formatConfigJson,
+ * no schema migration needed. */
+export type TtsProvider = 'auto' | 'google' | 'openai';
 /** Whether a participant's reports for a run came from the user's explicit selection, from
  * falling back to that agent's most recent reports (see config.discussion.latestReportLimit),
  * or were intentionally skipped ('none') because the discussion is grounded in a shared
@@ -39,6 +43,8 @@ export interface DiscussionFormatConfig {
    * brevity/depth instruction in the orchestrator. Undefined means 'medium' (the original
    * behavior). Stored in formatConfigJson, no schema migration needed. */
   turnLength?: 'short' | 'medium' | 'long';
+  /** Voice API used when rendering this discussion as audio. Undefined means 'auto'. */
+  ttsProvider?: TtsProvider;
   /** How this discussion is grounded. Undefined means 'reports' (the original behavior:
    * per-participant report picks with latest-N fallback). Stored in formatConfigJson,
    * no schema migration needed. */

@@ -179,28 +179,38 @@ export function SourceSearchPicker({ onSelect, selectedValue, urlFallback }: Sou
           {!searchFailed && warnings.length > 0 && results !== null && (
             <Alert type="warning" showIcon message={t('sourcePicker.partialResults')} />
           )}
-          {(results ?? []).map((item) => (
-            <ResultCard
-              key={`${item.type}:${item.value}`}
-              item={item}
-              selected={selectedValue === item.value}
-              onPick={() => onSelect({ type: item.type, value: item.value, title: item.title, coverImageUrl: item.coverImageUrl })}
-              t={t}
-            />
-          ))}
+          <div
+            className="max-h-[min(22rem,calc(100vh-24rem))] space-y-2 overflow-y-auto overscroll-contain pr-1"
+            aria-live="polite"
+          >
+            {(results ?? []).map((item) => (
+              <ResultCard
+                key={`${item.type}:${item.value}`}
+                item={item}
+                selected={selectedValue === item.value}
+                onPick={() => onSelect({ type: item.type, value: item.value, title: item.title, coverImageUrl: item.coverImageUrl })}
+                t={t}
+              />
+            ))}
+          </div>
         </div>
       ) : suggestions.length > 0 ? (
         <div className="space-y-2">
           <p className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('sourcePicker.popularSources')}</p>
-          {suggestions.slice(0, 6).map((item) => (
-            <ResultCard
-              key={`${item.origin}:${item.value}`}
-              item={item}
-              selected={selectedValue === item.value}
-              onPick={() => onSelect({ type: item.type, value: item.value, title: item.title, coverImageUrl: item.coverImageUrl })}
-              t={t}
-            />
-          ))}
+          <div
+            className="max-h-[min(22rem,calc(100vh-24rem))] space-y-2 overflow-y-auto overscroll-contain pr-1"
+            aria-live="polite"
+          >
+            {suggestions.slice(0, 6).map((item) => (
+              <ResultCard
+                key={`${item.origin}:${item.value}`}
+                item={item}
+                selected={selectedValue === item.value}
+                onPick={() => onSelect({ type: item.type, value: item.value, title: item.title, coverImageUrl: item.coverImageUrl })}
+                t={t}
+              />
+            ))}
+          </div>
         </div>
       ) : null}
 

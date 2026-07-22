@@ -49,6 +49,8 @@ import { GoogleTtsClient } from './modules/discussion/google-tts-client';
 import { FileTtsStorage } from './modules/discussion/tts-storage';
 import OpenAI from 'openai';
 import { logger } from './lib/logger';
+import { RealtimeRepository } from './modules/realtime/repository';
+import { startRealtimeCleanupLoop } from './modules/realtime/cleanup-loop';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
   const { email, password } = config.auth.bootstrapAdmin;
@@ -89,15 +91,16 @@ async function start(role: Role) {
   await ensureSqliteSchemaCompatibility();
   await applySqlitePragmas(prisma);
 
-  const agentRepository = new AgentRepository(prisma);
+  const realtimeEventRepository = new RealtimeRepository(prisma);
+  const agentRepository = new AgentRepository(prisma, realtimeEventRepository);
   const promptRepository = new PromptRepository(prisma);
   const artifactRepository = new ArtifactRepository(prisma);
-  const reportRepository = new ReportRepository(prisma);
+  const reportRepository = new ReportRepository(prisma, realtimeEventRepository);
   const runsRepository = new RunsRepository(prisma);
   const claudeClient = new ClaudeClient({ apiKey: process.env.ANTHROPIC_API_KEY });
   const userRepository = new UserRepository(prisma);
-  const sourceRepository = new SourceRepository(prisma);
-  const playbookRepository = new PlaybookRepository(prisma);
+  const sourceRepository = new SourceRepository(prisma, realtimeEventRepository);
+  const playbookRepository = new PlaybookRepository(prisma, realtimeEventRepository);
   const accessResolver = new DomainAccessResolver(new AccessRepository(prisma));
   const cursorRepository = new SourceCursorRepository(prisma);
   const crawlConfigRepository = new SourceCrawlConfigRepository(prisma);
@@ -113,7 +116,7 @@ async function start(role: Role) {
     siteInspector
   };
 
-  const discussionRepository = new DiscussionRepository(prisma);
+  const discussionRepository = new DiscussionRepository(prisma, realtimeEventRepository);
   const syntheticSourceService = new SyntheticSourceService(prisma);
   const discussionOrchestrator = new DiscussionOrchestrator({
     discussionRepository,
@@ -130,7 +133,7 @@ async function start(role: Role) {
     await bootstrapAdminAccount(userRepository);
   }
 
-  const runStore = new PrismaRunStore(prisma);
+  const runStore = new PrismaRunStore(prisma, realtimeEventRepository);
   const queue = new RunQueueService(runStore);
 
   const agentRunner = new AgentRunner({
@@ -224,25 +227,35 @@ async function start(role: Role) {
       audioDir: config.tts.audioDir,
       // TTS is optional: without a GOOGLE_TTS_API_KEY or OPENAI_API_KEY the render endpoint
       // answers 501 and the UI tells the user that audio rendering isn't configured.
-      // Google is preferred when both are set (works where corporate policy blocks OpenAI).
+      // Every configured backend is wired so each discussion can pick its provider;
+      // 'auto' prefers Google (works where corporate policy blocks OpenAI).
       ...(isTtsConfigured()
         ? {
-            ttsClient: isGoogleTtsConfigured()
-              ? new GoogleTtsClient({
-                  apiKey: config.tts.googleApiKey || undefined,
-                  serviceAccount: config.tts.googleCredentials || undefined
-                })
-              : new OpenAITtsClient(new OpenAI({ apiKey: config.tts.openaiApiKey })),
+            ttsClients: {
+              ...(isGoogleTtsConfigured()
+                ? {
+                    google: new GoogleTtsClient({
+                      apiKey: config.tts.googleApiKey || undefined,
+                      serviceAccount: config.tts.googleCredentials || undefined
+                    })
+                  }
+                : {}),
+              ...(config.tts.openaiApiKey
+                ? { openai: new OpenAITtsClient(new OpenAI({ apiKey: config.tts.openaiApiKey })) }
+                : {})
+            },
             ttsStorage: new FileTtsStorage(config.tts.audioDir)
           }
         : {})
     },
+    realtime: { repository: realtimeEventRepository },
     db: prisma
   });
 
   if (plan.startSchedulers) {
     startSchedulerLoop({ intervalMs: 60_000, queue, runner: agentRunner });
     startDigestLoop({ store: new PrismaDigestStore(prisma), mailer });
+    startRealtimeCleanupLoop({ repository: realtimeEventRepository });
 
     // Discussion scheduler: check every 60s for scheduled discussions due to run
     setInterval(async () => {
@@ -315,3 +328,4 @@ function bootstrap() {
 }
 
 bootstrap();
+

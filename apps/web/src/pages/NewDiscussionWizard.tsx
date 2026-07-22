@@ -19,11 +19,14 @@ import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { listAgents, listAgentReports, type AgentSummary, type RunReportDto } from '../api/agents';
 import {
   createDiscussion,
+  getDiscussionCapabilities,
   listTranscriptOptions,
   triggerDiscussionRun,
+  type DiscussionCapabilities,
   type DiscussionGroundingMode,
   type DiscussionPreselect,
-  type TranscriptOptionDto
+  type TranscriptOptionDto,
+  type TtsProviderDto
 } from '../api/discussions';
 import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
 import { getAgentDisplayLabel } from '../utils/agent-label';
@@ -43,6 +46,27 @@ const VOICE_LABELS: Record<Voice, string> = {
   onyx: 'Onyx · deep male',
   nova: 'Nova · female',
   shimmer: 'Shimmer · bright female'
+};
+
+/** Mirrors the backend's Google voice mapping (google-tts-client.ts VOICE_MAP) so the picker
+ * can show which actual Google voice a character maps to when Google renders the audio. */
+const GOOGLE_VOICE_NAMES: Record<'en' | 'de', Record<Voice, string>> = {
+  en: {
+    alloy: 'en-US-Neural2-C',
+    echo: 'en-US-Neural2-D',
+    fable: 'en-US-Neural2-F',
+    onyx: 'en-US-Neural2-J',
+    nova: 'en-US-Neural2-E',
+    shimmer: 'en-US-Neural2-G'
+  },
+  de: {
+    alloy: 'de-DE-Neural2-C',
+    echo: 'de-DE-Neural2-D',
+    fable: 'de-DE-Neural2-F',
+    onyx: 'de-DE-Neural2-B',
+    nova: 'de-DE-Neural2-A',
+    shimmer: 'de-DE-Neural2-C'
+  }
 };
 
 interface ParticipantConfig {
@@ -100,6 +124,25 @@ export function NewDiscussionWizard() {
   // How long each spoken turn should be; maps to a token budget + brevity instruction in the
   // backend orchestrator (formatConfig.turnLength). Default 'medium' = original behavior.
   const [turnLength, setTurnLength] = useState<'short' | 'medium' | 'long'>('medium');
+  // Which voice API renders the audio podcast. 'auto' keeps the server default. Only offered
+  // when the server reports more than one configured provider.
+  const [ttsProvider, setTtsProvider] = useState<TtsProviderDto>('auto');
+  const [capabilities, setCapabilities] = useState<DiscussionCapabilities>({ tts: false, ttsProviders: [] });
+
+  useEffect(() => {
+    getDiscussionCapabilities().then(setCapabilities).catch(() => undefined);
+  }, []);
+
+  // The provider that will actually render audio given the current choice - drives the
+  // Google voice-name hints on the voice picker so users see what the API will use.
+  const effectiveTtsProvider: 'google' | 'openai' | null =
+    ttsProvider !== 'auto' && capabilities.ttsProviders.includes(ttsProvider)
+      ? ttsProvider
+      : capabilities.ttsProviders.includes('google')
+        ? 'google'
+        : capabilities.ttsProviders.includes('openai')
+          ? 'openai'
+          : null;
 
   // Material step: the shared, agent-independent pool - any report from any agent plus
   // any downloaded transcript can be picked; every participant discusses the same pool.
@@ -283,6 +326,7 @@ export function NewDiscussionWizard() {
           totalTurnTarget,
           language,
           turnLength,
+          ...(ttsProvider !== 'auto' ? { ttsProvider } : {}),
           grounding: {
             mode: groundingMode,
             ...(groundingMode === 'material'
@@ -493,6 +537,21 @@ export function NewDiscussionWizard() {
                 ]}
               />
             </Form.Item>
+            {capabilities.ttsProviders.length > 1 && (
+              <Form.Item label={t('studio.voiceApiLabel')} extra={t('studio.voiceApiHint')}>
+                <Select
+                  value={ttsProvider}
+                  onChange={(v) => setTtsProvider(v as TtsProviderDto)}
+                  options={[
+                    { value: 'auto', label: t('studio.voiceApiAuto') },
+                    ...capabilities.ttsProviders.map((provider) => ({
+                      value: provider,
+                      label: provider === 'google' ? t('studio.voiceApiGoogle') : t('studio.voiceApiOpenai')
+                    }))
+                  ]}
+                />
+              </Form.Item>
+            )}
             <Form.Item label={t('studio.participants')}>
               {participants.map((p, i) => {
                 const agent = agents.find((a) => a.id === p.agentId);
@@ -513,8 +572,16 @@ export function NewDiscussionWizard() {
                     <Select
                       value={p.voiceId}
                       onChange={(v) => updateParticipant(i, 'voiceId', v)}
-                      style={{ width: 190 }}
-                      options={VOICES.map((v) => ({ value: v, label: VOICE_LABELS[v] }))}
+                      style={{ width: 230 }}
+                      options={VOICES.map((v) => ({
+                        value: v,
+                        // When Google renders the audio, show the actual Google voice each
+                        // character maps to so the picker matches the underlying API.
+                        label:
+                          effectiveTtsProvider === 'google'
+                            ? `${VOICE_LABELS[v]} · ${GOOGLE_VOICE_NAMES[language][v]}`
+                            : VOICE_LABELS[v]
+                      }))}
                     />
                   </div>
                 );

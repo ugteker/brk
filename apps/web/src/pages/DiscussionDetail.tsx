@@ -8,6 +8,7 @@ import {
   Spin,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   message
 } from 'antd';
@@ -25,17 +26,19 @@ import { useSafeNavigate } from '../utils/useSafeNavigate';
 import {
   getAudioRenderStatus,
   getDiscussion,
+  getDiscussionRun,
   listDiscussionRuns,
   triggerAudioRender,
   triggerDiscussionRun,
   getDiscussionCapabilities,
+  type DiscussionCapabilities,
   type DiscussionDto,
   type DiscussionRunDto,
   type DiscussionRunEvidenceSnapshotDto,
   type DiscussionTurnDto
 } from '../api/discussions';
-import { useDiscussionStream } from '../hooks/useDiscussionStream';
 import { useAppData } from '../context/AppDataContext';
+import { useRealtimeSubscription } from '../context/RealtimeContext';
 
 const { Text, Paragraph } = Typography;
 
@@ -369,15 +372,56 @@ export function DiscussionDetail() {
     return () => clearInterval(interval);
   }, []);
   // Hide the "Render audio" button entirely when the backend has no TTS configured.
-  const [ttsAvailable, setTtsAvailable] = useState(false);
+  const [capabilities, setCapabilities] = useState<DiscussionCapabilities>({ tts: false, ttsProviders: [] });
+  const ttsAvailable = capabilities.tts;
 
   useEffect(() => {
     getDiscussionCapabilities()
-      .then((caps) => setTtsAvailable(caps.tts))
-      .catch(() => setTtsAvailable(false));
+      .then(setCapabilities)
+      .catch(() => setCapabilities({ tts: false, ttsProviders: [] }));
   }, []);
 
-  const { turns: liveTurns, status: liveStatus } = useDiscussionStream(discussionId ?? '', liveRun);
+  // Live run turns/status, kept up to date by the global `discussion.changed` realtime
+  // subscription below instead of a per-run EventSource (`/api/discussions/:id/runs/:runId/stream`,
+  // now removed).
+  const [liveTurns, setLiveTurns] = useState<DiscussionTurnDto[]>([]);
+  const [liveStatus, setLiveStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+
+  // Refetches the tracked live run and merges its turns (by turn id) into local state, then
+  // maps its status onto the UI's running/done/error states. 'pending' is treated the same
+  // as 'running' since the transcript view has no separate "queued" UI.
+  const refreshLiveRun = useCallback(async (runId: string) => {
+    if (!discussionId) return;
+    try {
+      const run = await getDiscussionRun(discussionId, runId);
+      setLiveTurns((prev) => {
+        const byId = new Map(prev.map((turn) => [turn.id, turn]));
+        for (const turn of run.turns) byId.set(turn.id, turn);
+        return [...byId.values()].sort((a, b) => a.turnIndex - b.turnIndex);
+      });
+      setLiveStatus(run.status === 'pending' ? 'running' : run.status);
+    } catch {
+      setLiveStatus('error');
+    }
+  }, [discussionId]);
+
+  useEffect(() => {
+    if (!liveRun) return;
+    setLiveStatus('running');
+    setLiveTurns([]);
+    refreshLiveRun(liveRun);
+  }, [liveRun, refreshLiveRun]);
+
+  useRealtimeSubscription(['discussion.changed'], (event) => {
+    if (!liveRun) return;
+    if (event.topic === 'resync') {
+      refreshLiveRun(liveRun);
+      return;
+    }
+    if (event.entityId === discussionId) {
+      refreshLiveRun(liveRun);
+    }
+  });
 
   // The wizard's "run now" already triggered a run and hands its ID over via
   // navigation state - attach to that run's live stream instead of requiring
@@ -556,12 +600,66 @@ export function DiscussionDetail() {
             {runs.length === 0 ? t('studio.runNow') : t('studio.runAgain')}
           </Button>
           {ttsAvailable && selectedRunId && (
-            <Button loading={renderingAudio} onClick={handleRenderAudio} icon={<AudioOutlined />}>
-              {t('studio.renderAudio')}
-            </Button>
+            <Tooltip title={selectedRun?.status !== 'done' ? t('studio.renderAudioNeedsRun') : undefined}>
+              <Button
+                loading={renderingAudio}
+                disabled={selectedRun?.status !== 'done'}
+                onClick={handleRenderAudio}
+                icon={<AudioOutlined />}
+              >
+                {t('studio.renderAudio')}
+              </Button>
+            </Tooltip>
           )}
         </Space>
       </div>
+
+      <Card size="small" style={{ marginBottom: 16 }} title={t('studio.detailsTitle')}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 24px', fontSize: 13 }}>
+          <span>
+            <Text type="secondary">{t('studio.detailsFormat')}: </Text>
+            {t(`studio.format_${discussion.format}`)}
+          </span>
+          <span>
+            <Text type="secondary">{t('studio.detailsLanguage')}: </Text>
+            {(discussion.formatConfig.language ?? 'en') === 'de' ? t('studio.languageGerman') : t('studio.languageEnglish')}
+          </span>
+          {ttsAvailable && (
+            <span>
+              <Text type="secondary">{t('studio.detailsVoiceService')}: </Text>
+              {(() => {
+                const chosen = discussion.formatConfig.ttsProvider;
+                const effective =
+                  chosen === 'google' || chosen === 'openai'
+                    ? chosen
+                    : capabilities.ttsProviders.includes('google')
+                      ? 'google'
+                      : capabilities.ttsProviders.includes('openai')
+                        ? 'openai'
+                        : null;
+                if (!effective) return t('studio.voiceApiAuto');
+                const label = effective === 'google' ? t('studio.voiceApiGoogle') : t('studio.voiceApiOpenai');
+                return chosen === 'google' || chosen === 'openai' ? label : `${t('studio.voiceApiAuto')} · ${label}`;
+              })()}
+            </span>
+          )}
+          <span>
+            <Text type="secondary">{t('studio.detailsCreated')}: </Text>
+            {new Date(discussion.createdAt).toLocaleDateString()}
+          </span>
+        </div>
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <Text type="secondary" style={{ fontSize: 13 }}>{t('studio.detailsSpeakers')}: </Text>
+          {discussion.participants.map((p) => {
+            const info = participantInfoMap[p.id];
+            return (
+              <Tag key={p.id} style={{ margin: 0 }}>
+                {getCharacterTypeEmoji(info?.characterType ?? null)} {info?.name ?? p.agentId} · {p.voiceId}
+              </Tag>
+            );
+          })}
+        </div>
+      </Card>
 
       {runs.length === 0 && !liveRun ? (
         <Card>

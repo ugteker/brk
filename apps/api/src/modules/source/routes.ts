@@ -3,7 +3,7 @@ import type { SourceConfig } from '../analysis/types';
 import type { SourceProbeResult } from '../analysis/source-adapters/smart-crawler';
 import type { DomainAccessResolver } from '../access/permissions';
 import type { SourceRepositoryLike } from './repository';
-import type { CreateSourceInput, PublishSourceInput, ShareSourceInput, UpdateSourceInput } from './types';
+import type { CreateSourceInput, PublishSourceInput, ShareSourceInput, SourceRecord, UpdateSourceInput } from './types';
 import type { SourceSearchLike } from './search';
 import { CURATED_SOURCES } from './curated-sources';
 
@@ -13,7 +13,13 @@ export interface SourceProbeLike {
 
 export interface SourceScopedReportRepositoryLike {
   listReportsForSource(sourceValue: string): Promise<unknown[]>;
+  countReportsForSourceValues(sourceValues: string[]): Promise<Record<string, number>>;
 }
+
+/** `GET /api/sources` response shape: each source annotated with its source-scoped report
+ * count (see `ReportRepository.countReportsForSourceValues`), so Library cards can show
+ * accurate per-source counts without a separate request per card. */
+export type SourceRecordWithReportCount = SourceRecord & { reportCount: number };
 
 export interface SourceRoutesDeps {
   sourceRepository: SourceRepositoryLike;
@@ -71,7 +77,14 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
 
   app.get('/api/sources', async (req, reply) => {
     const rows = await deps.sourceRepository.listSources(req.userRole === 'admin' ? undefined : req.userId!);
-    return reply.status(200).send(rows);
+    const counts = deps.reportRepository
+      ? await deps.reportRepository.countReportsForSourceValues(rows.map((source) => source.value))
+      : {};
+    const rowsWithReportCount: SourceRecordWithReportCount[] = rows.map((source) => ({
+      ...source,
+      reportCount: counts[source.value] ?? 0
+    }));
+    return reply.status(200).send(rowsWithReportCount);
   });
 
   app.get('/api/sources/:sourceId', async (req, reply) => {

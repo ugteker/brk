@@ -65,6 +65,9 @@ Thumbs.db
 /.superpowers/brainstorm/1018-1784396210/state/server-instance-id
 /.superpowers/brainstorm/1003-1784380496/state/server-stopped
 
+# Local-only sdd session artifacts (kept on disk, not tracked in git)
+/.superpowers/sdd/realtime-task-3-report.md
+
 # Google service-account keys (never commit)
 apps/api/keys/
 secrets/

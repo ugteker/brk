@@ -6,6 +6,7 @@ import { AgentsPage } from './AgentsPage';
 import { AuthProvider } from '../auth/AuthContext';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { AppDataProvider } from '../context/AppDataContext';
+import { RealtimeProvider } from '../context/RealtimeContext';
 import { logout as apiLogout, getCurrentUser } from '../api/auth';
 import { listAgents } from '../api/agents';
 import { createSource, deleteSource, listSources, probeSource, updateSource } from '../api/sources';
@@ -49,7 +50,9 @@ vi.mock('../api/sources', () => ({
   deleteSource: vi.fn(),
   shareSource: vi.fn(),
   publishSource: vi.fn(),
-  probeSource: vi.fn()
+  probeSource: vi.fn(),
+  listSourceSuggestions: vi.fn().mockResolvedValue([]),
+  listSourceReports: vi.fn().mockResolvedValue([])
 }));
 
 vi.mock('../api/playbooks', () => ({
@@ -82,11 +85,13 @@ function renderPage(options?: { openAdminArea?: boolean }) {
   return render(
     <AuthProvider>
       <AppDataProvider>
-        <ThemeProvider>
-          <MemoryRouter>
-            <AgentsPage hub="sources" />
-          </MemoryRouter>
-        </ThemeProvider>
+        <RealtimeProvider>
+          <ThemeProvider>
+            <MemoryRouter>
+              <AgentsPage hub="sources" />
+            </MemoryRouter>
+          </ThemeProvider>
+        </RealtimeProvider>
       </AppDataProvider>
     </AuthProvider>
   );
@@ -349,6 +354,144 @@ describe('AgentsPage three hub shell', () => {
     expect(await screen.findByText(/long-term value investor/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /manage source/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /summarize this source/i })).not.toBeInTheDocument();
+  });
+
+  it('renders source-scoped report counts on library cards, defaulting missing counts to zero', async () => {
+    // Both sources share the same linked agent so a card-count regression that derives
+    // counts from the agent's own report list (instead of source.reportCount) would show
+    // the same non-zero count on both cards and this test would pass by accident.
+    vi.mocked(listSources).mockResolvedValueOnce([
+      {
+        id: 'source-1',
+        ownerUserId: 'user-1',
+        type: 'web_urls',
+        value: 'https://example.com/no-reports',
+        status: 'active',
+        config: {},
+        metadata: { title: 'Source without reports', coverImageUrl: null, previewItems: [] },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        reportCount: 0
+      },
+      {
+        id: 'source-2',
+        ownerUserId: 'user-1',
+        type: 'web_urls',
+        value: 'https://example.com/with-reports',
+        status: 'active',
+        config: {},
+        metadata: { title: 'Source with reports', coverImageUrl: null, previewItems: [] },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        reportCount: 2
+      }
+    ]);
+    vi.mocked(listAgents).mockResolvedValueOnce([
+      {
+        id: 'agent-1',
+        ownerUserId: 'user-1',
+        name: 'Shared Analyst',
+        characterType: 'finance_expert',
+        promptConfig: { personality_label: 'Long-term value investor' },
+        status: 'active',
+        sources: [],
+        schedule: null,
+        runCount: 0,
+        reportCount: 0,
+        latestReportAt: null
+      }
+    ]);
+    vi.mocked(listPlaybooks).mockResolvedValueOnce([
+      {
+        id: 'playbook-1',
+        ownerUserId: 'user-1',
+        agentId: 'agent-1',
+        name: 'Shared follow',
+        description: '',
+        enabled: true,
+        schedule: { mode: 'daily', dailyTime: '07:30', timezone: 'UTC' },
+        sourceIds: ['source-1', 'source-2'],
+        recipients: [],
+        executionMode: 'latest_only',
+        maxSourcesPerRun: 5,
+        maxItemsPerSource: 2,
+        lastRunAt: null,
+        nextRunAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+
+    renderPage();
+
+    await screen.findByText(/source without reports/i);
+    expect(screen.getByText(/no reports yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 reports available/i)).toBeInTheDocument();
+  });
+
+  it('opens the follow wizard with the source and its already-linked agent preselected from the source detail header add agent action', async () => {
+    vi.mocked(listSources).mockResolvedValueOnce([
+      {
+        id: 'source-1',
+        ownerUserId: 'user-1',
+        type: 'web_urls',
+        value: 'https://example.com',
+        status: 'active',
+        config: {},
+        metadata: { title: 'Example source', coverImageUrl: null, previewItems: [] },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        reportCount: 0
+      }
+    ]);
+    vi.mocked(listAgents).mockResolvedValueOnce([
+      {
+        id: 'agent-1',
+        ownerUserId: 'user-1',
+        name: 'Macro Analyst',
+        characterType: 'finance_expert',
+        promptConfig: { personality_label: 'Long-term value investor' },
+        status: 'active',
+        sources: [],
+        schedule: null,
+        runCount: 0,
+        reportCount: 0,
+        latestReportAt: null
+      }
+    ]);
+    vi.mocked(listPlaybooks).mockResolvedValueOnce([
+      {
+        id: 'playbook-1',
+        ownerUserId: 'user-1',
+        agentId: 'agent-1',
+        name: 'Daily macro review',
+        description: '',
+        enabled: true,
+        schedule: { mode: 'daily', dailyTime: '07:30', timezone: 'UTC' },
+        sourceIds: ['source-1'],
+        recipients: [],
+        executionMode: 'latest_only',
+        maxSourcesPerRun: 5,
+        maxItemsPerSource: 2,
+        lastRunAt: null,
+        nextRunAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /no reports yet/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /add agent/i }));
+
+    // Two antd Modals can be mounted at once in this test environment and both title
+    // elements receive the same static id, which makes the dialog's accessible-name
+    // lookup ambiguous; matching on the rendered title text avoids that collision.
+    expect(await screen.findByText(/^summarize: example source$/i)).toBeInTheDocument();
+    const agentCard = screen.getByRole('button', { name: /select agent/i });
+    expect(agentCard).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText(/agents follow/i)).not.toBeInTheDocument();
   });
 
   it('shows polished dashed ghost card copy in Library hub', async () => {

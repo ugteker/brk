@@ -11,6 +11,7 @@ import { registerPlaybookRoutes, type PlaybookRoutesDeps } from './modules/playb
 import { registerDiscussionRoutes, type DiscussionRoutesDeps } from './modules/discussion/routes';
 import { registerWatchlistRoutes, type WatchlistRoutesDeps } from './modules/watchlist/routes';
 import { registerUsageRoutes, type UsageRoutesDeps } from './modules/usage/routes';
+import { registerRealtimeRoutes, type RealtimeEventRepository } from './modules/realtime/routes';
 import type { DomainAccessResolver } from './modules/access/permissions';
 import { config } from './config';
 import { verifySessionToken } from './modules/auth/jwt';
@@ -33,6 +34,7 @@ export interface ServerDeps {
   watchlist?: WatchlistRoutesDeps;
   usage?: UsageRoutesDeps;
   discussion?: DiscussionRoutesDeps;
+  realtime?: { repository: RealtimeEventRepository };
   accessResolver?: DomainAccessResolver;
   sourceProbe?: SourceProbeLike;
   runTrigger?: RunTriggerLike;
@@ -104,6 +106,9 @@ export async function buildServer(deps: ServerDeps) {
   }
   if (deps.discussion) {
     await registerDiscussionRoutes(app, deps.discussion);
+  }
+  if (deps.realtime) {
+    await registerRealtimeRoutes(app, deps.realtime);
   }
   // Admin user-management routes reuse the same userRepository as auth - there's no separate
   // "admin service", just extra ADMIN_EMAIL-gated endpoints on top of the existing user store.

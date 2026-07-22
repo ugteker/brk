@@ -12,6 +12,7 @@ import type {
   RecentRun,
   ShareAgentInput
 } from './types';
+import type { RealtimeEventWriter } from '../realtime/types';
 
 type AgentDb = Pick<
   PrismaClient,
@@ -25,9 +26,14 @@ type AgentDb = Pick<
   | 'playbook'
   | 'accessGrant'
   | 'marketplacePublication'
+  | 'realtimeEvent'
   | '$transaction'
 >;
 type SourceRow = { type: string; value: string; frequencyMinutes?: number; maxItems?: number };
+
+/** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
+ * mutation behavior identical while emitting no realtime events. */
+const noopRealtimeEventWriter: RealtimeEventWriter = { append: async () => {} };
 
 function parsePreferences(json: string | null | undefined): Record<string, string[]> {
   if (!json) return {};
@@ -84,7 +90,10 @@ function mapAgent(row: any): Agent {
 }
 
 export class AgentRepository {
-  constructor(private readonly db: AgentDb) {}
+  constructor(
+    private readonly db: AgentDb,
+    private readonly realtime: RealtimeEventWriter = noopRealtimeEventWriter
+  ) {}
 
   async listAgents(ownerUserId?: string): Promise<AgentListItem[]> {
     const rows = await this.db.agent.findMany({
@@ -118,50 +127,65 @@ export class AgentRepository {
   async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
     const characterType = input.characterType ?? DEFAULT_CHARACTER_TYPE;
     const promptConfig = input.promptConfig ?? {};
-    const created = await this.db.agent.create({
-      data: {
-        ownerUserId,
-        name: input.name && input.name.trim().length > 0 ? input.name.trim() : deriveAgentName(characterType, promptConfig),
-        description: input.description ?? '',
-        characterType,
-        promptConfigJson: JSON.stringify(promptConfig),
-        status: input.active === false ? 'disabled' : 'active',
-        preferencesJson: JSON.stringify(input.preferences ?? {}),
-        ...(input.sources && input.sources.length > 0
-          ? {
-              sources: {
-                create: input.sources.map((s) => ({
-                  type: s.type,
-                  value: s.value,
-                  frequencyMinutes: s.frequencyMinutes ?? 60,
-                  maxItems: s.maxItems ?? 1
-                }))
+    const created = await this.db.$transaction(async (tx: any) => {
+      const created = await tx.agent.create({
+        data: {
+          ownerUserId,
+          name: input.name && input.name.trim().length > 0 ? input.name.trim() : deriveAgentName(characterType, promptConfig),
+          description: input.description ?? '',
+          characterType,
+          promptConfigJson: JSON.stringify(promptConfig),
+          status: input.active === false ? 'disabled' : 'active',
+          preferencesJson: JSON.stringify(input.preferences ?? {}),
+          ...(input.sources && input.sources.length > 0
+            ? {
+                sources: {
+                  create: input.sources.map((s) => ({
+                    type: s.type,
+                    value: s.value,
+                    frequencyMinutes: s.frequencyMinutes ?? 60,
+                    maxItems: s.maxItems ?? 1
+                  }))
+                }
               }
-            }
-          : {})
-      },
-      include: { sources: true }
+            : {})
+        },
+        include: { sources: true }
+      });
+      await this.realtime.append(tx, { userId: ownerUserId, topic: 'agent.changed', entityId: created.id });
+      return created;
     });
 
     return mapAgent(created);
   }
 
   async disableAgent(agentId: string): Promise<void> {
-    await this.db.agent.update({
-      where: { id: agentId },
-      data: { status: 'disabled' }
+    await this.db.$transaction(async (tx: any) => {
+      const updated = await tx.agent.update({
+        where: { id: agentId },
+        data: { status: 'disabled' }
+      });
+      await this.realtime.append(tx, { userId: updated.ownerUserId, topic: 'agent.changed', entityId: agentId });
     });
   }
 
   async enableAgent(agentId: string): Promise<void> {
-    await this.db.agent.update({
-      where: { id: agentId },
-      data: { status: 'active' }
+    await this.db.$transaction(async (tx: any) => {
+      const updated = await tx.agent.update({
+        where: { id: agentId },
+        data: { status: 'active' }
+      });
+      await this.realtime.append(tx, { userId: updated.ownerUserId, topic: 'agent.changed', entityId: agentId });
     });
   }
 
   async deleteAgent(agentId: string): Promise<void> {
     await this.db.$transaction(async (tx: any) => {
+      const existing = await tx.agent.findUnique({ where: { id: agentId } });
+      if (!existing) {
+        throw new Error('not_found');
+      }
+
       const reports = await tx.agentRunReport.findMany({ where: { agentId }, select: { id: true } });
       const reportIds = reports.map((r: { id: string }) => r.id);
       if (reportIds.length > 0) {
@@ -185,6 +209,8 @@ export class AgentRepository {
 
       await tx.playbook.deleteMany({ where: { agentId } });
       await tx.agent.delete({ where: { id: agentId } });
+
+      await this.realtime.append(tx, { userId: existing.ownerUserId, topic: 'agent.changed', entityId: agentId });
     });
   }
 
@@ -218,11 +244,13 @@ export class AgentRepository {
       if (patch.active !== undefined) data.status = patch.active ? 'active' : 'disabled';
       if (patch.preferences !== undefined) data.preferencesJson = JSON.stringify(patch.preferences);
 
-      return tx.agent.update({
+      const changed = await tx.agent.update({
         where: { id: agentId },
         data,
         include: { sources: true }
       });
+      await this.realtime.append(tx, { userId: changed.ownerUserId, topic: 'agent.changed', entityId: agentId });
+      return changed;
     });
 
     return mapAgent(updated);
@@ -247,16 +275,23 @@ export class AgentRepository {
   }
 
   async shareAgent(agentId: string, grantedByUserId: string, input: ShareAgentInput): Promise<void> {
-    await this.db.accessGrant.create({
-      data: {
-        grantedByUserId,
-        granteeUserId: input.granteeUserId,
-        resourceType: 'agent',
-        resourceId: agentId,
-        permission: input.permission,
-        agentId,
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+    await this.db.$transaction(async (tx: any) => {
+      const agent = await tx.agent.findUnique({ where: { id: agentId } });
+      if (!agent) {
+        throw new Error('not_found');
       }
+      await tx.accessGrant.create({
+        data: {
+          grantedByUserId,
+          granteeUserId: input.granteeUserId,
+          resourceType: 'agent',
+          resourceId: agentId,
+          permission: input.permission,
+          agentId,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+        }
+      });
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'agent.changed', entityId: agentId });
     });
   }
 
@@ -302,71 +337,86 @@ export class AgentRepository {
   }
 
   async publishAgent(agentId: string, publisherUserId: string, input: PublishAgentInput): Promise<MarketplaceAgentListItem> {
-    const agent = await this.getAgent(agentId);
-    if (!agent) {
-      throw new Error('not_found');
-    }
+    return this.db.$transaction(async (tx: any) => {
+      const agentRow = await tx.agent.findUnique({ where: { id: agentId }, include: { sources: true } });
+      if (!agentRow) {
+        throw new Error('not_found');
+      }
+      const agent = mapAgent(agentRow);
 
-    const existing = await this.db.marketplacePublication.findFirst({
-      where: { resourceType: 'agent', resourceId: agentId, retiredAt: null }
+      const existing = await tx.marketplacePublication.findFirst({
+        where: { resourceType: 'agent', resourceId: agentId, retiredAt: null }
+      });
+
+      const publication = existing
+        ? await tx.marketplacePublication.update({
+            where: { id: existing.id },
+            data: {
+              publisherUserId,
+              title: input.title,
+              summary: input.summary ?? '',
+              visibility: input.visibility ?? 'public',
+              status: 'published',
+              publishedAt: new Date(),
+              retiredAt: null
+            }
+          })
+        : await tx.marketplacePublication.create({
+            data: {
+              publisherUserId,
+              resourceType: 'agent',
+              resourceId: agentId,
+              agentId,
+              title: input.title,
+              summary: input.summary ?? '',
+              visibility: input.visibility ?? 'public',
+              status: 'published',
+              publishedAt: new Date()
+            }
+          });
+
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'agent.changed', entityId: agentId });
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'marketplace.changed', entityId: publication.id });
+
+      return {
+        publicationId: publication.id,
+        agentId,
+        publisherUserId: publication.publisherUserId,
+        title: publication.title,
+        summary: publication.summary,
+        visibility: publication.visibility as MarketplaceAgentListItem['visibility'],
+        publishedAt: publication.publishedAt ?? new Date(),
+        agent
+      };
     });
-
-    const publication = existing
-      ? await this.db.marketplacePublication.update({
-          where: { id: existing.id },
-          data: {
-            publisherUserId,
-            title: input.title,
-            summary: input.summary ?? '',
-            visibility: input.visibility ?? 'public',
-            status: 'published',
-            publishedAt: new Date(),
-            retiredAt: null
-          }
-        })
-      : await this.db.marketplacePublication.create({
-          data: {
-            publisherUserId,
-            resourceType: 'agent',
-            resourceId: agentId,
-            agentId,
-            title: input.title,
-            summary: input.summary ?? '',
-            visibility: input.visibility ?? 'public',
-            status: 'published',
-            publishedAt: new Date()
-          }
-        });
-
-    return {
-      publicationId: publication.id,
-      agentId,
-      publisherUserId: publication.publisherUserId,
-      title: publication.title,
-      summary: publication.summary,
-      visibility: publication.visibility as MarketplaceAgentListItem['visibility'],
-      publishedAt: publication.publishedAt ?? new Date(),
-      agent
-    };
   }
 
   async unpublishAgent(agentId: string): Promise<void> {
-    const publication = await this.db.marketplacePublication.findFirst({
-      where: {
-        resourceType: 'agent',
-        resourceId: agentId,
-        status: 'published',
-        retiredAt: null
+    await this.db.$transaction(async (tx: any) => {
+      const agentRow = await tx.agent.findUnique({ where: { id: agentId } });
+      if (!agentRow) {
+        throw new Error('not_found');
       }
-    });
+      const publication = await tx.marketplacePublication.findFirst({
+        where: {
+          resourceType: 'agent',
+          resourceId: agentId,
+          status: 'published',
+          retiredAt: null
+        }
+      });
 
-    if (!publication) {
-      throw new Error('not_found');
-    }
+      if (!publication) {
+        throw new Error('not_found');
+      }
 
-    await this.db.marketplacePublication.update({
-      where: { id: publication.id },
-      data: { status: 'draft', retiredAt: new Date() }
+      await tx.marketplacePublication.update({
+        where: { id: publication.id },
+        data: { status: 'draft', retiredAt: new Date() }
+      });
+
+      await this.realtime.append(tx, { userId: agentRow.ownerUserId, topic: 'agent.changed', entityId: agentId });
+      await this.realtime.append(tx, { userId: agentRow.ownerUserId, topic: 'marketplace.changed', entityId: publication.id });
     });
   }
 
@@ -403,62 +453,67 @@ export class AgentRepository {
   }
 
   async cloneFromMarketplace(publicationId: string, targetOwnerUserId: string): Promise<CloneAgentResult> {
-    const publication = await this.db.marketplacePublication.findFirst({
-      where: {
-        id: publicationId,
-        resourceType: 'agent',
-        status: 'published',
-        visibility: 'public',
-        retiredAt: null
-      },
-      include: {
-        agent: {
-          include: {
-            sources: true
+    return this.db.$transaction(async (tx: any) => {
+      const publication = await tx.marketplacePublication.findFirst({
+        where: {
+          id: publicationId,
+          resourceType: 'agent',
+          status: 'published',
+          visibility: 'public',
+          retiredAt: null
+        },
+        include: {
+          agent: {
+            include: {
+              sources: true
+            }
           }
         }
+      });
+      if (!publication?.agent) {
+        throw new Error('not_found');
       }
-    });
-    if (!publication?.agent) {
-      throw new Error('not_found');
-    }
 
-    const existing = await this.db.agent.findFirst({
-      where: {
-        ownerUserId: targetOwnerUserId,
-        name: publication.agent.name
-      },
-      include: {
-        sources: true
-      }
-    });
-    if (existing) {
-      return { agent: mapAgent(existing), cloned: false };
-    }
-
-    const cloned = await this.db.agent.create({
-      data: {
-        ownerUserId: targetOwnerUserId,
-        name: publication.agent.name,
-        description: publication.agent.description ?? '',
-        characterType: publication.agent.characterType ?? DEFAULT_CHARACTER_TYPE,
-        promptConfigJson: publication.agent.promptConfigJson ?? '{}',
-        status: publication.agent.status ?? 'active',
-        preferencesJson: publication.agent.preferencesJson ?? '{}',
-        sources: {
-          create: (publication.agent.sources ?? []).map((source: any) => ({
-            type: source.type,
-            value: source.value,
-            frequencyMinutes: source.frequencyMinutes ?? 60,
-            maxItems: source.maxItems ?? 1
-          }))
+      const existing = await tx.agent.findFirst({
+        where: {
+          ownerUserId: targetOwnerUserId,
+          name: publication.agent.name
+        },
+        include: {
+          sources: true
         }
-      },
-      include: {
-        sources: true
+      });
+      if (existing) {
+        return { agent: mapAgent(existing), cloned: false };
       }
-    });
 
-    return { agent: mapAgent(cloned), cloned: true };
+      const cloned = await tx.agent.create({
+        data: {
+          ownerUserId: targetOwnerUserId,
+          name: publication.agent.name,
+          description: publication.agent.description ?? '',
+          characterType: publication.agent.characterType ?? DEFAULT_CHARACTER_TYPE,
+          promptConfigJson: publication.agent.promptConfigJson ?? '{}',
+          status: publication.agent.status ?? 'active',
+          preferencesJson: publication.agent.preferencesJson ?? '{}',
+          sources: {
+            create: (publication.agent.sources ?? []).map((source: any) => ({
+              type: source.type,
+              value: source.value,
+              frequencyMinutes: source.frequencyMinutes ?? 60,
+              maxItems: source.maxItems ?? 1
+            }))
+          }
+        },
+        include: {
+          sources: true
+        }
+      });
+
+      await this.realtime.append(tx, { userId: targetOwnerUserId, topic: 'agent.changed', entityId: cloned.id });
+      await this.realtime.append(tx, { userId: targetOwnerUserId, topic: 'marketplace.changed', entityId: publicationId });
+
+      return { agent: mapAgent(cloned), cloned: true };
+    });
   }
 }

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "cross-env NODE_EXTRA_CA_CERTS=./certs/netskope-root-ca.pem node ./scripts/prisma-generate-safe.cjs",
     "build": "tsc -p tsconfig.build.json",
     "predev": "node ./scripts/prisma-generate-safe.cjs",
     "prestart": "node ./scripts/prisma-generate-safe.cjs",

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ReportRepository } from './repository';
 
 function createFakeDb(agentCharacterTypes: Record<string, string> = {}) {
@@ -28,7 +28,10 @@ function createFakeDb(agentCharacterTypes: Record<string, string> = {}) {
     return { ...row, agent: include?.agent && agentCharacterTypes[row.agentId] ? { characterType: agentCharacterTypes[row.agentId] } : undefined };
   }
 
-  return {
+  const db: any = {
+    agent: {
+      findUnique: async ({ where }: { where: { id: string } }) => ({ id: where.id, ownerUserId: `owner-of-${where.id}` })
+    },
     agentRunReport: {
       create: async ({
         data,
@@ -107,6 +110,8 @@ function createFakeDb(agentCharacterTypes: Record<string, string> = {}) {
       }
     }
   };
+  db.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(db);
+  return db;
 }
 
 describe('ReportRepository', () => {
@@ -238,6 +243,65 @@ describe('ReportRepository', () => {
         artifacts: { some: { payloadJson: { contains: '"sourceId":"https://example.com/feed.xml"' } } }
       }
     });
+  });
+
+  it('counts each report only for source values referenced by its evidence artifacts', async () => {
+    const reportRows = [
+      // References feed-a via a single evidence artifact.
+      {
+        id: 'report-1',
+        agentId: 'agent-1',
+        agentRun: { artifacts: [{ payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-a.xml' }) }] }
+      },
+      // References feed-a twice (two artifacts) - must still contribute 1, not 2.
+      {
+        id: 'report-2',
+        agentId: 'agent-1',
+        agentRun: {
+          artifacts: [
+            { payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-a.xml' }) },
+            { payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-a.xml' }) }
+          ]
+        }
+      },
+      // References feed-b only.
+      {
+        id: 'report-3',
+        agentId: 'agent-2',
+        agentRun: { artifacts: [{ payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-b.xml' }) }] }
+      },
+      // Unrelated report owned by the same agent as report-1/report-2, but its evidence
+      // artifact references a source that was not requested - must be absent from both counts.
+      {
+        id: 'report-4',
+        agentId: 'agent-1',
+        agentRun: { artifacts: [{ payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-unrelated.xml' }) }] }
+      }
+    ];
+    const db = {
+      agentRunReport: {
+        findMany: async () => reportRows
+      }
+    };
+    const repo = new ReportRepository(db as never);
+
+    const result = await repo.countReportsForSourceValues([
+      'https://example.com/feed-a.xml',
+      'https://example.com/feed-b.xml'
+    ]);
+
+    expect(result).toEqual({
+      'https://example.com/feed-a.xml': 2,
+      'https://example.com/feed-b.xml': 1
+    });
+  });
+
+  it('returns a zero count for every requested source value without querying when the list is empty', async () => {
+    const findMany = vi.fn(async () => []);
+    const repo = new ReportRepository({ agentRunReport: { findMany } } as never);
+
+    expect(await repo.countReportsForSourceValues([])).toEqual({});
+    expect(findMany).not.toHaveBeenCalled();
   });
 
   it('persists AI usage/cost stats when provided', async () => {
@@ -418,5 +482,109 @@ describe('ReportRepository', () => {
 
     const reRead = await repo.getReportById(saved.id);
     expect(reRead?.report.section.character_type).toBe('teacher');
+  });
+});
+
+describe('ReportRepository read/dismiss state', () => {
+  function createStateDb() {
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const db: any = { agentRunReport: { updateMany } };
+    return { db, updateMany };
+  }
+
+  it('markReportRead only stamps readAt when it is still null (idempotent)', async () => {
+    const { db, updateMany } = createStateDb();
+    const repository = new ReportRepository(db);
+    await repository.markReportRead('report-1');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'report-1', readAt: null },
+      data: { readAt: expect.any(Date) }
+    });
+  });
+
+  it('markReportDismissed only stamps dismissedAt when it is still null (idempotent)', async () => {
+    const { db, updateMany } = createStateDb();
+    const repository = new ReportRepository(db);
+    await repository.markReportDismissed('report-1');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'report-1', dismissedAt: null },
+      data: { dismissedAt: expect.any(Date) }
+    });
+  });
+});
+
+describe('ReportRepository realtime event production', () => {
+  function createMockRealtime() {
+    const events: Array<{ userId: string; topic: string; entityId?: string; agentId?: string }> = [];
+    return {
+      events,
+      append: async (_tx: unknown, event: { userId: string; topic: string; entityId?: string; agentId?: string }) => {
+        events.push(event);
+      }
+    };
+  }
+
+  it('emits report.changed for the report agent owner in the same transaction as the create', async () => {
+    const db = createFakeDb();
+    const realtime = createMockRealtime();
+    const repo = new ReportRepository(db as never, realtime);
+
+    const saved = await repo.saveRunReport({
+      agentId: 'agent-1',
+      agentRunId: 'run-1',
+      promptVersionId: 'prompt-1',
+      summary: 'Bullish on AAPL',
+      needsHumanReview: false,
+      sourceWarnings: [],
+      signals: []
+    });
+
+    expect(realtime.events).toContainEqual(
+      expect.objectContaining({ userId: 'owner-of-agent-1', topic: 'report.changed', entityId: saved.id, agentId: 'agent-1' })
+    );
+  });
+
+  it('does not emit report.changed when the domain write fails', async () => {
+    const db = createFakeDb();
+    db.agentRunReport.create = async () => {
+      throw new Error('db_error');
+    };
+    const realtime = createMockRealtime();
+    const repo = new ReportRepository(db as never, realtime);
+
+    await expect(
+      repo.saveRunReport({
+        agentId: 'agent-1',
+        agentRunId: 'run-1',
+        promptVersionId: 'prompt-1',
+        summary: 'will fail',
+        needsHumanReview: false,
+        sourceWarnings: [],
+        signals: []
+      })
+    ).rejects.toThrow('db_error');
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when the owning agent is missing', async () => {
+    const db = createFakeDb();
+    db.agent = { findUnique: async () => null };
+    const realtime = createMockRealtime();
+    const repo = new ReportRepository(db as never, realtime);
+
+    await expect(
+      repo.saveRunReport({
+        agentId: 'agent-missing',
+        agentRunId: 'run-1',
+        promptVersionId: 'prompt-1',
+        summary: 'orphaned report',
+        needsHumanReview: false,
+        sourceWarnings: [],
+        signals: []
+      })
+    ).rejects.toThrow(/invariant_violation: report report_1 references missing agent agent-missing/);
+
+    expect(realtime.events).toHaveLength(0);
   });
 });

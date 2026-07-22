@@ -142,8 +142,13 @@ export function AgentRunsBrowser({ agentId, runs, onViewReport }: AgentRunsBrows
               type="error"
               showIcon
               style={{ marginTop: 8, wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-              message={`Error: ${run.errorCode}`}
-              description={run.errorMessage ? linkifyText(run.errorMessage) : t('runs.noErrorDetails')}
+              message={t('runs.errorTitle')}
+              description={
+                <>
+                  {run.errorMessage ? linkifyText(run.errorMessage) : t('runs.noErrorDetails')}
+                  <span className="mt-1 block text-xs opacity-60">({run.errorCode})</span>
+                </>
+              }
             />
           ) : run.status === 'succeeded_no_new_content' && run.errorMessage ? (
             // No error occurred, but a warning was collected while crawling (e.g. a manually

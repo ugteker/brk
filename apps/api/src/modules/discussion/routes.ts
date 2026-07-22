@@ -14,6 +14,13 @@ export interface DiscussionTtsLike {
   renderTurn(text: string, voice: string, language?: 'en' | 'de'): Promise<Buffer>;
 }
 
+/** Named TTS backends the server has credentials for. A discussion picks one via
+ * formatConfig.ttsProvider ('auto' keeps the server preference: google, then openai). */
+export interface DiscussionTtsClients {
+  google?: DiscussionTtsLike;
+  openai?: DiscussionTtsLike;
+}
+
 export interface DiscussionTtsStorageLike {
   save(key: string, buffer: Buffer): Promise<string>;
 }
@@ -21,7 +28,10 @@ export interface DiscussionTtsStorageLike {
 export interface DiscussionRoutesDeps {
   discussionRepository: DiscussionRepositoryLike;
   runTrigger?: DiscussionRunTriggerLike;
+  /** Single default TTS backend (legacy wiring/tests). Used when ttsClients is absent. */
   ttsClient?: DiscussionTtsLike;
+  /** Per-provider TTS backends; enables the per-discussion provider choice. */
+  ttsClients?: DiscussionTtsClients;
   ttsStorage?: DiscussionTtsStorageLike;
   /** Directory rendered mp3 files are read from by GET /api/discussions/audio/:file. */
   audioDir?: string;
@@ -49,6 +59,26 @@ export interface DiscussionRoutesDeps {
 }
 
 export async function registerDiscussionRoutes(app: FastifyInstance, deps: DiscussionRoutesDeps) {
+  const availableTtsProviders = (): Array<'google' | 'openai'> => {
+    const providers: Array<'google' | 'openai'> = [];
+    if (deps.ttsClients?.google) providers.push('google');
+    if (deps.ttsClients?.openai) providers.push('openai');
+    return providers;
+  };
+
+  const hasAnyTtsClient = (): boolean =>
+    availableTtsProviders().length > 0 || Boolean(deps.ttsClient);
+
+  /** Resolves the TTS backend for a discussion's provider choice; null when the requested
+   * provider (or any provider, for 'auto') isn't configured on this server. */
+  const resolveTtsClient = (provider?: 'auto' | 'google' | 'openai'): DiscussionTtsLike | null => {
+    if (provider === 'google' || provider === 'openai') {
+      return deps.ttsClients?.[provider] ?? null;
+    }
+    // 'auto' / undefined: server preference (google first), falling back to legacy single client.
+    return deps.ttsClients?.google ?? deps.ttsClients?.openai ?? deps.ttsClient ?? null;
+  };
+
   // Tracks in-flight/failed audio renders per run so the UI can poll for progress -
   // the actual render runs detached from the triggering request.
   const audioRenderState = new Map<string, 'rendering' | 'error' | 'done'>();
@@ -83,7 +113,10 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
   // (e.g. the "Render audio" button when no TTS backend is configured). Registered before
   // /api/discussions/:id so the static segment wins route matching.
   app.get('/api/discussions/capabilities', async (_req, reply) => {
-    return reply.send({ tts: Boolean(deps.ttsClient && deps.ttsStorage) });
+    return reply.send({
+      tts: Boolean(hasAnyTtsClient() && deps.ttsStorage),
+      ttsProviders: availableTtsProviders()
+    });
   });
 
   // List the user's recent raw source-material artifacts (episode/page transcripts downloaded
@@ -235,45 +268,6 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     return reply.status(200).send(run);
   });
 
-  // SSE stream for a live run
-  app.get('/api/discussions/:id/runs/:runId/stream', async (req, reply) => {
-    const { id, runId } = req.params as { id: string; runId: string };
-    const discussion = await deps.discussionRepository.getDiscussion(id);
-    if (!discussion || discussion.ownerUserId !== req.userId) {
-      return reply.status(404).send({ code: 'not_found', message: 'Discussion not found' });
-    }
-    reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
-    reply.raw.setHeader('Connection', 'keep-alive');
-    // Tell nginx (and compatible proxies) not to buffer this stream.
-    reply.raw.setHeader('X-Accel-Buffering', 'no');
-    reply.raw.flushHeaders();
-
-    let lastTurnIndex = -1;
-    const interval = setInterval(async () => {
-      const run = await deps.discussionRepository.getRunWithTurns(runId);
-      if (!run) {
-        clearInterval(interval);
-        reply.raw.end();
-        return;
-      }
-      for (const turn of run.turns) {
-        if (turn.turnIndex > lastTurnIndex) {
-          reply.raw.write(`event: turn\ndata: ${JSON.stringify(turn)}\n\n`);
-          lastTurnIndex = turn.turnIndex;
-        }
-      }
-      if (run.status === 'done' || run.status === 'error') {
-        reply.raw.write(`event: ${run.status}\ndata: ${JSON.stringify({ runId })}\n\n`);
-        clearInterval(interval);
-        reply.raw.end();
-      }
-    }, 2000);
-
-    req.raw.on('close', () => clearInterval(interval));
-    return reply;
-  });
-
   // Trigger TTS audio render for a completed run
   app.post('/api/discussions/:id/runs/:runId/audio', async (req, reply) => {
     const { id, runId } = req.params as { id: string; runId: string };
@@ -285,11 +279,18 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     if (!run || run.status !== 'done') {
       return reply.status(422).send({ code: 'run_not_done', message: 'Run must be completed before rendering audio' });
     }
-    if (!deps.ttsClient || !deps.ttsStorage) {
+    const requestedProvider = discussion.formatConfig.ttsProvider;
+    const ttsClient = resolveTtsClient(requestedProvider);
+    if (!ttsClient || !deps.ttsStorage) {
+      if ((requestedProvider === 'google' || requestedProvider === 'openai') && hasAnyTtsClient() && deps.ttsStorage) {
+        return reply.status(422).send({
+          code: 'tts_provider_unavailable',
+          message: `The ${requestedProvider === 'google' ? 'Google' : 'OpenAI'} voice service is not configured on this server`
+        });
+      }
       return reply.status(501).send({ code: 'tts_not_configured', message: 'TTS not configured' });
     }
 
-    const ttsClient = deps.ttsClient;
     const ttsStorage = deps.ttsStorage;
     audioRenderState.set(runId, 'rendering');
     const language = discussion.formatConfig.language ?? 'en';

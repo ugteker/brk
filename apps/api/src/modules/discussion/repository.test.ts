@@ -7,14 +7,10 @@ const turnRow = { id: 't1', discussionRunId: 'r1', participantId: 'p1', turnInde
 const runRow = { id: 'r1', discussionId: 'd1', status: 'pending', triggeredBy: 'manual', errorMessage: null, startedAt: null, completedAt: null, syntheticSourceItemId: null, audioUrl: null, createdAt: new Date(), evidenceSnapshotJson: null, turns: [] };
 
 function makeDb(overrides: any = {}) {
-  const tx = {
-    discussion: { create: vi.fn().mockResolvedValue(discRow), findUniqueOrThrow: vi.fn().mockResolvedValue(discRow) },
-    discussionParticipant: { create: vi.fn().mockResolvedValue(participantRow) }
-  };
-  return {
-    tx,
-    $transaction: vi.fn().mockImplementation((fn: any) => fn(tx)),
+  const db: any = {
     discussion: {
+      create: vi.fn().mockResolvedValue(discRow),
+      findUniqueOrThrow: vi.fn().mockResolvedValue(discRow),
       findUnique: vi.fn().mockResolvedValue(discRow),
       findMany: vi.fn().mockResolvedValue([discRow]),
       update: vi.fn().mockResolvedValue(discRow),
@@ -26,15 +22,18 @@ function makeDb(overrides: any = {}) {
       create: vi.fn().mockResolvedValue(runRow),
       findUnique: vi.fn().mockResolvedValue({ ...runRow, turns: [turnRow] }),
       findMany: vi.fn().mockResolvedValue([runRow]),
-      update: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockResolvedValue(runRow),
       ...overrides.discussionRun
     },
     discussionTurn: {
       create: vi.fn().mockResolvedValue(turnRow),
-      update: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockResolvedValue(turnRow),
       ...overrides.discussionTurn
     }
   };
+  db.$transaction = vi.fn().mockImplementation((fn: any) => fn(db));
+  db.tx = db;
+  return db;
 }
 
 describe('DiscussionRepository', () => {
@@ -153,5 +152,134 @@ describe('DiscussionRepository', () => {
     const repo = new DiscussionRepository(db as any);
     const run = await repo.getRunWithTurns('r1');
     expect(run!.evidenceSnapshot).toEqual(snapshot);
+  });
+});
+
+describe('DiscussionRepository realtime event production', () => {
+  function createMockRealtime() {
+    const events: Array<{ userId: string; topic: string; entityId?: string }> = [];
+    return {
+      events,
+      append: vi.fn(async (_tx: unknown, event: { userId: string; topic: string; entityId?: string }) => {
+        events.push(event);
+      })
+    };
+  }
+
+  it('emits discussion.changed for the discussion owner on createRun, updateRun, and createTurn', async () => {
+    const db = makeDb();
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await repo.createRun('d1', 'manual');
+    await repo.updateRun('r1', { status: 'running' });
+    await repo.createTurn('r1', 'p1', 0, 'Hello', null);
+
+    expect(realtime.events).toHaveLength(3);
+    expect(realtime.events.every((e) => e.userId === 'u1' && e.topic === 'discussion.changed' && e.entityId === 'd1')).toBe(true);
+  });
+
+  it('emits discussion.changed for the discussion owner on updateTurnAudioUrl and setRunEvidenceSnapshot', async () => {
+    const db = makeDb();
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await repo.updateTurnAudioUrl('t1', 'https://audio/1.mp3');
+    await repo.setRunEvidenceSnapshot('r1', { agenda: 'Discuss', participants: [] });
+
+    expect(realtime.events).toHaveLength(2);
+    expect(realtime.events.every((e) => e.userId === 'u1' && e.topic === 'discussion.changed' && e.entityId === 'd1')).toBe(true);
+  });
+
+  it('does not emit discussion.changed when the domain write throws', async () => {
+    const db = makeDb({ discussionRun: { update: vi.fn().mockRejectedValue(new Error('db_error')) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.updateRun('r1', { status: 'error' })).rejects.toThrow('db_error');
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when createRun cannot find the owning discussion', async () => {
+    const db = makeDb({ discussion: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.createRun('d1', 'manual')).rejects.toThrow(/invariant_violation: discussion run r1 references missing discussion d1/);
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when updateRun cannot find the owning discussion', async () => {
+    const db = makeDb({ discussion: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.updateRun('r1', { status: 'running' })).rejects.toThrow(
+      /invariant_violation: discussion run r1 references missing discussion d1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when setRunEvidenceSnapshot cannot find the owning discussion', async () => {
+    const db = makeDb({ discussion: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.setRunEvidenceSnapshot('r1', { agenda: 'Discuss', participants: [] })).rejects.toThrow(
+      /invariant_violation: discussion run r1 references missing discussion d1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when createTurn cannot find the owning run', async () => {
+    const db = makeDb({ discussionRun: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.createTurn('r1', 'p1', 0, 'Hello', null)).rejects.toThrow(
+      /invariant_violation: discussion turn t1 references missing run r1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when createTurn cannot find the owning discussion', async () => {
+    const db = makeDb({ discussion: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.createTurn('r1', 'p1', 0, 'Hello', null)).rejects.toThrow(
+      /invariant_violation: discussion run r1 references missing discussion d1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when updateTurnAudioUrl cannot find the owning run', async () => {
+    const db = makeDb({ discussionRun: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.updateTurnAudioUrl('t1', 'https://audio/1.mp3')).rejects.toThrow(
+      /invariant_violation: discussion turn t1 references missing run r1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
+  });
+
+  it('throws invariant_violation instead of silently skipping the event when updateTurnAudioUrl cannot find the owning discussion', async () => {
+    const db = makeDb({ discussion: { findUnique: vi.fn().mockResolvedValue(null) } });
+    const realtime = createMockRealtime();
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.updateTurnAudioUrl('t1', 'https://audio/1.mp3')).rejects.toThrow(
+      /invariant_violation: discussion run r1 references missing discussion d1/
+    );
+
+    expect(realtime.events).toHaveLength(0);
   });
 });

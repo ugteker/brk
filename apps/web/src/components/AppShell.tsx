@@ -130,6 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const {
     failedRunNotices,
     newReportNotices,
+    discussionNotices,
     bellDismissedIds,
     setBellDismissedIds,
     refreshAgents, refreshSources, refreshPlaybooks,
@@ -151,10 +152,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   const current = activeKey(pathname);
-  type BellNotice = { id: string; kind: 'run_failed' | 'new_report'; agentName: string; message: string; timestamp: string };
+  type BellNotice = { id: string; kind: 'run_failed' | 'new_report' | 'show_started' | 'show_finished' | 'audio_ready'; agentName: string; message: string; timestamp: string };
   const combinedNotices: BellNotice[] = [
     ...failedRunNotices.map((n) => ({ id: n.runId, kind: 'run_failed' as const, agentName: n.agentName, message: n.errorMessage ?? 'Run failed', timestamp: n.timestamp })),
-    ...newReportNotices.map((n) => ({ id: n.reportId, kind: 'new_report' as const, agentName: n.agentName, message: n.summary, timestamp: n.timestamp }))
+    ...newReportNotices.map((n) => ({ id: n.reportId, kind: 'new_report' as const, agentName: n.agentName, message: n.summary, timestamp: n.timestamp })),
+    ...discussionNotices.map((n) => ({
+      id: n.id,
+      kind: n.kind,
+      agentName: n.discussionName,
+      message: t(`nav.bell_${n.kind}`),
+      timestamp: n.timestamp
+    }))
   ].sort((a, b) => (Date.parse(a.timestamp) || 0) - (Date.parse(b.timestamp) || 0));
   const unread = combinedNotices.filter((n) => !bellDismissedIds.has(n.id));
   const navItems = [...COMMON_NAV_ITEMS, ...(isAdmin && adminMode ? ADMIN_NAV_ITEMS : [])];
@@ -317,26 +325,29 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {combinedNotices.length === 0 ? (
                     <p className="text-xs text-gray-400 py-2 text-center">{t('nav.bellEmpty')}</p>
                   ) : (
-                    [...combinedNotices].reverse().map((n) => (
+                    [...combinedNotices].reverse().map((n) => {
+                      const tone = n.kind === 'run_failed'
+                        ? { box: 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950', title: 'text-red-700 dark:text-red-300', body: 'text-red-500 dark:text-red-400' }
+                        : n.kind === 'new_report'
+                          ? { box: 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950', title: 'text-green-700 dark:text-green-300', body: 'text-green-600 dark:text-green-400' }
+                          : { box: 'border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-950', title: 'text-violet-700 dark:text-violet-300', body: 'text-violet-600 dark:text-violet-400' };
+                      return (
                       <div
                         key={n.id}
                         className={`rounded-lg border px-3 py-2 text-xs ${
-                          bellDismissedIds.has(n.id)
-                            ? 'opacity-40 border-gray-200'
-                            : n.kind === 'run_failed'
-                              ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'
-                              : 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950'
+                          bellDismissedIds.has(n.id) ? 'opacity-40 border-gray-200' : tone.box
                         }`}
                       >
-                        <p className={`font-semibold truncate ${n.kind === 'run_failed' ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}>
+                        <p className={`font-semibold truncate ${tone.title}`}>
                           {n.agentName}
                         </p>
-                        <p className={`truncate ${n.kind === 'run_failed' ? 'text-red-500 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                        <p className={`truncate ${tone.body}`}>
                           {n.kind === 'new_report' ? `${t('nav.bellNewReport')}: ` : ''}{n.message}
                         </p>
                         {n.timestamp ? <p className="text-gray-400 mt-0.5">{new Date(n.timestamp).toLocaleString()}</p> : null}
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               }

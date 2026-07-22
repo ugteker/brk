@@ -24,7 +24,11 @@ function makeDb(sourceExists = false) {
       update: vi.fn().mockResolvedValue({})
     },
     discussionRun: {
-      update: vi.fn().mockResolvedValue({})
+      update: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'r1', audioUrl: 'https://cdn.example.com/r1.mp3' },
+        { id: 'r0', audioUrl: null }
+      ])
     }
   };
 }
@@ -84,6 +88,20 @@ describe('SyntheticSourceService', () => {
     ]);
     // Participants stay intact in config
     expect(cfg.participants).toEqual(['Agent A']);
+  });
+
+  it('records rendered-audio material on the library card (per item and total)', async () => {
+    const db = makeDb(false);
+    const svc = new SyntheticSourceService(db as any);
+    await svc.ensureSyntheticSource(baseDiscussion, 'r1', 'transcript', ['Agent A']);
+    const updateArg = db.source.update.mock.calls[0][0];
+    const cfg = JSON.parse(updateArg.data.configJson);
+    // Preview item r1 has rendered audio, so it is flagged
+    expect(cfg.libraryCard.previewItems).toEqual([
+      expect.objectContaining({ link: 'discussion-run:r1', hasAudio: true })
+    ]);
+    // One of the two runs has audio rendered
+    expect(cfg.libraryCard.audioCount).toBe(1);
   });
 
   it('does not fail the run when the library card refresh errors', async () => {
