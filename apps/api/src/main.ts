@@ -49,6 +49,8 @@ import { GoogleTtsClient } from './modules/discussion/google-tts-client';
 import { FileTtsStorage } from './modules/discussion/tts-storage';
 import OpenAI from 'openai';
 import { logger } from './lib/logger';
+import { RealtimeRepository } from './modules/realtime/repository';
+import { startRealtimeCleanupLoop } from './modules/realtime/cleanup-loop';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
   const { email, password } = config.auth.bootstrapAdmin;
@@ -114,6 +116,7 @@ async function start(role: Role) {
   };
 
   const discussionRepository = new DiscussionRepository(prisma);
+  const realtimeEventRepository = new RealtimeRepository(prisma);
   const syntheticSourceService = new SyntheticSourceService(prisma);
   const discussionOrchestrator = new DiscussionOrchestrator({
     discussionRepository,
@@ -237,12 +240,14 @@ async function start(role: Role) {
           }
         : {})
     },
+    realtime: { repository: realtimeEventRepository },
     db: prisma
   });
 
   if (plan.startSchedulers) {
     startSchedulerLoop({ intervalMs: 60_000, queue, runner: agentRunner });
     startDigestLoop({ store: new PrismaDigestStore(prisma), mailer });
+    startRealtimeCleanupLoop({ repository: realtimeEventRepository });
 
     // Discussion scheduler: check every 60s for scheduled discussions due to run
     setInterval(async () => {
