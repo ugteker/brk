@@ -91,15 +91,16 @@ async function start(role: Role) {
   await ensureSqliteSchemaCompatibility();
   await applySqlitePragmas(prisma);
 
-  const agentRepository = new AgentRepository(prisma);
+  const realtimeEventRepository = new RealtimeRepository(prisma);
+  const agentRepository = new AgentRepository(prisma, realtimeEventRepository);
   const promptRepository = new PromptRepository(prisma);
   const artifactRepository = new ArtifactRepository(prisma);
   const reportRepository = new ReportRepository(prisma);
   const runsRepository = new RunsRepository(prisma);
   const claudeClient = new ClaudeClient({ apiKey: process.env.ANTHROPIC_API_KEY });
   const userRepository = new UserRepository(prisma);
-  const sourceRepository = new SourceRepository(prisma);
-  const playbookRepository = new PlaybookRepository(prisma);
+  const sourceRepository = new SourceRepository(prisma, realtimeEventRepository);
+  const playbookRepository = new PlaybookRepository(prisma, realtimeEventRepository);
   const accessResolver = new DomainAccessResolver(new AccessRepository(prisma));
   const cursorRepository = new SourceCursorRepository(prisma);
   const crawlConfigRepository = new SourceCrawlConfigRepository(prisma);
@@ -116,7 +117,6 @@ async function start(role: Role) {
   };
 
   const discussionRepository = new DiscussionRepository(prisma);
-  const realtimeEventRepository = new RealtimeRepository(prisma);
   const syntheticSourceService = new SyntheticSourceService(prisma);
   const discussionOrchestrator = new DiscussionOrchestrator({
     discussionRepository,
