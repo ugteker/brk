@@ -94,6 +94,7 @@ import {
 import {
   createSource,
   deleteSource,
+  listSourceReports,
   listSources,
   probeSource,
   publishSource,
@@ -835,14 +836,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       return;
     }
     setSourceDetailLoading(true);
-    const reportPromises = linked.map((pb) => listAgentReports(pb.agentId));
+    // Reports come from the source-scoped endpoint (only reports whose run actually crawled
+    // this source); runs are still per-agent since they have no source-level endpoint.
     const runPromises = linked.map((pb) => listAgentRuns(pb.agentId));
-    Promise.all([...reportPromises, ...runPromises])
+    Promise.all([listSourceReports<RunReportDto>(selectedSourceId), ...runPromises])
       .then((results) => {
         if (!alive) return;
-        const n = linked.length;
-        const allReports = (results.slice(0, n) as RunReportDto[][]).flat();
-        const allRuns = (results.slice(n) as RunDetailDto[][]).flat();
+        const allReports = results[0] as RunReportDto[];
+        const allRuns = (results.slice(1) as RunDetailDto[][]).flat();
         allReports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         allRuns.sort((a, b) => new Date(b.scheduledFor).getTime() - new Date(a.scheduledFor).getTime());
         setSourceDetailReports(allReports);

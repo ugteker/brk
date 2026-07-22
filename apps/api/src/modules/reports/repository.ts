@@ -110,6 +110,28 @@ export class ReportRepository {
   }
 
   /**
+   * Lists reports whose generating run actually crawled the given source, across all agents.
+   * Attribution goes through the run's saved evidence artifacts: every adapter serializes its
+   * EvidenceBlock (which carries `sourceId = source.value`) into `payloadJson`, so a substring
+   * match on that JSON key/value pair scopes reports to the concrete source - unlike the
+   * agent-scoped listing, which would surface an agent's unrelated reports on every source
+   * its playbook merely links to.
+   */
+  async listReportsForSource(sourceValue: string): Promise<RunReportRecord[]> {
+    const rows = await this.db.agentRunReport.findMany({
+      where: {
+        agentRun: {
+          artifacts: { some: { payloadJson: { contains: `"sourceId":${JSON.stringify(sourceValue)}` } } }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { signals: true, agent: { select: { characterType: true } }, agentRun: { select: { playbookId: true } } }
+    });
+
+    return rows.map((row: unknown) => this.toRecord(row as ReportRow));
+  }
+
+  /**
    * Lists all reports for the given agent that contain at least one signal for `symbol`,
    * ordered oldest-first (chronological), for building a per-symbol signal history timeline.
    * Symbol matching is exact/case-sensitive, matching how symbols are stored elsewhere.

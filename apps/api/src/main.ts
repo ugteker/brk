@@ -163,6 +163,7 @@ async function start() {
     source: {
       sourceRepository,
       accessResolver,
+      reportRepository,
       sourceProbe: {
         probeSource: (source, previewLimit) =>
           source.type === 'youtube_videos'

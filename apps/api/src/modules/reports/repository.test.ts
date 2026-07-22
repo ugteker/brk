@@ -216,6 +216,30 @@ describe('ReportRepository', () => {
     expect(await repo.getReportById('report-unknown')).toBeNull();
   });
 
+  it('filters source-scoped reports by run artifacts that reference the source value', async () => {
+    // The nested relation filter is what makes this query source-scoped; a fake in-memory
+    // join would only re-test the fake, so this asserts the exact Prisma filter shape.
+    let captured: { where?: unknown } | undefined;
+    const db = {
+      agentRunReport: {
+        findMany: async (args: { where?: unknown }) => {
+          captured = args;
+          return [];
+        }
+      }
+    };
+    const repo = new ReportRepository(db as never);
+
+    const result = await repo.listReportsForSource('https://example.com/feed.xml');
+
+    expect(result).toEqual([]);
+    expect(captured?.where).toEqual({
+      agentRun: {
+        artifacts: { some: { payloadJson: { contains: '"sourceId":"https://example.com/feed.xml"' } } }
+      }
+    });
+  });
+
   it('persists AI usage/cost stats when provided', async () => {
     const repo = new ReportRepository(createFakeDb() as never);
 
