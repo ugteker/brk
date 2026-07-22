@@ -109,36 +109,43 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
     private readonly realtime: RealtimeEventWriter = noopRealtimeEventWriter
   ) {}
 
-  async createPlaybook(_ownerUserId: string, input: CreatePlaybookInput): Promise<Playbook> {
+  async createPlaybook(ownerUserId: string, input: CreatePlaybookInput): Promise<Playbook> {
     const now = new Date();
     const schedule = input.schedule ?? { mode: 'interval', intervalMinutes: 60 };
-    const created = await this.db.playbook.create({
-      data: {
-        agentId: input.agentId,
-        name: input.name,
-        description: input.description ?? '',
-        enabled: input.enabled ?? true,
-        recipientsJson: JSON.stringify(input.recipients ?? []),
-        executionMode: input.executionMode ?? 'latest_only',
-        maxSourcesPerRun: input.maxSourcesPerRun ?? 3,
-        maxItemsPerSource: input.maxItemsPerSource ?? 1,
-        followTargetType: input.followTargetType ?? null,
-        followTargetKey: input.followTargetKey ?? null,
-        followTargetTitle: input.followTargetTitle ?? null,
-        language: input.language ?? 'en',
-        ...schedulePatchData(schedule, now),
-        sources: {
-          create: input.sourceIds.map((sourceId, index) => ({
-            sourceId,
-            enabled: true,
-            position: index
-          }))
+    const created = await this.db.$transaction(async (tx: any) => {
+      const created = await tx.playbook.create({
+        data: {
+          agentId: input.agentId,
+          name: input.name,
+          description: input.description ?? '',
+          enabled: input.enabled ?? true,
+          recipientsJson: JSON.stringify(input.recipients ?? []),
+          executionMode: input.executionMode ?? 'latest_only',
+          maxSourcesPerRun: input.maxSourcesPerRun ?? 3,
+          maxItemsPerSource: input.maxItemsPerSource ?? 1,
+          followTargetType: input.followTargetType ?? null,
+          followTargetKey: input.followTargetKey ?? null,
+          followTargetTitle: input.followTargetTitle ?? null,
+          language: input.language ?? 'en',
+          ...schedulePatchData(schedule, now),
+          sources: {
+            create: input.sourceIds.map((sourceId, index) => ({
+              sourceId,
+              enabled: true,
+              position: index
+            }))
+          }
+        },
+        include: {
+          sources: { orderBy: { position: 'asc' } },
+          agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
         }
-      },
-      include: {
-        sources: { orderBy: { position: 'asc' } },
-        agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
-      }
+      });
+      // The creating user is the known-good owner path here: the route only lets a
+      // caller create a playbook against their own agentId, so we target them directly
+      // rather than re-querying the just-created row's linked agent.
+      await this.realtime.append(tx, { userId: ownerUserId, topic: 'playbook.changed', entityId: created.id });
+      return created;
     });
     return mapPlaybook(created);
   }
@@ -169,6 +176,18 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
   async updatePlaybook(playbookId: string, patch: UpdatePlaybookInput): Promise<Playbook> {
     const now = new Date();
     const updated = await this.db.$transaction(async (tx: any) => {
+      const existing = await tx.playbook.findUnique({ where: { id: playbookId } });
+      if (!existing) {
+        throw new Error('not_found');
+      }
+      const agent = await tx.agent.findUnique({ where: { id: existing.agentId } });
+      if (!agent) {
+        // Playbook.agentId is a required, FK-enforced column (onDelete: Restrict), so a
+        // missing agent here means the data invariant has been violated. Surface it loudly
+        // instead of silently skipping the realtime event.
+        throw new Error(`invariant_violation: playbook ${playbookId} references missing agent ${existing.agentId}`);
+      }
+
       if (patch.sourceIds) {
         await tx.playbookSource.deleteMany({ where: { playbookId } });
         if (patch.sourceIds.length > 0) {
@@ -183,7 +202,7 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
         }
       }
 
-      return tx.playbook.update({
+      const changed = await tx.playbook.update({
         where: { id: playbookId },
         data: {
           ...(patch.name !== undefined ? { name: patch.name } : {}),
@@ -206,14 +225,27 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
           agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
         }
       });
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'playbook.changed', entityId: playbookId });
+      return changed;
     });
     return mapPlaybook(updated);
   }
 
   async deletePlaybook(playbookId: string): Promise<void> {
     await this.db.$transaction(async (tx: any) => {
+      const existing = await tx.playbook.findUnique({ where: { id: playbookId } });
+      if (!existing) {
+        throw new Error('not_found');
+      }
+      const agent = await tx.agent.findUnique({ where: { id: existing.agentId } });
+      if (!agent) {
+        throw new Error(`invariant_violation: playbook ${playbookId} references missing agent ${existing.agentId}`);
+      }
+
       await tx.playbookSource.deleteMany({ where: { playbookId } });
       await tx.playbook.delete({ where: { id: playbookId } });
+
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'playbook.changed', entityId: playbookId });
     });
   }
 
@@ -229,16 +261,29 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
   }
 
   async sharePlaybook(playbookId: string, grantedByUserId: string, input: SharePlaybookInput): Promise<void> {
-    await this.db.accessGrant.create({
-      data: {
-        grantedByUserId,
-        granteeUserId: input.granteeUserId,
-        resourceType: 'playbook',
-        resourceId: playbookId,
-        permission: input.permission,
-        playbookId,
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+    await this.db.$transaction(async (tx: any) => {
+      const existing = await tx.playbook.findUnique({ where: { id: playbookId } });
+      if (!existing) {
+        throw new Error('not_found');
       }
+      const agent = await tx.agent.findUnique({ where: { id: existing.agentId } });
+      if (!agent) {
+        throw new Error(`invariant_violation: playbook ${playbookId} references missing agent ${existing.agentId}`);
+      }
+
+      await tx.accessGrant.create({
+        data: {
+          grantedByUserId,
+          granteeUserId: input.granteeUserId,
+          resourceType: 'playbook',
+          resourceId: playbookId,
+          permission: input.permission,
+          playbookId,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+        }
+      });
+
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'playbook.changed', entityId: playbookId });
     });
   }
 
@@ -288,9 +333,12 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
             }
           });
 
-      if (agent) {
-        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'marketplace.changed', entityId: publication.id });
-      }
+      // Playbook.agentId is a required, FK-enforced column, so `agent` should never be
+      // null here. If it somehow is (data invariant violation), fall back to the known
+      // publisher rather than silently dropping the realtime events.
+      const targetUserId = agent ? agent.ownerUserId : publisherUserId;
+      await this.realtime.append(tx, { userId: targetUserId, topic: 'playbook.changed', entityId: playbookId });
+      await this.realtime.append(tx, { userId: targetUserId, topic: 'marketplace.changed', entityId: publication.id });
 
       return {
         publicationId: publication.id,
@@ -331,9 +379,11 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
       });
 
       const agent = await tx.agent.findUnique({ where: { id: row.agentId } });
-      if (agent) {
-        await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'marketplace.changed', entityId: publication.id });
-      }
+      // Fall back to the publication's recorded publisher if the linked agent is
+      // unexpectedly missing, rather than silently omitting the realtime events.
+      const targetUserId = agent ? agent.ownerUserId : publication.publisherUserId;
+      await this.realtime.append(tx, { userId: targetUserId, topic: 'playbook.changed', entityId: playbookId });
+      await this.realtime.append(tx, { userId: targetUserId, topic: 'marketplace.changed', entityId: publication.id });
     });
   }
 
@@ -512,6 +562,7 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
         }
       });
 
+      await this.realtime.append(tx, { userId: targetOwnerUserId, topic: 'playbook.changed', entityId: created.id });
       await this.realtime.append(tx, { userId: targetOwnerUserId, topic: 'marketplace.changed', entityId: publicationId });
 
       return { playbook: mapPlaybook(created), cloned: true };

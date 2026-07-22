@@ -127,50 +127,65 @@ export class AgentRepository {
   async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
     const characterType = input.characterType ?? DEFAULT_CHARACTER_TYPE;
     const promptConfig = input.promptConfig ?? {};
-    const created = await this.db.agent.create({
-      data: {
-        ownerUserId,
-        name: input.name && input.name.trim().length > 0 ? input.name.trim() : deriveAgentName(characterType, promptConfig),
-        description: input.description ?? '',
-        characterType,
-        promptConfigJson: JSON.stringify(promptConfig),
-        status: input.active === false ? 'disabled' : 'active',
-        preferencesJson: JSON.stringify(input.preferences ?? {}),
-        ...(input.sources && input.sources.length > 0
-          ? {
-              sources: {
-                create: input.sources.map((s) => ({
-                  type: s.type,
-                  value: s.value,
-                  frequencyMinutes: s.frequencyMinutes ?? 60,
-                  maxItems: s.maxItems ?? 1
-                }))
+    const created = await this.db.$transaction(async (tx: any) => {
+      const created = await tx.agent.create({
+        data: {
+          ownerUserId,
+          name: input.name && input.name.trim().length > 0 ? input.name.trim() : deriveAgentName(characterType, promptConfig),
+          description: input.description ?? '',
+          characterType,
+          promptConfigJson: JSON.stringify(promptConfig),
+          status: input.active === false ? 'disabled' : 'active',
+          preferencesJson: JSON.stringify(input.preferences ?? {}),
+          ...(input.sources && input.sources.length > 0
+            ? {
+                sources: {
+                  create: input.sources.map((s) => ({
+                    type: s.type,
+                    value: s.value,
+                    frequencyMinutes: s.frequencyMinutes ?? 60,
+                    maxItems: s.maxItems ?? 1
+                  }))
+                }
               }
-            }
-          : {})
-      },
-      include: { sources: true }
+            : {})
+        },
+        include: { sources: true }
+      });
+      await this.realtime.append(tx, { userId: ownerUserId, topic: 'agent.changed', entityId: created.id });
+      return created;
     });
 
     return mapAgent(created);
   }
 
   async disableAgent(agentId: string): Promise<void> {
-    await this.db.agent.update({
-      where: { id: agentId },
-      data: { status: 'disabled' }
+    await this.db.$transaction(async (tx: any) => {
+      const updated = await tx.agent.update({
+        where: { id: agentId },
+        data: { status: 'disabled' }
+      });
+      await this.realtime.append(tx, { userId: updated.ownerUserId, topic: 'agent.changed', entityId: agentId });
     });
   }
 
   async enableAgent(agentId: string): Promise<void> {
-    await this.db.agent.update({
-      where: { id: agentId },
-      data: { status: 'active' }
+    await this.db.$transaction(async (tx: any) => {
+      const updated = await tx.agent.update({
+        where: { id: agentId },
+        data: { status: 'active' }
+      });
+      await this.realtime.append(tx, { userId: updated.ownerUserId, topic: 'agent.changed', entityId: agentId });
     });
   }
 
   async deleteAgent(agentId: string): Promise<void> {
     await this.db.$transaction(async (tx: any) => {
+      const existing = await tx.agent.findUnique({ where: { id: agentId } });
+      if (!existing) {
+        throw new Error('not_found');
+      }
+
       const reports = await tx.agentRunReport.findMany({ where: { agentId }, select: { id: true } });
       const reportIds = reports.map((r: { id: string }) => r.id);
       if (reportIds.length > 0) {
@@ -194,6 +209,8 @@ export class AgentRepository {
 
       await tx.playbook.deleteMany({ where: { agentId } });
       await tx.agent.delete({ where: { id: agentId } });
+
+      await this.realtime.append(tx, { userId: existing.ownerUserId, topic: 'agent.changed', entityId: agentId });
     });
   }
 
@@ -227,11 +244,13 @@ export class AgentRepository {
       if (patch.active !== undefined) data.status = patch.active ? 'active' : 'disabled';
       if (patch.preferences !== undefined) data.preferencesJson = JSON.stringify(patch.preferences);
 
-      return tx.agent.update({
+      const changed = await tx.agent.update({
         where: { id: agentId },
         data,
         include: { sources: true }
       });
+      await this.realtime.append(tx, { userId: changed.ownerUserId, topic: 'agent.changed', entityId: agentId });
+      return changed;
     });
 
     return mapAgent(updated);
@@ -256,16 +275,23 @@ export class AgentRepository {
   }
 
   async shareAgent(agentId: string, grantedByUserId: string, input: ShareAgentInput): Promise<void> {
-    await this.db.accessGrant.create({
-      data: {
-        grantedByUserId,
-        granteeUserId: input.granteeUserId,
-        resourceType: 'agent',
-        resourceId: agentId,
-        permission: input.permission,
-        agentId,
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+    await this.db.$transaction(async (tx: any) => {
+      const agent = await tx.agent.findUnique({ where: { id: agentId } });
+      if (!agent) {
+        throw new Error('not_found');
       }
+      await tx.accessGrant.create({
+        data: {
+          grantedByUserId,
+          granteeUserId: input.granteeUserId,
+          resourceType: 'agent',
+          resourceId: agentId,
+          permission: input.permission,
+          agentId,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+        }
+      });
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'agent.changed', entityId: agentId });
     });
   }
 
@@ -349,6 +375,7 @@ export class AgentRepository {
             }
           });
 
+      await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'agent.changed', entityId: agentId });
       await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'marketplace.changed', entityId: publication.id });
 
       return {
@@ -388,6 +415,7 @@ export class AgentRepository {
         data: { status: 'draft', retiredAt: new Date() }
       });
 
+      await this.realtime.append(tx, { userId: agentRow.ownerUserId, topic: 'agent.changed', entityId: agentId });
       await this.realtime.append(tx, { userId: agentRow.ownerUserId, topic: 'marketplace.changed', entityId: publication.id });
     });
   }
@@ -482,6 +510,7 @@ export class AgentRepository {
         }
       });
 
+      await this.realtime.append(tx, { userId: targetOwnerUserId, topic: 'agent.changed', entityId: cloned.id });
       await this.realtime.append(tx, { userId: targetOwnerUserId, topic: 'marketplace.changed', entityId: publicationId });
 
       return { agent: mapAgent(cloned), cloned: true };

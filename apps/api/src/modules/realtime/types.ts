@@ -3,6 +3,8 @@ export const REALTIME_HEARTBEAT_MS = 15_000;
 export const REALTIME_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 export type RealtimeTopic =
+  | 'agent.changed'
+  | 'playbook.changed'
   | 'source.changed'
   | 'marketplace.changed'
   | 'run.changed'
