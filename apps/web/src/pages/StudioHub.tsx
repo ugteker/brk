@@ -102,59 +102,61 @@ export function StudioHub() {
           {discussions.map((d, i) => (
             <div
               key={d.id}
-              className="ct-animate-enter flex cursor-pointer items-center gap-4 border-b border-border bg-card px-5 py-4 transition-colors last:border-b-0 hover:bg-muted/50"
+              className="ct-animate-enter flex flex-col gap-3 border-b border-border bg-card px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-4 sm:px-5 sm:py-4"
               style={{ animationDelay: `${i * 50}ms` }}
               onClick={() => navigate(`/studio/${d.id}`)}
             >
-              {/* Format dot indicator — replaces the old card grid */}
-              <div
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  background: FORMAT_HEX[d.format] ?? '#888',
-                  flexShrink: 0
-                }}
-              />
+              <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
+                {/* Format dot indicator — replaces the old card grid */}
+                <div
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                    background: FORMAT_HEX[d.format] ?? '#888',
+                    flexShrink: 0
+                  }}
+                />
 
-              {/* Body */}
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="truncate font-semibold">{d.name}</span>
-                  <Tag color={FORMAT_COLORS[d.format] ?? 'default'} style={{ fontSize: 11, margin: 0 }}>
-                    {t(`studio.format_${d.format}`)}
-                  </Tag>
-                </div>
-                <div className="mt-1.5 flex items-center gap-2">
-                  {d.participants.map((p) => (
-                    <Tooltip key={p.id} title={`Speaker ${p.speakerOrder + 1}`}>
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: 20,
-                          height: 20,
-                          borderRadius: '50%',
-                          background: SPEAKER_HEX[p.speakerOrder % SPEAKER_HEX.length],
-                          color: '#fff',
-                          fontSize: 10,
-                          fontWeight: 600,
-                          flexShrink: 0
-                        }}
-                      >
-                        {p.speakerOrder + 1}
-                      </span>
-                    </Tooltip>
-                  ))}
-                  <span className="text-xs text-muted-foreground">
-                    {d.participants.length} {t('studio.participants')}
-                  </span>
+                {/* Body */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="break-words font-semibold">{d.name}</span>
+                    <Tag color={FORMAT_COLORS[d.format] ?? 'default'} style={{ fontSize: 11, margin: 0 }}>
+                      {t(`studio.format_${d.format}`)}
+                    </Tag>
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    {d.participants.map((p) => (
+                      <Tooltip key={p.id} title={`Speaker ${p.speakerOrder + 1}`}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 20,
+                            height: 20,
+                            borderRadius: '50%',
+                            background: SPEAKER_HEX[p.speakerOrder % SPEAKER_HEX.length],
+                            color: '#fff',
+                            fontSize: 10,
+                            fontWeight: 600,
+                            flexShrink: 0
+                          }}
+                        >
+                          {p.speakerOrder + 1}
+                        </span>
+                      </Tooltip>
+                    ))}
+                    <span className="text-xs text-muted-foreground">
+                      {d.participants.length} {t('studio.participants')}
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto" onClick={(e) => e.stopPropagation()}>
                 <Button
                   size="small"
                   loading={runningId === d.id}

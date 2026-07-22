@@ -495,8 +495,17 @@ describe('AgentsPage three hub shell', () => {
     // lookup ambiguous; matching on the rendered title text avoids that collision.
     expect(await screen.findByText(/^summarize: example source$/i)).toBeInTheDocument();
     const agentCard = screen.getByRole('button', { name: /select agent/i });
+    expect(agentCard.closest('.follow-source-modal')).toBeInTheDocument();
     expect(agentCard).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('follow-wizard-mobile-progress')).toHaveClass('sm:hidden');
+    expect(agentCard.closest('.grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-2');
+    expect(screen.queryByRole('button', { name: /^back$/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/agents follow/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /create new/i }));
+    expect(await screen.findByRole('button', { name: /choose agent/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^cancel$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /choose agent/i }).closest('.sticky')).toHaveClass('flex-row');
   });
 
   it('shows a listen button for synthetic material items with audio and plays inline audio', async () => {
