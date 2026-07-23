@@ -2,7 +2,15 @@ import Anthropic from '@anthropic-ai/sdk';
 import { renderEvidenceForPrompt } from './prompt-builder';
 import { parseClaudeResponse } from './response-parser';
 import type { ClaudeAnalysisRequest, ClaudeAnalysisResult } from './types';
+import { CHARACTER_TYPES } from '../agents/types';
 import type { CharacterType } from '../agents/types';
+import type {
+  ClaudeAgentCurationCompletion,
+  ClaudeAgentCurationRequest,
+  CurationDraftPatch,
+  CurationMissingField,
+  CurationProfileField
+} from '../agent-curation/types';
 
 export interface ClaudeMessagesClient {
   messages: {
@@ -81,6 +89,106 @@ Write "summary" and long text fields tersely: drop filler words, use fragments o
 }
 
 const FENCED_CODE_BLOCK_PATTERN = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
+const CURATION_MISSING_FIELDS: readonly CurationMissingField[] = ['name', 'description', 'characterType', 'systemPrompt'];
+const CURATION_PROFILE_FIELDS: readonly CurationProfileField[] = ['name', 'description', 'avatar', 'characterType', 'systemPrompt'];
+
+function stripMarkdownCodeFence(text: string): string {
+  const fenced = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n?```\s*$/);
+  return fenced ? fenced[1].trim() : text;
+}
+
+export class ClaudeCurationResponseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ClaudeCurationResponseError';
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseCurationDraftPatch(value: unknown): CurationDraftPatch {
+  if (!isRecord(value) || Object.keys(value).some((field) => !CURATION_PROFILE_FIELDS.includes(field as CurationProfileField))) {
+    throw new ClaudeCurationResponseError('Claude curation response has an invalid draftPatch');
+  }
+
+  if (value.name !== undefined && typeof value.name !== 'string') {
+    throw new ClaudeCurationResponseError('Claude curation response has an invalid draftPatch.name');
+  }
+  if (value.description !== undefined && typeof value.description !== 'string') {
+    throw new ClaudeCurationResponseError('Claude curation response has an invalid draftPatch.description');
+  }
+  if (value.avatar !== undefined && value.avatar !== null && typeof value.avatar !== 'string') {
+    throw new ClaudeCurationResponseError('Claude curation response has an invalid draftPatch.avatar');
+  }
+  if (
+    value.characterType !== undefined &&
+    (typeof value.characterType !== 'string' || !CHARACTER_TYPES.includes(value.characterType as CharacterType))
+  ) {
+    throw new ClaudeCurationResponseError('Claude curation response has an invalid draftPatch.characterType');
+  }
+  if (
+    value.systemPrompt !== undefined &&
+    (typeof value.systemPrompt !== 'string' || value.systemPrompt.trim().length === 0)
+  ) {
+    throw new ClaudeCurationResponseError('Claude curation response has an invalid draftPatch.systemPrompt');
+  }
+
+  return value as CurationDraftPatch;
+}
+
+function parseCurationCompletion(raw: unknown): ClaudeAgentCurationCompletion {
+  if (
+    !isRecord(raw) ||
+    Object.keys(raw).length !== 4 ||
+    !['message', 'draftPatch', 'suggestedReplies', 'missingFields'].every((field) => field in raw) ||
+    Object.keys(raw).some((field) => !['message', 'draftPatch', 'suggestedReplies', 'missingFields'].includes(field))
+  ) {
+    throw new ClaudeCurationResponseError('Claude curation response does not match the required JSON shape');
+  }
+
+  if (typeof raw.message !== 'string' || raw.message.trim().length === 0) {
+    throw new ClaudeCurationResponseError('Claude curation response must include a non-empty message');
+  }
+  if (
+    !Array.isArray(raw.suggestedReplies) ||
+    !raw.suggestedReplies.every((reply) => typeof reply === 'string' && reply.trim().length > 0)
+  ) {
+    throw new ClaudeCurationResponseError('Claude curation response has invalid suggestedReplies');
+  }
+  if (
+    !Array.isArray(raw.missingFields) ||
+    !raw.missingFields.every((field) => typeof field === 'string' && CURATION_MISSING_FIELDS.includes(field as CurationMissingField)) ||
+    new Set(raw.missingFields).size !== raw.missingFields.length
+  ) {
+    throw new ClaudeCurationResponseError('Claude curation response has invalid missingFields');
+  }
+
+  return {
+    message: raw.message.trim(),
+    draftPatch: parseCurationDraftPatch(raw.draftPatch),
+    suggestedReplies: raw.suggestedReplies.map((reply) => reply.trim()),
+    missingFields: raw.missingFields as CurationMissingField[]
+  };
+}
+
+function buildCurationContextMessage(request: ClaudeAgentCurationRequest): string {
+  return [
+    'Return ONLY one strict JSON object with exactly these keys:',
+    '{"message": string, "draftPatch": object, "suggestedReplies": string[], "missingFields": string[]}',
+    '',
+    'draftPatch may contain only name, description, avatar, characterType, and systemPrompt.',
+    `characterType must be one of: ${CHARACTER_TYPES.join(', ')}.`,
+    'missingFields may contain only name, description, characterType, and systemPrompt.',
+    '',
+    'Selected source context:',
+    JSON.stringify(request.sourceContext),
+    '',
+    'Current agent profile:',
+    JSON.stringify(request.currentAgentProfile)
+  ].join('\n');
+}
 
 /**
  * JSON schema for the forced `submit_report` tool call. With tool use the API itself guarantees
@@ -274,6 +382,32 @@ export class ClaudeClient {
         ? { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens }
         : undefined
     };
+  }
+
+  async curateAgent(request: ClaudeAgentCurationRequest): Promise<ClaudeAgentCurationCompletion> {
+    if (request.systemInstruction.trim().length === 0) {
+      throw new ClaudeCurationResponseError('Claude curation system instruction must not be empty');
+    }
+
+    const response = await this.client.messages.create({
+      model: request.model,
+      max_tokens: 2048,
+      system: request.systemInstruction,
+      messages: [{ role: 'user', content: buildCurationContextMessage(request) }, ...request.conversation]
+    });
+    const textBlock = response.content.find((block) => block.type === 'text');
+    if (!textBlock?.text) {
+      throw new ClaudeCurationResponseError('Claude curation response did not contain a text block');
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(stripMarkdownCodeFence(textBlock.text.trim()));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new ClaudeCurationResponseError(`Claude curation response was not valid JSON: ${reason}`);
+    }
+    return parseCurationCompletion(parsed);
   }
 
   async analyze(request: ClaudeAnalysisRequest): Promise<ClaudeAnalysisResult> {

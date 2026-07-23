@@ -91,6 +91,7 @@ model AgentPromptVersion {
   model        String
   systemPrompt String
   enabled      Boolean  @default(true)
+  curationSessionId String? @unique
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   agent          Agent      @relation(fields: [agentId], references: [id], onDelete: Restrict)
@@ -377,6 +378,39 @@ model DiscussionTurn {
   createdAt        DateTime @default(now())
   run              DiscussionRun         @relation(fields: [discussionRunId], references: [id], onDelete: Cascade)
   participant      DiscussionParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+}
+
+model AgentCurationSession {
+  id                String                  @id @default(cuid())
+  ownerUserId       String
+  targetAgentId     String?
+  mode              String
+  status            String                  @default("active")
+  revision          Int                     @default(0)
+  finalizationAgentId String?
+  sourceContextJson String                  @default("{}")
+  draftJson         String
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  messages          AgentCurationMessage[]
+
+  @@index([ownerUserId, status])
+}
+
+model AgentCurationMessage {
+  id        String                @id @default(cuid())
+  sessionId String
+  role      String
+  content   String
+  clientRequestId String?
+  replyJson String?
+  replyClaimedAt DateTime?
+  position  Int
+  createdAt DateTime              @default(now())
+  session   AgentCurationSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, position])
+  @@unique([sessionId, clientRequestId])
 }
 
 model RealtimeEvent {

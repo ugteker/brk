@@ -12,6 +12,7 @@ import { registerDiscussionRoutes, type DiscussionRoutesDeps } from './modules/d
 import { registerWatchlistRoutes, type WatchlistRoutesDeps } from './modules/watchlist/routes';
 import { registerUsageRoutes, type UsageRoutesDeps } from './modules/usage/routes';
 import { registerRealtimeRoutes, type RealtimeEventRepository } from './modules/realtime/routes';
+import { registerAgentCurationRoutes, type AgentCurationFeatureDeps, type AgentCurationRoutesDeps } from './modules/agent-curation/routes';
 import type { DomainAccessResolver } from './modules/access/permissions';
 import { config } from './config';
 import { verifySessionToken } from './modules/auth/jwt';
@@ -35,6 +36,7 @@ export interface ServerDeps {
   usage?: UsageRoutesDeps;
   discussion?: DiscussionRoutesDeps;
   realtime?: { repository: RealtimeEventRepository };
+  agentCuration?: AgentCurationFeatureDeps;
   accessResolver?: DomainAccessResolver;
   sourceProbe?: SourceProbeLike;
   runTrigger?: RunTriggerLike;
@@ -89,6 +91,14 @@ export async function buildServer(deps: ServerDeps) {
     runsRepository: deps.runs?.runsRepository,
     accessResolver: deps.agents.accessResolver ?? deps.accessResolver
   });
+  if (deps.agentCuration) {
+    await registerAgentCurationRoutes(app, {
+      ...deps.agentCuration,
+      agentRepository: deps.agentRepository as unknown as AgentCurationRoutesDeps['agentRepository'],
+      promptRepository: deps.agents.promptRepository as unknown as AgentCurationRoutesDeps['promptRepository'],
+      accessResolver: deps.agentCuration.accessResolver ?? deps.accessResolver
+    });
+  }
   if (deps.runs) {
     await registerRunsRoutes(app, { ...deps.runs, accessResolver: deps.runs.accessResolver ?? deps.accessResolver });
   }

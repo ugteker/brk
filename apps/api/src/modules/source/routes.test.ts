@@ -842,7 +842,7 @@ describe('source suggestions route', () => {
     expect(suggestions.every((item) => item.origin === 'curated')).toBe(true);
   });
 
-  it('filters out sources the user already follows', async () => {
+  it('marks sources the user already follows as followed instead of hiding them', async () => {
     const sourceRepo = new InMemorySourceRepository();
     await sourceRepo.createSource('user-1', { type: CURATED_SOURCES[0].type, value: CURATED_SOURCES[0].value });
 
@@ -850,12 +850,16 @@ describe('source suggestions route', () => {
     const res = await app.inject({ method: 'GET', url: '/api/sources/suggestions', headers: authCookieHeader('user-1') });
 
     expect(res.statusCode).toBe(200);
-    const suggestions = res.json<Array<{ value: string }>>();
-    expect(suggestions.some((item) => item.value === CURATED_SOURCES[0].value)).toBe(false);
-    expect(suggestions).toHaveLength(CURATED_SOURCES.length - 1);
+    const suggestions = res.json<Array<{ value: string; followed: boolean }>>();
+    expect(suggestions).toHaveLength(CURATED_SOURCES.length);
+    const followedEntry = suggestions.find((item) => item.value === CURATED_SOURCES[0].value);
+    expect(followedEntry).toMatchObject({ followed: true });
+    expect(suggestions.filter((item) => item.followed)).toHaveLength(1);
 
-    // A different user still sees the full curated list
+    // A different user sees the full curated list with nothing marked as followed
     const otherRes = await app.inject({ method: 'GET', url: '/api/sources/suggestions', headers: authCookieHeader('user-2') });
-    expect(otherRes.json<unknown[]>()).toHaveLength(CURATED_SOURCES.length);
+    const otherSuggestions = otherRes.json<Array<{ followed: boolean }>>();
+    expect(otherSuggestions).toHaveLength(CURATED_SOURCES.length);
+    expect(otherSuggestions.every((item) => item.followed === false)).toBe(true);
   });
 });

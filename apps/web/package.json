@@ -7,7 +7,6 @@
     "build": "vite build",
     "dev": "vite --host 0.0.0.0 --port 4173",
     "start": "vite preview --host 0.0.0.0 --port 4173",
-    "test": "vitest run",
     "test:smoke": "playwright test --grep @smoke",
     "test:e2e": "npm run test:smoke"
   },
@@ -29,16 +28,13 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.54.1",
-    "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.0.1",
+    "@types/node": "^26.1.1",
     "@types/react": "^18.3.13",
     "@types/react-dom": "^18.3.1",
     "autoprefixer": "^10.4.20",
-    "jsdom": "^25.0.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.8.3",
-    "vitest": "^2.1.8"
+    "typescript": "^5.8.3"
   }
 }

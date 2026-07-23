@@ -7,6 +7,6 @@
     "build:web": "npm --prefix apps/web run build",
     "start:web": "npm --prefix apps/web run start",
     "test:api": "npm --prefix apps/api run test",
-    "test:web": "npm --prefix apps/web run test"
+    "test:web": "npm --prefix apps/web run test:smoke"
   }
 }

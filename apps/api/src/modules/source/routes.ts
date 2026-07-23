@@ -209,7 +209,8 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
   });
 
   /** Curated "popular sources" suggestions: marketplace publications first, static curated
-   * fallback appended, deduped by value, minus sources the user already follows. */
+   * fallback appended, deduped by value. Sources the user already follows are included but
+   * flagged `followed` so the UI can render them as non-pickable. */
   app.get('/api/sources/suggestions', async (req, reply) => {
     const [marketplace, own] = await Promise.all([
       deps.sourceRepository.listMarketplaceSources(),
@@ -225,9 +226,10 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
       coverImageUrl: string | null;
       origin: 'marketplace' | 'curated';
       publicationId?: string;
+      followed: boolean;
     }> = [];
     for (const publication of marketplace) {
-      if (ownValues.has(publication.value) || seenValues.has(publication.value)) continue;
+      if (seenValues.has(publication.value)) continue;
       seenValues.add(publication.value);
       suggestions.push({
         type: publication.type,
@@ -235,13 +237,14 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
         title: publication.title,
         coverImageUrl: publication.metadata.coverImageUrl ?? null,
         origin: 'marketplace',
-        publicationId: publication.publicationId
+        publicationId: publication.publicationId,
+        followed: ownValues.has(publication.value)
       });
     }
     for (const curated of CURATED_SOURCES) {
-      if (ownValues.has(curated.value) || seenValues.has(curated.value)) continue;
+      if (seenValues.has(curated.value)) continue;
       seenValues.add(curated.value);
-      suggestions.push({ ...curated, origin: 'curated' });
+      suggestions.push({ ...curated, origin: 'curated', followed: ownValues.has(curated.value) });
     }
     return reply.status(200).send(suggestions);
   });

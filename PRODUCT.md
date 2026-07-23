@@ -10,7 +10,9 @@ Finance professionals, researchers, and avid content consumers who subscribe to 
 
 ## Product Purpose
 
-An AI-powered research intelligence platform. Users configure AI agents (with distinct character personas: finance expert, teacher, philosopher, summarizer, etc.) that periodically analyze content sources and produce structured reports. Reports surface in a personal feed, allowing users to triage and act on insights, recommendations, and risks across their subscribed sources.
+An AI-powered research intelligence platform. Users primarily create AI agents through a curator that turns a freeform conversation into an agent profile; manual setup remains available. The curator collects the intended profile conversationally, then presents an editable review that the user must explicitly confirm before the agent is created. Existing agents can also be refined with **Improve with AI**. Agents have distinct character personas (finance expert, teacher, philosopher, summarizer, etc.), periodically analyze content sources, and produce structured reports. Reports surface in a personal feed, allowing users to triage and act on insights, recommendations, and risks across their subscribed sources.
+
+Guided setup begins with a source. The selected source is passed to the curator as advisory context, not as a binding configuration. Choosing **Set up later** saves that source only; it does not create an agent, playbook, or run. Agent avatars are not currently available, and advanced runtime configuration is outside this flow's scope.
 
 ## Brand Personality
 

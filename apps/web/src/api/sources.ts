@@ -227,6 +227,7 @@ export interface SourceSuggestion {
   coverImageUrl: string | null;
   origin: 'marketplace' | 'curated';
   publicationId?: string;
+  followed: boolean;
 }
 
 /** Curated "popular sources" (marketplace-first, minus sources the user already follows). */
