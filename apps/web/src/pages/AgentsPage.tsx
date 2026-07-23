@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { useTranslation } from 'react-i18next';
-import { Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Progress, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
+import { Alert, Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Progress, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
-  AppstoreOutlined,
   ArrowLeftOutlined,
   AudioOutlined,
   AudioMutedOutlined,
@@ -36,6 +35,7 @@ import {
   ToolOutlined
 } from '@ant-design/icons';
 import { AgentForm } from '../components/AgentForm';
+import { AgentCurator, type CuratedAgent } from '../components/AgentCurator';
 import { SourceSearchPicker, type SourcePickerSelection } from '../components/SourceSearchPicker';
 import { AgentStatusCard } from '../components/AgentStatusCard';
 import { AgentReportsBrowser } from '../components/AgentReportsBrowser';
@@ -96,7 +96,6 @@ import {
   createSource,
   deleteSource,
   listSourceReports,
-  listSources,
   probeSource,
   publishSource,
   shareSource,
@@ -107,7 +106,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { EntityActions } from '../components/EntityActions';
 import { InlineDeleteButton } from '../components/InlineDeleteButton';
-import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID } from '../data/prompt-personas';
+import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID, type PersonaId } from '../data/prompt-personas';
 import { getAgentDisplayLabel } from '../utils/agent-label';
 import { extractYoutubeVideoId, getYoutubeThumbnailUrl } from '../utils/youtube';
 
@@ -124,6 +123,12 @@ const TIMEZONE_OPTIONS = [
 ];
 type HubKey = 'feed' | 'sources' | 'agents' | 'playbooks';
 type ProbeKind = 'feed' | 'listing_page' | 'single_page' | 'unknown';
+type AgentEditor =
+  | { mode: 'manual-create' }
+  | { mode: 'manual-edit'; detail: AgentDetail; prompt: PromptVersionDto | null }
+  | { mode: 'curation-create' }
+  | { mode: 'curation-update'; detail: AgentDetail; prompt: PromptVersionDto | null }
+  | null;
 interface LibraryTabRecord {
   id: string;
   name: string;
@@ -374,8 +379,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const navigate = useSafeNavigate();
   const {
     agents, setAgents,
-    sources, setSources,
-    playbooks, setPlaybooks,
+    sources,
+    playbooks,
     agentsLoadState: loadState,
     sourcesLoadState,
     playbooksLoadState,
@@ -390,10 +395,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     forceShowOnboarding, forceShowGuidedWizard, setForceShowGuidedWizard
   } = useAppData();
   const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
-  const [isCreatingAgent, setIsCreatingAgent] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<{ detail: AgentDetail; prompt: PromptVersionDto | null } | null>(
-    null
-  );
+  const [agentEditor, setAgentEditor] = useState<AgentEditor>(null);
   const [isLoadingEditTarget, setIsLoadingEditTarget] = useState(false);
   const [agentsSearch, setAgentsSearch] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -525,6 +527,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [inlineAgentRiskLevel, setInlineAgentRiskLevel] = useState<'low' | 'medium' | 'high'>('medium');
   const [inlineAgentReportDetailLevel, setInlineAgentReportDetailLevel] = useState<'brief' | 'standard' | 'detailed'>('standard');
   const [inlineAgentValidationError, setInlineAgentValidationError] = useState<string | null>(null);
+  // AI curation inside the follow wizard's "pick agent" step (alternative to the manual sub-wizard)
+  const [inlineAgentCurating, setInlineAgentCurating] = useState(false);
   const [showSourcesMarketplace, setShowSourcesMarketplace] = useState(false);
   const [showPlaybooksMarketplace, setShowPlaybooksMarketplace] = useState(false);
   const [showAgentsMarketplace, setShowAgentsMarketplace] = useState(false);
@@ -539,8 +543,25 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [guidedWizardUrl, setGuidedWizardUrl] = useState('');
   const [guidedWizardDetecting, setGuidedWizardDetecting] = useState(false);
   const [guidedWizardSource, setGuidedWizardSource] = useState<AutoDetectedSource | null>(null);
-  const [guidedWizardPersonaId, setGuidedWizardPersonaId] = useState('finance_expert');
-  const [guidedWizardRunning, setGuidedWizardRunning] = useState(false);
+  const [guidedWizardSavedSource, setGuidedWizardSavedSource] = useState<SourceRecord | null>(null);
+  const [guidedWizardCuratedAgent, setGuidedWizardCuratedAgent] = useState<CuratedAgent | null>(null);
+  const [guidedWizardCurating, setGuidedWizardCurating] = useState(false);
+  const [guidedWizardCuratorBusy, setGuidedWizardCuratorBusy] = useState(false);
+  const [guidedWizardSavingSource, setGuidedWizardSavingSource] = useState(false);
+  const [guidedWizardCompleting, setGuidedWizardCompleting] = useState(false);
+  const [guidedWizardSetupError, setGuidedWizardSetupError] = useState<string | null>(null);
+  const guidedWizardCompletionRef = useRef(false);
+  const guidedWizardSetupRef = useRef<{
+    agentId: string | null;
+    sourceId: string | null;
+    playbookId: string | null;
+    runTriggered: boolean;
+  }>({
+    agentId: null,
+    sourceId: null,
+    playbookId: null,
+    runTriggered: false
+  });
   const [guidedWizardDismissed, setGuidedWizardDismissed] = useState(() =>
     localStorage.getItem('chattrader:guided-wizard:dismissed') === '1'
   );
@@ -635,6 +656,25 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   async function refreshAgents() {
     return _refreshAgents();
+  }
+
+  function openManualAgentCreate() {
+    setAgentEditor({ mode: 'manual-create' });
+    setSelectedAgentId(null);
+  }
+
+  function openCurationCreate() {
+    setAgentEditor({ mode: 'curation-create' });
+    setSelectedAgentId(null);
+  }
+
+  async function completeAgentCuration(agent: CuratedAgent) {
+    setAgentEditor(null);
+    try {
+      await refreshAgents();
+    } finally {
+      setSelectedAgentId(agent.id);
+    }
   }
 
   async function refreshMarketplaceCounts() {
@@ -1069,8 +1109,18 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setIsLoadingEditTarget(true);
     try {
       const [detail, latestPrompt] = await Promise.all([getAgent(agent.id), getLatestAgentPrompt(agent.id)]);
-      setEditingAgent({ detail, prompt: latestPrompt });
-      setIsCreatingAgent(false);
+      setAgentEditor({ mode: 'manual-edit', detail, prompt: latestPrompt });
+    } finally {
+      setIsLoadingEditTarget(false);
+    }
+  }
+
+  async function onImproveAgentWithAI(agent: AgentSummary, event?: React.MouseEvent) {
+    event?.stopPropagation();
+    setIsLoadingEditTarget(true);
+    try {
+      const [detail, latestPrompt] = await Promise.all([getAgent(agent.id), getLatestAgentPrompt(agent.id)]);
+      setAgentEditor({ mode: 'curation-update', detail, prompt: latestPrompt });
     } finally {
       setIsLoadingEditTarget(false);
     }
@@ -1146,6 +1196,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setWizardAlreadyLinkedPlaybooks([]);
     setFollowWizardSourcePreselected(false);
     setShowInlineAgentCreate(false);
+    setInlineAgentCurating(false);
     setInlineAgentStep(0);
     setInlineAgentValidationError(null);
     setConfirmingUnfollow(false);
@@ -1153,6 +1204,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }
 
   function openInlineAgentCreate() {
+    setInlineAgentCurating(false);
     setInlineAgentStep(0);
     setInlineAgentDescription('');
     setInlineAgentPersonaId(DEFAULT_PROMPT_PERSONA_ID);
@@ -1169,6 +1221,20 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   function closeInlineAgentCreate() {
     setShowInlineAgentCreate(false);
     setInlineAgentValidationError(null);
+  }
+
+  function openInlineAgentCuration() {
+    setShowInlineAgentCreate(false);
+    setInlineAgentValidationError(null);
+    setPlaybookAgentIdsDraft([]);
+    setInlineAgentCurating(true);
+  }
+
+  async function onInlineAgentCurated(agent: CuratedAgent) {
+    await refreshAgents();
+    // Auto-select the curated agent in the wizard draft and return to the agent grid
+    setPlaybookAgentIdsDraft((prev) => (prev.includes(agent.id) ? prev : [...prev, agent.id]));
+    setInlineAgentCurating(false);
   }
 
   function onInlineAgentPersonaChange(nextPersonaId: string) {
@@ -1470,7 +1536,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   function onOpenPlaybookWizard(playbook: PlaybookRecord) {
     setFollowWizardSourcePreselected(true);
     setShowInlineAgentCreate(false);
-    setInlineAgentName('My Analyst');
     setEditingPlaybookId(playbook.id);
     setWizardFocusedAgentId(playbook.agentId);
     setPlaybookCreateStep(1);
@@ -1581,20 +1646,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       await deletePlaybook(editingPlaybookId);
       await refreshPlaybooks();
       message.success('Unfollowed');
-      closePlaybookCreate();
+      onCancelPlaybookCreate();
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to unfollow');
-    }
-  }
-
-  async function onTogglePlaybookEnabled(playbook: PlaybookRecord, event: React.MouseEvent) {
-    event.stopPropagation();
-    try {
-      await updatePlaybook(playbook.id, { enabled: !playbook.enabled });
-      await refreshPlaybooks();
-      message.success(playbook.enabled ? 'Playbook paused' : 'Playbook resumed');
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to update playbook status');
     }
   }
 
@@ -1769,6 +1823,23 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }
 
   /** Guided-wizard URL fallback: candidate-guess the source type from the pasted URL. */
+  function selectGuidedWizardSource(source: AutoDetectedSource) {
+    guidedWizardCompletionRef.current = false;
+    guidedWizardSetupRef.current = {
+      agentId: null,
+      sourceId: null,
+      playbookId: null,
+      runTriggered: false
+    };
+    setGuidedWizardSource(source);
+    setGuidedWizardSavedSource(null);
+    setGuidedWizardCuratedAgent(null);
+    setGuidedWizardCurating(false);
+    setGuidedWizardCuratorBusy(false);
+    setGuidedWizardCompleting(false);
+    setGuidedWizardSetupError(null);
+  }
+
   async function detectGuidedWizardSource() {
     const url = guidedWizardUrl.trim();
     if (!url) return;
@@ -1786,7 +1857,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         } catch { /* try next */ }
       }
       if (!best) { message.error(t('source.probeError')); return; }
-      setGuidedWizardSource(best);
+      selectGuidedWizardSource(best);
     } catch { message.error(t('source.probeError')); }
     finally { setGuidedWizardDetecting(false); }
   }
@@ -1797,7 +1868,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setGuidedWizardDetecting(true);
     try {
       const probe = await probeSource({ type: selection.type, value: selection.value, maxItems: 5 });
-      setGuidedWizardSource({
+      selectGuidedWizardSource({
         type: selection.type,
         url: selection.value,
         kind: probe.kind,
@@ -1808,6 +1879,203 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       });
     } catch { message.error(t('source.probeError')); }
     finally { setGuidedWizardDetecting(false); }
+  }
+
+  async function persistGuidedWizardSource(): Promise<SourceRecord | null> {
+    if (guidedWizardSavedSource) return guidedWizardSavedSource;
+    if (!guidedWizardSource) return null;
+
+    const existingSource = sources.find(
+      (source) => source.type === guidedWizardSource.type && source.value === guidedWizardSource.url
+    );
+    if (existingSource) {
+      setGuidedWizardSavedSource(existingSource);
+      return existingSource;
+    }
+
+    const createdSource = await createSource({
+      type: guidedWizardSource.type,
+      value: guidedWizardSource.url,
+      metadata: {
+        title: guidedWizardSource.title,
+        coverImageUrl: guidedWizardSource.coverImageUrl ?? null,
+        itemCount: guidedWizardSource.itemCount,
+        previewItems: guidedWizardSource.previewItems.map((item) => ({
+          title: item.title,
+          link: item.link ?? undefined,
+          pubDate: item.pubDate
+        }))
+      }
+    });
+    setSourceLibraryBySourceId((current) => ({ ...current, [createdSource.id]: DEFAULT_LIBRARY_TAB_ID }));
+    setGuidedWizardSavedSource(createdSource);
+    return createdSource;
+  }
+
+  function dismissGuidedWizard() {
+    setGuidedWizardOpen(false);
+    setForceShowGuidedWizard(false);
+    localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
+    setGuidedWizardDismissed(true);
+  }
+
+  function guidedWizardActionIsBlocked(): boolean {
+    return guidedWizardCuratorBusy || guidedWizardCompleting;
+  }
+
+  function explainGuidedWizardBusy() {
+    message.info('The curator is still working. Closing or skipping now would not cancel its request.');
+  }
+
+  function requestGuidedWizardClose() {
+    if (guidedWizardActionIsBlocked()) {
+      explainGuidedWizardBusy();
+      return;
+    }
+    if (guidedWizardCurating) {
+      setGuidedWizardCurating(false);
+      return;
+    }
+    dismissGuidedWizard();
+  }
+
+  async function startGuidedCuration() {
+    if (guidedWizardActionIsBlocked()) {
+      explainGuidedWizardBusy();
+      return;
+    }
+    setGuidedWizardSavingSource(true);
+    try {
+      const savedSource = await persistGuidedWizardSource();
+      if (!savedSource) return;
+      setGuidedWizardCurating(true);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t('guided.error'));
+    } finally {
+      setGuidedWizardSavingSource(false);
+    }
+  }
+
+  async function setUpGuidedWizardLater() {
+    if (guidedWizardActionIsBlocked()) {
+      explainGuidedWizardBusy();
+      return;
+    }
+    if (guidedWizardCuratedAgent) {
+      message.warning('Your agent was created, but guided setup is incomplete. Retry setup instead of skipping it.');
+      return;
+    }
+    setGuidedWizardSavingSource(true);
+    try {
+      const savedSource = await persistGuidedWizardSource();
+      if (!savedSource) return;
+      void refreshSources().catch(() => undefined);
+      message.success('Source saved. No agent or playbook was created.');
+      dismissGuidedWizard();
+      setActiveHub('feed');
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t('guided.error'));
+    } finally {
+      setGuidedWizardSavingSource(false);
+    }
+  }
+
+  async function finishGuidedAgentSetup(agent: CuratedAgent) {
+    const source = guidedWizardSavedSource;
+    if (!source || guidedWizardCompleting) return;
+
+    const setup = guidedWizardSetupRef.current;
+    if (setup.agentId !== agent.id || setup.sourceId !== source.id) {
+      guidedWizardSetupRef.current = {
+        agentId: agent.id,
+        sourceId: source.id,
+        playbookId: null,
+        runTriggered: false
+      };
+    }
+
+    setGuidedWizardCompleting(true);
+    setGuidedWizardSetupError(null);
+    try {
+      const currentSetup = guidedWizardSetupRef.current;
+      if (!currentSetup.playbookId) {
+        const matchingPlaybook = (await listPlaybooks()).find(
+          (playbook) => playbook.agentId === agent.id && playbook.sourceIds.includes(source.id)
+        );
+        const playbook =
+          matchingPlaybook ??
+          (await createPlaybook({
+            name: `${getSourceDisplayTitle(source)} — ${agent.name}`,
+            agentId: agent.id,
+            sourceIds: [source.id],
+            recipients: user?.email ? [user.email] : [],
+            schedule: { mode: 'daily', dailyTime: '08:00', timezone: 'UTC' },
+            language: 'en'
+          }));
+        currentSetup.playbookId = playbook.id;
+      }
+
+      if (!currentSetup.runTriggered) {
+        const result = await runAgentNow(agent.id);
+        currentSetup.runTriggered = true;
+        if (result.status === 'failed') {
+          message.warning(`Your setup is saved, but the initial run failed${result.errorCode ? `: ${result.errorCode}` : ''}.`);
+        } else if (result.status === 'no_run_claimed') {
+          message.info('Your setup is saved. Another run is already in progress.');
+        }
+      }
+
+      await Promise.all([refreshAgents(), refreshSources(), refreshPlaybooks()]);
+      message.success(t('guided.success'));
+      dismissGuidedWizard();
+      setActiveHub('feed');
+    } catch (err) {
+      const details = err instanceof Error ? err.message : t('guided.error');
+      setGuidedWizardSetupError(details);
+      message.error(`Your agent was created, but guided setup is incomplete: ${details}`);
+      void refreshAgents().catch(() => undefined);
+      setGuidedWizardCurating(false);
+    } finally {
+      setGuidedWizardCompleting(false);
+    }
+  }
+
+  const [guidedWizardPresetCreating, setGuidedWizardPresetCreating] = useState<string | null>(null);
+
+  async function useGuidedPresetAgent(personaId: PersonaId) {
+    if (guidedWizardActionIsBlocked() || guidedWizardPresetCreating || guidedWizardCompletionRef.current) return;
+    const persona = getPromptPersona(personaId);
+    const character = persona?.characters[0];
+    if (!persona || !character) return;
+    setGuidedWizardPresetCreating(personaId);
+    try {
+      const newAgent = await createAgent({
+        name: persona.name,
+        description: persona.tagline,
+        active: true,
+        characterType: personaId,
+        promptConfig: {
+          personality_id: character.id,
+          personality_label: character.name,
+          ...(personaId === 'finance_expert' ? { risk_level: character.riskLevel } : {})
+        },
+        preferences: personaId === 'finance_expert' ? { risk_level: [character.riskLevel] } : {}
+      });
+      await saveAgentPrompt(newAgent.id, { model: 'claude-sonnet-4-5', systemPrompt: character.systemPrompt, enabled: true });
+      await completeGuidedAgentCuration(newAgent as CuratedAgent);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t('guided.error'));
+    } finally {
+      setGuidedWizardPresetCreating(null);
+    }
+  }
+
+  async function completeGuidedAgentCuration(agent: CuratedAgent) {
+    if (!guidedWizardSavedSource || guidedWizardCompletionRef.current) return;
+
+    guidedWizardCompletionRef.current = true;
+    setGuidedWizardCuratedAgent(agent);
+    await finishGuidedAgentSetup(agent);
   }
 
   function onSourceUrlChange(value: string) {
@@ -1960,8 +2228,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   function goToDashboard() {
     setSelectedAgentId(null);
     setViewingSymbol(null);
-    setIsCreatingAgent(false);
-    setEditingAgent(null);
+    setAgentEditor(null);
     setActiveHub('feed');
     setSelectedPlaybookId(null);
   }
@@ -3266,34 +3533,58 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                     children: (
                   <div
                     className={
-                      isCreatingAgent || editingAgent || selectedAgent
+                      agentEditor || selectedAgent
                         ? 'grid min-w-0 gap-4 lg:grid-cols-[2fr_1fr]'
                         : 'min-w-0'
                     }
                   >
-                    {isCreatingAgent ? (
+                    {agentEditor?.mode === 'manual-create' ? (
                       <AgentForm
-                        onCancel={() => setIsCreatingAgent(false)}
+                        onCancel={() => setAgentEditor(null)}
                         onComplete={() => {
-                          setIsCreatingAgent(false);
+                          setAgentEditor(null);
                           refreshAgents();
                         }}
                       />
-                    ) : editingAgent ? (
+                    ) : agentEditor?.mode === 'manual-edit' ? (
                       <AgentForm
-                        key={editingAgent.detail.id}
-                        agent={editingAgent.detail}
+                        key={agentEditor.detail.id}
+                        agent={agentEditor.detail}
                         initialPrompt={
-                          editingAgent.prompt
-                            ? { model: editingAgent.prompt.model, systemPrompt: editingAgent.prompt.systemPrompt }
+                          agentEditor.prompt
+                            ? { model: agentEditor.prompt.model, systemPrompt: agentEditor.prompt.systemPrompt }
                             : null
                         }
-                        onCancel={() => setEditingAgent(null)}
+                        onCancel={() => setAgentEditor(null)}
                         onComplete={() => {
-                          setEditingAgent(null);
+                          setAgentEditor(null);
                           refreshAgents();
                         }}
                       />
+                    ) : agentEditor?.mode === 'curation-create' ? (
+                      <Card className="min-w-0" title="Curate with AI">
+                        <AgentCurator
+                          mode="create"
+                          onCancel={() => setAgentEditor(null)}
+                          onComplete={completeAgentCuration}
+                        />
+                      </Card>
+                    ) : agentEditor?.mode === 'curation-update' ? (
+                      <Card className="min-w-0" title="Curate with AI">
+                        <AgentCurator
+                          key={agentEditor.detail.id}
+                          mode="update"
+                          targetAgentId={agentEditor.detail.id}
+                          currentAgentProfile={{
+                            name: agentEditor.detail.name,
+                            description: agentEditor.detail.description,
+                            characterType: agentEditor.detail.characterType ?? null,
+                            systemPrompt: agentEditor.prompt?.systemPrompt ?? ''
+                          }}
+                          onCancel={() => setAgentEditor(null)}
+                          onComplete={completeAgentCuration}
+                        />
+                      </Card>
                     ) : selectedAgent ? (
                       <Card
                         className="min-w-0"
@@ -3325,6 +3616,13 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                 onClick={(event) => onEditAgent(selectedAgent, event)}
                               />
                             </TouchSafeTooltip>
+                            <Button
+                              aria-label="Improve agent with AI"
+                              icon={<BrainIcon />}
+                              onClick={(event) => onImproveAgentWithAI(selectedAgent, event)}
+                            >
+                              Improve with AI
+                            </Button>
                             <TouchSafeTooltip title={selectedAgent.status === 'disabled' ? 'Resume agent' : 'Pause agent'}>
                               <Button
                                 aria-label={selectedAgent.status === 'disabled' ? 'Resume agent' : 'Pause agent'}
@@ -3373,18 +3671,26 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             prefix={<SearchOutlined />}
                             style={{ maxWidth: 420 }}
                           />
-                          <Badge count={marketplaceAgentCount} size="small">
-                            <Button
-                              aria-label="Browse marketplace agents"
-                              icon={<CompassOutlined />}
-                              onClick={async () => {
-                                await refreshMarketplaceCounts();
-                                setShowAgentsMarketplace(true);
-                              }}
-                            >
-                              Browse marketplace
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Button type="primary" icon={<BrainIcon />} onClick={openCurationCreate}>
+                              Curate with AI
                             </Button>
-                          </Badge>
+                            <Button icon={<EditOutlined />} onClick={openManualAgentCreate}>
+                              Configure manually
+                            </Button>
+                            <Badge count={marketplaceAgentCount} size="small">
+                              <Button
+                                aria-label="Browse marketplace agents"
+                                icon={<CompassOutlined />}
+                                onClick={async () => {
+                                  await refreshMarketplaceCounts();
+                                  setShowAgentsMarketplace(true);
+                                }}
+                              >
+                                Browse marketplace
+                              </Button>
+                            </Badge>
+                          </div>
                         </div>
                         {loadState === 'loading' ? (
                           <div className="grid gap-3 sm:grid-cols-2">
@@ -3403,18 +3709,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                               <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('agent.emptyHeadline')}</p>
                               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('agent.emptyDesc')}</p>
                             </div>
-                            <Button
-                              type="primary"
-                              size="large"
-                              icon={<PlusCircleOutlined />}
-                              onClick={() => {
-                                setIsCreatingAgent(true);
-                                setEditingAgent(null);
-                                setSelectedAgentId(null);
-                              }}
-                            >
-                              {t('agent.emptyCta')}
-                            </Button>
+                            <div className="flex flex-wrap justify-center gap-2">
+                              <Button type="primary" size="large" icon={<BrainIcon />} onClick={openCurationCreate}>
+                                Curate with AI
+                              </Button>
+                              <Button size="large" icon={<EditOutlined />} onClick={openManualAgentCreate}>
+                                Configure manually
+                              </Button>
+                            </div>
                             {sources.length === 0 ? (
                               <p className="text-xs text-amber-600 dark:text-amber-400 max-w-xs">{t('agent.emptySourceHint')}</p>
                             ) : null}
@@ -3444,6 +3746,13 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                   </div>
                                 </div>
                                 <div className="flex flex-wrap items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
+                                  <Button
+                                    aria-label="Improve agent with AI"
+                                    icon={<BrainIcon />}
+                                    onClick={() => void onImproveAgentWithAI(agent)}
+                                  >
+                                    Improve with AI
+                                  </Button>
                                   <EntityActions
                                     entityLabel="agent"
                                     isOwner={agent.ownerUserId === user?.id}
@@ -3469,15 +3778,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             </Card>
                           ))}
                           <GhostCreateCard
-                           ariaLabel={t('agent.emptyCta')}
-                           onClick={() => {
-                             setIsCreatingAgent(true);
-                             setEditingAgent(null);
-                             setSelectedAgentId(null);
-                           }}
-                           icon={<AppstoreOutlined />}
-                           title={t('agent.createNew')}
-                           sub={t('agent.createNewSub')}
+                           ariaLabel="Curate an agent with AI"
+                           onClick={openCurationCreate}
+                           icon={<BrainIcon />}
+                           title="Curate with AI"
+                           sub="Describe the agent you want to create"
                            className="w-full"
                           />
                         </div>
@@ -4001,8 +4306,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           {playbookCreateStep === 1 ? (
             <>
             <div className="space-y-3">
-              {/* Hide agent selection grid when the inline creation sub-wizard is active */}
-              {!showInlineAgentCreate ? (
+              {/* Hide agent selection grid when the inline creation sub-wizard or AI curation is active */}
+              {!showInlineAgentCreate && !inlineAgentCurating ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {agents.map((agent) => {
                   const selected = playbookAgentIdsDraft.includes(agent.id);
@@ -4096,7 +4401,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                     </div>
                   );
                 })}
-                {/* "Create new agent" ghost card — shown only when not in sub-wizard */}
+                {/* "Create new agent" ghost cards — AI curation (primary) and manual sub-wizard */}
+                <GhostCreateCard
+                  ariaLabel="Curate with AI"
+                  onClick={openInlineAgentCuration}
+                  icon={<RobotOutlined />}
+                  title="Curate with AI"
+                  sub="Describe the agent you want — AI drafts it with you"
+                />
                 <GhostCreateCard
                   ariaLabel={t('agent.createNew')}
                   onClick={openInlineAgentCreate}
@@ -4106,6 +4418,22 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 />
               </div>
               ) : null}
+              {inlineAgentCurating ? (() => {
+                const inlineCurationSource = sources.find((s) => s.id === playbookSourceIdsDraft[0]);
+                return (
+                  <AgentCurator
+                    mode="create"
+                    sourceContext={inlineCurationSource ? {
+                      title: getSourceDisplayTitle(inlineCurationSource),
+                      type: inlineCurationSource.type,
+                      url: inlineCurationSource.value,
+                      value: inlineCurationSource.value
+                    } : undefined}
+                    onCancel={() => setInlineAgentCurating(false)}
+                    onComplete={(agent) => void onInlineAgentCurated(agent)}
+                  />
+                );
+              })() : null}
               {showInlineAgentCreate ? (() => {
                 const inlinePersonaData = getPromptPersona(inlineAgentPersonaId);
                 const inlineChars = getPromptCharactersForPersona(inlineAgentPersonaId);
@@ -4325,7 +4653,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             </div>
 
             {/* Advanced settings for follow-source mode (replaces the separate step 2) */}
-            {playbookCreateStep === 1 && followWizardSourcePreselected && !showInlineAgentCreate ? (
+            {playbookCreateStep === 1 && followWizardSourcePreselected && !showInlineAgentCreate && !inlineAgentCurating ? (
               <div className="border-t pt-3">
                 <button
                   type="button"
@@ -4484,6 +4812,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             </>
           ) : null}
         </div>
+        {/* While the AI curator is embedded, it owns the only nav buttons (← Back / Continue →) — hide the wizard footer. */}
+        {inlineAgentCurating ? null : (
         <div className={`sticky bottom-0 mt-4 flex gap-2 border-t bg-card pt-3 pb-1 ${
           showInlineAgentCreate ? 'flex-row items-center justify-between' : 'flex-col sm:flex-row sm:items-center sm:justify-between'
         }`}>
@@ -4556,6 +4886,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             )}
           </div>
         </div>
+        )}
       </Modal>
       <EpisodePickerModal
         open={Boolean(episodePickerAgent)}
@@ -4712,129 +5043,171 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       <Modal
         title={<span className="flex items-center gap-2"><RocketOutlined className="text-blue-500" /> {t('guided.title')}</span>}
         open={guidedWizardOpen}
-        onCancel={() => {
-          setGuidedWizardOpen(false);
-          setForceShowGuidedWizard(false);
-          localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
-          setGuidedWizardDismissed(true);
-        }}
+        onCancel={requestGuidedWizardClose}
         footer={null}
         destroyOnHidden
         width="min(600px, 95vw)"
       >
         <div className="space-y-5">
-          <section className="space-y-3">
-            <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step1Desc')}</p>
-            <SourceSearchPicker
-              selectedValue={guidedWizardSource?.url ?? null}
-              onSelect={(selection) => void onPickGuidedWizardSource(selection)}
-              urlFallback={
-                <>
-                  <Input
-                    size="large"
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    value={guidedWizardUrl}
-                    onChange={(e) => setGuidedWizardUrl(e.currentTarget.value)}
-                    prefix={<LinkOutlined />}
-                    onPressEnter={() => void detectGuidedWizardSource()}
-                  />
-                  <Button
-                    type="primary"
-                    block
-                    loading={guidedWizardDetecting}
-                    disabled={!guidedWizardUrl.trim()}
-                    onClick={() => void detectGuidedWizardSource()}
-                  >
-                    {t('guided.detectSource')}
-                  </Button>
-                </>
-              }
-            />
-            {guidedWizardDetecting && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoadingOutlined spin /> {t('guided.detectSource')}…</div>
-            )}
-            {guidedWizardSource && (
-              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
-                <p className="text-sm font-semibold text-green-800 dark:text-green-200">✅ {guidedWizardSource.title ?? guidedWizardSource.url}</p>
-                <p className="mt-0.5 text-xs text-green-600 dark:text-green-400">{guidedWizardSource.type}</p>
-              </div>
-            )}
-          </section>
-
-          <section className="space-y-3">
-            <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step2Desc')}</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {PROMPT_PERSONAS.map((persona) => (
-                <div
-                  key={persona.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={guidedWizardPersonaId === persona.id}
-                  onClick={() => setGuidedWizardPersonaId(persona.id)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setGuidedWizardPersonaId(persona.id); } }}
-                  className={`cursor-pointer rounded-lg border-2 px-3 py-2 text-foreground transition-all !bg-card ${guidedWizardPersonaId === persona.id ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'}`}
-                >
-                  <p className="text-sm font-semibold">{persona.name}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-2">{persona.description}</p>
+          {guidedWizardCurating && guidedWizardSavedSource ? (
+            <section className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-green-800 dark:text-green-200">
+                    ✅ {t('guided.sourceSelected', { title: getSourceDisplayTitle(guidedWizardSavedSource) })}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-green-600 dark:text-green-400">
+                    {guidedWizardSavedSource.type} · {guidedWizardSavedSource.value}
+                  </p>
                 </div>
-              ))}
-            </div>
-          </section>
-
-          <Button
-            type="primary"
-            block
-            size="large"
-            icon={<CaretRightOutlined />}
-            loading={guidedWizardRunning}
-            disabled={!guidedWizardSource}
-            onClick={async () => {
-              if (!guidedWizardSource) return;
-              setGuidedWizardRunning(true);
-              try {
-                const newSource = await createSource({
-                  type: guidedWizardSource.type,
-                  value: guidedWizardSource.url,
-                  metadata: {
-                    title: guidedWizardSource.title,
-                    coverImageUrl: guidedWizardSource.coverImageUrl ?? null,
-                    itemCount: guidedWizardSource.itemCount,
-                    previewItems: guidedWizardSource.previewItems.map((item) => ({ title: item.title, link: item.link ?? undefined, pubDate: item.pubDate }))
-                  }
-                });
-                const newAgent = await createAgent({
-
-                  characterType: guidedWizardPersonaId as import('../api/agents').CharacterType,
-                  preferences: {},
-                }) as import('../api/agents').AgentSummary;
-                await createPlaybook({
-                  name: `${guidedWizardSource.title ?? 'My Source'} — ${getAgentDisplayLabel(newAgent)}`,
-                  agentId: newAgent.id,
-                  sourceIds: [newSource.id],
-                  recipients: user?.email ? [user.email] : [],
-                  schedule: { mode: 'daily', dailyTime: '08:00', timezone: 'UTC' },
-                  language: 'en',
-                });
-                await Promise.all([refreshAgents()]);
-                const [newSources, newPlaybooks] = await Promise.all([listSources(), listPlaybooks()]);
-                setSources(newSources);
-                setPlaybooks(newPlaybooks);
-                await runAgentNow(newAgent.id).catch(() => null);
-                message.success(t('guided.success'));
-                setGuidedWizardOpen(false);
-                setForceShowGuidedWizard(false);
-                localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
-                setGuidedWizardDismissed(true);
-                setActiveHub('feed');
-              } catch (err) {
-                message.error(err instanceof Error ? err.message : t('guided.error'));
-              } finally {
-                setGuidedWizardRunning(false);
-              }
-            }}
-          >
-            {t('guided.runNow')}
-          </Button>
+                <Button
+                  onClick={() => void setUpGuidedWizardLater()}
+                  loading={guidedWizardSavingSource}
+                  disabled={guidedWizardCuratorBusy || guidedWizardCompleting || guidedWizardSavingSource}
+                >
+                  {t('guided.setUpLater')}
+                </Button>
+              </div>
+              {guidedWizardCuratorBusy ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  title={t('guided.curatorBusyTitle')}
+                  description={t('guided.curatorBusyDesc')}
+                />
+              ) : null}
+              {guidedWizardCompleting ? (
+                <Card loading title={t('guided.finishingSetup')} aria-busy="true" />
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-1.5" aria-label="Preset agents">
+                    <span className="mr-1 text-xs text-gray-500 dark:text-gray-400">{t('guided.presetQuickStart')}</span>
+                    {PROMPT_PERSONAS.map((persona) => (
+                      <TouchSafeTooltip key={persona.id} title={persona.tagline}>
+                        <Button
+                          size="small"
+                          loading={guidedWizardPresetCreating === persona.id}
+                          disabled={guidedWizardCuratorBusy || Boolean(guidedWizardPresetCreating)}
+                          onClick={() => void useGuidedPresetAgent(persona.id)}
+                        >
+                          {persona.name}
+                        </Button>
+                      </TouchSafeTooltip>
+                    ))}
+                  </div>
+                  <AgentCurator
+                    key={guidedWizardSavedSource.id}
+                    mode="create"
+                    sourceContext={{
+                      title: getSourceDisplayTitle(guidedWizardSavedSource),
+                      type: guidedWizardSavedSource.type,
+                      url: guidedWizardSavedSource.value,
+                      value: guidedWizardSavedSource.value
+                    }}
+                    onCancel={() => setGuidedWizardCurating(false)}
+                    onComplete={(agent) => void completeGuidedAgentCuration(agent)}
+                    onBusyChange={setGuidedWizardCuratorBusy}
+                  />
+                </>
+              )}
+            </section>
+          ) : (
+            <section className="space-y-4">
+              {guidedWizardCuratedAgent && guidedWizardSavedSource ? (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
+                    <p className="m-0 text-sm font-semibold text-green-800 dark:text-green-200">
+                      ✅ {guidedWizardCuratedAgent.name} and {getSourceDisplayTitle(guidedWizardSavedSource)} were created.
+                    </p>
+                  </div>
+                  <Alert
+                    type="error"
+                    showIcon
+                    title="Guided setup is incomplete"
+                    description={guidedWizardSetupError ?? 'The playbook or initial run still needs to be completed.'}
+                  />
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      type="primary"
+                      size="large"
+                      className="flex-1"
+                      loading={guidedWizardCompleting}
+                      disabled={guidedWizardCompleting}
+                      onClick={() => void finishGuidedAgentSetup(guidedWizardCuratedAgent)}
+                    >
+                      Retry setup
+                    </Button>
+                    <Button size="large" className="flex-1" onClick={requestGuidedWizardClose}>
+                      Close with agent and source saved
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step1Desc')}</p>
+                  <SourceSearchPicker
+                    selectedValue={guidedWizardSource?.url ?? null}
+                    onSelect={(selection) => void onPickGuidedWizardSource(selection)}
+                    urlFallback={
+                      <>
+                        <Input
+                          size="large"
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          value={guidedWizardUrl}
+                          onChange={(e) => setGuidedWizardUrl(e.currentTarget.value)}
+                          prefix={<LinkOutlined />}
+                          onPressEnter={() => void detectGuidedWizardSource()}
+                        />
+                        <Button
+                          type="primary"
+                          block
+                          loading={guidedWizardDetecting}
+                          disabled={!guidedWizardUrl.trim()}
+                          onClick={() => void detectGuidedWizardSource()}
+                        >
+                          {t('guided.detectSource')}
+                        </Button>
+                      </>
+                    }
+                  />
+                  {guidedWizardDetecting && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoadingOutlined spin /> {t('guided.detectSource')}…</div>
+                  )}
+                  {guidedWizardSource && (
+                    <div className="space-y-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
+                      <div>
+                        <p className="text-sm font-semibold text-green-800 dark:text-green-200">
+                          ✅ {guidedWizardSavedSource ? `Source ready: ${getSourceDisplayTitle(guidedWizardSavedSource)}` : guidedWizardSource.title ?? guidedWizardSource.url}
+                        </p>
+                        <p className="mt-0.5 text-xs text-green-600 dark:text-green-400">
+                          {guidedWizardSavedSource?.type ?? guidedWizardSource.type}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          type="primary"
+                          size="large"
+                          className="flex-1"
+                          loading={guidedWizardSavingSource}
+                          onClick={() => void startGuidedCuration()}
+                        >
+                          {t('guided.continueToAgent')}
+                        </Button>
+                        <Button
+                          size="large"
+                          className="flex-1"
+                          loading={guidedWizardSavingSource}
+                          onClick={() => void setUpGuidedWizardLater()}
+                        >
+                          {t('guided.setUpLater')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
         </div>
       </Modal>
     </>

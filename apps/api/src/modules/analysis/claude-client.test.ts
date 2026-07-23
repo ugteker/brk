@@ -237,4 +237,155 @@ describe('ClaudeClient', () => {
       /Claude response was not valid JSON/
     );
   });
+
+  it('sends curation context and returns a validated structured curation completion', async () => {
+    let capturedParams: Parameters<ClaudeMessagesClient['messages']['create']>[0] | undefined;
+    const fakeClient: ClaudeMessagesClient = {
+      messages: {
+        create: async (params) => {
+          capturedParams = params;
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  message: 'I can help turn this into a research digest.',
+                  draftPatch: {
+                    name: 'Research Digest',
+                    characterType: 'summarizer',
+                    systemPrompt: 'Summarize selected research into a concise digest.'
+                  },
+                  suggestedReplies: ['Make it brief', 'Focus on AI research'],
+                  missingFields: ['description']
+                })
+              }
+            ]
+          };
+        }
+      }
+    };
+    const client = new ClaudeClient({ client: fakeClient });
+
+    const completion = await client.curateAgent({
+      model: 'claude-sonnet-4-5',
+      systemInstruction: 'Selected source context is advisory, not mandatory.',
+      conversation: [{ role: 'user', content: 'Create a research digest.' }],
+      sourceContext: { selectedSources: ['https://example.com/research'] },
+      currentAgentProfile: {
+        name: '',
+        description: '',
+        avatar: null,
+        characterType: null,
+        systemPrompt: ''
+      }
+    });
+
+    expect(completion).toEqual({
+      message: 'I can help turn this into a research digest.',
+      draftPatch: {
+        name: 'Research Digest',
+        characterType: 'summarizer',
+        systemPrompt: 'Summarize selected research into a concise digest.'
+      },
+      suggestedReplies: ['Make it brief', 'Focus on AI research'],
+      missingFields: ['description']
+    });
+    expect(capturedParams?.system).toBe('Selected source context is advisory, not mandatory.');
+    expect(capturedParams?.messages).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: expect.stringContaining('https://example.com/research')
+      }),
+      { role: 'user', content: 'Create a research digest.' }
+    ]);
+  });
+
+  it('accepts a curation completion wrapped in a markdown code fence', async () => {
+    const payload = JSON.stringify({
+      message: 'Draft updated.',
+      draftPatch: { name: 'Research Digest' },
+      suggestedReplies: [],
+      missingFields: ['description']
+    });
+    const fakeClient: ClaudeMessagesClient = {
+      messages: {
+        create: async () => ({ content: [{ type: 'text', text: '```json\n' + payload + '\n```' }] })
+      }
+    };
+    const client = new ClaudeClient({ client: fakeClient });
+
+    const completion = await client.curateAgent({
+      model: 'claude-sonnet-4-5',
+      systemInstruction: 'Curate an agent.',
+      conversation: [],
+      sourceContext: {},
+      currentAgentProfile: {
+        name: '',
+        description: '',
+        avatar: null,
+        characterType: null,
+        systemPrompt: ''
+      }
+    });
+
+    expect(completion.draftPatch).toEqual({ name: 'Research Digest' });
+  });
+
+  it.each([
+    ['invalid JSON', '{"message":"broken"'],
+    [
+      'an empty message',
+      JSON.stringify({ message: '   ', draftPatch: {}, suggestedReplies: [], missingFields: ['name'] })
+    ],
+    [
+      'an unknown character type',
+      JSON.stringify({
+        message: 'Draft updated.',
+        draftPatch: { characterType: 'unsupported' },
+        suggestedReplies: [],
+        missingFields: []
+      })
+    ],
+    [
+      'an invalid missing field',
+      JSON.stringify({
+        message: 'Draft updated.',
+        draftPatch: {},
+        suggestedReplies: [],
+        missingFields: ['unsupported']
+      })
+    ],
+    [
+      'a blank profile system prompt',
+      JSON.stringify({
+        message: 'Draft updated.',
+        draftPatch: { systemPrompt: '   ' },
+        suggestedReplies: [],
+        missingFields: []
+      })
+    ]
+  ])('rejects a curation completion with %s', async (_label, responseText) => {
+    const fakeClient: ClaudeMessagesClient = {
+      messages: {
+        create: async () => ({ content: [{ type: 'text', text: responseText }] })
+      }
+    };
+    const client = new ClaudeClient({ client: fakeClient });
+
+    await expect(
+      client.curateAgent({
+        model: 'claude-sonnet-4-5',
+        systemInstruction: 'Curate an agent.',
+        conversation: [],
+        sourceContext: {},
+        currentAgentProfile: {
+          name: '',
+          description: '',
+          avatar: null,
+          characterType: null,
+          systemPrompt: ''
+        }
+      })
+    ).rejects.toThrow(/curation/i);
+  });
 });

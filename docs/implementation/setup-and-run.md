@@ -90,9 +90,21 @@ npm run dev
 
 Opens the Ant Design-based ChatTrader dashboard on `http://localhost:4173`. From there you can:
 - Use the three-hub layout (**Sources**, **Agents**, **Playbooks**)
-- Create/edit agents (character/persona/prompt) from **Agents**
+- Create agents primarily with the AI curator in **Agents**: describe the analyst through
+  freeform conversation, edit the resulting profile review, and explicitly confirm before
+  creation. Manual agent setup remains available.
+- Use **Improve with AI** on an existing agent to refine its profile through the same
+  editable-and-confirmed curation flow.
 - Create/edit source library entries from **Sources**
 - Run and review **Runs/Reports** from **Playbooks** (Playbooks own execution outputs)
+
+### Source-first guided setup
+
+The guided setup begins by saving a source, then passes that source to the AI curator as
+advisory context while the user creates an agent. The source does not lock the curator's
+profile or create an execution configuration. Choosing **Set up later** preserves only the
+source; no agent, playbook, or run is created. Agent avatars are unavailable, and advanced
+runtime configuration is outside the guided setup scope.
 
 ### Startup order
 
@@ -133,15 +145,10 @@ npm run test -- src/modules/agents/validation.test.ts src/modules/agents/reposit
 
 Expected: both tests pass.
 
-## Run Full Test Suites
+## Run API Test Suite
 
 ```powershell
 Set-Location G:\brk\apps\api
-npm run test
-```
-
-```powershell
-Set-Location G:\brk\apps\web
 npm run test
 ```
 
@@ -152,8 +159,7 @@ Set-Location G:\brk\apps\web
 npm run test:smoke
 ```
 
-Smoke specs live under `apps/web/e2e/` (scoped via `playwright.config.ts`'s `testDir` so they
-don't collide with Vitest unit tests). The smoke suite is intentionally minimal and currently
+Smoke specs live under `apps/web/e2e/`. The smoke suite is intentionally minimal and currently
 targets only critical app-load/dashboard visibility checks while the UI is still changing rapidly.
 Specs render synthetic DOM fixtures rather than driving the full Vite dev server + live API, so
 they run without an Anthropic API key.

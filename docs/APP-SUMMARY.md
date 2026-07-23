@@ -32,9 +32,11 @@ The flow is three steps:
 1. **Pick up data from a source** — podcast/RSS feed, web URL, or YouTube
    video/channel/playlist (full transcripts, not just show notes). New items are crawled
    automatically on a schedule.
-2. **Run analysis with an agent the user creates** — each agent has a **custom
-   character/personality** (a system prompt). The agent reads the crawled evidence and
-   produces a report *in the voice and shape of its character*.
+2. **Run analysis with an agent the user creates** — AI curation is the primary creation
+   path: the user describes the analyst they need in a freeform conversation, then edits
+   and explicitly confirms the curator's profile review. Manual setup remains available.
+   Each agent has a **custom character/personality** (a system prompt), reads the crawled
+   evidence, and produces a report *in the voice and shape of its character*.
 3. **Deliver the report as a notification** — a structured report is emailed to the user
    (and surfaced in the in-app Feed / notification bell), shaped by the agent's character.
 
@@ -88,7 +90,7 @@ market-data platform.
 | Web | React 18 + Vite, **Ant Design 6** (+ a few legacy shadcn primitives), Tailwind, i18next (en/de) |
 | Auth | JWT in httpOnly cookie; email+password w/ 2-step confirmation, Google OAuth, password reset, admin user management (`ADMIN_EMAIL`) |
 | Email | nodemailer SMTP, bilingual templates |
-| Tests | Vitest (API ~300+, Web ~100+), Playwright e2e |
+| Tests | API Vitest, Playwright web smoke tests |
 | Deploy | Single all-in-one Docker container (API + nginx SPA + cloudflared) on Hetzner, GitHub Actions deploy over SSH; API supports multi-process clustering via `WEB_CONCURRENCY` |
 
 Monorepo: `apps/api` + `apps/web` (npm scripts proxied from root `package.json`).
@@ -106,7 +108,11 @@ The API can scale to multiple processes: set `WEB_CONCURRENCY` to N (default 1 =
   directly remains the fallback path.
   A synthetic `synthetic_discussion` source type is produced by the Studio hub (§8).
 - **Agent** (character/personality): name, character type + system prompt (versioned
-  `AgentPromptVersion`), language. Owns identity only — *not* schedule or sources.
+  `AgentPromptVersion`), language. AI curation is the primary creation path, while manual
+  setup remains available. Existing agents can be refined with **Improve with AI**. The
+  curator gathers the profile through freeform conversation, shows an editable review, and
+  requires explicit confirmation to create or save the agent. Avatars are unavailable.
+  Agents own identity only — *not* schedule or sources.
 - **Playbook**: connects Agent + Sources (`PlaybookSource`) + schedule
   (interval/daily/weekly) + recipients + notification toggle + digest cadence. Owns
   **Runs** (`AgentRun` with phases, retries, artifacts) and **Reports**
@@ -129,8 +135,11 @@ A report is a **unified structure** (`apps/api/src/modules/reports/`):
     (`AgentSignal`: symbol, long/short side, confidence, rationale, citations). This is
     the *only* character allowed to emit signals; the prompt layer enforces it.
 
-Primary user flow ("Summarize" / listen flow): pick source → choose agent character (or
-create inline) → set schedule → reports arrive as notifications and in the Feed hub.
+Primary user flow ("Summarize" / listen flow): pick a source → use the curator to create
+and explicitly confirm an agent (or use manual setup) → set schedule → reports arrive as
+notifications and in the Feed hub. The source-first guided setup gives the curator advisory
+source context only. Choosing **Set up later** preserves the source without creating an
+agent, playbook, or run. Advanced runtime configuration is outside the guided setup scope.
 
 ## 5. Key implementation notes for agents working here
 

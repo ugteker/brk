@@ -46,28 +46,35 @@ function typeTag(type: SourceType, t: (key: string) => string) {
 function ResultCard({
   item,
   selected,
+  disabled = false,
   onPick,
   t
 }: {
   item: DisplayItem;
   selected: boolean;
+  disabled?: boolean;
   onPick: () => void;
   t: (key: string) => string;
 }) {
   return (
     <div
       role="button"
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
       aria-pressed={selected}
-      onClick={onPick}
+      aria-disabled={disabled}
+      onClick={disabled ? undefined : onPick}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
           onPick();
         }
       }}
-      className={`flex w-full cursor-pointer items-center gap-3 rounded-lg border-2 px-3 py-2 text-left transition-all !bg-card ${
-        selected ? 'border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]' : 'border-border hover:border-[#9d6fe8]'
+      className={`flex w-full items-center gap-3 rounded-lg border-2 px-3 py-2 text-left transition-all !bg-card ${
+        disabled
+          ? 'cursor-default opacity-60 border-border'
+          : selected
+            ? 'cursor-pointer border-[#722ed1] shadow-[0_0_0_3px_rgba(114,46,209,0.18)]'
+            : 'cursor-pointer border-border hover:border-[#9d6fe8]'
       }`}
     >
       {item.coverImageUrl ? (
@@ -81,7 +88,7 @@ function ResultCard({
         <p className="m-0 truncate text-sm font-semibold text-foreground">{item.title}</p>
         {item.author ? <p className="m-0 truncate text-xs text-muted-foreground">{item.author}</p> : null}
       </div>
-      {typeTag(item.type, t)}
+      {disabled ? <Tag color="green" className="m-0">{t('sourcePicker.alreadyFollowing')}</Tag> : typeTag(item.type, t)}
     </div>
   );
 }
@@ -201,11 +208,12 @@ export function SourceSearchPicker({ onSelect, selectedValue, urlFallback }: Sou
             className="max-h-[min(22rem,calc(100vh-24rem))] space-y-2 overflow-y-auto overscroll-contain pr-1"
             aria-live="polite"
           >
-            {suggestions.slice(0, 6).map((item) => (
+            {[...suggestions].sort((a, b) => Number(a.followed) - Number(b.followed)).slice(0, 8).map((item) => (
               <ResultCard
                 key={`${item.origin}:${item.value}`}
                 item={item}
                 selected={selectedValue === item.value}
+                disabled={item.followed}
                 onPick={() => onSelect({ type: item.type, value: item.value, title: item.title, coverImageUrl: item.coverImageUrl })}
                 t={t}
               />

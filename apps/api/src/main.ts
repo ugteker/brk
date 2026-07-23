@@ -51,6 +51,7 @@ import OpenAI from 'openai';
 import { logger } from './lib/logger';
 import { RealtimeRepository } from './modules/realtime/repository';
 import { startRealtimeCleanupLoop } from './modules/realtime/cleanup-loop';
+import { AgentCurationRepository } from './modules/agent-curation/repository';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
   const { email, password } = config.auth.bootstrapAdmin;
@@ -102,6 +103,7 @@ async function start(role: Role) {
   const sourceRepository = new SourceRepository(prisma, realtimeEventRepository);
   const playbookRepository = new PlaybookRepository(prisma, realtimeEventRepository);
   const accessResolver = new DomainAccessResolver(new AccessRepository(prisma));
+  const agentCurationRepository = new AgentCurationRepository(prisma);
   const cursorRepository = new SourceCursorRepository(prisma);
   const crawlConfigRepository = new SourceCrawlConfigRepository(prisma);
   const siteInspector = new SiteInspectorClient({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -249,6 +251,12 @@ async function start(role: Role) {
         : {})
     },
     realtime: { repository: realtimeEventRepository },
+    agentCuration: {
+      repository: agentCurationRepository,
+      claudeClient,
+      model: 'claude-sonnet-4-5',
+      accessResolver
+    },
     db: prisma
   });
 
@@ -328,4 +336,3 @@ function bootstrap() {
 }
 
 bootstrap();
-

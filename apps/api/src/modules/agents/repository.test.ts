@@ -89,6 +89,37 @@ describe('AgentRepository', () => {
     expect(reenabled.status).toBe('active');
   });
 
+  it('persists a curated explicit name alongside its character type without resetting prompt config', async () => {
+    const update = vi.fn(async ({ data }: { data: { name?: string; characterType?: string; promptConfigJson?: string } }) => ({
+      id: 'agent_1',
+      ownerUserId: 'owner-1',
+      name: data.name ?? 'Existing agent',
+      description: 'Existing description',
+      characterType: data.characterType ?? 'summarizer',
+      promptConfigJson: data.promptConfigJson ?? JSON.stringify({ tone: 'brief' }),
+      status: 'active',
+      preferencesJson: '{}',
+      createdAt: new Date('2026-07-10T00:00:00.000Z'),
+      updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+      sources: []
+    }));
+    const fakeDb = { agent: { update }, $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fakeDb) };
+    const repo = new AgentRepository(fakeDb as never);
+
+    await repo.updateAgent('agent_1', { name: 'Market Watcher', characterType: 'teacher' });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ name: 'Market Watcher', characterType: 'teacher' })
+      })
+    );
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.not.objectContaining({ promptConfigJson: expect.anything() })
+      })
+    );
+  });
+
   it('lists agents with their sources', async () => {
     const fakeDb = {
       agent: {

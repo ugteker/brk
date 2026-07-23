@@ -17,6 +17,7 @@ import type { RealtimeEventWriter } from '../realtime/types';
 type AgentDb = Pick<
   PrismaClient,
   | 'agent'
+  | 'agentCurationSession'
   | 'agentSource'
   | 'agentRun'
   | 'agentPromptVersion'
@@ -125,38 +126,56 @@ export class AgentRepository {
   }
 
   async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
-    const characterType = input.characterType ?? DEFAULT_CHARACTER_TYPE;
-    const promptConfig = input.promptConfig ?? {};
     const created = await this.db.$transaction(async (tx: any) => {
-      const created = await tx.agent.create({
-        data: {
-          ownerUserId,
-          name: input.name && input.name.trim().length > 0 ? input.name.trim() : deriveAgentName(characterType, promptConfig),
-          description: input.description ?? '',
-          characterType,
-          promptConfigJson: JSON.stringify(promptConfig),
-          status: input.active === false ? 'disabled' : 'active',
-          preferencesJson: JSON.stringify(input.preferences ?? {}),
-          ...(input.sources && input.sources.length > 0
-            ? {
-                sources: {
-                  create: input.sources.map((s) => ({
-                    type: s.type,
-                    value: s.value,
-                    frequencyMinutes: s.frequencyMinutes ?? 60,
-                    maxItems: s.maxItems ?? 1
-                  }))
-                }
-              }
-            : {})
-        },
-        include: { sources: true }
-      });
+      const created = await this.createAgentInTransaction(tx, ownerUserId, input);
       await this.realtime.append(tx, { userId: ownerUserId, topic: 'agent.changed', entityId: created.id });
       return created;
     });
-
     return mapAgent(created);
+  }
+
+  async createFinalizedAgent(
+    ownerUserId: string,
+    input: CreateAgentInput,
+    curationSessionId: string,
+    expectedRevision: number
+  ): Promise<Agent> {
+    const created = await this.db.$transaction(async (tx: any) => {
+      const created = await this.createAgentInTransaction(tx, ownerUserId, input);
+      await this.recordCurationAgent(tx, curationSessionId, expectedRevision, created.id);
+      await this.realtime.append(tx, { userId: ownerUserId, topic: 'agent.changed', entityId: created.id });
+      return created;
+    });
+    return mapAgent(created);
+  }
+
+  private async createAgentInTransaction(tx: any, ownerUserId: string, input: CreateAgentInput): Promise<any> {
+    const characterType = input.characterType ?? DEFAULT_CHARACTER_TYPE;
+    const promptConfig = input.promptConfig ?? {};
+    return tx.agent.create({
+      data: {
+        ownerUserId,
+        name: input.name && input.name.trim().length > 0 ? input.name.trim() : deriveAgentName(characterType, promptConfig),
+        description: input.description ?? '',
+        characterType,
+        promptConfigJson: JSON.stringify(promptConfig),
+        status: input.active === false ? 'disabled' : 'active',
+        preferencesJson: JSON.stringify(input.preferences ?? {}),
+        ...(input.sources && input.sources.length > 0
+          ? {
+              sources: {
+                create: input.sources.map((s) => ({
+                  type: s.type,
+                  value: s.value,
+                  frequencyMinutes: s.frequencyMinutes ?? 60,
+                  maxItems: s.maxItems ?? 1
+                }))
+              }
+            }
+          : {})
+      },
+      include: { sources: true }
+    });
   }
 
   async disableAgent(agentId: string): Promise<void> {
@@ -216,44 +235,85 @@ export class AgentRepository {
 
   async updateAgent(agentId: string, patch: Partial<CreateAgentInput>): Promise<Agent> {
     const updated = await this.db.$transaction(async (tx: any) => {
-      // Only touch the name/characterType/promptConfig when the patch explicitly includes
-      // characterType or promptConfig; otherwise preserve the existing name to avoid
-      // surprising renames when callers only toggle `active`.
-      if (patch.sources) {
-        await tx.agentSource.deleteMany({ where: { agentId } });
-        await tx.agentSource.createMany({
-          data: patch.sources.map((s) => ({
-            agentId,
-            type: s.type,
-            value: s.value,
-            frequencyMinutes: s.frequencyMinutes ?? 60,
-            maxItems: s.maxItems ?? 1
-          }))
-        });
-      }
+      const updated = await this.updateAgentInTransaction(tx, agentId, patch);
+      await this.realtime.append(tx, { userId: updated.ownerUserId, topic: 'agent.changed', entityId: agentId });
+      return updated;
+    });
+    return mapAgent(updated);
+  }
 
-      const data: any = {};
-      if (patch.description !== undefined) data.description = patch.description;
-      if (patch.characterType !== undefined || patch.promptConfig !== undefined) {
-        const characterType = patch.characterType ?? DEFAULT_CHARACTER_TYPE;
-        const promptConfig = patch.promptConfig ?? {};
-        data.name = deriveAgentName(characterType, promptConfig);
-        data.characterType = characterType;
+  async updateFinalizedAgent(
+    agentId: string,
+    patch: CreateAgentInput,
+    curationSessionId: string,
+    expectedRevision: number
+  ): Promise<Agent> {
+    const updated = await this.db.$transaction(async (tx: any) => {
+      const updated = await this.updateAgentInTransaction(tx, agentId, patch);
+      await this.recordCurationAgent(tx, curationSessionId, expectedRevision, updated.id);
+      await this.realtime.append(tx, { userId: updated.ownerUserId, topic: 'agent.changed', entityId: agentId });
+      return updated;
+    });
+    return mapAgent(updated);
+  }
+
+  private async updateAgentInTransaction(tx: any, agentId: string, patch: Partial<CreateAgentInput>): Promise<any> {
+    // Preserve explicitly supplied names (including names curated through the agent-creation
+    // flow). Keep the prior derived-name behavior for older patches that change character
+    // settings without supplying a name.
+    if (patch.sources) {
+      await tx.agentSource.deleteMany({ where: { agentId } });
+      await tx.agentSource.createMany({
+        data: patch.sources.map((s) => ({
+          agentId,
+          type: s.type,
+          value: s.value,
+          frequencyMinutes: s.frequencyMinutes ?? 60,
+          maxItems: s.maxItems ?? 1
+        }))
+      });
+    }
+
+    const data: any = {};
+    if (patch.name !== undefined) data.name = patch.name.trim();
+    if (patch.description !== undefined) data.description = patch.description;
+    if (patch.characterType !== undefined || patch.promptConfig !== undefined) {
+      const characterType = patch.characterType ?? DEFAULT_CHARACTER_TYPE;
+      const promptConfig = patch.promptConfig ?? {};
+      if (patch.name === undefined) data.name = deriveAgentName(characterType, promptConfig);
+      data.characterType = characterType;
+      if (patch.promptConfig !== undefined || patch.name === undefined) {
         data.promptConfigJson = JSON.stringify(promptConfig);
       }
-      if (patch.active !== undefined) data.status = patch.active ? 'active' : 'disabled';
-      if (patch.preferences !== undefined) data.preferencesJson = JSON.stringify(patch.preferences);
+    }
+    if (patch.active !== undefined) data.status = patch.active ? 'active' : 'disabled';
+    if (patch.preferences !== undefined) data.preferencesJson = JSON.stringify(patch.preferences);
 
-      const changed = await tx.agent.update({
-        where: { id: agentId },
-        data,
-        include: { sources: true }
-      });
-      await this.realtime.append(tx, { userId: changed.ownerUserId, topic: 'agent.changed', entityId: agentId });
-      return changed;
+    return tx.agent.update({
+      where: { id: agentId },
+      data,
+      include: { sources: true }
     });
+  }
 
-    return mapAgent(updated);
+  private async recordCurationAgent(
+    tx: any,
+    curationSessionId: string,
+    expectedRevision: number,
+    agentId: string
+  ): Promise<void> {
+    const handoff = await tx.agentCurationSession.updateMany({
+      where: {
+        id: curationSessionId,
+        revision: expectedRevision,
+        status: 'finalizing',
+        finalizationAgentId: null
+      },
+      data: { finalizationAgentId: agentId }
+    });
+    if (handoff.count !== 1) {
+      throw new Error('curation_finalization_handoff_conflict');
+    }
   }
 
   async listRecentRuns(ownerUserId: string, limit: number): Promise<RecentRun[]> {

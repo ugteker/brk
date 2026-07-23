@@ -143,9 +143,7 @@ Last updated: 2026-07-19 (Reframed product direction: general-purpose platform, 
   do not scatter requirements across chat history only.
 - **This file must be updated automatically as progress is made** (after each task,
   not just at the end).
-- Since this repo has no git history, implementation proceeds via direct
-  session-based execution (TDD per task) rather than full subagent-driven-development
-  tooling, which assumes a git repo.
+
 
 ---
 
