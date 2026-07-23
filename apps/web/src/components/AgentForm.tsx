@@ -14,10 +14,14 @@ import {
   message
 } from 'antd';
 import {
+  ArrowLeftOutlined,
+  ArrowRightOutlined,
   CheckCircleOutlined,
+  CloseOutlined,
   MessageOutlined,
   UserOutlined
 } from '@ant-design/icons';
+import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { createAgent, updateAgent, type AgentDetail } from '../api/agents';
 import { saveAgentPrompt } from '../api/agents';
 import {
@@ -196,9 +200,21 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
             <Title level={4} style={{ margin: 0 }}>
               {isEditing ? 'Edit agent' : 'Agent setup wizard'}
             </Title>
-            <Text aria-label="Wizard progress" type="secondary">
-              Step {currentStep + 1} of {STEPS.length}
-            </Text>
+            <div className="flex items-center gap-2">
+              <Text aria-label="Wizard progress" type="secondary">
+                Step {currentStep + 1} of {STEPS.length}
+              </Text>
+              <TouchSafeTooltip title="Cancel">
+                <Button
+                  aria-label="Cancel agent setup"
+                  className="sm:hidden"
+                  type="text"
+                  shape="circle"
+                  icon={<CloseOutlined />}
+                  onClick={onCancel}
+                />
+              </TouchSafeTooltip>
+            </div>
           </div>
           {/* Compact progress bar on mobile keeps the stepper from eating the whole screen;
               the full icon+title Steps component is restored on sm+ where there's room. */}
@@ -391,18 +407,33 @@ export function AgentForm({ onCancel, onComplete, agent, initialPrompt }: AgentF
           )}
         </div>
 
-        <div className="sticky bottom-0 z-10 -mx-4 flex justify-between border-t border-border bg-background px-4 py-3 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
+        <div className="mobile-agent-form-actions z-10 -mx-4 flex justify-between px-4 py-3 sm:mx-0 sm:px-0 sm:py-0">
           <div className="flex gap-2">
-            <Button onClick={backStep} disabled={currentStep === 0}>Back</Button>
-            <Button onClick={onCancel}>Cancel</Button>
+            <TouchSafeTooltip title="Back">
+              <Button
+                aria-label="Back"
+                className="mobile-wizard-button"
+                icon={<ArrowLeftOutlined />}
+                onClick={backStep}
+                disabled={currentStep === 0}
+              >
+                <span className="mobile-button-label">Back</span>
+              </Button>
+            </TouchSafeTooltip>
+            <Button className="hidden sm:inline-flex" onClick={onCancel}>Cancel</Button>
           </div>
-          <Button
-            type="primary"
-            onClick={currentStep === STEPS.length - 1 ? onSave : nextStep}
-            loading={saveState === 'saving' && currentStep === STEPS.length - 1}
-          >
-            {currentStep === STEPS.length - 1 ? 'Save agent' : 'Next'}
-          </Button>
+          <TouchSafeTooltip title={currentStep === STEPS.length - 1 ? 'Save agent' : 'Next'}>
+            <Button
+              aria-label={currentStep === STEPS.length - 1 ? 'Save agent' : 'Next'}
+              className="mobile-wizard-button"
+              type="primary"
+              icon={currentStep === STEPS.length - 1 ? <CheckCircleOutlined /> : <ArrowRightOutlined />}
+              onClick={currentStep === STEPS.length - 1 ? onSave : nextStep}
+              loading={saveState === 'saving' && currentStep === STEPS.length - 1}
+            >
+              <span className="mobile-button-label">{currentStep === STEPS.length - 1 ? 'Save agent' : 'Next'}</span>
+            </Button>
+          </TouchSafeTooltip>
         </div>
       </div>
 

@@ -311,66 +311,64 @@ export function AppShell({ children }: { children: ReactNode }) {
             <WatchlistMenu />
 
             {/* Bell */}
-            <Popover
-              open={bellOpen}
-              onOpenChange={setBellOpen}
-              trigger="click"
-              title={
-                <div className="flex items-center justify-between gap-4">
-                  <span>{t('nav.bellTitle')}</span>
-                  {combinedNotices.length > 0 && (
-                    <Button
-                      size="small"
-                      type="text"
-                      onClick={() => {
-                        const newSet = new Set(combinedNotices.map((n) => n.id));
-                        setBellDismissedIds(newSet);
-                        localStorage.setItem('chattrader:bell:dismissed', JSON.stringify([...newSet]));
-                      }}
-                    >
-                      {t('nav.bellClearAll')}
-                    </Button>
-                  )}
-                </div>
-              }
-              content={
-                <div className="w-72 space-y-2 max-h-80 overflow-y-auto">
-                  {combinedNotices.length === 0 ? (
-                    <p className="text-xs text-gray-400 py-2 text-center">{t('nav.bellEmpty')}</p>
-                  ) : (
-                    [...combinedNotices].reverse().map((n) => {
-                      const tone = n.kind === 'run_failed'
-                        ? { box: 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950', title: 'text-red-700 dark:text-red-300', body: 'text-red-500 dark:text-red-400' }
-                        : n.kind === 'new_report'
-                          ? { box: 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950', title: 'text-green-700 dark:text-green-300', body: 'text-green-600 dark:text-green-400' }
-                          : { box: 'border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-950', title: 'text-violet-700 dark:text-violet-300', body: 'text-violet-600 dark:text-violet-400' };
-                      return (
-                      <div
-                        key={n.id}
-                        className={`rounded-lg border px-3 py-2 text-xs ${
-                          bellDismissedIds.has(n.id) ? 'opacity-40 border-gray-200' : tone.box
-                        }`}
+            <Badge count={unread.length} size="small" className={unread.length > 0 ? 'ct-bell-badge-alert' : undefined}>
+              <Popover
+                open={bellOpen}
+                onOpenChange={setBellOpen}
+                trigger="click"
+                title={
+                  <div className="flex items-center justify-between gap-4">
+                    <span>{t('nav.bellTitle')}</span>
+                    {combinedNotices.length > 0 && (
+                      <Button
+                        size="small"
+                        type="text"
+                        onClick={() => {
+                          const newSet = new Set(combinedNotices.map((n) => n.id));
+                          setBellDismissedIds(newSet);
+                          localStorage.setItem('chattrader:bell:dismissed', JSON.stringify([...newSet]));
+                        }}
                       >
-                        <p className={`font-semibold truncate ${tone.title}`}>
-                          {n.agentName}
-                        </p>
-                        <p className={`truncate ${tone.body}`}>
-                          {n.kind === 'new_report' ? `${t('nav.bellNewReport')}: ` : ''}{n.message}
-                        </p>
-                        {n.timestamp ? <p className="text-gray-400 mt-0.5">{new Date(n.timestamp).toLocaleString()}</p> : null}
-                      </div>
-                      );
-                    })
-                  )}
-                </div>
-              }
-            >
-              <TouchSafeTooltip title={t('nav.bellTitle')}>
-                <Badge count={unread.length} size="small" className={unread.length > 0 ? 'ct-bell-badge-alert' : undefined}>
-                  <Button shape="circle" icon={<BellOutlined />} aria-label={t('nav.bellLabel')} style={circleActionStyle} />
-                </Badge>
-              </TouchSafeTooltip>
-            </Popover>
+                        {t('nav.bellClearAll')}
+                      </Button>
+                    )}
+                  </div>
+                }
+                content={
+                  <div className="w-72 space-y-2 max-h-80 overflow-y-auto">
+                    {combinedNotices.length === 0 ? (
+                      <p className="text-xs text-gray-400 py-2 text-center">{t('nav.bellEmpty')}</p>
+                    ) : (
+                      [...combinedNotices].reverse().map((n) => {
+                        const tone = n.kind === 'run_failed'
+                          ? { box: 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950', title: 'text-red-700 dark:text-red-300', body: 'text-red-500 dark:text-red-400' }
+                          : n.kind === 'new_report'
+                            ? { box: 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950', title: 'text-green-700 dark:text-green-300', body: 'text-green-600 dark:text-green-400' }
+                            : { box: 'border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-950', title: 'text-violet-700 dark:text-violet-300', body: 'text-violet-600 dark:text-violet-400' };
+                        return (
+                        <div
+                          key={n.id}
+                          className={`rounded-lg border px-3 py-2 text-xs ${
+                            bellDismissedIds.has(n.id) ? 'opacity-40 border-gray-200' : tone.box
+                          }`}
+                        >
+                          <p className={`font-semibold truncate ${tone.title}`}>
+                            {n.agentName}
+                          </p>
+                          <p className={`truncate ${tone.body}`}>
+                            {n.kind === 'new_report' ? `${t('nav.bellNewReport')}: ` : ''}{n.message}
+                          </p>
+                          {n.timestamp ? <p className="text-gray-400 mt-0.5">{new Date(n.timestamp).toLocaleString()}</p> : null}
+                        </div>
+                        );
+                      })
+                    )}
+                  </div>
+                }
+              >
+                <Button shape="circle" icon={<BellOutlined />} aria-label={t('nav.bellLabel')} style={circleActionStyle} />
+              </Popover>
+            </Badge>
 
             {/* User menu — desktop only */}
             <span className="hidden sm:inline-flex">

@@ -202,19 +202,71 @@
   }
 
   .ant-modal-body {
-    max-height: 80vh;
+    max-height: calc(100dvh - 96px);
     overflow-y: auto;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
   }
 
-  .follow-source-modal {
-    width: calc(100vw - 16px) !important;
-    max-width: calc(100vw - 16px) !important;
-    margin: 8px !important;
+  .ant-modal-wrap {
+    overscroll-behavior: contain;
+  }
+
+  .mobile-fullscreen-modal {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin: 0 !important;
     top: 0 !important;
+    padding-bottom: 0 !important;
   }
 
-  .follow-source-modal .ant-modal-content {
-    min-height: calc(100dvh - 16px);
+  .mobile-fullscreen-modal .ant-modal-content {
+    display: flex;
+    height: 100dvh;
+    flex-direction: column;
+    border-radius: 0 !important;
+  }
+
+  .mobile-fullscreen-modal .ant-modal-header {
+    flex: 0 0 auto;
+  }
+
+  .mobile-fullscreen-modal .ant-modal-body {
+    min-height: 0;
+    max-height: none;
+    flex: 1 1 auto;
+  }
+
+  .mobile-fullscreen-modal .curator-actions,
+  .mobile-fullscreen-modal .mobile-workflow-actions,
+  .mobile-agent-form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    margin-right: -4px;
+    margin-left: -4px;
+    padding: 12px 4px max(12px, env(safe-area-inset-bottom));
+    background: transparent;
+  }
+
+  .mobile-wizard-button {
+    width: 48px !important;
+    min-width: 48px !important;
+    height: 48px !important;
+    padding: 0 !important;
+    border-radius: 9999px !important;
+    box-shadow: 0 8px 24px rgba(31, 23, 46, 0.16);
+  }
+
+  .mobile-wizard-button .mobile-button-label {
+    display: none;
+  }
+
+  .mobile-fullscreen-modal .source-picker-results {
+    max-height: none !important;
+    overflow: visible;
+    padding-right: 0;
   }
 
   /* Tabs scrollable on mobile */

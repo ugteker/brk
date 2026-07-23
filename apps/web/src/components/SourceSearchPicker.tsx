@@ -187,7 +187,7 @@ export function SourceSearchPicker({ onSelect, selectedValue, urlFallback }: Sou
             <Alert type="warning" showIcon message={t('sourcePicker.partialResults')} />
           )}
           <div
-            className="max-h-[min(22rem,calc(100vh-24rem))] space-y-2 overflow-y-auto overscroll-contain pr-1"
+            className="source-picker-results max-h-[min(22rem,calc(100vh-24rem))] space-y-2 overflow-y-auto overscroll-contain pr-1"
             aria-live="polite"
           >
             {(results ?? []).map((item) => (
@@ -205,7 +205,7 @@ export function SourceSearchPicker({ onSelect, selectedValue, urlFallback }: Sou
         <div className="space-y-2">
           <p className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('sourcePicker.popularSources')}</p>
           <div
-            className="max-h-[min(22rem,calc(100vh-24rem))] space-y-2 overflow-y-auto overscroll-contain pr-1"
+            className="source-picker-results max-h-[min(22rem,calc(100vh-24rem))] space-y-2 overflow-y-auto overscroll-contain pr-1"
             aria-live="polite"
           >
             {[...suggestions].sort((a, b) => Number(a.followed) - Number(b.followed)).slice(0, 8).map((item) => (

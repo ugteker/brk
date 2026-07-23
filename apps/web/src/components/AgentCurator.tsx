@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Collapse, Form, Input, Select, Skeleton, Typography } from 'antd';
+import { ArrowLeftOutlined, ArrowRightOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { TouchSafeTooltip } from './TouchSafeTooltip';
 import type { CharacterType } from '../api/agents';
 import {
   finalizeAgentCuration,
@@ -290,7 +292,11 @@ export function AgentCurator({
 
   const profileFields: EditableReviewField[] = ['name', 'description', 'characterType', 'systemPrompt'];
   const lastCuratorMessage = [...session.messages].reverse().find((item) => item.role !== 'user');
-  const isFirstStep = session.messages.filter((item) => item.role === 'user').length === 0;
+  const userMessageCount = session.messages.filter((item) => item.role === 'user').length;
+  const isFirstStep = userMessageCount === 0;
+  const sourceTitle = sourceContext && typeof sourceContext.title === 'string' ? sourceContext.title.trim() : '';
+  const showSourceInspiration =
+    Boolean(sourceTitle) && userMessageCount === 1 && Boolean(lastCuratorMessage) && !sending;
   const visibleSuggestions = suggestions.length > 0 ? suggestions : isFirstStep ? STARTER_SUGGESTION_KEYS.map((key) => t(key)) : [];
 
   const errorBanner = actionError ? (
@@ -377,13 +383,36 @@ export function AgentCurator({
             }
           ]}
         />
-        <div className="mt-4 flex items-center justify-between gap-2">
-          <Button shape="round" onClick={() => setReviewOpen(false)} disabled={isBusy}>
-            {t('curator.back')}
-          </Button>
-          <Button type="primary" shape="round" size="large" onClick={() => void finalize()} loading={finalizing} disabled={isBusy}>
-            {mode === 'create' ? t('curator.createAgent') : t('curator.saveChanges')}
-          </Button>
+        <div className="curator-actions mt-4 flex items-center justify-between gap-2">
+          <TouchSafeTooltip title={t('curator.back')}>
+            <Button
+              aria-label={t('curator.back')}
+              className="mobile-wizard-button"
+              shape="round"
+              icon={<ArrowLeftOutlined />}
+              onClick={() => setReviewOpen(false)}
+              disabled={isBusy}
+            >
+              <span className="mobile-button-label">{t('curator.back')}</span>
+            </Button>
+          </TouchSafeTooltip>
+          <TouchSafeTooltip title={mode === 'create' ? t('curator.createAgent') : t('curator.saveChanges')}>
+            <Button
+              aria-label={mode === 'create' ? t('curator.createAgent') : t('curator.saveChanges')}
+              className="mobile-wizard-button"
+              type="primary"
+              shape="round"
+              size="large"
+              icon={<CheckCircleOutlined />}
+              onClick={() => void finalize()}
+              loading={finalizing}
+              disabled={isBusy}
+            >
+              <span className="mobile-button-label">
+                {mode === 'create' ? t('curator.createAgent') : t('curator.saveChanges')}
+              </span>
+            </Button>
+          </TouchSafeTooltip>
         </div>
       </div>
     );
@@ -412,6 +441,11 @@ export function AgentCurator({
       </div>
 
       <div aria-live="polite" className="mb-4 min-h-[4.5rem]">
+        {showSourceInspiration ? (
+          <p className="mb-1 text-xs font-medium text-muted-foreground">
+            {t('curator.inspiredBy', { source: sourceTitle })}
+          </p>
+        ) : null}
         <p className={`m-0 text-lg font-semibold leading-snug text-foreground ${sending ? 'animate-pulse' : ''}`} style={{ textWrap: 'balance' }}>
           {sending
             ? t('curator.thinking')
@@ -453,25 +487,50 @@ export function AgentCurator({
         className="!rounded-xl"
       />
 
-      <div className="mt-4 flex items-center justify-between gap-2">
-        <Button shape="round" onClick={onCancel} disabled={isBusy}>
-          {t('curator.back')}
-        </Button>
-        {canReview ? (
-          <Button type="primary" shape="round" size="large" onClick={() => setReviewOpen(true)} disabled={isBusy}>
-            {t('curator.reviewAgent')}
-          </Button>
-        ) : (
+      <div className="curator-actions mt-4 flex items-center justify-between gap-2">
+        <TouchSafeTooltip title={t('curator.back')}>
           <Button
-            type="primary"
+            aria-label={t('curator.back')}
+            className="mobile-wizard-button"
             shape="round"
-            size="large"
-            onClick={sendFreeformMessage}
-            loading={sending}
-            disabled={!messageText.trim() || isBusy}
+            icon={<ArrowLeftOutlined />}
+            onClick={onCancel}
+            disabled={isBusy}
           >
-            {t('curator.continue')}
+            <span className="mobile-button-label">{t('curator.back')}</span>
           </Button>
+        </TouchSafeTooltip>
+        {canReview ? (
+          <TouchSafeTooltip title={t('curator.reviewAgent')}>
+            <Button
+              aria-label={t('curator.reviewAgent')}
+              className="mobile-wizard-button"
+              type="primary"
+              shape="round"
+              size="large"
+              icon={<ArrowRightOutlined />}
+              onClick={() => setReviewOpen(true)}
+              disabled={isBusy}
+            >
+              <span className="mobile-button-label">{t('curator.reviewAgent')}</span>
+            </Button>
+          </TouchSafeTooltip>
+        ) : (
+          <TouchSafeTooltip title={t('curator.continue')}>
+            <Button
+              aria-label={t('curator.continue')}
+              className="mobile-wizard-button"
+              type="primary"
+              shape="round"
+              size="large"
+              icon={<ArrowRightOutlined />}
+              onClick={sendFreeformMessage}
+              loading={sending}
+              disabled={!messageText.trim() || isBusy}
+            >
+              <span className="mobile-button-label">{t('curator.continue')}</span>
+            </Button>
+          </TouchSafeTooltip>
         )}
       </div>
     </div>

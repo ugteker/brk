@@ -29,8 +29,14 @@ export const CURATION_SYSTEM_INSTRUCTION = [
   'Only fill systemPrompt once you have enough detail from the conversation to write a specific, useful prompt. Leave it out of the patch until then.',
   'Always infer characterType yourself from the conversation; never ask the user about character types or mention the term.',
   'Suggested replies must be short, pickable answers to the question you just asked (2-4 of them), not generic phrases.',
-  'Selected source context is advisory, not mandatory. Do not require it, invent facts from it, or treat it as a constraint on the profile.',
   'Respect explicit user corrections over any prior profile direction.'
+].join('\n');
+
+const CURATION_SOURCE_OPENING_INSTRUCTION = [
+  'Use selected source context only for this opening proposal.',
+  'Let it inspire a useful character, audience, tone, or output shape, but keep the agent reusable with other sources.',
+  'Do not invent source facts, lock profile fields from it, or treat it as a user requirement.',
+  'Explicit user direction always wins.'
 ].join('\n');
 
 export interface AgentCurationClaudeLike {
@@ -330,6 +336,12 @@ function curationLanguageDirective(sourceContext: CurationSession['sourceContext
   return `\nThe app language is ${languageName}. Write your assistant message, suggested replies, and all profile draft fields (name, description, systemPrompt) in ${languageName}.`;
 }
 
+function hasSelectedSourceContext(sourceContext: CurationSession['sourceContext']): boolean {
+  return ['title', 'type', 'url', 'value', 'selectedSources'].some((field) =>
+    Object.prototype.hasOwnProperty.call(sourceContext, field)
+  );
+}
+
 function toReplyResult(reply: CurationSavedReply, session: CurationSession): CurationReplyResult {
   return {
     assistantMessage: reply.assistantMessage,
@@ -413,13 +425,18 @@ export class AgentCurationService {
     assertSourceContextWithinLimit(freshSession.sourceContext);
     const currentAgentProfile = profileFromDraft(freshSession.draft);
     assertValidCurationDraftPatch(currentAgentProfile);
+    const isOpeningTurn = freshSession.messages.filter((message) => message.role === 'user').length === 1;
+    const useSourceContext = isOpeningTurn && hasSelectedSourceContext(freshSession.sourceContext);
     const request: ClaudeAgentCurationRequest = {
       model: this.deps.model,
-      systemInstruction: CURATION_SYSTEM_INSTRUCTION + curationLanguageDirective(freshSession.sourceContext),
+      systemInstruction:
+        CURATION_SYSTEM_INSTRUCTION +
+        (useSourceContext ? `\n${CURATION_SOURCE_OPENING_INSTRUCTION}` : '') +
+        curationLanguageDirective(freshSession.sourceContext),
       conversation: freshSession.messages
         .slice(-MAX_CURATION_CONVERSATION_MESSAGES)
         .map((message) => ({ role: message.role, content: message.content })),
-      sourceContext: freshSession.sourceContext,
+      sourceContext: useSourceContext ? freshSession.sourceContext : {},
       currentAgentProfile
     };
 

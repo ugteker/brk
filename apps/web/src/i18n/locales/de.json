@@ -153,7 +153,7 @@
       "long_term": "Langfristig"
     },
     "focus": {
-      "recommendation": "Empfohlener nächster Schritt",
+      "recommendation": "Wesentliche Erkenntnisse",
       "risk": "Zu beobachtendes Risiko",
       "openQuestion": "Offene Frage",
       "keyTakeaway": "Kernaussage"
@@ -493,6 +493,7 @@
     "progressDone": "Alles bereit – ein letzter Blick",
     "thinking": "Einen Moment…",
     "firstQuestion": "Was soll dieser Agent für dich tun?",
+    "inspiredBy": "Inspiriert von: {{source}}",
     "placeholder": "Oder antworte in deinen eigenen Worten…",
     "starter1": "Fasse neue Inhalte zusammen und hebe die wichtigsten Punkte hervor",
     "starter2": "Verfolge Finanznachrichten und markiere Risiken und Chancen",
@@ -523,6 +524,7 @@
     "skip": "Überspringen — ich richte es manuell ein",
     "setUpLater": "Später einrichten",
     "continueToAgent": "Weiter zur Agenten-Einrichtung",
+    "changeSource": "Andere Quelle auswählen",
     "sourceSelected": "Quelle ausgewählt: {{title}}",
     "presetQuickStart": "Schnellstart mit einer Vorlage:",
     "curatorBusyTitle": "Der Assistent arbeitet gerade",
