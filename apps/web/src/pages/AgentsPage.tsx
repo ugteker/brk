@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Alert, Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Progress, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
 import {
   ArrowLeftOutlined,
+  ArrowRightOutlined,
   AudioOutlined,
   AudioMutedOutlined,
   CheckCircleOutlined,
@@ -2897,15 +2898,22 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                              const videoId = selectedSource.type === 'youtube_videos' ? extractYoutubeVideoId(ep.link) : null;
                                              const episodeReport = findEpisodeReport(ep.link);
                                              return (
-                                               <li key={ep.link} className="flex flex-col sm:flex-row sm:items-center gap-3 py-2.5">
+                                               <li
+                                                 key={ep.link}
+                                                 className={`grid items-start gap-x-3 py-2.5 sm:items-center ${
+                                                   videoId
+                                                     ? 'grid-cols-[72px_minmax(0,1fr)] sm:grid-cols-[64px_minmax(0,1fr)_auto]'
+                                                     : 'grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto]'
+                                                 }`}
+                                               >
                                                  {videoId ? (
                                                    <img
                                                      src={getYoutubeThumbnailUrl(videoId, 'mqdefault')}
                                                      alt=""
-                                                     className="w-full sm:w-16 h-auto sm:h-11 rounded object-cover flex-shrink-0 bg-muted sm:max-w-16"
+                                                     className="h-12 w-[72px] rounded object-cover bg-muted sm:h-11 sm:w-16"
                                                    />
                                                  ) : null}
-                                                 <div className="min-w-0 flex-1">
+                                                 <div className="min-w-0">
                                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
                                                      <span className="truncate text-sm font-medium">{ep.title}</span>
                                                      {episodeReport ? (
@@ -2920,7 +2928,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                      </div>
                                                    ) : null}
                                                  </div>
-                                                 <div className="flex gap-1 shrink-0">
+                                                 <div className={`mt-2 flex gap-1 ${
+                                                   videoId ? 'col-start-2 sm:col-start-3' : 'col-start-1 sm:col-start-2'
+                                                 } sm:row-start-1 sm:mt-0 sm:shrink-0`}>
                                                    {episodeReport ? (
                                                      <TouchSafeTooltip title={t('library.openReport')}>
                                                        <Button
@@ -3562,15 +3572,34 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                         }}
                       />
                     ) : agentEditor?.mode === 'curation-create' ? (
-                      <Card className="min-w-0" title="Curate with AI">
+                      <Modal
+                        title="Curate with AI"
+                        open
+                        onCancel={() => setAgentEditor(null)}
+                        footer={null}
+                        destroyOnHidden
+                        width="min(720px, 95vw)"
+                        className="agent-curator-modal mobile-fullscreen-modal"
+                        styles={{ body: { maxHeight: 'calc(100dvh - 9rem)', overflowX: 'hidden', overflowY: 'auto' } }}
+                      >
                         <AgentCurator
                           mode="create"
                           onCancel={() => setAgentEditor(null)}
                           onComplete={completeAgentCuration}
                         />
-                      </Card>
+                      </Modal>
                     ) : agentEditor?.mode === 'curation-update' ? (
-                      <Card className="min-w-0" title="Curate with AI">
+                      <Modal
+                        key={agentEditor.detail.id}
+                        title="Curate with AI"
+                        open
+                        onCancel={() => setAgentEditor(null)}
+                        footer={null}
+                        destroyOnHidden
+                        width="min(720px, 95vw)"
+                        className="agent-curator-modal mobile-fullscreen-modal"
+                        styles={{ body: { maxHeight: 'calc(100dvh - 9rem)', overflowX: 'hidden', overflowY: 'auto' } }}
+                      >
                         <AgentCurator
                           key={agentEditor.detail.id}
                           mode="update"
@@ -3584,7 +3613,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           onCancel={() => setAgentEditor(null)}
                           onComplete={completeAgentCuration}
                         />
-                      </Card>
+                      </Modal>
                     ) : selectedAgent ? (
                       <Card
                         className="min-w-0"
@@ -4191,7 +4220,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         footer={null}
         destroyOnHidden
         width="min(720px, 95vw)"
-        className="follow-source-modal"
+        className="follow-source-modal mobile-fullscreen-modal"
         styles={{ body: { maxHeight: 'calc(100dvh - 9rem)', overflowX: 'hidden', overflowY: 'auto' } }}
       >
         <div className="space-y-3">
@@ -4814,14 +4843,19 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         </div>
         {/* While the AI curator is embedded, it owns the only nav buttons (← Back / Continue →) — hide the wizard footer. */}
         {inlineAgentCurating ? null : (
-        <div className={`sticky bottom-0 mt-4 flex gap-2 border-t bg-card pt-3 pb-1 ${
-          showInlineAgentCreate ? 'flex-row items-center justify-between' : 'flex-col sm:flex-row sm:items-center sm:justify-between'
-        }`}>
+        <div className="mobile-workflow-actions mt-4 flex flex-row flex-wrap items-center justify-between gap-2 pt-3 pb-1">
           {showInlineAgentCreate || (!followWizardSourcePreselected && playbookCreateStep > 0) || editingPlaybookId ? (
-          <div className={`flex flex-wrap items-center gap-2 ${showInlineAgentCreate ? 'shrink-0' : 'w-full sm:w-auto'}`}>
+          <div className={`flex flex-wrap items-center gap-2 ${showInlineAgentCreate ? 'shrink-0' : ''}`}>
             {showInlineAgentCreate || (!followWizardSourcePreselected && playbookCreateStep > 0) ? (
-              <Button onClick={showInlineAgentCreate ? onInlineAgentBack : onBackPlaybookCreateStep}>
-                  {showInlineAgentCreate && inlineAgentStep === 0 ? `← ${t('listen.stepChooseAgent')}` : t('common.back')}
+              <Button
+                aria-label={showInlineAgentCreate && inlineAgentStep === 0 ? t('listen.stepChooseAgent') : t('common.back')}
+                className="mobile-wizard-button"
+                icon={<ArrowLeftOutlined />}
+                onClick={showInlineAgentCreate ? onInlineAgentBack : onBackPlaybookCreateStep}
+              >
+                  <span className="mobile-button-label">
+                    {showInlineAgentCreate && inlineAgentStep === 0 ? t('listen.stepChooseAgent') : t('common.back')}
+                  </span>
               </Button>
             ) : null}
             {/* Stop listening — only shown when editing a playbook and NOT inside the agent sub-wizard */}
@@ -4853,35 +4887,76 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             ) : null}
           </div>
           ) : null}
-          <div className={`flex items-center gap-2 sm:justify-end ${showInlineAgentCreate ? 'min-w-0 flex-1 justify-end' : 'w-full sm:w-auto'}`}>
+          <div className={`ml-auto flex items-center justify-end gap-2 ${showInlineAgentCreate ? 'min-w-0 flex-1' : ''}`}>
             {!showInlineAgentCreate ? (
-              <Button className="flex-1 sm:flex-none" onClick={onCancelPlaybookCreate}>{t('common.cancel')}</Button>
+              <Button className="hidden sm:inline-flex" onClick={onCancelPlaybookCreate}>{t('common.cancel')}</Button>
             ) : null}
             {showInlineAgentCreate ? (
               inlineAgentStep < 2 ? (
-                <Button className="flex-1 sm:flex-none" type="primary" onClick={onInlineAgentNext}>
-                    {t('common.next')}
+                <Button
+                  aria-label={t('common.next')}
+                  className="mobile-wizard-button"
+                  type="primary"
+                  icon={<ArrowRightOutlined />}
+                  onClick={onInlineAgentNext}
+                >
+                    <span className="mobile-button-label">{t('common.next')}</span>
                 </Button>
               ) : (
-                <Button className="flex-1 sm:flex-none" type="primary" loading={isInlineAgentSaving} onClick={() => void onSaveInlineAgent()}>
-                    {t('agent.create')}
+                <Button
+                  aria-label={t('agent.create')}
+                  className="mobile-wizard-button"
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  loading={isInlineAgentSaving}
+                  onClick={() => void onSaveInlineAgent()}
+                >
+                    <span className="mobile-button-label">{t('agent.create')}</span>
                 </Button>
               )
             ) : playbookCreateStep < 2 && !followWizardSourcePreselected ? (
-              <Button className="flex-1 sm:flex-none" type="primary" onClick={onNextPlaybookCreateStep}>
-                  {t('common.next')}
+              <Button
+                aria-label={t('common.next')}
+                className="mobile-wizard-button"
+                type="primary"
+                icon={<ArrowRightOutlined />}
+                onClick={onNextPlaybookCreateStep}
+              >
+                  <span className="mobile-button-label">{t('common.next')}</span>
               </Button>
             ) : playbookCreateStep === 1 && followWizardSourcePreselected ? (
-              <Button className="flex-1 sm:flex-none" type="primary" loading={isPlaybookSaving} onClick={() => void onCreatePlaybook()}>
-                  {t('common.save')}
+              <Button
+                aria-label={t('common.save')}
+                className="mobile-wizard-button"
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                loading={isPlaybookSaving}
+                onClick={() => void onCreatePlaybook()}
+              >
+                  <span className="mobile-button-label">{t('common.save')}</span>
               </Button>
             ) : playbookCreateStep < 2 ? (
-              <Button className="flex-1 sm:flex-none" type="primary" onClick={onNextPlaybookCreateStep}>
-                  {t('common.next')}
+              <Button
+                aria-label={t('common.next')}
+                className="mobile-wizard-button"
+                type="primary"
+                icon={<ArrowRightOutlined />}
+                onClick={onNextPlaybookCreateStep}
+              >
+                  <span className="mobile-button-label">{t('common.next')}</span>
               </Button>
             ) : (
-              <Button className="flex-1 sm:flex-none" type="primary" loading={isPlaybookSaving} onClick={onCreatePlaybook}>
-                  {editingPlaybookId ? t('playbook.updatePlaybook') : t('playbook.createPlaybook')}
+              <Button
+                aria-label={editingPlaybookId ? t('playbook.updatePlaybook') : t('playbook.createPlaybook')}
+                className="mobile-wizard-button"
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                loading={isPlaybookSaving}
+                onClick={onCreatePlaybook}
+              >
+                  <span className="mobile-button-label">
+                    {editingPlaybookId ? t('playbook.updatePlaybook') : t('playbook.createPlaybook')}
+                  </span>
               </Button>
             )}
           </div>
@@ -5047,6 +5122,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         footer={null}
         destroyOnHidden
         width="min(600px, 95vw)"
+        className="guided-source-modal mobile-fullscreen-modal"
       >
         <div className="space-y-5">
           {guidedWizardCurating && guidedWizardSavedSource ? (
@@ -5126,7 +5202,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                     title="Guided setup is incomplete"
                     description={guidedWizardSetupError ?? 'The playbook or initial run still needs to be completed.'}
                   />
-                  <div className="flex flex-col gap-2 sm:flex-row">
+                  <div className="mobile-workflow-actions flex flex-col gap-2 sm:flex-row">
                     <Button
                       type="primary"
                       size="large"
@@ -5145,35 +5221,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
               ) : (
                 <>
                   <p className="text-sm text-gray-600 dark:text-gray-400">{t('guided.step1Desc')}</p>
-                  <SourceSearchPicker
-                    selectedValue={guidedWizardSource?.url ?? null}
-                    onSelect={(selection) => void onPickGuidedWizardSource(selection)}
-                    urlFallback={
-                      <>
-                        <Input
-                          size="large"
-                          placeholder="https://www.youtube.com/watch?v=..."
-                          value={guidedWizardUrl}
-                          onChange={(e) => setGuidedWizardUrl(e.currentTarget.value)}
-                          prefix={<LinkOutlined />}
-                          onPressEnter={() => void detectGuidedWizardSource()}
-                        />
-                        <Button
-                          type="primary"
-                          block
-                          loading={guidedWizardDetecting}
-                          disabled={!guidedWizardUrl.trim()}
-                          onClick={() => void detectGuidedWizardSource()}
-                        >
-                          {t('guided.detectSource')}
-                        </Button>
-                      </>
-                    }
-                  />
-                  {guidedWizardDetecting && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoadingOutlined spin /> {t('guided.detectSource')}…</div>
-                  )}
-                  {guidedWizardSource && (
+                  {guidedWizardSource ? (
                     <div className="space-y-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
                       <div>
                         <p className="text-sm font-semibold text-green-800 dark:text-green-200">
@@ -5183,6 +5231,17 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           {guidedWizardSavedSource?.type ?? guidedWizardSource.type}
                         </p>
                       </div>
+                      <Button
+                        type="link"
+                        className="!h-auto !p-0"
+                        disabled={guidedWizardSavingSource}
+                        onClick={() => {
+                          setGuidedWizardSource(null);
+                          setGuidedWizardSavedSource(null);
+                        }}
+                      >
+                        {t('guided.changeSource')}
+                      </Button>
                       <div className="flex flex-col gap-2 sm:flex-row">
                         <Button
                           type="primary"
@@ -5203,6 +5262,37 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                         </Button>
                       </div>
                     </div>
+                  ) : (
+                    <>
+                      <SourceSearchPicker
+                        selectedValue={null}
+                        onSelect={(selection) => void onPickGuidedWizardSource(selection)}
+                        urlFallback={
+                          <>
+                            <Input
+                              size="large"
+                              placeholder="https://www.youtube.com/watch?v=..."
+                              value={guidedWizardUrl}
+                              onChange={(e) => setGuidedWizardUrl(e.currentTarget.value)}
+                              prefix={<LinkOutlined />}
+                              onPressEnter={() => void detectGuidedWizardSource()}
+                            />
+                            <Button
+                              type="primary"
+                              block
+                              loading={guidedWizardDetecting}
+                              disabled={!guidedWizardUrl.trim()}
+                              onClick={() => void detectGuidedWizardSource()}
+                            >
+                              {t('guided.detectSource')}
+                            </Button>
+                          </>
+                        }
+                      />
+                      {guidedWizardDetecting && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoadingOutlined spin /> {t('guided.detectSource')}…</div>
+                      )}
+                    </>
                   )}
                 </>
               )}

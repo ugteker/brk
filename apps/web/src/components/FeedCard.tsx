@@ -130,18 +130,16 @@ export function FeedCard({
     }
   })();
 
+  const keyTakeaways = (common?.key_takeaways ?? []).map((item) => item.trim()).filter(Boolean);
   const focusContent = (() => {
-    if (common?.recommendation?.trim()) {
-      return { label: t('feedCard.focus.recommendation'), text: common.recommendation.trim() };
+    if (keyTakeaways.length > 0) {
+      return { label: t('report.keyTakeaways'), items: keyTakeaways };
     }
-    if (resultType === 'risk' && common?.key_takeaways?.[0]?.trim()) {
-      return { label: t('feedCard.focus.risk'), text: common.key_takeaways[0].trim() };
+    if (common?.recommendation?.trim()) {
+      return { label: t('feedCard.focus.recommendation'), items: [common.recommendation.trim()] };
     }
     if (common?.open_questions?.[0]?.trim()) {
-      return { label: t('feedCard.focus.openQuestion'), text: common.open_questions[0].trim() };
-    }
-    if (common?.key_takeaways?.[0]?.trim()) {
-      return { label: t('feedCard.focus.keyTakeaway'), text: common.key_takeaways[0].trim() };
+      return { label: t('feedCard.focus.openQuestion'), items: [common.open_questions[0].trim()] };
     }
     return null;
   })();
@@ -268,7 +266,14 @@ export function FeedCard({
               <span aria-hidden="true" className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${accent.focusDot}`} />
               {focusContent.label}
             </span>
-            <p className={`mt-1 text-sm font-medium leading-relaxed ${accent.focusText}`}>{focusContent.text}</p>
+            <ul className={`mt-1 space-y-1 text-sm font-medium leading-relaxed ${accent.focusText}`}>
+              {focusContent.items.map((item) => (
+                <li key={item} className="flex gap-2">
+                  <span aria-hidden="true">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
 
@@ -374,4 +379,3 @@ export function FeedCard({
     </Card>
   );
 }
-

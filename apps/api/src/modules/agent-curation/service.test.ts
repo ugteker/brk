@@ -384,7 +384,7 @@ describe('AgentCurationService', () => {
     await expect(service.buildFinalization(result.session)).rejects.toMatchObject({ code: 'curation_incomplete' });
   });
 
-  it('includes an advisory-only source instruction in the curation request', async () => {
+  it('uses selected source context only for the first curation reply', async () => {
     const { curateAgent, service } = createService();
     const session = await service.start({
       ownerUserId: 'owner-1',
@@ -392,10 +392,20 @@ describe('AgentCurationService', () => {
       sourceContext: { selectedSources: ['https://example.com/research'] }
     });
 
-    await service.reply(session, 'Create a research digest.');
+    const first = await service.reply(session, 'Create a research digest.');
+    await service.reply(first.session, 'Make it suitable for executives.');
 
-    const request = curateAgent.mock.calls[0]?.[0];
-    expect(request.systemInstruction).toContain('Selected source context is advisory, not mandatory.');
-    expect(request.sourceContext).toEqual({ selectedSources: ['https://example.com/research'] });
+    expect(curateAgent.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        systemInstruction: expect.stringContaining('Use selected source context only for this opening proposal.'),
+        sourceContext: { selectedSources: ['https://example.com/research'] }
+      })
+    );
+    expect(curateAgent.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        systemInstruction: expect.not.stringContaining('opening proposal'),
+        sourceContext: {}
+      })
+    );
   });
 });
