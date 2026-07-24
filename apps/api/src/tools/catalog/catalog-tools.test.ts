@@ -293,21 +293,38 @@ describe('validateCatalog', () => {
   });
 
   it('reports bad demo references and locale mismatches', () => {
-    const badReferenceBundle = cloneBundle(loadSeedBundle());
-    badReferenceBundle.demos[0] = {
-      ...badReferenceBundle.demos[0],
-      sourceSlug: 'unknown-source'
+    const seedBundle = loadSeedBundle();
+    const source = seedBundle.sources[0];
+    const agent = seedBundle.agents.find((entry) => entry.locale === source.locale) ?? seedBundle.agents[0];
+    const demoTemplate = {
+      slug: 'demo-validation-fixture',
+      locale: source.locale,
+      title: 'Demo validation fixture',
+      disclosure: 'Generated for test validation.',
+      sourceSlug: source.slug,
+      agentSlug: agent.slug,
+      report: { summary: 'fixture' }
     };
+
+    const badReferenceBundle = cloneBundle(seedBundle);
+    badReferenceBundle.demos = [
+      {
+        ...demoTemplate,
+      sourceSlug: 'unknown-source'
+      }
+    ];
 
     expect(validateCatalog(badReferenceBundle)).toContainEqual(
       expect.objectContaining({ code: 'unknown_demo_reference' })
     );
 
-    const localeMismatchBundle = cloneBundle(loadSeedBundle());
-    localeMismatchBundle.demos[0] = {
-      ...localeMismatchBundle.demos[0],
+    const localeMismatchBundle = cloneBundle(seedBundle);
+    localeMismatchBundle.demos = [
+      {
+        ...demoTemplate,
       locale: 'fr'
-    };
+      }
+    ];
 
     expect(validateCatalog(localeMismatchBundle)).toContainEqual(
       expect.objectContaining({ code: 'locale_reference_integrity' })
@@ -329,7 +346,7 @@ describe('renderCatalogPreviewHtml', () => {
     expect(html).toContain('&lt;b&gt;Duplicate icon&lt;/b&gt;');
     expect(html).toContain('Duplicate icon assignments');
     expect(html).toContain(bundle.sources[0].title);
-    expect(html).toContain(bundle.demos[0].slug);
+    expect(html).toContain('Source-agent sample pairings');
   });
 });
 
@@ -340,12 +357,14 @@ describe('catalog import', () => {
     await withRealCatalogPrisma('schema', async (db) => {
       const appliedPlan = await applyCatalogImport(db, bundle);
       expect(appliedPlan.creates.length).toBe(bundle.sources.length + bundle.agents.length + bundle.demos.length);
-      expect(appliedPlan.versions).toHaveLength(2);
+      const uniqueAgentSlugs = new Set(bundle.agents.map((entry) => entry.slug));
+      expect(appliedPlan.versions).toHaveLength(uniqueAgentSlugs.size);
 
       const sources = await db.source.findMany({
         orderBy: [{ value: 'asc' }]
       });
-      expect(sources).toHaveLength(2);
+      const uniqueSourceValues = new Set(bundle.sources.map((entry) => entry.value));
+      expect(sources).toHaveLength(uniqueSourceValues.size);
       expect(sources.every((row) => row.ownerUserId === PLATFORM_CATALOG_OWNER_USER_ID)).toBe(true);
 
       const sourcePublications = await db.marketplacePublication.findMany({
@@ -361,13 +380,14 @@ describe('catalog import', () => {
       const agents = await db.agent.findMany({
         orderBy: [{ name: 'asc' }]
       });
-      expect(agents).toHaveLength(2);
+      const uniqueAgentNames = new Set(bundle.agents.map((entry) => entry.title));
+      expect(agents).toHaveLength(uniqueAgentNames.size);
       expect(agents.every((row) => row.ownerUserId === PLATFORM_CATALOG_OWNER_USER_ID)).toBe(true);
 
       const versions = await db.agentPromptVersion.findMany({
         orderBy: [{ agentId: 'asc' }, { version: 'asc' }]
       });
-      expect(versions).toHaveLength(2);
+      expect(versions).toHaveLength(uniqueAgentNames.size);
       expect(versions.every((row) => row.version === 1)).toBe(true);
       expect(versions.every((row) => row.publishedAt instanceof Date)).toBe(true);
       expect(versions.every((row) => typeof row.iconAssetKey === 'string' && row.iconAssetKey.length > 0)).toBe(true);
@@ -413,7 +433,8 @@ describe('catalog import', () => {
 
       const db = new PrismaClient({ datasourceUrl: databaseUrl });
       try {
-        expect(await db.marketplacePublication.count({ where: { origin: 'platform_curated' } })).toBe(8);
+        const bundle = loadSeedBundle();
+        expect(await db.marketplacePublication.count({ where: { origin: 'platform_curated' } })).toBe(bundle.sources.length + bundle.agents.length);
       } finally {
         await db.$disconnect();
       }
@@ -438,9 +459,11 @@ describe('catalog import', () => {
     const repeatPlan = await planCatalogImport(db as never, bundle);
     expect(repeatPlan.versions).toEqual([]);
 
+    const changedAgentSlug = bundle.agents[0]?.slug;
+    expect(changedAgentSlug).toBeTruthy();
     const changedBundle = cloneBundle(bundle);
     changedBundle.agents = changedBundle.agents.map((entry) =>
-      entry.slug === 'market-analyst'
+      entry.slug === changedAgentSlug
         ? {
             ...entry,
             promptSnapshot: {
@@ -455,7 +478,7 @@ describe('catalog import', () => {
     expect(versionPlan.versions).toContainEqual(
       expect.objectContaining({
         entityType: 'agentVersion',
-        stableKey: 'agent-version:market-analyst'
+        stableKey: `agent-version:${changedAgentSlug}`
       })
     );
 
@@ -481,12 +504,15 @@ describe('catalog import', () => {
       retirements: []
     });
 
+    const removedSource = bundle.sources[0];
     const retiredBundle = cloneBundle(bundle);
     retiredBundle.sources = retiredBundle.sources.filter(
-      (entry) => !(entry.slug === 'knowledge-project' && entry.locale === 'de')
+      (entry) => !(entry.slug === removedSource.slug && entry.locale === removedSource.locale)
     );
 
-    const knowledgeSource = db.state.sources.find((row) => row.value === 'https://example.com/knowledge.xml');
+    const knowledgeSource = db.state.sources.find(
+      (row) => row.type === removedSource.type && row.value === removedSource.value
+    );
     expect(knowledgeSource).toBeTruthy();
     db.state.userLibrarySources.push({
       userId: 'user-1',
@@ -500,7 +526,7 @@ describe('catalog import', () => {
     expect(retirementPlan.retirements[0]).toEqual(
       expect.objectContaining({
         entityType: 'sourcePublication',
-        stableKey: 'source-publication:knowledge-project:de:v1'
+        stableKey: `source-publication:${removedSource.slug}:${removedSource.locale}:v${removedSource.catalogVersion}`
       })
     );
 

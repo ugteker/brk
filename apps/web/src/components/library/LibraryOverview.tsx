@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Skeleton, Typography } from 'antd';
 import { DatabaseOutlined } from '@ant-design/icons';
-import { useMemo } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogSource } from '../../api/catalog';
 import type { SourceRecord } from '../../api/sources';
@@ -15,6 +15,7 @@ const { Title, Text } = Typography;
 export interface LibraryOverviewProps {
   starterSources: CatalogSource[];
   savedSources: SourceRecord[];
+  currentUserId?: string;
   isCatalogLoading: boolean;
   catalogError: boolean;
   showAddSourceAttention: boolean;
@@ -22,13 +23,25 @@ export interface LibraryOverviewProps {
   onSaveStarter: (source: CatalogSource) => Promise<void>;
   onOpenSource: (source: SourceRecord) => void;
   onAddAgent?: (source: SourceRecord) => void | Promise<void>;
+  onRemoveAgent?: (playbookId: string, sourceId: string) => void | Promise<void>;
   onRetryCatalog: () => void;
   hasAnySavedSources?: boolean;
+  renderSavedSourceActions?: (source: SourceRecord) => ReactNode;
+  linkedAgentsBySourceId?: Record<string, Array<{
+    playbookId: string;
+    agentId: string;
+    label: string;
+    characterType?: string | null;
+    characterLabel?: string;
+    personalityLabel?: string;
+  }>>;
+  highlightedAgentIdBySourceId?: Record<string, string>;
 }
 
 export function LibraryOverview({
   starterSources,
   savedSources,
+  currentUserId,
   isCatalogLoading,
   catalogError,
   showAddSourceAttention,
@@ -36,8 +49,12 @@ export function LibraryOverview({
   onSaveStarter,
   onOpenSource,
   onAddAgent,
+  onRemoveAgent,
   onRetryCatalog,
-  hasAnySavedSources
+  hasAnySavedSources,
+  renderSavedSourceActions,
+  linkedAgentsBySourceId,
+  highlightedAgentIdBySourceId
 }: LibraryOverviewProps) {
   const { t } = useTranslation();
   const { catalogDemos } = useAppData();
@@ -54,8 +71,39 @@ export function LibraryOverview({
       });
   }, [catalogDemos, starterSources]);
 
+  const hasOwnedSavedSources = useMemo(
+    () => Boolean(currentUserId) && savedSources.some((source) => source.ownerUserId === currentUserId),
+    [currentUserId, savedSources]
+  );
+
   return (
     <div className="space-y-8">
+      {hasOwnedSavedSources ? (
+        <section aria-labelledby="library-yours" className="space-y-4">
+          <Title id="library-yours" level={3} style={{ margin: 0 }}>{t('library.yourLibrary')}</Title>
+          <SavedSourceGrid
+            sources={savedSources}
+            currentUserId={currentUserId}
+            onOpenSource={onOpenSource}
+            onAddAgent={onAddAgent}
+            onRemoveAgent={onRemoveAgent}
+            hasAnySources={hasAnySavedSources}
+            leadingCard={(
+              <GhostCreateCard
+                attention={showAddSourceAttention}
+                ariaLabel={t('library.addSource')}
+                onClick={onAddSource}
+                icon={<DatabaseOutlined />}
+                title={t('library.addSource')}
+              />
+            )}
+            renderSourceActions={renderSavedSourceActions}
+            linkedAgentsBySourceId={linkedAgentsBySourceId}
+            highlightedAgentIdBySourceId={highlightedAgentIdBySourceId}
+          />
+        </section>
+      ) : null}
+
       <section aria-labelledby="library-start-here" className="space-y-4">
         <div className="space-y-1">
           {showAddSourceAttention ? (
@@ -79,14 +127,16 @@ export function LibraryOverview({
           />
         ) : null}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <GhostCreateCard
-            attention={showAddSourceAttention}
-            ariaLabel={t('library.addSource')}
-            onClick={onAddSource}
-            icon={<DatabaseOutlined />}
-            title={t('library.addSource')}
-            sub={showAddSourceAttention ? t('library.nextActionHint') : undefined}
-          />
+          {!hasOwnedSavedSources ? (
+            <GhostCreateCard
+              attention={showAddSourceAttention}
+              ariaLabel={t('library.addSource')}
+              onClick={onAddSource}
+              icon={<DatabaseOutlined />}
+              title={t('library.addSource')}
+              sub={showAddSourceAttention ? t('library.nextActionHint') : undefined}
+            />
+          ) : null}
           {isCatalogLoading ? [1, 2, 3].map((item) => (
             <Card key={item} size="small" className="min-h-[170px]">
               <div className="flex items-start gap-3">
@@ -118,15 +168,22 @@ export function LibraryOverview({
         </section>
       ) : null}
 
-      <section aria-labelledby="library-yours" className="space-y-4">
-        <Title id="library-yours" level={3} style={{ margin: 0 }}>{t('library.yourLibrary')}</Title>
-        <SavedSourceGrid
-          sources={savedSources}
-          onOpenSource={onOpenSource}
-          onAddAgent={onAddAgent}
-          hasAnySources={hasAnySavedSources}
-        />
-      </section>
+      {!hasOwnedSavedSources ? (
+        <section aria-labelledby="library-yours" className="space-y-4">
+          <Title id="library-yours" level={3} style={{ margin: 0 }}>{t('library.yourLibrary')}</Title>
+          <SavedSourceGrid
+            sources={savedSources}
+            currentUserId={currentUserId}
+            onOpenSource={onOpenSource}
+            onAddAgent={onAddAgent}
+            onRemoveAgent={onRemoveAgent}
+            hasAnySources={hasAnySavedSources}
+            renderSourceActions={renderSavedSourceActions}
+            linkedAgentsBySourceId={linkedAgentsBySourceId}
+            highlightedAgentIdBySourceId={highlightedAgentIdBySourceId}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }

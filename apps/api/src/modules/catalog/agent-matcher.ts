@@ -1,4 +1,5 @@
 import type { SourceType } from '../source/types';
+import type { CharacterType } from '../agents/types';
 import type { AgentMatch, AgentMatchReason, AgentOwnership } from './types';
 
 export interface RankableSource {
@@ -13,6 +14,7 @@ export interface RankableAgentCandidate {
   ownership: AgentOwnership;
   name: string;
   purpose: string;
+  characterType: CharacterType | null;
   iconAssetKey: string | null;
   sourceTypes: string[];
   topics: string[];
@@ -55,10 +57,6 @@ function buildReasons(source: RankableSource, agent: RankableAgentCandidate): Ag
     }
   }
 
-  if (agent.sourceTypes.includes(source.type)) {
-    reasons.push({ code: 'source_type', value: source.type });
-  }
-
   const sourceLanguage = normalizeLanguage(source.language);
   if (sourceLanguage && normalizeLanguage(agent.language) === sourceLanguage) {
     reasons.push({ code: 'language', value: sourceLanguage });
@@ -80,11 +78,9 @@ export function rankAgentMatches(input: RankAgentMatchesInput): AgentMatch[] {
     .map((agent) => {
       const agentTopics = new Set([...uniqueNormalized(agent.topics).keys()]);
       const topicMatches = [...sourceTopics].filter((topic) => agentTopics.has(topic)).length;
-      const sourceTypeMatches = agent.sourceTypes.includes(input.source.type) ? 1 : 0;
       const languageMatches = sourceLanguage && normalizeLanguage(agent.language) === sourceLanguage ? 1 : 0;
       const score =
         topicMatches * 10_000 +
-        sourceTypeMatches * 1_000 +
         languageMatches * 100 +
         (agent.ownership === 'owned' ? 10 : 0) +
         editorialScore(agent.editorialRank);
@@ -95,7 +91,11 @@ export function rankAgentMatches(input: RankAgentMatchesInput): AgentMatch[] {
         ownership: agent.ownership,
         name: agent.name,
         purpose: agent.purpose,
+        characterType: agent.characterType,
         iconAssetKey: agent.iconAssetKey,
+        sourceTypes: agent.sourceTypes,
+        topics: agent.topics,
+        language: normalizeLanguage(agent.language),
         reasons: buildReasons(input.source, agent),
         score,
         updateAvailable: false,
@@ -104,3 +104,4 @@ export function rankAgentMatches(input: RankAgentMatchesInput): AgentMatch[] {
     })
     .sort((left, right) => right.score - left.score || left.agentVersionId.localeCompare(right.agentVersionId));
 }
+

@@ -15,11 +15,14 @@ export interface AgentMatchDto {
   ownership: 'owned' | 'curated';
   name: string;
   purpose: string;
+  characterType: CharacterType | null;
   iconAssetKey: string | null;
+  sourceTypes: string[];
+  topics: string[];
+  language: string | null;
   reasons: AgentMatchReasonDto[];
   score: number;
   agentId?: string | null;
-  characterType?: CharacterType | null;
   updateAvailable?: boolean;
   latestAgentVersionId?: string | null;
 }
@@ -118,9 +121,6 @@ export function CompactAgentCard({ match, loading, onUse, onDetails }: CompactAg
                   {ownershipLabel}
                 </Tag>
               </div>
-              <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                {match.purpose}
-              </p>
             </div>
           </div>
         </div>
@@ -145,3 +145,4 @@ export function CompactAgentCard({ match, loading, onUse, onDetails }: CompactAg
     </Card>
   );
 }
+

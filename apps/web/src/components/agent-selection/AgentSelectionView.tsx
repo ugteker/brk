@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Empty, message } from 'antd';
-import { RobotOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Empty } from 'antd';
+import { ArrowLeftOutlined, ArrowRightOutlined, RobotOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { getLatestAgentPrompt, type AgentSummary } from '../../api/agents';
 import { updateSavedAgentVersion, useAgentForSource, type UseAgentForSourceInput } from '../../api/agent-selection';
 import type { PlaybookRecord } from '../../api/playbooks';
 import type { SourceRecord } from '../../api/sources';
-import { getAgentDisplayLabel } from '../../utils/agent-label';
 import { GhostCreateCard } from '../library/GhostCreateCard';
 import { AgentDetailsDrawer } from './AgentDetailsDrawer';
 import { CompactAgentCard, type AgentMatchDto } from './CompactAgentCard';
@@ -18,7 +17,7 @@ export interface AgentSelectionViewProps {
   onCurate: (baseAgentVersionId?: string) => void;
 }
 
-const BEST_MATCHES_PAGE_SIZE = 4;
+const BEST_MATCHES_PAGE_SIZE = 6;
 
 async function parseErrorMessage(response: Response, fallback: string): Promise<string> {
   try {
@@ -52,12 +51,15 @@ async function hydrateOwnedAgents(ownedAgents: AgentSummary[]): Promise<AgentMat
         publicationId: null,
         ownership: 'owned' as const,
         name: agent.name,
-        purpose: getAgentDisplayLabel(agent),
+        purpose: agent.description ?? '',
+        characterType: agent.characterType ?? null,
         iconAssetKey: null,
+        sourceTypes: [],
+        topics: [],
+        language: null,
         reasons: [],
         score: -1,
-        agentId: agent.id,
-        characterType: agent.characterType ?? null
+        agentId: agent.id
       } satisfies AgentMatchDto;
     })
     .filter((agent): agent is AgentMatchDto => agent !== null)
@@ -71,7 +73,11 @@ function createLoadingMatch(agentVersionId: string): AgentMatchDto {
     ownership: 'curated',
     name: '',
     purpose: '',
+    characterType: null,
     iconAssetKey: null,
+    sourceTypes: [],
+    topics: [],
+    language: null,
     reasons: [],
     score: 0
   };
@@ -79,11 +85,12 @@ function createLoadingMatch(agentVersionId: string): AgentMatchDto {
 
 export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCurate }: AgentSelectionViewProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [matches, setMatches] = useState<AgentMatchDto[]>([]);
   const [ownedAgentMatches, setOwnedAgentMatches] = useState<AgentMatchDto[]>([]);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [visibleLimit, setVisibleLimit] = useState(BEST_MATCHES_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useState(0);
   const [retryKey, setRetryKey] = useState(0);
   const [activeDrawerMatch, setActiveDrawerMatch] = useState<AgentMatchDto | null>(null);
   const [loadingAgentVersionId, setLoadingAgentVersionId] = useState<string | null>(null);
@@ -101,7 +108,7 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
     let cancelled = false;
     setLoadState('loading');
     setErrorMessage(null);
-    setVisibleLimit(BEST_MATCHES_PAGE_SIZE);
+    setCurrentPage(0);
 
     void Promise.all([listAgentMatches(source.id), hydrateOwnedAgents(ownedAgents)])
       .then(([nextMatches, nextOwnedAgentMatches]) => {
@@ -131,26 +138,29 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
       setFocusAgentVersionId(null);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [focusAgentVersionId, matches, visibleLimit]);
+  }, [focusAgentVersionId, currentPage, matches]);
 
-  const visibleMatches = useMemo(() => matches.slice(0, visibleLimit), [matches, visibleLimit]);
-
-  const matchedOwnedVersionIds = useMemo(
-    () => new Set(matches.filter((match) => match.ownership === 'owned').map((match) => match.agentVersionId)),
+  const curatedBestMatches = useMemo(
+    () => matches.filter((match) => match.ownership !== 'owned'),
     [matches]
   );
 
-  const remainingOwnedMatches = useMemo(
-    () => ownedAgentMatches.filter((match) => !matchedOwnedVersionIds.has(match.agentVersionId)),
-    [matchedOwnedVersionIds, ownedAgentMatches]
-  );
+  const totalBestMatchPages = Math.max(1, Math.ceil(curatedBestMatches.length / BEST_MATCHES_PAGE_SIZE));
+
+  const visibleMatches = useMemo(() => {
+    const start = currentPage * BEST_MATCHES_PAGE_SIZE;
+    return curatedBestMatches.slice(start, start + BEST_MATCHES_PAGE_SIZE);
+  }, [currentPage, curatedBestMatches]);
+
+  const remainingOwnedMatches = ownedAgentMatches;
+  const showOwnedAgentsFirst = remainingOwnedMatches.length > 0;
 
   const loadingMatches = useMemo(
     () => Array.from({ length: BEST_MATCHES_PAGE_SIZE }, (_, index) => createLoadingMatch(`loading-${index}`)),
     []
   );
 
-  const isEmpty = loadState === 'ready' && visibleMatches.length === 0 && remainingOwnedMatches.length === 0;
+  const isEmpty = loadState === 'ready' && curatedBestMatches.length === 0 && remainingOwnedMatches.length === 0;
 
   async function handleUse(match: AgentMatchDto) {
     if (!source) return;
@@ -165,28 +175,36 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
     } finally {
       setLoadingAgentVersionId(null);
     }
+  }
 
-    async function handleUpdate(match: AgentMatchDto) {
-      if (!match.latestAgentVersionId) return;
-      try {
-        await updateSavedAgentVersion(match.latestAgentVersionId, {
-          fromAgentVersionId: match.agentVersionId,
-          updateManualPlaybooks: false
-        });
-        setRetryKey((current) => current + 1);
-        message.success(t('agentSelection.updateSuccess'));
-      } catch (error) {
-        message.error(error instanceof Error ? error.message : t('agentSelection.updateFailed'));
-      }
+  async function handleUpdate(match: AgentMatchDto) {
+    if (!match.latestAgentVersionId) return;
+    try {
+      await updateSavedAgentVersion(match.latestAgentVersionId, {
+        fromAgentVersionId: match.agentVersionId,
+        updateManualPlaybooks: false
+      });
+      setRetryKey((current) => current + 1);
+      message.success(t('agentSelection.updateSuccess'));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('agentSelection.updateFailed'));
     }
   }
 
-  function handleShowMore() {
-    const nextMatch = matches[visibleLimit];
-    setVisibleLimit((current) => current + BEST_MATCHES_PAGE_SIZE);
-    if (nextMatch) {
-      setFocusAgentVersionId(nextMatch.agentVersionId);
-    }
+  function handleNextPage() {
+    if (curatedBestMatches.length === 0) return;
+    const nextPage = currentPage + 1 >= totalBestMatchPages ? 0 : currentPage + 1;
+    const nextMatch = curatedBestMatches[nextPage * BEST_MATCHES_PAGE_SIZE];
+    setCurrentPage(nextPage);
+    if (nextMatch) setFocusAgentVersionId(nextMatch.agentVersionId);
+  }
+
+  function handlePreviousPage() {
+    if (curatedBestMatches.length === 0) return;
+    const previousPage = currentPage - 1 < 0 ? totalBestMatchPages - 1 : currentPage - 1;
+    const previousMatch = curatedBestMatches[previousPage * BEST_MATCHES_PAGE_SIZE];
+    setCurrentPage(previousPage);
+    if (previousMatch) setFocusAgentVersionId(previousMatch.agentVersionId);
   }
 
   if (!source) {
@@ -231,16 +249,55 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
 
       {loadState === 'ready' ? (
         <>
+          {showOwnedAgentsFirst ? (
+            <section className="space-y-3" aria-labelledby="agent-selection-your-agents">
+              <h3 id="agent-selection-your-agents" className="text-sm font-semibold text-foreground">
+                {t('agentSelection.yourAgents')}
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <GhostCreateCard
+                  ariaLabel={t('agentSelection.curateYourOwn')}
+                  onClick={() => onCurate()}
+                  icon={<RobotOutlined />}
+                  title={t('agentSelection.curateYourOwn')}
+                />
+                {remainingOwnedMatches.map((match) => (
+                  <CompactAgentCard
+                    key={match.agentVersionId}
+                    match={match}
+                    loading={loadingAgentVersionId === match.agentVersionId}
+                    onUse={handleUse}
+                    onDetails={setActiveDrawerMatch}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {visibleMatches.length > 0 ? (
             <section className="space-y-3" aria-labelledby="agent-selection-best-matches">
               <div className="flex items-center justify-between gap-3">
                 <h3 id="agent-selection-best-matches" className="text-sm font-semibold text-foreground">
                   {t('agentSelection.bestMatches')}
                 </h3>
-                {matches.length > visibleLimit ? (
-                  <Button type="link" className="px-0" onClick={handleShowMore}>
-                    {t('agentSelection.showMore')}
-                  </Button>
+                {totalBestMatchPages > 1 ? (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="small"
+                      aria-label="Previous best matches page"
+                      icon={<ArrowLeftOutlined />}
+                      onClick={handlePreviousPage}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {currentPage + 1} / {totalBestMatchPages}
+                    </span>
+                    <Button
+                      size="small"
+                      aria-label="Next best matches page"
+                      icon={<ArrowRightOutlined />}
+                      onClick={handleNextPage}
+                    />
+                  </div>
                 ) : null}
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -257,7 +314,7 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
             </section>
           ) : null}
 
-          {remainingOwnedMatches.length > 0 ? (
+          {!showOwnedAgentsFirst && remainingOwnedMatches.length > 0 ? (
             <section className="space-y-3" aria-labelledby="agent-selection-your-agents">
               <h3 id="agent-selection-your-agents" className="text-sm font-semibold text-foreground">
                 {t('agentSelection.yourAgents')}
@@ -282,19 +339,21 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
         </>
       ) : null}
 
-      <section aria-labelledby="agent-selection-curate" className="space-y-3">
-        <h3 id="agent-selection-curate" className="text-sm font-semibold text-foreground">
-          {t('agentSelection.curateYourOwn')}
-        </h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <GhostCreateCard
-            ariaLabel={t('agentSelection.curateYourOwn')}
-            onClick={onCurate}
-            icon={<RobotOutlined />}
-            title={t('agentSelection.curateYourOwn')}
-          />
-        </div>
-      </section>
+      {!showOwnedAgentsFirst ? (
+        <section aria-labelledby="agent-selection-curate" className="space-y-3">
+          <h3 id="agent-selection-curate" className="text-sm font-semibold text-foreground">
+            {t('agentSelection.curateYourOwn')}
+          </h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <GhostCreateCard
+              ariaLabel={t('agentSelection.curateYourOwn')}
+              onClick={() => onCurate()}
+              icon={<RobotOutlined />}
+              title={t('agentSelection.curateYourOwn')}
+            />
+          </div>
+        </section>
+      ) : null}
 
       <AgentDetailsDrawer
         open={Boolean(activeDrawerMatch)}

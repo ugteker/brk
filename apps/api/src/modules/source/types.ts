@@ -7,6 +7,7 @@ export interface SourcePreviewItem {
   title: string;
   link?: string;
   pubDate?: string | null;
+  imageUrl?: string | null;
   /** Synthetic discussions: whether this run has rendered audio. */
   hasAudio?: boolean;
 }

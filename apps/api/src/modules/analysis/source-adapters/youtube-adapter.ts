@@ -638,13 +638,23 @@ export async function probeYouTubeSource(
       return {
         reachable: true,
         kind: 'single_page',
-        previewItems: [{ title: title ?? `Video ${videoId}`, link: source.value, pubDate: null }]
+        previewItems: [{
+          title: title ?? `Video ${videoId}`,
+          link: source.value,
+          pubDate: null,
+          imageUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+        }]
       };
     } catch (error) {
       return {
         reachable: true,
         kind: 'single_page',
-        previewItems: [{ title: title ?? `Video ${videoId}`, link: source.value, pubDate: null }],
+        previewItems: [{
+          title: title ?? `Video ${videoId}`,
+          link: source.value,
+          pubDate: null,
+          imageUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+        }],
         warning: error instanceof Error ? error.message : `Could not fetch a transcript for ${source.value}`
       };
     }

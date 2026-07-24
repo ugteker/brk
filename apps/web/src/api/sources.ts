@@ -9,6 +9,7 @@ export interface SourceProbePreviewItem {
   title: string;
   link: string | null;
   pubDate: string | null;
+  imageUrl?: string | null;
 }
 
 export interface SourceProbeResult {
@@ -36,7 +37,7 @@ export interface SourceRecord {
     itemCount?: number;
     /** Synthetic discussions: number of runs with rendered audio. */
     audioCount?: number;
-    previewItems: Array<{ title: string; link?: string; pubDate?: string | null; hasAudio?: boolean }>;
+    previewItems: Array<{ title: string; link?: string; pubDate?: string | null; imageUrl?: string | null; hasAudio?: boolean }>;
   };
   createdAt: string;
   updatedAt: string;
@@ -55,7 +56,7 @@ export interface CreateSourcePayload {
     title?: string;
     coverImageUrl?: string | null;
     itemCount?: number;
-    previewItems?: Array<{ title: string; link?: string; pubDate?: string | null }>;
+    previewItems?: Array<{ title: string; link?: string; pubDate?: string | null; imageUrl?: string | null }>;
   };
 }
 
@@ -67,7 +68,7 @@ export interface UpdateSourcePayload {
     title?: string;
     coverImageUrl?: string | null;
     itemCount?: number;
-    previewItems?: Array<{ title: string; link?: string; pubDate?: string | null }>;
+    previewItems?: Array<{ title: string; link?: string; pubDate?: string | null; imageUrl?: string | null }>;
   };
 }
 
@@ -251,4 +252,3 @@ export async function listSourceSuggestions(): Promise<SourceSuggestion[]> {
   }
   return response.json();
 }
-

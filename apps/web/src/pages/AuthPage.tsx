@@ -143,7 +143,8 @@ export function AuthPage() {
                 margin: 0,
                 lineHeight: 1.1,
                 fontSize: 'clamp(2rem, 3.5vw, 2.75rem)',
-                letterSpacing: '-0.03em'
+                letterSpacing: '-0.03em',
+                whiteSpace: 'pre-line'
               }}
             >
               {t('auth.heroTitle')}

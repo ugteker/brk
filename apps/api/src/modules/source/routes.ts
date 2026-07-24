@@ -76,7 +76,9 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
   });
 
   app.get('/api/sources', async (req, reply) => {
-    const rows = await deps.sourceRepository.listSources(req.userRole === 'admin' ? undefined : req.userId!);
+    // Library view is always user-scoped (owned + explicitly saved). Admin users
+    // can still inspect other sources via marketplace/public endpoints.
+    const rows = await deps.sourceRepository.listSources(req.userId!);
     const counts = deps.reportRepository
       ? await deps.reportRepository.countReportsForSourceValues(rows.map((source) => source.value))
       : {};

@@ -59,6 +59,7 @@ function normalizeMetadata(input?: SourceLibraryMetadata): SourceRecord['metadat
             title: item.title,
             link: typeof item.link === 'string' ? item.link : undefined,
             pubDate: typeof item.pubDate === 'string' ? item.pubDate : null,
+            ...(typeof item.imageUrl === 'string' ? { imageUrl: item.imageUrl } : {}),
             ...(typeof item.hasAudio === 'boolean' ? { hasAudio: item.hasAudio } : {})
           }))
       : []

@@ -84,7 +84,10 @@ export function parseFeedItems(xml: string): FeedItem[] {
         description: extractTag(block, 'description') ?? extractTag(block, 'summary') ?? '',
         pubDate: extractTag(block, 'pubDate') ?? extractTag(block, 'published') ?? extractTag(block, 'updated'),
         transcriptUrl: extractTranscriptUrl(block),
-        imageUrl: extractAttributeValue(block, 'itunes:image', 'href') ?? feedCoverImageUrl
+        imageUrl:
+          extractAttributeValue(block, 'itunes:image', 'href') ??
+          extractAttributeValue(block, 'media:thumbnail', 'url') ??
+          feedCoverImageUrl
       };
     })
     .filter((item) => item.itemId.length > 0);

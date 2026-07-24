@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { useTranslation } from 'react-i18next';
-import { Alert, Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Progress, Select, Skeleton, Steps, message, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Progress, Select, Skeleton, Steps, Tabs, Tag, Typography } from 'antd';
 import {
   ArrowLeftOutlined,
   ArrowRightOutlined,
@@ -115,7 +115,7 @@ import { EntityActions } from '../components/EntityActions';
 import { InlineDeleteButton } from '../components/InlineDeleteButton';
 import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID, type PersonaId } from '../data/prompt-personas';
 import { getAgentDisplayLabel } from '../utils/agent-label';
-import { extractYoutubeVideoId, getYoutubeThumbnailUrl } from '../utils/youtube';
+import { extractYoutubeVideoId, getYoutubeCoverImageFallback, getYoutubeThumbnailUrl } from '../utils/youtube';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -179,7 +179,45 @@ interface AutoDetectedSource {
   title?: string;
   coverImageUrl?: string;
   itemCount?: number;
-  previewItems: Array<{ title: string; link: string | null; pubDate: string | null }>;
+  previewItems: Array<{ title: string; link: string | null; pubDate: string | null; imageUrl?: string | null }>;
+}
+
+function EpisodeArtwork({
+  episodeImageUrl,
+  coverImageUrl,
+  sourceType
+}: {
+  episodeImageUrl?: string | null;
+  coverImageUrl?: string | null;
+  sourceType: SourceRecord['type'];
+}) {
+  const candidates = useMemo(
+    () => Array.from(new Set([episodeImageUrl, coverImageUrl].filter((url): url is string => Boolean(url)))),
+    [coverImageUrl, episodeImageUrl]
+  );
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [candidates.join('|')]);
+
+  const imageUrl = candidates[candidateIndex];
+  if (imageUrl) {
+    return (
+      <img
+        src={imageUrl}
+        alt=""
+        className="h-12 w-[72px] shrink-0 rounded object-cover bg-muted sm:h-11 sm:w-16"
+        onError={() => setCandidateIndex((index) => index + 1)}
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-12 w-[72px] shrink-0 items-center justify-center rounded bg-muted text-sm sm:h-11 sm:w-16">
+      {sourceType === 'youtube_videos' ? '📺' : sourceType === 'podcast_feeds' ? '🎙️' : '🌐'}
+    </div>
+  );
 }
 
 function WizardSelectableCard({
@@ -253,9 +291,13 @@ function probeRankScore(probe: { reachable: boolean; kind: ProbeKind; confidence
 }
 
 function formatPlaybookSchedule(schedule: PlaybookRecord['schedule']): string {
+  if (!schedule || typeof schedule !== 'object' || !('mode' in schedule)) {
+    return 'Schedule unavailable';
+  }
   if (schedule.mode === 'interval') return `Every ${schedule.intervalMinutes} min`;
   if (schedule.mode === 'daily') return `Daily ${schedule.dailyTime} (${schedule.timezone})`;
-  const days = schedule.daysOfWeek.map((d) => WEEKDAY_LABELS[d] ?? d).join(', ');
+  const weeklyDays = Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [];
+  const days = (weeklyDays.length > 0 ? weeklyDays : [1]).map((d) => WEEKDAY_LABELS[d] ?? d).join(', ');
   return `Weekly ${schedule.dailyTime} on ${days} (${schedule.timezone})`;
 }
 
@@ -338,6 +380,7 @@ function hasEpisodicSource(agent: AgentSummary): boolean {
 export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const { user, isAdmin, logout } = useAuth();
   const { t, i18n } = useTranslation();
+  const { message } = App.useApp();
   const navigate = useSafeNavigate();
   const {
     agents, setAgents,
@@ -353,6 +396,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     marketplacePlaybooks, setMarketplacePlaybooks: _setMarketplacePlaybooks,
     marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
     refreshAgents: _refreshAgents, refreshSources: _refreshSources, refreshPlaybooks: _refreshPlaybooks, refreshCatalog,
+    removeCatalogSource,
     failedRunNotices, setFailedRunNotices,
     newReportNotices, setNewReportNotices,
     bellDismissedIds,
@@ -417,6 +461,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [recentlyUpdatedSourceId, setRecentlyUpdatedSourceId] = useState<string | null>(null);
   const updatedHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [agentAssignmentOrigin, setAgentAssignmentOrigin] = useState<'library' | 'detail'>('library');
+  const [recentlyConnectedAgent, setRecentlyConnectedAgent] = useState<{ sourceId: string; agentId: string } | null>(null);
+  const connectedAgentHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playbooksSearch, setPlaybooksSearch] = useState('');
   const [selectedPlaybookId, setSelectedPlaybookId] = useState<string | null>(null);
   const [selectedSourceId, setSelectedSourceIdState] = useState<string | null>(
@@ -1093,6 +1140,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   function onFollowSource(source: SourceRecord, event?: React.MouseEvent) {
     event?.stopPropagation();
+    setAgentAssignmentOrigin(selectedSourceId === source.id ? 'detail' : 'library');
     clearPostSourceAgentGuidance(source.id);
     // Opening the follow wizard must never expose the admin-only Agents/Playbooks
     // tabs to non-admin users. The wizard is a standalone Modal reachable regardless
@@ -1130,9 +1178,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }
 
   async function handleAgentSelectionConnected(playbook: PlaybookRecord) {
-    await Promise.all([refreshPlaybooks(), refreshSources()]);
-    if (playbook.sourceIds[0]) {
-      markSourceUpdated(playbook.sourceIds[0]);
+    await Promise.all([refreshAgents(), refreshPlaybooks(), refreshSources()]);
+    const sourceId = playbook.sourceIds[0];
+    if (sourceId) {
+      markSourceUpdated(sourceId);
+      if (connectedAgentHighlightTimerRef.current) {
+        clearTimeout(connectedAgentHighlightTimerRef.current);
+      }
+      setRecentlyConnectedAgent({ sourceId, agentId: playbook.agentId });
+      connectedAgentHighlightTimerRef.current = setTimeout(() => setRecentlyConnectedAgent(null), 4000);
     }
     message.success(t('agentSelection.connectionSuccess'));
     setPostSourceChoiceSource(null);
@@ -1165,6 +1219,23 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     if (!connectedAgentPlaybook) return;
     setConnectedAgentPlaybook(null);
     onOpenScheduleEdit(connectedAgentPlaybook);
+  }
+
+  async function onDoneConnectedAgentPlaybook() {
+    const playbook = connectedAgentPlaybook;
+    setConnectedAgentPlaybook(null);
+    if (!playbook) return;
+
+    await Promise.all([refreshAgents(), refreshPlaybooks(), refreshSources()]);
+    const sourceId = playbook.sourceIds[0];
+    if (!sourceId) return;
+
+    if (agentAssignmentOrigin === 'library') {
+      setSelectedSourceId(null);
+      setActiveHub('sources');
+    } else if (selectedSourceId !== sourceId) {
+      setSelectedSourceId(sourceId);
+    }
   }
 
   async function onRemoveAgentFromSource(playbook: PlaybookRecord, sourceId: string) {
@@ -1493,7 +1564,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       previewItems: source.metadata.previewItems.map((item) => ({
         title: item.title,
         link: item.link ?? null,
-        pubDate: item.pubDate ?? null
+        pubDate: item.pubDate ?? null,
+        imageUrl: item.imageUrl ?? null
       }))
     });
     setIsSourceCreateOpen(true);
@@ -1527,7 +1599,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     } else {
       setPlaybookDailyTimeDraft(playbook.schedule.dailyTime);
       setPlaybookTimezoneDraft(playbook.schedule.timezone);
-      setPlaybookDaysOfWeekDraft(playbook.schedule.mode === 'weekly' ? playbook.schedule.daysOfWeek : [1]);
+      setPlaybookDaysOfWeekDraft(
+        playbook.schedule.mode === 'weekly' && Array.isArray(playbook.schedule.daysOfWeek) && playbook.schedule.daysOfWeek.length > 0
+          ? playbook.schedule.daysOfWeek
+          : [1]
+      );
     }
     setPlaybookRecipientsDraft(playbook.recipients);
     // Pre-fill detail level from existing agent if available
@@ -1552,7 +1628,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     } else {
       setPlaybookDailyTimeDraft(playbook.schedule.dailyTime);
       setPlaybookTimezoneDraft(playbook.schedule.timezone);
-      setPlaybookDaysOfWeekDraft(playbook.schedule.mode === 'weekly' ? playbook.schedule.daysOfWeek : [1]);
+      setPlaybookDaysOfWeekDraft(
+        playbook.schedule.mode === 'weekly' && Array.isArray(playbook.schedule.daysOfWeek) && playbook.schedule.daysOfWeek.length > 0
+          ? playbook.schedule.daysOfWeek
+          : [1]
+      );
     }
     setPlaybookRecipientsDraft(playbook.recipients);
     setIsScheduleEditOpen(true);
@@ -1647,6 +1727,37 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     const preview = source.metadata.previewItems.map((item) => item.title).join(' ');
     return `${scannedTitle} ${source.value} ${preview}`.toLowerCase().includes(normalizedSourceSearch);
   });
+  const linkedAgentsBySourceId = playbooks.reduce<Record<string, Array<{
+    playbookId: string;
+    agentId: string;
+    label: string;
+    characterType?: string | null;
+    characterLabel?: string;
+    personalityLabel?: string;
+  }>>>(
+    (result, playbook) => {
+      const agent = agents.find((candidate) => candidate.id === playbook.agentId);
+      const linkedAgent = {
+        playbookId: playbook.id,
+        agentId: playbook.agentId,
+        label: playbook.name,
+        characterType: agent?.characterType,
+        characterLabel: agent ? getAgentCharacterLabel(agent) : undefined,
+        personalityLabel: agent ? getAgentPersonalityLabel(agent) : undefined
+      };
+      for (const sourceId of playbook.sourceIds) {
+        const current = result[sourceId] ?? [];
+        if (!current.some((candidate) => candidate.agentId === linkedAgent.agentId)) {
+          result[sourceId] = [...current, linkedAgent];
+        }
+      }
+      return result;
+    },
+    {}
+  );
+  const highlightedAgentIdBySourceId = recentlyConnectedAgent
+    ? { [recentlyConnectedAgent.sourceId]: recentlyConnectedAgent.agentId }
+    : {};
   const filteredAgents = agents.filter((agent) => {
     if (!normalizedAgentsSearch) return true;
     const sourceValues = agent.sources.map((source) => source.value).join(' ');
@@ -1706,7 +1817,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     if (source.metadata.coverImageUrl) return source.metadata.coverImageUrl;
     if (source.type !== 'youtube_videos') return null;
     const firstPreviewVideoId = extractYoutubeVideoId(source.metadata.previewItems[0]?.link);
-    return firstPreviewVideoId ? getYoutubeThumbnailUrl(firstPreviewVideoId) : null;
+    if (firstPreviewVideoId) return getYoutubeThumbnailUrl(firstPreviewVideoId);
+    return getYoutubeCoverImageFallback(source.value);
   }
 
   // A report's own cited video URL is fresher and more accurate than the source's cached
@@ -1942,7 +2054,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         previewItems: guidedWizardSource.previewItems.map((item) => ({
           title: item.title,
           link: item.link ?? undefined,
-          pubDate: item.pubDate
+          pubDate: item.pubDate,
+          imageUrl: item.imageUrl ?? null
         }))
       }
     });
@@ -2230,7 +2343,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             previewItems: autoDetectedSource.previewItems.map((item) => ({
               title: item.title,
               link: item.link ?? undefined,
-              pubDate: item.pubDate
+              pubDate: item.pubDate,
+              imageUrl: item.imageUrl ?? null
             }))
           }
         });
@@ -2245,7 +2359,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             previewItems: autoDetectedSource.previewItems.map((item) => ({
               title: item.title,
               link: item.link ?? undefined,
-              pubDate: item.pubDate
+              pubDate: item.pubDate,
+              imageUrl: item.imageUrl ?? null
             }))
           }
         });
@@ -2760,7 +2875,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                      const agent = agents.find((a) => a.id === pb.agentId);
                                      const characterLabel = agent?.characterType ? humanizeCharacterType(agent.characterType) : null;
                                      return (
-                                       <div key={pb.id} className={`flex items-start gap-2.5 text-xs transition-opacity ${pb.enabled ? '' : 'opacity-60'}`}>
+                                       <div
+                                         key={pb.id}
+                                         className={`flex items-start gap-2.5 rounded-lg text-xs transition-all ${
+                                           recentlyConnectedAgent?.sourceId === selectedSource.id &&
+                                           recentlyConnectedAgent.agentId === pb.agentId
+                                             ? 'animate-pulse bg-violet-500/10 ring-2 ring-violet-400/70'
+                                             : ''
+                                         } ${pb.enabled ? '' : 'opacity-60'}`}
+                                       >
                                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${getCharacterTypeIconBg(agent?.characterType)}`}>
                                            {getCharacterTypeEmoji(agent?.characterType)}
                                          </div>
@@ -2770,7 +2893,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${pb.enabled ? 'bg-emerald-500' : 'bg-gray-400'}`}
                                                title={pb.enabled ? t('playbook.active') : t('playbook.paused')}
                                              />
-                                             <span className="font-semibold text-foreground truncate">{agent ? getAgentDisplayLabel(agent) : characterLabel}</span>
+                                             <span className="font-semibold text-foreground truncate">{pb.name}</span>
                                              {agent && characterLabel ? (
                                                <span className="text-muted-foreground truncate">· {characterLabel}</span>
                                              ) : null}
@@ -2895,23 +3018,20 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                          <ul className="divide-y divide-border">
                                            {episodes.map((ep) => {
                                              const videoId = selectedSource.type === 'youtube_videos' ? extractYoutubeVideoId(ep.link) : null;
+                                             const episodeImageUrl =
+                                               ep.imageUrl ?? (videoId ? getYoutubeThumbnailUrl(videoId, 'mqdefault') : null);
+                                             const coverImageUrl = selectedSource.metadata.coverImageUrl;
                                              const episodeReport = findEpisodeReport(ep.link);
                                              return (
                                                <li
                                                  key={ep.link}
-                                                 className={`grid items-start gap-x-3 py-2.5 sm:items-center ${
-                                                   videoId
-                                                     ? 'grid-cols-[72px_minmax(0,1fr)] sm:grid-cols-[64px_minmax(0,1fr)_auto]'
-                                                     : 'grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto]'
-                                                 }`}
+                                                 className="grid grid-cols-[72px_minmax(0,1fr)] items-start gap-x-3 py-2.5 sm:grid-cols-[64px_minmax(0,1fr)_auto] sm:items-center"
                                                >
-                                                 {videoId ? (
-                                                   <img
-                                                     src={getYoutubeThumbnailUrl(videoId, 'mqdefault')}
-                                                     alt=""
-                                                     className="h-12 w-[72px] rounded object-cover bg-muted sm:h-11 sm:w-16"
-                                                   />
-                                                 ) : null}
+                                                 <EpisodeArtwork
+                                                   episodeImageUrl={episodeImageUrl}
+                                                   coverImageUrl={coverImageUrl}
+                                                   sourceType={selectedSource.type}
+                                                 />
                                                  <div className="min-w-0">
                                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
                                                      <span className="truncate text-sm font-medium">{ep.title}</span>
@@ -2927,9 +3047,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                      </div>
                                                    ) : null}
                                                  </div>
-                                                 <div className={`mt-2 flex gap-1 ${
-                                                   videoId ? 'col-start-2 sm:col-start-3' : 'col-start-1 sm:col-start-2'
-                                                 } sm:row-start-1 sm:mt-0 sm:shrink-0`}>
+                                                 <div className="col-start-2 mt-2 flex gap-1 sm:col-start-3 sm:row-start-1 sm:mt-0 sm:shrink-0">
                                                    {episodeReport ? (
                                                      <TouchSafeTooltip title={t('library.openReport')}>
                                                        <Button
@@ -3151,6 +3269,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                      <LibraryOverview
                        starterSources={starterSources}
                        savedSources={filteredSources}
+                       currentUserId={user?.id}
                        isCatalogLoading={catalogLoadState === 'loading'}
                        catalogError={catalogLoadState === 'error'}
                        showAddSourceAttention={sources.length === 0 && !libraryGuidanceSeen}
@@ -3168,8 +3287,57 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports');
                        }}
                        onAddAgent={(source) => onFollowSource(source)}
+                       onRemoveAgent={(playbookId, sourceId) => {
+                         const playbook = playbooks.find((candidate) => candidate.id === playbookId);
+                         if (playbook) {
+                           return onRemoveAgentFromSource(playbook, sourceId);
+                         }
+                       }}
+                       linkedAgentsBySourceId={linkedAgentsBySourceId}
+                       highlightedAgentIdBySourceId={highlightedAgentIdBySourceId}
                        onRetryCatalog={() => void refreshCatalog(i18n.resolvedLanguage ?? i18n.language)}
                        hasAnySavedSources={sources.length > 0}
+                       renderSavedSourceActions={(source) => (
+                         source.ownerUserId === user?.id ? (
+                           <EntityActions
+                             entityLabel="source"
+                             isOwner
+                             variant="menu"
+                             menuAriaLabel={t('library.manageSource')}
+                             onEdit={() => onEditSource(source)}
+                             onShare={(payload) =>
+                               shareSource(source.id, {
+                                 granteeUserId: payload.granteeUserId,
+                                 permission: payload.permission as 'read' | 'update' | 'delete' | '*'
+                               })
+                             }
+                             sharePermissions={['read', 'update', 'delete', '*']}
+                             onPublish={(payload) => publishSource(source.id, payload)}
+                             defaultPublishTitle={getSourceDisplayTitle(source)}
+                           />
+                         ) : (
+                           <Popconfirm
+                             title={t('library.removeFromLibrary')}
+                             okText={t('common.remove')}
+                             cancelText={t('common.cancel')}
+                             onConfirm={() => {
+                               void removeCatalogSource(source.id).catch(() => {
+                                 message.error(t('library.removeSourceFailed'));
+                               });
+                             }}
+                           >
+                             <Button
+                               aria-label={t('library.removeFromLibrary')}
+                               shape="circle"
+                               type="text"
+                               danger
+                               icon={<DeleteOutlined />}
+                               className="border border-white/40 bg-black/50 text-white shadow-sm transition-colors hover:!border-white/55 hover:!bg-black/65 hover:!text-white"
+                               onClick={(event) => event.stopPropagation()}
+                             />
+                           </Popconfirm>
+                         )
+                       )}
                      />
                    </div>
                    ) : null}
@@ -3997,7 +4165,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           })() : (
             <AgentSelectionView
               source={sources.find((s) => s.id === playbookSourceIdsDraft[0]) ?? null}
-              ownedAgents={agents}
+              ownedAgents={agents.filter((agent) => agent.ownerUserId === user?.id)}
               onAgentConnected={handleAgentSelectionConnected}
               onCurate={openInlineAgentCuration}
             />
@@ -5086,7 +5254,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         running={runningConnectedAgentPlaybook}
         onRunFirstReport={onRunFirstConnectedReport}
         onScheduleRecurring={onScheduleConnectedAgentPlaybook}
-        onDone={() => setConnectedAgentPlaybook(null)}
+        onDone={() => void onDoneConnectedAgentPlaybook()}
       />
     </>
   );

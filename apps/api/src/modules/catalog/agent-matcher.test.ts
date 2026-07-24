@@ -8,6 +8,7 @@ function fixture(overrides: Partial<Parameters<typeof rankAgentMatches>[0]['agen
     ownership: 'curated' as const,
     name: overrides.agentVersionId,
     purpose: `${overrides.agentVersionId} purpose`,
+    characterType: 'summarizer' as const,
     iconAssetKey: null,
     sourceTypes: [],
     topics: [],
@@ -18,7 +19,7 @@ function fixture(overrides: Partial<Parameters<typeof rankAgentMatches>[0]['agen
 }
 
 describe('rankAgentMatches', () => {
-  it('ranks topic, source type, language, ownership, then editorial rank', () => {
+  it('ranks topic, language, ownership, then editorial rank', () => {
     const matches = rankAgentMatches({
       source: { type: 'podcast_feeds', topics: ['business'], language: 'en' },
       agents: [
@@ -52,11 +53,17 @@ describe('rankAgentMatches', () => {
     expect(matches.map((match) => match.agentVersionId)).toEqual(['owned-topic', 'curated-topic', 'type-only']);
     expect(matches[0].reasons).toEqual([
       { code: 'topic', value: 'business' },
-      { code: 'source_type', value: 'podcast_feeds' }
+      { code: 'language', value: 'en' }
     ]);
+    expect(matches[0]).toMatchObject({
+      characterType: 'summarizer',
+      sourceTypes: ['podcast_feeds'],
+      topics: ['business'],
+      language: 'en'
+    });
   });
 
-  it('falls back to source type and language when topic metadata is missing', () => {
+  it('falls back to language and editorial rank when topic metadata is missing', () => {
     const matches = rankAgentMatches({
       source: { type: 'podcast_feeds', topics: [], language: 'en' },
       agents: [
@@ -68,7 +75,6 @@ describe('rankAgentMatches', () => {
 
     expect(matches.map((match) => match.agentVersionId)).toEqual(['type-and-language', 'language-only', 'editorial-only']);
     expect(matches[0].reasons).toEqual([
-      { code: 'source_type', value: 'podcast_feeds' },
       { code: 'language', value: 'en' }
     ]);
   });
@@ -134,3 +140,4 @@ describe('rankAgentMatches', () => {
     expect(matches.map((match) => match.agentVersionId)).toEqual(['higher-priority-rank', 'later-rank']);
   });
 });
+

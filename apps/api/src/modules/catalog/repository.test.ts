@@ -567,9 +567,9 @@ describe('CatalogRepository', () => {
     const ownedVersionRows = [
       {
         id: 'version-dup',
-        name: 'Dup v',
-        description: 'owned',
-        agent: { ownerUserId: 'user-1', status: 'active' },
+        name: '',
+        description: '',
+        agent: { ownerUserId: 'user-1', status: 'active', name: 'Owned Dup', description: 'Owned description' },
         catalogPublications: [
           { id: 'agent-pub-owned', locale: 'en', sourceTypesJson: JSON.stringify(['web_urls']), topicsJson: JSON.stringify([]), iconAssetKey: null, editorialRank: 10, status: 'published', retiredAt: null, catalogVersion: 1 }
         ],
@@ -578,15 +578,16 @@ describe('CatalogRepository', () => {
       }
     ];
 
+    const marketplaceFindMany = vi.fn(async ({ where }: any) => {
+      if (where.resourceType === 'agent' && where.agentVersion?.is) return curatedAgentRows;
+      return [];
+    });
     const db = {
       source: {
         findFirst: async () => sourceRow
       },
       marketplacePublication: {
-        findMany: async ({ where }: any) => {
-          if (where.resourceType === 'agent') return curatedAgentRows;
-          return [];
-        }
+        findMany: marketplaceFindMany
       },
       agentPromptVersion: {
         findMany: async () => ownedVersionRows
@@ -596,6 +597,9 @@ describe('CatalogRepository', () => {
     const repository = new CatalogRepository(db);
     const matches = await repository.getAgentMatches({ userId: 'user-1', sourceId: 'source-1' });
     expect(matches.map((m) => m.agentVersionId)).toEqual(['version-dup', 'other']);
+    expect(matches[0]).toMatchObject({ name: 'Owned Dup', purpose: 'Owned description', ownership: 'owned' });
+    const curatedQuery = marketplaceFindMany.mock.calls.find(([args]) => args.where.origin === 'platform_curated');
+    expect(curatedQuery?.[0].where).not.toHaveProperty('locale');
   });
 
   it('saves the version and creates a manual playbook for the selected source', async () => {
@@ -637,9 +641,9 @@ describe('CatalogRepository', () => {
         findUnique: vi.fn(async () => ({
           id: 'version-3',
           agentId: 'agent-1',
-          name: 'Market analyst v3',
-          description: 'Pinned version',
-          agent: { id: 'agent-1', ownerUserId: 'platform', status: 'active' }
+          name: '',
+          description: '',
+          agent: { id: 'agent-1', name: 'My own analyst', description: 'My own description', ownerUserId: 'user-1', status: 'active' }
         }))
       },
       marketplacePublication: {
@@ -668,6 +672,8 @@ describe('CatalogRepository', () => {
     expect(result.created).toBe(true);
     expect(result.playbook.schedule).toEqual({ mode: 'manual' });
     expect(result.playbook.agentVersionId).toBe('version-3');
+    expect(result.playbook.name).toBe('My own analyst');
+    expect(result.playbook.description).toBe('My own description');
     expect(result.playbook.nextRunAt).toBeNull();
     expect(db.userLibraryAgent.upsert).toHaveBeenCalledWith({
       where: {

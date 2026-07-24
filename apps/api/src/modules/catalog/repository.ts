@@ -374,6 +374,7 @@ function mergeRankableAgentCandidates(existing: RankableAgentCandidate, incoming
     ownership: existing.ownership === 'owned' || incoming.ownership === 'owned' ? 'owned' : 'curated',
     name: existing.name,
     purpose: existing.purpose || incoming.purpose,
+    characterType: existing.characterType ?? incoming.characterType,
     iconAssetKey: existing.iconAssetKey ?? incoming.iconAssetKey,
     sourceTypes: mergeStringArrays(existing.sourceTypes, incoming.sourceTypes),
     topics: mergeStringArrays(existing.topics, incoming.topics),
@@ -391,6 +392,7 @@ function mapCuratedPublicationToMatchCandidate(row: CatalogPublicationRow): Rank
     ownership: 'curated',
     name: row.agentVersion.name,
     purpose: metadata.purpose ?? row.agentVersion.description,
+    characterType: row.agentVersion.characterType as CharacterType,
     iconAssetKey: metadata.iconAssetKey ?? (typeof row.agentVersion.iconAssetKey === 'string' ? row.agentVersion.iconAssetKey : null),
     sourceTypes: metadata.sourceTypes,
     topics: metadata.topics,
@@ -406,13 +408,16 @@ function mapVersionRowToMatchCandidate(row: CatalogAgentVersionRow, userId: stri
   const selectedInheritedPublication = selectPublicationForLanguage(inheritedPublications, sourceLanguage);
   const metadata = publicationMetadataToCandidate(selectedOwnPublication ?? selectedInheritedPublication);
   const ownership = row.agent.ownerUserId === userId ? 'owned' : 'curated';
+  const versionName = row.name.trim().length > 0 ? row.name : row.agent.name;
+  const versionDescription = row.description.trim().length > 0 ? row.description : row.agent.description;
 
   return {
     publicationId: selectedOwnPublication ? metadata.publicationId : null,
     agentVersionId: requireString(row.id, 'invalid_catalog_publication'),
     ownership,
-    name: requireString(row.name, 'invalid_catalog_publication'),
-    purpose: metadata.purpose ?? row.description,
+    name: requireString(versionName, 'invalid_catalog_publication'),
+    purpose: metadata.purpose ?? versionDescription,
+    characterType: typeof row.characterType === 'string' ? row.characterType as CharacterType : null,
     iconAssetKey: metadata.iconAssetKey ?? (typeof row.iconAssetKey === 'string' ? row.iconAssetKey : null),
     sourceTypes: metadata.sourceTypes,
     topics: metadata.topics,
@@ -518,8 +523,8 @@ export class CatalogRepository implements CatalogRepositoryLike {
           data: {
             agentId: agentVersion.agentId,
             agentVersionId: input.agentVersionId,
-            name: agentVersion.name,
-            description: '',
+            name: agentVersion.name.trim().length > 0 ? agentVersion.name : agentVersion.agent.name,
+            description: agentVersion.description.trim().length > 0 ? agentVersion.description : agentVersion.agent.description,
             enabled: true,
             recipientsJson: '[]',
             executionMode: 'latest_only',
@@ -611,7 +616,6 @@ export class CatalogRepository implements CatalogRepositoryLike {
           visibility: 'public',
           origin: 'platform_curated',
           retiredAt: null,
-          locale: { in: localeCandidates(sourceLanguage) },
           agent: { is: { status: 'active' } },
           agentVersion: { is: { enabled: true } }
         },

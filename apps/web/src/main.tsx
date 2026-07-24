@@ -1,11 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { ConfigProvider, theme as antdTheme } from 'antd';
+import { App as AntdApp, ConfigProvider, theme as antdTheme } from 'antd';
 import enUS from 'antd/locale/en_US';
 import deDE from 'antd/locale/de_DE';
 import 'antd/dist/reset.css';
 import { I18nextProvider, useTranslation } from 'react-i18next';
-import { App } from './App';
+import { App as MaydozApp } from './App';
 import { ThemeProvider, useTheme } from './theme/ThemeContext';
 import './i18n/index';
 import './index.css';
@@ -38,7 +38,9 @@ function ThemedApp() {
         }
       }}
     >
-      <App />
+      <AntdApp>
+        <MaydozApp />
+      </AntdApp>
     </ConfigProvider>
   );
 }

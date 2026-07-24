@@ -284,7 +284,7 @@ describe('source routes', () => {
     expect(deleteRes.statusCode).toBe(204);
   });
 
-  it('enforces ownership for non-admin users and allows admins to access all sources', async () => {
+  it('enforces ownership for non-admin users and keeps library list user-scoped for admins', async () => {
     const sourceRepo = new InMemorySourceRepository();
     const userRepository = new InMemoryUserRepository();
     const owner = await userRepository.createWithPassword('owner@example.com', 'hash', 'Owner', 'user');
@@ -316,7 +316,7 @@ describe('source routes', () => {
       headers: authCookieHeader(admin.id)
     });
     expect(adminList.statusCode).toBe(200);
-    expect(adminList.json<SourceRecord[]>()).toHaveLength(1);
+    expect(adminList.json<SourceRecord[]>()).toHaveLength(0);
   });
 
   it('adds source-scoped report counts to the library list', async () => {

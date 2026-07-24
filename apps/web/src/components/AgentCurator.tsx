@@ -83,7 +83,7 @@ function fieldLabelKey(field: EditableReviewField): string {
     : field === 'systemPrompt'
       ? 'curator.fieldInstructions'
       : field === 'name'
-        ? 'curator.fieldName'
+        ? 'curator.fieldTitle'
         : 'curator.fieldDescription';
 }
 
@@ -336,9 +336,9 @@ export function AgentCurator({
           </Paragraph>
         </div>
         <Form layout="vertical">
-          <Form.Item label={t('curator.nameLabel')} className="!mb-3">
+          <Form.Item label={t('curator.titleLabel')} className="!mb-3">
             <Input
-              aria-label="Agent name"
+              aria-label="Agent title"
               value={reviewDraft.name}
               disabled={isBusy}
               onChange={(event) => updateReviewField('name', event.currentTarget.value)}
@@ -539,3 +539,4 @@ export function AgentCurator({
     </div>
   );
 }
+

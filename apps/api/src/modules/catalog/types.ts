@@ -85,7 +85,11 @@ export interface AgentMatch {
   ownership: AgentOwnership;
   name: string;
   purpose: string;
+  characterType: CharacterType | null;
   iconAssetKey: string | null;
+  sourceTypes: string[];
+  topics: string[];
+  language: string | null;
   reasons: AgentMatchReason[];
   score: number;
   updateAvailable: boolean;
