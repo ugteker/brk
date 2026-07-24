@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, App, Button, Empty } from 'antd';
-import { ArrowLeftOutlined, ArrowRightOutlined, RobotOutlined } from '@ant-design/icons';
+import { RobotOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { getLatestAgentPrompt, type AgentSummary } from '../../api/agents';
 import { updateSavedAgentVersion, useAgentForSource, type UseAgentForSourceInput } from '../../api/agent-selection';
@@ -90,7 +90,7 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
   const [ownedAgentMatches, setOwnedAgentMatches] = useState<AgentMatchDto[]>([]);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(0);
+  const [visibleLimit, setVisibleLimit] = useState(BEST_MATCHES_PAGE_SIZE);
   const [retryKey, setRetryKey] = useState(0);
   const [activeDrawerMatch, setActiveDrawerMatch] = useState<AgentMatchDto | null>(null);
   const [loadingAgentVersionId, setLoadingAgentVersionId] = useState<string | null>(null);
@@ -108,7 +108,7 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
     let cancelled = false;
     setLoadState('loading');
     setErrorMessage(null);
-    setCurrentPage(0);
+    setVisibleLimit(BEST_MATCHES_PAGE_SIZE);
 
     void Promise.all([listAgentMatches(source.id), hydrateOwnedAgents(ownedAgents)])
       .then(([nextMatches, nextOwnedAgentMatches]) => {
@@ -138,19 +138,29 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
       setFocusAgentVersionId(null);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [focusAgentVersionId, currentPage, matches]);
+  }, [focusAgentVersionId, visibleLimit, matches]);
 
   const curatedBestMatches = useMemo(
     () => matches.filter((match) => match.ownership !== 'owned'),
     [matches]
   );
 
-  const totalBestMatchPages = Math.max(1, Math.ceil(curatedBestMatches.length / BEST_MATCHES_PAGE_SIZE));
+  const matchedOwnedVersionIds = useMemo(
+    () => new Set(ownedAgentMatches.map((m) => m.agentVersionId)),
+    [ownedAgentMatches]
+  );
 
-  const visibleMatches = useMemo(() => {
-    const start = currentPage * BEST_MATCHES_PAGE_SIZE;
-    return curatedBestMatches.slice(start, start + BEST_MATCHES_PAGE_SIZE);
-  }, [currentPage, curatedBestMatches]);
+  const dedupedBestMatches = useMemo(
+    () => curatedBestMatches.filter((match) => !matchedOwnedVersionIds.has(match.agentVersionId)),
+    [curatedBestMatches, matchedOwnedVersionIds]
+  );
+
+  const visibleMatches = useMemo(
+    () => dedupedBestMatches.slice(0, visibleLimit),
+    [dedupedBestMatches, visibleLimit]
+  );
+
+  const hasMoreMatches = dedupedBestMatches.length > visibleLimit;
 
   const remainingOwnedMatches = ownedAgentMatches;
   const showOwnedAgentsFirst = remainingOwnedMatches.length > 0;
@@ -160,7 +170,7 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
     []
   );
 
-  const isEmpty = loadState === 'ready' && curatedBestMatches.length === 0 && remainingOwnedMatches.length === 0;
+  const isEmpty = loadState === 'ready' && dedupedBestMatches.length === 0 && remainingOwnedMatches.length === 0;
 
   async function handleUse(match: AgentMatchDto) {
     if (!source) return;
@@ -191,21 +201,6 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
     }
   }
 
-  function handleNextPage() {
-    if (curatedBestMatches.length === 0) return;
-    const nextPage = currentPage + 1 >= totalBestMatchPages ? 0 : currentPage + 1;
-    const nextMatch = curatedBestMatches[nextPage * BEST_MATCHES_PAGE_SIZE];
-    setCurrentPage(nextPage);
-    if (nextMatch) setFocusAgentVersionId(nextMatch.agentVersionId);
-  }
-
-  function handlePreviousPage() {
-    if (curatedBestMatches.length === 0) return;
-    const previousPage = currentPage - 1 < 0 ? totalBestMatchPages - 1 : currentPage - 1;
-    const previousMatch = curatedBestMatches[previousPage * BEST_MATCHES_PAGE_SIZE];
-    setCurrentPage(previousPage);
-    if (previousMatch) setFocusAgentVersionId(previousMatch.agentVersionId);
-  }
 
   if (!source) {
     return <Empty description={t('agentSelection.empty')} />;
@@ -280,25 +275,6 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
                 <h3 id="agent-selection-best-matches" className="text-sm font-semibold text-foreground">
                   {t('agentSelection.bestMatches')}
                 </h3>
-                {totalBestMatchPages > 1 ? (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="small"
-                      aria-label="Previous best matches page"
-                      icon={<ArrowLeftOutlined />}
-                      onClick={handlePreviousPage}
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {currentPage + 1} / {totalBestMatchPages}
-                    </span>
-                    <Button
-                      size="small"
-                      aria-label="Next best matches page"
-                      icon={<ArrowRightOutlined />}
-                      onClick={handleNextPage}
-                    />
-                  </div>
-                ) : null}
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {visibleMatches.map((match) => (
@@ -311,6 +287,13 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
                   />
                 ))}
               </div>
+              {hasMoreMatches ? (
+                <div className="flex justify-center">
+                  <Button onClick={() => setVisibleLimit((current) => current + BEST_MATCHES_PAGE_SIZE)}>
+                    {t('agentSelection.showMore')}
+                  </Button>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
