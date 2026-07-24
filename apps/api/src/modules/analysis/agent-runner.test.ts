@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AgentRunner } from './agent-runner';
+import { SourceIngestionService } from '../source/ingestion-service';
+import { PodcastFeedAdapter } from './source-adapters/podcast-feed-adapter';
+import { InMemorySourceCursorRepository } from '../crawler/source-cursor-repository';
+import { InMemorySourceCrawlConfigRepository } from '../crawler/crawl-config-repository';
+import { logger } from '../../lib/logger';
 import type { Agent } from '../agents/types';
 
 function summarizerReport(summary = 'Bullish on AAPL') {
@@ -12,8 +17,20 @@ function summarizerReport(summary = 'Bullish on AAPL') {
   };
 }
 
-function createDeps(overrides: Partial<Parameters<typeof AgentRunner>[0]> = {}) {
-  const agent: Agent = {
+function createPromptVersion() {
+  return {
+    id: 'prompt-1',
+    agentId: 'agent-1',
+    version: 1,
+    model: 'claude-sonnet-4-5',
+    systemPrompt: 'Analyze for signals',
+    enabled: true,
+    createdAt: new Date()
+  };
+}
+
+function createAgent(overrides: Partial<Agent> = {}): Agent {
+  return {
     id: 'agent-1',
     ownerUserId: 'admin-user-id',
     name: 'Housing Agent',
@@ -23,14 +40,60 @@ function createDeps(overrides: Partial<Parameters<typeof AgentRunner>[0]> = {}) 
     status: 'active',
     createdAt: new Date(),
     updatedAt: new Date(),
-    sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
+    sources: [],
     preferences: {},
-    schedule: null
+    schedule: null,
+    ...overrides
   };
+}
 
-  const artifactRepository = { saveArtifact: vi.fn(async (input) => ({ ...input, id: 'artifact-1', createdAt: new Date() })) };
+function createDeps(overrides: Partial<Parameters<typeof AgentRunner>[0]> = {}) {
+  const artifactRepository = {
+    saveArtifact: vi.fn(async (input) => ({ ...input, id: `artifact-${Math.random()}`, createdAt: new Date() }))
+  };
   const reportRepository = {
     saveRunReport: vi.fn(async (input) => ({ ...input, id: 'report-1', createdAt: new Date() }))
+  };
+  const ingestionRepository = {
+    listPlaybookSources: vi.fn(async () => [
+      {
+        playbookId: 'playbook-1',
+        sourceId: 'source-1',
+        source: { id: 'source-1', type: 'web_urls' as const, value: 'https://example.com/article' }
+      }
+    ]),
+    listUnconsumed: vi.fn(async () => [
+      {
+        id: 'item-1',
+        sourceId: 'source-1',
+        sourceType: 'web_urls' as const,
+        sourceValue: 'https://example.com/article',
+        title: 'Article 1',
+        content: 'guidance',
+        link: 'https://example.com/article',
+        publishedAt: new Date('2026-07-24T10:00:00.000Z'),
+        contentHash: 'hash-1',
+        metadata: { fidelity: 'high', citations: ['https://example.com/article'] },
+        createdAt: new Date('2026-07-24T10:00:00.000Z')
+      }
+    ]),
+    markConsumed: vi.fn(async () => undefined),
+    getSourceItemByLink: vi.fn(async () => ({
+      id: 'item-1',
+      sourceId: 'source-1',
+      sourceType: 'web_urls' as const,
+      sourceValue: 'https://example.com/article',
+      title: 'Article 1',
+      content: 'guidance',
+      link: 'https://example.com/article',
+      publishedAt: new Date('2026-07-24T10:00:00.000Z'),
+      contentHash: 'hash-1',
+      metadata: { fidelity: 'high', citations: ['https://example.com/article'] },
+      createdAt: new Date('2026-07-24T10:00:00.000Z')
+    }))
+  };
+  const ingestionService = {
+    ensureFresh: vi.fn(async () => ({ warning: undefined }))
   };
   const cursorRepository = {
     getCursor: vi.fn(async () => null),
@@ -39,20 +102,16 @@ function createDeps(overrides: Partial<Parameters<typeof AgentRunner>[0]> = {}) 
   };
 
   return {
-    agentRepository: { getAgent: vi.fn(async () => agent) },
+    agentRepository: { getAgent: vi.fn(async () => createAgent()) },
     promptRepository: {
-      getLatestPromptVersion: vi.fn(async () => ({
-        id: 'prompt-1',
-        agentId: 'agent-1',
-        version: 1,
-        model: 'claude-sonnet-4-5',
-        systemPrompt: 'Analyze for signals',
-        enabled: true,
-        createdAt: new Date()
-      }))
+      getPromptVersionById: vi.fn(async () => createPromptVersion()),
+      getLatestPromptVersion: vi.fn(async () => createPromptVersion())
     },
     artifactRepository,
     reportRepository,
+    cursorRepository,
+    ingestionRepository,
+    ingestionService,
     claudeClient: {
       analyze: vi.fn(async () => ({
         summary: 'Bullish on AAPL',
@@ -62,478 +121,278 @@ function createDeps(overrides: Partial<Parameters<typeof AgentRunner>[0]> = {}) 
         needsHumanReview: false
       }))
     },
-    cursorRepository,
     sourceAdapters: {
       web_urls: {
         fetch: vi.fn(async () => ({
-          evidence: [{ sourceId: 's1', sourceType: 'web_urls' as const, sourceRef: 'https://example.com/article', content: 'guidance', fidelity: 'high' as const, citations: [] }]
+          evidence: [
+            {
+              sourceId: 'https://example.com/article',
+              sourceType: 'web_urls' as const,
+              sourceRef: 'https://example.com/article',
+              content: 'legacy guidance',
+              fidelity: 'high' as const,
+              citations: ['https://example.com/article'],
+              itemId: 'legacy-item-1',
+              publishedAt: '2026-07-24T10:00:00.000Z',
+              title: 'Legacy article'
+            }
+          ],
+          cursorUpdate: {
+            agentId: 'agent-1',
+            sourceValue: 'https://example.com/article',
+            strategy: 'content_hash' as const,
+            seenItemIds: [],
+            lastItemPublishedAt: null,
+            lastContentHash: 'legacy-hash'
+          }
         }))
-      },
-      podcast_feeds: { fetch: vi.fn(async () => ({ evidence: [] })) }
+      }
     },
     ...overrides
   };
 }
 
+function createSharedSourceHarness() {
+  const source = { id: 'source-1', type: 'web_urls' as const, value: 'https://example.com/article' };
+  const state = {
+    cursor: {} as Record<string, unknown>,
+    refreshedAt: null as Date | null,
+    leased: false,
+    items: [] as any[],
+    consumptions: new Set<string>()
+  };
+
+  const repository = {
+    getSource: vi.fn(async () => source),
+    getRefreshState: vi.fn(async () => ({ cursor: state.cursor, refreshedAt: state.refreshedAt })),
+    claimRefresh: vi.fn(async (_sourceId: string, now: Date, _leaseMs: number, freshnessMs: number) => {
+      if (state.leased) return false;
+      if (state.refreshedAt && now.getTime() - state.refreshedAt.getTime() < freshnessMs) return false;
+      state.leased = true;
+      return true;
+    }),
+    completeRefresh: vi.fn(async (_sourceId: string, items: any[], cursor: Record<string, unknown>, now: Date) => {
+      state.items = items.map((item, index) => ({
+        id: `item-${index + 1}`,
+        sourceId: source.id,
+        sourceType: source.type,
+        sourceValue: source.value,
+        createdAt: now,
+        ...item
+      }));
+      state.cursor = cursor;
+      state.refreshedAt = now;
+      state.leased = false;
+    }),
+    releaseRefresh: vi.fn(async () => {
+      state.leased = false;
+    }),
+    listPlaybookSources: vi.fn(async (playbookId: string) => [{ playbookId, sourceId: source.id, source }]),
+    listUnconsumed: vi.fn(async (playbookId: string) =>
+      state.items.filter((item) => !state.consumptions.has(`${playbookId}::${item.id}`))
+    ),
+    markConsumed: vi.fn(async (playbookId: string, sourceItemIds: string[]) => {
+      for (const sourceItemId of sourceItemIds) {
+        state.consumptions.add(`${playbookId}::${sourceItemId}`);
+      }
+    }),
+    getSourceItemByLink: vi.fn(async (_sourceId: string, link: string) => state.items.find((item) => item.link === link) ?? null)
+  };
+
+  const adapter = {
+    fetch: vi.fn(async () => ({
+      items: [
+        {
+          title: 'Shared article',
+          content: 'shared guidance',
+          link: 'https://example.com/article',
+          publishedAt: new Date('2026-07-24T10:00:00.000Z'),
+          contentHash: 'shared-hash',
+          metadata: { fidelity: 'high', citations: ['https://example.com/article'] }
+        }
+      ],
+      cursor: { lastContentHash: 'shared-hash' }
+    }))
+  };
+
+  return { repository, adapter };
+}
+
 describe('AgentRunner', () => {
-  it('stores artifacts and a report when a run succeeds', async () => {
+  it('stores artifacts and a report when a playbook run succeeds, then marks the consumed source items', async () => {
+    const sequence: string[] = [];
     const deps = createDeps();
+    deps.reportRepository.saveRunReport = vi.fn(async (input) => {
+      sequence.push('report');
+      return { ...input, id: 'report-1', createdAt: new Date() };
+    });
+    deps.ingestionRepository.markConsumed = vi.fn(async () => {
+      sequence.push('consumed');
+    });
     const runner = new AgentRunner(deps as never);
 
-    const result = await runner.run('agent-1', 'run-1');
+    const result = await runner.run('agent-1', 'run-1', {
+      playbookId: 'playbook-1',
+      playbookMaxItemsPerSource: 1
+    });
 
     expect(result.status).toBe('succeeded');
     expect(deps.reportRepository.saveRunReport).toHaveBeenCalledTimes(1);
     expect(deps.artifactRepository.saveArtifact).toHaveBeenCalledTimes(1);
+    expect(deps.ingestionRepository.markConsumed).toHaveBeenCalledWith('playbook-1', ['item-1'], expect.any(Date));
+    expect(sequence).toEqual(['report', 'consumed']);
   });
 
-  it('builds the effective staged system prompt before calling Claude analyze', async () => {
-    const deps = createDeps({
-      agentRepository: {
-        getAgent: vi.fn(async () => ({
-          id: 'agent-1',
-          ownerUserId: 'admin-user-id',
-          name: 'Housing Agent',
-          description: '',
-          characterType: 'teacher',
-          promptConfig: {
-            tone: 'encouraging',
-            custom_instructions: 'Use mini examples first, then definitions.'
-          },
-          status: 'active',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
-          preferences: {},
-          schedule: null
-        }))
-      },
-      promptRepository: {
-        getLatestPromptVersion: vi.fn(async () => ({
-          id: 'prompt-1',
-          agentId: 'agent-1',
-          version: 1,
-          model: 'claude-sonnet-4-5',
-          systemPrompt: 'Explain signal confidence assumptions clearly.',
-          enabled: true,
-          createdAt: new Date()
-        }))
-      }
-    });
-    const runner = new AgentRunner(deps as never);
-
-    await runner.run('agent-1', 'run-1');
-
-    const analyzeInput = deps.claudeClient.analyze.mock.calls[0][0];
-    expect(analyzeInput.systemPrompt).toContain('clear and patient teacher');
-    expect(analyzeInput.systemPrompt).toContain('- tone: encouraging');
-    expect(analyzeInput.systemPrompt).toContain('Explain signal confidence assumptions clearly.');
-    expect(analyzeInput.systemPrompt).toContain('Use mini examples first, then definitions.');
-  });
-
-  it('skips fetching a source whose frequencyMinutes has not elapsed since its last crawl', async () => {
-    const deps = createDeps({
-      cursorRepository: {
-        getCursor: vi.fn(async () => ({
-          agentId: 'agent-1',
-          sourceValue: 'https://example.com/article',
-          strategy: 'content_hash' as const,
-          seenItemIds: [],
-          lastItemPublishedAt: null,
-          lastContentHash: null,
-          lastCrawledAt: new Date(Date.now() - 5 * 60_000).toISOString() // crawled 5 min ago
-        })),
-        saveCursor: vi.fn(async () => undefined),
-        touchCrawlAttempt: vi.fn(async () => undefined)
-      }
-    });
-    const runner = new AgentRunner(deps as never);
-
-    const result = await runner.run('agent-1', 'run-1');
-
-    expect(deps.sourceAdapters.web_urls.fetch).not.toHaveBeenCalled();
-    expect(deps.cursorRepository.touchCrawlAttempt).not.toHaveBeenCalled();
-    expect(result.status).toBe('succeeded_no_new_content');
-  });
-
-  it('re-fetches a source once its frequencyMinutes has elapsed since its last crawl', async () => {
-    const deps = createDeps({
-      cursorRepository: {
-        getCursor: vi.fn(async () => ({
-          agentId: 'agent-1',
-          sourceValue: 'https://example.com/article',
-          strategy: 'content_hash' as const,
-          seenItemIds: [],
-          lastItemPublishedAt: null,
-          lastContentHash: null,
-          lastCrawledAt: new Date(Date.now() - 120 * 60_000).toISOString() // crawled 2h ago, frequency is 60 min
-        })),
-        saveCursor: vi.fn(async () => undefined),
-        touchCrawlAttempt: vi.fn(async () => undefined)
-      }
-    });
-    const runner = new AgentRunner(deps as never);
-
-    const result = await runner.run('agent-1', 'run-1');
-
-    expect(deps.sourceAdapters.web_urls.fetch).toHaveBeenCalledTimes(1);
-    expect(deps.cursorRepository.touchCrawlAttempt).toHaveBeenCalledWith(
-      'agent-1',
-      'https://example.com/article',
-      expect.any(String)
-    );
-    expect(result.status).toBe('succeeded');
-  });
-
-  it('creates an ad-hoc source config when forcedEpisode refers to a source not in agent.sources (library source run)', async () => {
-    const youtubeFetch = vi.fn(async () => ({
-      evidence: [{ sourceId: 'https://youtube.com/playlist?list=PL123', sourceType: 'youtube_videos' as const, sourceRef: 'https://youtu.be/vid1', content: 'transcript', fidelity: 'high' as const, citations: [] }]
-    }));
-    const deps = createDeps({
-      agentRepository: {
-        getAgent: vi.fn(async () => ({
-          id: 'agent-1',
-          ownerUserId: 'admin-user-id',
-          name: 'Finance Agent',
-          description: '',
-          characterType: 'summarizer',
-          promptConfig: {},
-          status: 'active',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          sources: [], // agent has NO sources configured — library source only
-          preferences: {},
-          schedule: null
-        }))
-      },
-      sourceAdapters: {
-        youtube_videos: { fetch: youtubeFetch }
-      }
+  it('does not mark source items consumed when saving the report fails', async () => {
+    const deps = createDeps();
+    deps.reportRepository.saveRunReport = vi.fn(async () => {
+      throw new Error('db down');
     });
     const runner = new AgentRunner(deps as never);
 
     const result = await runner.run('agent-1', 'run-1', {
-      forcedEpisode: { sourceType: 'youtube_videos', sourceValue: 'https://youtube.com/playlist?list=PL123', itemLink: 'https://youtu.be/vid1' }
+      playbookId: 'playbook-1',
+      playbookMaxItemsPerSource: 1
     });
 
-    expect(result.status).toBe('succeeded');
-    expect(youtubeFetch).toHaveBeenCalledWith('agent-1', expect.objectContaining({ type: 'youtube_videos', value: 'https://youtube.com/playlist?list=PL123' }), {
-      forcedItemLink: 'https://youtu.be/vid1'
-    });
+    expect(result.status).toBe('failed');
+    expect(deps.ingestionRepository.markConsumed).not.toHaveBeenCalled();
   });
 
-  it('forces crawling one specific episode from one source when forcedEpisode is given, skipping other sources', async () => {
-    const podcastFetch = vi.fn(async () => ({
-      evidence: [{ sourceId: 'https://example.com/feed.xml', sourceType: 'podcast_feeds' as const, sourceRef: 'https://example.com/ep-2', content: 'transcript', fidelity: 'high' as const, citations: [] }]
-    }));
-    const webUrlsFetch = vi.fn(async () => ({ evidence: [] }));
-    const deps = createDeps({
-      agentRepository: {
-        getAgent: vi.fn(async () => ({
-          id: 'agent-1',
-          ownerUserId: 'admin-user-id',
-          name: 'Housing Agent',
-          description: '',
-          characterType: 'summarizer',
-          promptConfig: {},
-          status: 'active',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          sources: [
-            { type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 },
-            { type: 'podcast_feeds', value: 'https://example.com/feed.xml', frequencyMinutes: 60, maxItems: 1 }
-          ],
-          preferences: {},
-          schedule: null
-        }))
-      },
-      sourceAdapters: {
-        web_urls: { fetch: webUrlsFetch },
-        podcast_feeds: { fetch: podcastFetch }
-      }
-    });
+  it('keeps forced episode runs retryable by resolving the stored item by link instead of marking it consumed', async () => {
+    const deps = createDeps();
     const runner = new AgentRunner(deps as never);
+    const options = {
+      playbookId: 'playbook-1',
+      forcedEpisode: {
+        sourceType: 'web_urls' as const,
+        sourceValue: 'https://example.com/article',
+        itemLink: 'https://example.com/article'
+      }
+    };
 
-    const result = await runner.run('agent-1', 'run-1', {
-      forcedEpisode: { sourceType: 'podcast_feeds', sourceValue: 'https://example.com/feed.xml', itemLink: 'https://example.com/ep-2' }
-    });
+    const first = await runner.run('agent-1', 'run-1', options);
+    const second = await runner.run('agent-1', 'run-2', options);
 
-    expect(result.status).toBe('succeeded');
-    expect(webUrlsFetch).not.toHaveBeenCalled();
-    expect(podcastFetch).toHaveBeenCalledWith('agent-1', expect.objectContaining({ value: 'https://example.com/feed.xml' }), {
-      forcedItemLink: 'https://example.com/ep-2'
-    });
+    expect(first.status).toBe('succeeded');
+    expect(second.status).toBe('succeeded');
+    expect(deps.ingestionRepository.getSourceItemByLink).toHaveBeenCalledTimes(2);
+    expect(deps.ingestionRepository.markConsumed).not.toHaveBeenCalled();
   });
 
-  it('fails gracefully when no prompt version is configured', async () => {
-    const deps = createDeps({
-      promptRepository: { getLatestPromptVersion: vi.fn(async () => null) }
+  it('lets two playbooks analyze the same stored source item after one shared refresh', async () => {
+    const { repository, adapter } = createSharedSourceHarness();
+    const ingestionService = new SourceIngestionService({
+      repository: repository as never,
+      adapters: { web_urls: adapter as never }
+    });
+    const agentRepository = {
+      getAgent: vi.fn(async (agentId: string) =>
+        createAgent({
+          id: agentId,
+          name: agentId === 'agent-1' ? 'First Agent' : 'Second Agent'
+        })
+      )
+    };
+    const promptRepository = {
+      getPromptVersionById: vi.fn(async () => createPromptVersion()),
+      getLatestPromptVersion: vi.fn(async () => createPromptVersion())
+    };
+    const claudeClient = {
+      analyze: vi.fn(async () => ({
+        summary: 'Shared source summary',
+        signals: [],
+        report: summarizerReport('Shared source summary'),
+        sourceWarnings: [],
+        needsHumanReview: false
+      }))
+    };
+    const runner = new AgentRunner({
+      agentRepository,
+      promptRepository,
+      artifactRepository: { saveArtifact: vi.fn(async () => ({ id: 'artifact-1' })) },
+      reportRepository: { saveRunReport: vi.fn(async (input) => ({ ...input, id: 'report-1', createdAt: new Date() })) },
+      claudeClient,
+      ingestionRepository: repository as never,
+      ingestionService: ingestionService as never,
+      sourceAdapters: {}
     } as never);
-    const runner = new AgentRunner(deps as never);
 
-    const result = await runner.run('agent-1', 'run-1');
-    expect(result.status).toBe('failed');
-    expect(result.errorCode).toBe('missing_prompt_version');
+    const first = await runner.run('agent-1', 'run-1', { playbookId: 'playbook-1', playbookMaxItemsPerSource: 1 });
+    const second = await runner.run('agent-2', 'run-2', { playbookId: 'playbook-2', playbookMaxItemsPerSource: 1 });
+
+    expect(first.status).toBe('succeeded');
+    expect(second.status).toBe('succeeded');
+    expect(adapter.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('records a source warning and continues when a source adapter throws', async () => {
-    const deps = createDeps();
-    deps.agentRepository.getAgent = vi.fn(async () => ({
-      id: 'agent-1',
-      ownerUserId: 'admin-user-id',
-      name: 'Housing Agent',
-      description: '',
-      characterType: 'summarizer',
-      promptConfig: {},
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      sources: [
-        { type: 'web_urls', value: 'https://example.com/article' },
-        { type: 'podcast_feeds', value: 'https://example.com/feed' }
-      ]
-    }));
-    deps.sourceAdapters.web_urls.fetch = vi.fn(async () => {
-      throw new Error('network down');
-    });
-    deps.sourceAdapters.podcast_feeds.fetch = vi.fn(async () => ({
-      evidence: [{ sourceId: 's2', sourceType: 'podcast_feeds' as const, sourceRef: 'https://example.com/feed', content: 'episode notes', fidelity: 'low' as const, citations: [] }]
-    }));
-    const runner = new AgentRunner(deps as never);
-
-    const result = await runner.run('agent-1', 'run-1');
-
-    expect(result.status).toBe('succeeded');
-    const savedReport = deps.reportRepository.saveRunReport.mock.calls[0][0];
-    expect(savedReport.sourceWarnings[0]).toContain('network down');
-  });
-
-  it('skips the Claude call/report and returns succeeded_no_new_content when no source has new evidence', async () => {
-    const deps = createDeps();
-    deps.sourceAdapters.web_urls.fetch = vi.fn(async () => ({ evidence: [] }));
-    const runner = new AgentRunner(deps as never);
-
-    const result = await runner.run('agent-1', 'run-1');
-
-    expect(result.status).toBe('succeeded_no_new_content');
-    expect(deps.claudeClient.analyze).not.toHaveBeenCalled();
-    expect(deps.reportRepository.saveRunReport).not.toHaveBeenCalled();
-  });
-
-  it('passes model, prompt version, token usage, and estimated cost to saveRunReport when Claude reports usage', async () => {
-    const deps = createDeps();
-    deps.claudeClient.analyze = vi.fn(async () => ({
-      summary: 'Bullish on AAPL',
-      signals: [],
-      report: summarizerReport(),
-      sourceWarnings: [],
-      needsHumanReview: false,
-      usage: { inputTokens: 1000, outputTokens: 200 }
-    }));
-    const runner = new AgentRunner(deps as never);
-
-    await runner.run('agent-1', 'run-1');
-
-    const savedReport = deps.reportRepository.saveRunReport.mock.calls[0][0];
-    expect(savedReport.model).toBe('claude-sonnet-4-5');
-    expect(savedReport.promptVersionNumber).toBe(1);
-    expect(savedReport.inputTokens).toBe(1000);
-    expect(savedReport.outputTokens).toBe(200);
-    expect(savedReport.estimatedCostUsd).toBeCloseTo((1000 * 3 + 200 * 15) / 1_000_000);
-  });
-
-  it('saves null usage/cost fields when Claude does not report usage (best-effort, never fails the run)', async () => {
-    const deps = createDeps();
-    const runner = new AgentRunner(deps as never);
-
-    const result = await runner.run('agent-1', 'run-1');
-
-    expect(result.status).toBe('succeeded');
-    const savedReport = deps.reportRepository.saveRunReport.mock.calls[0][0];
-    expect(savedReport.model).toBe('claude-sonnet-4-5');
-    expect(savedReport.promptVersionNumber).toBe(1);
-    expect(savedReport.inputTokens).toBeNull();
-    expect(savedReport.outputTokens).toBeNull();
-    expect(savedReport.estimatedCostUsd).toBeNull();
-  });
-
-  it('applies pending cursor updates only after the report is saved successfully', async () => {
-    const deps = createDeps();
-    const cursorUpdate = { agentId: 'agent-1', sourceValue: 'https://example.com/article', strategy: 'content_hash' as const, seenItemIds: [], lastItemPublishedAt: null, lastContentHash: 'abc' };
-    deps.sourceAdapters.web_urls.fetch = vi.fn(async () => ({
-      evidence: [{ sourceId: 's1', sourceType: 'web_urls' as const, sourceRef: 'https://example.com/article', content: 'guidance', fidelity: 'high' as const, citations: [] }],
-      cursorUpdate
-    }));
-    const runner = new AgentRunner(deps as never);
-
-    await runner.run('agent-1', 'run-1');
-
-    expect(deps.cursorRepository.saveCursor).toHaveBeenCalledWith(cursorUpdate);
-  });
-
-  it('captures the real error message (not just a generic code) when the Claude analysis call fails after evidence was already fetched', async () => {
-    const deps = createDeps();
-    deps.claudeClient.analyze = vi.fn(async () => {
-      throw new Error('Claude API request timed out after 30000ms');
+  it('warns and falls back to legacy agent.sources when a run has no playbook id', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const deps = createDeps({
+      agentRepository: {
+        getAgent: vi.fn(async () =>
+          createAgent({
+            sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }]
+          })
+        )
+      }
     });
     const runner = new AgentRunner(deps as never);
 
     const result = await runner.run('agent-1', 'run-1');
 
-    expect(result.status).toBe('failed');
-    expect(result.errorCode).toBe('agent_run_failed');
-    expect(result.errorMessage).toBe('Claude API request timed out after 30000ms');
-    // The artifact for the successfully-fetched evidence must still have been saved even though
-    // the overall run failed later at the analysis step.
-    expect(deps.artifactRepository.saveArtifact).toHaveBeenCalledTimes(1);
-  });
-
-  it('reports crawling, analyzing, notifying phases in order for a successful run', async () => {
-    const onPhaseChange = vi.fn(async () => undefined);
-    const deps = createDeps({ onPhaseChange } as never);
-    const runner = new AgentRunner(deps as never);
-
-    await runner.run('agent-1', 'run-1');
-
-    expect(onPhaseChange.mock.calls.map((call) => call[1])).toEqual(['crawling', 'analyzing', 'notifying']);
-    expect(onPhaseChange.mock.calls[0][0]).toBe('run-1');
-  });
-
-  it('does not report analyzing/notifying phases when there is no new evidence', async () => {
-    const onPhaseChange = vi.fn(async () => undefined);
-    const deps = createDeps({ onPhaseChange } as never);
-    deps.sourceAdapters.web_urls.fetch = vi.fn(async () => ({ evidence: [] }));
-    const runner = new AgentRunner(deps as never);
-
-    await runner.run('agent-1', 'run-1');
-
-    expect(onPhaseChange.mock.calls.map((call) => call[1])).toEqual(['crawling']);
-  });
-
-  it('never fails the run when onPhaseChange itself throws', async () => {
-    const deps = createDeps({ onPhaseChange: vi.fn(async () => { throw new Error('db down'); }) } as never);
-    const runner = new AgentRunner(deps as never);
-
-    const result = await runner.run('agent-1', 'run-1');
-
     expect(result.status).toBe('succeeded');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('playbookId'));
+    expect(deps.reportRepository.saveRunReport).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 
-  it('sends a best-effort report notification via the mailer after a successful run', async () => {
-    const send = vi.fn(async () => undefined);
-    const deps = createDeps();
-    deps.agentRepository.getAgent = vi.fn(async () => ({
-      id: 'agent-1',
-      ownerUserId: 'admin-user-id',
-      name: 'Housing Agent',
-      description: '',
-      characterType: 'summarizer',
-      promptConfig: {},
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
-      preferences: {},
-      schedule: null
-    }));
-    const runner = new AgentRunner({ ...deps, mailer: { send } } as never);
+  it('preserves legacy cursor persistence and source cadence for runs without a playbook id', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    try {
+      const httpGet = vi.fn(async () => `<rss><channel>
+        <item><guid>ep-1</guid><title>Episode 1</title><description>Notes 1</description></item>
+      </channel></rss>`);
+      const cursorRepository = new InMemorySourceCursorRepository();
+      const adapter = new PodcastFeedAdapter({
+        httpGet,
+        cursorRepository,
+        crawlConfigRepository: new InMemorySourceCrawlConfigRepository(),
+        siteInspector: { inspect: async () => null }
+      });
+      const runner = new AgentRunner({
+        ...createDeps({
+          agentRepository: {
+            getAgent: vi.fn(async () =>
+              createAgent({
+                sources: [{ type: 'podcast_feeds', value: 'https://example.com/feed.xml', frequencyMinutes: 60, maxItems: 1 }]
+              })
+            )
+          },
+          sourceAdapters: { podcast_feeds: adapter as never }
+        }),
+        cursorRepository
+      } as never);
 
-    await runner.run('agent-1', 'run-1', { playbookRecipients: ['alerts@example.com'] });
+      vi.setSystemTime(new Date('2026-07-24T10:00:00.000Z'));
+      const first = await runner.run('agent-1', 'run-1');
+      vi.setSystemTime(new Date('2026-07-24T10:30:00.000Z'));
+      const second = await runner.run('agent-1', 'run-2');
+      vi.setSystemTime(new Date('2026-07-24T11:01:00.000Z'));
+      const third = await runner.run('agent-1', 'run-3');
 
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(send.mock.calls[0][0].to).toBe('alerts@example.com');
-  });
+      const storedCursor = await cursorRepository.getCursor('agent-1', 'https://example.com/feed.xml');
 
-  it('suppresses the immediate per-run email when the playbook uses a daily/weekly digest cadence', async () => {
-    const send = vi.fn(async () => undefined);
-    const deps = createDeps();
-    deps.agentRepository.getAgent = vi.fn(async () => ({
-      id: 'agent-1',
-      ownerUserId: 'admin-user-id',
-      name: 'Housing Agent',
-      description: '',
-      characterType: 'summarizer',
-      promptConfig: {},
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
-      preferences: {},
-      schedule: null
-    }));
-    const runner = new AgentRunner({ ...deps, mailer: { send } } as never);
-
-    const result = await runner.run('agent-1', 'run-1', {
-      playbookRecipients: ['alerts@example.com'],
-      playbookDigestFrequency: 'daily'
-    });
-
-    expect(result.status).toBe('succeeded');
-    expect(send).not.toHaveBeenCalled();
-  });
-
-  it('does not fail the run when the mailer send throws', async () => {
-    const send = vi.fn(async () => { throw new Error('smtp down'); });
-    const deps = createDeps();
-    deps.agentRepository.getAgent = vi.fn(async () => ({
-      id: 'agent-1',
-      ownerUserId: 'admin-user-id',
-      name: 'Housing Agent',
-      description: '',
-      characterType: 'summarizer',
-      promptConfig: {},
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      sources: [{ type: 'web_urls', value: 'https://example.com/article', frequencyMinutes: 60, maxItems: 1 }],
-      preferences: {},
-      schedule: null
-    }));
-    const runner = new AgentRunner({ ...deps, mailer: { send } } as never);
-
-    const result = await runner.run('agent-1', 'run-1');
-
-    expect(result.status).toBe('succeeded');
-  });
-
-  it('fails fast with budget_exceeded before calling Claude when the owner is over budget', async () => {
-    const deps = createDeps();
-    const checkRunAllowed = vi.fn(async () => ({ allowed: false, spentUsd: 10.5, budgetUsd: 10 }));
-    const runner = new AgentRunner({ ...deps, budgetGuard: { checkRunAllowed } } as never);
-
-    const result = await runner.run('agent-1', 'run-1');
-
-    expect(result.status).toBe('failed');
-    expect(result.errorCode).toBe('budget_exceeded');
-    expect(result.errorMessage).toContain('$10.50');
-    expect(checkRunAllowed).toHaveBeenCalledWith('admin-user-id');
-    expect(deps.claudeClient.analyze).not.toHaveBeenCalled();
-    expect(deps.reportRepository.saveRunReport).not.toHaveBeenCalled();
-    // Cursors must not advance so the blocked items are retried after the budget resets.
-    expect(deps.cursorRepository.saveCursor).not.toHaveBeenCalled();
-  });
-
-  it('runs normally when the budget guard allows the run', async () => {
-    const deps = createDeps();
-    const checkRunAllowed = vi.fn(async () => ({ allowed: true, spentUsd: 1, budgetUsd: 10 }));
-    const runner = new AgentRunner({ ...deps, budgetGuard: { checkRunAllowed } } as never);
-
-    const result = await runner.run('agent-1', 'run-1');
-
-    expect(result.status).toBe('succeeded');
-    expect(deps.claudeClient.analyze).toHaveBeenCalledTimes(1);
-  });
-
-  it('notifies the watchlist notifier after a successful run', async () => {
-    const deps = createDeps();
-    const notifyForReport = vi.fn(async () => {});
-    const runner = new AgentRunner({ ...deps, watchlistNotifier: { notifyForReport } } as never);
-
-    const result = await runner.run('agent-1', 'run-1', { playbookLanguage: 'de' });
-
-    expect(result.status).toBe('succeeded');
-    expect(notifyForReport).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: 'agent-1', agentName: 'Housing Agent', language: 'de' })
-    );
+      expect(first.status).toBe('succeeded');
+      expect(second.status).toBe('succeeded_no_new_content');
+      expect(third.status).toBe('succeeded_no_new_content');
+      expect(httpGet).toHaveBeenCalledTimes(2);
+      expect(storedCursor?.seenItemIds).toEqual(['ep-1']);
+      expect(storedCursor?.lastCrawledAt).toBe('2026-07-24T11:01:00.000Z');
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });

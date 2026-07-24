@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ClaudeCurationResponseError } from '../analysis/claude-client';
 import { AgentCurationRepository } from './repository';
-import { AgentCurationService, CurationGenerationError, MAX_CURATION_PROFILE_DRAFT_CHARS } from './service';
+import {
+  AgentCurationService,
+  CurationGenerationError,
+  MAX_CURATION_FOLLOW_UP_QUESTIONS,
+  MAX_CURATION_PROFILE_DRAFT_CHARS
+} from './service';
 
 function createRepository() {
   const sessions = new Map<string, any>();
@@ -405,6 +410,54 @@ describe('AgentCurationService', () => {
       expect.objectContaining({
         systemInstruction: expect.not.stringContaining('opening proposal'),
         sourceContext: {}
+      })
+    );
+  });
+
+  it('allows a complete source-aware opening to proceed directly to review', async () => {
+    const { service } = createService();
+    const session = await service.start({
+      ownerUserId: 'owner-1',
+      mode: 'create',
+      sourceContext: { selectedSources: ['https://example.com/research'] }
+    });
+
+    const result = await service.reply(session, 'Create a research digest for executive podcast coverage.');
+
+    expect(result.draft.completeness).toBe('ready_for_review');
+    expect(result.canReview).toBe(true);
+  });
+
+  it('starts with a persisted base agent version when provided', async () => {
+    const { service } = createService();
+
+    const session = await service.start({
+      ownerUserId: 'owner-1',
+      mode: 'create',
+      baseAgentVersionId: 'public-version-1',
+      initialDraft: {
+        name: 'Public Market Analyst',
+        description: 'Tracks public market coverage.',
+        characterType: 'summarizer',
+        systemPrompt: 'Summarize public market podcasts.'
+      }
+    });
+
+    expect(session.baseAgentVersionId).toBe('public-version-1');
+    expect(session.draft.name).toBe('Public Market Analyst');
+  });
+
+  it('instructs the model to stop asking after two essential questions', async () => {
+    const { curateAgent, service } = createService(completion({ message: 'What should this agent watch first?' }));
+    const session = await service.start({ ownerUserId: 'owner-1', mode: 'create', sourceContext: {} });
+    const first = await service.reply(session, 'Build me an agent.');
+    const second = await service.reply(first.session, 'Finance podcasts.');
+    await service.reply(second.session, 'Short actionable summaries.');
+
+    expect(MAX_CURATION_FOLLOW_UP_QUESTIONS).toBe(2);
+    expect(curateAgent.mock.calls[2]?.[0]).toEqual(
+      expect.objectContaining({
+        systemInstruction: expect.stringContaining('Do not ask another question; complete the editable proposal now.')
       })
     );
   });

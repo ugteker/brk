@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import { validateCreateAgentInput, validatePatchAgentInput } from './validation';
+import { validateCreateAgentInput, validatePatchAgentInput, validateCreateAgentVersionInput } from './validation';
 import type {
   Agent,
   AgentListItem,
   AgentShareRecord,
   CloneAgentResult,
   CreateAgentInput,
+  CreateAgentVersionInput,
   MarketplaceAgentListItem,
   PublishAgentInput,
   RecentRun,
@@ -33,6 +34,11 @@ export interface AgentRepositoryLike {
   unpublishAgent(agentId: string): Promise<void>;
   listMarketplaceAgents(): Promise<MarketplaceAgentListItem[]>;
   cloneFromMarketplace(publicationId: string, targetOwnerUserId: string): Promise<CloneAgentResult>;
+
+  // Versioning and saved-agent memberships
+  createAgentVersion(agentId: string, input: CreateAgentVersionInput): Promise<{ id: string; agentId: string; version: number }>;
+  saveAgentVersion(userId: string, agentVersionId: string): Promise<void>;
+  removeSavedAgentVersion(userId: string, agentVersionId: string): Promise<void>;
 }
 
 export interface SourceProbeLike {
@@ -190,8 +196,74 @@ export async function registerAgentRoutes(app: FastifyInstance, repo: AgentRepos
       const agent = await repo.updateAgent(agentId, patch);
       void sendAgentChangeConfirmation(mailer, agent, 'updated', []);
       return reply.status(200).send(agent);
-    } catch {
-      return reply.status(404).send({ code: 'not_found', message: 'Agent not found' });
+    } catch (err: any) {
+      if (err && err.message === 'not_found') {
+        return reply.status(404).send({ code: 'not_found', message: 'Agent not found' });
+      }
+      if (err && err.message === 'immutable_agent_version') {
+        return reply.status(409).send({ code: 'immutable_agent_version', message: 'Agent version is immutable' });
+      }
+      throw err;
+    }
+  });
+
+  // Create a new immutable agent version (edits to execution/prompt fields create versions)
+  app.post('/api/agents/:agentId/versions', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string };
+    const access = await requireAgentAccess(req, agentId, 'edit');
+    if (!access.ok) {
+      return reply.status(access.statusCode).send({ code: access.code, message: access.message });
+    }
+    if (access.reason === 'grant') {
+      return reply.status(403).send({ code: 'forbidden', message: 'Only owner/admin can create versions' });
+    }
+    const input = req.body as CreateAgentVersionInput;
+    const validation = validateCreateAgentVersionInput(input);
+    if (!validation.ok) {
+      return reply.status(400).send({ code: 'validation_error', message: 'Invalid version', fieldErrors: validation.errors });
+    }
+    try {
+      const created = await repo.createAgentVersion(agentId, input);
+      // notify owner of new version using a full agent projection; the notification function is a no-op when there are no recipients
+      const agent = await repo.getAgent(agentId);
+      if (agent) void sendAgentChangeConfirmation(mailer, agent, 'updated', []);
+      return reply.status(201).send(created);
+    } catch (err: any) {
+      if (err && err.message === 'not_found') {
+        return reply.status(404).send({ code: 'not_found', message: 'Agent not found' });
+      }
+      if (err && err.message === 'immutable_agent_version') {
+        return reply.status(409).send({ code: 'immutable_agent_version', message: 'Agent version is immutable' });
+      }
+      throw err;
+    }
+  });
+
+  // Save a published agent version into the user's library (public versions save by membership)
+  app.post('/api/agent-versions/:agentVersionId/save', async (req, reply) => {
+    const { agentVersionId } = req.params as { agentVersionId: string };
+    try {
+      await repo.saveAgentVersion(req.userId!, agentVersionId);
+      return reply.status(204).send();
+    } catch (err: any) {
+      if (err && err.message === 'not_found') {
+        return reply.status(404).send({ code: 'not_found', message: 'Agent version not found' });
+      }
+      throw err;
+    }
+  });
+
+  // Remove a saved agent version from the user's library
+  app.delete('/api/agent-versions/:agentVersionId/save', async (req, reply) => {
+    const { agentVersionId } = req.params as { agentVersionId: string };
+    try {
+      await repo.removeSavedAgentVersion(req.userId!, agentVersionId);
+      return reply.status(204).send();
+    } catch (err: any) {
+      if (err && err.message === 'not_found') {
+        return reply.status(404).send({ code: 'not_found', message: 'Saved agent not found' });
+      }
+      throw err;
     }
   });
 

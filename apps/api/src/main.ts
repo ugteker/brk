@@ -3,7 +3,6 @@ import { buildServer } from './server';
 import { AgentRepository } from './modules/agents/repository';
 import { RunQueueService } from './modules/runs/run-queue.service';
 import { PrismaRunStore } from './modules/runs/prisma-run-store';
-import type { ForcedEpisodeSelection } from './modules/analysis/agent-runner';
 import { startSchedulerLoop } from './modules/schedules/scheduler-loop';
 import { ManualRunTrigger } from './modules/runs/manual-run-trigger';
 import { ensureSqliteSchemaCompatibility, prisma } from './lib/db';
@@ -34,8 +33,11 @@ import { config, isTtsConfigured, isGoogleTtsConfigured } from './config';
 import { AccessRepository } from './modules/access/repository';
 import { DomainAccessResolver } from './modules/access/permissions';
 import { SourceRepository } from './modules/source/repository';
+import { SourceIngestionRepository } from './modules/source/ingestion-repository';
+import { SourceIngestionService } from './modules/source/ingestion-service';
 import { createSourceSearch } from './modules/source/search';
 import { PlaybookRepository } from './modules/playbook/repository';
+import { createPlaybookRunTrigger } from './modules/playbook/run-trigger-factory';
 import { PrismaDigestStore, startDigestLoop } from './modules/playbook/digest';
 import { ReportChatRepository, ReportChatService } from './modules/reports/chat';
 import { WatchlistRepository } from './modules/watchlist/repository';
@@ -52,6 +54,7 @@ import { logger } from './lib/logger';
 import { RealtimeRepository } from './modules/realtime/repository';
 import { startRealtimeCleanupLoop } from './modules/realtime/cleanup-loop';
 import { AgentCurationRepository } from './modules/agent-curation/repository';
+import { CatalogRepository } from './modules/catalog/repository';
 
 async function bootstrapAdminAccount(userRepository: UserRepository) {
   const { email, password } = config.auth.bootstrapAdmin;
@@ -101,9 +104,11 @@ async function start(role: Role) {
   const claudeClient = new ClaudeClient({ apiKey: process.env.ANTHROPIC_API_KEY });
   const userRepository = new UserRepository(prisma);
   const sourceRepository = new SourceRepository(prisma, realtimeEventRepository);
+  const sourceIngestionRepository = new SourceIngestionRepository(prisma);
   const playbookRepository = new PlaybookRepository(prisma, realtimeEventRepository);
   const accessResolver = new DomainAccessResolver(new AccessRepository(prisma));
   const agentCurationRepository = new AgentCurationRepository(prisma);
+  const catalogRepository = new CatalogRepository(prisma);
   const cursorRepository = new SourceCursorRepository(prisma);
   const crawlConfigRepository = new SourceCrawlConfigRepository(prisma);
   const siteInspector = new SiteInspectorClient({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -117,6 +122,15 @@ async function start(role: Role) {
     crawlConfigRepository,
     siteInspector
   };
+  const sourceAdapters = {
+    web_urls: new WebUrlAdapter(smartCrawlerDeps),
+    podcast_feeds: new PodcastFeedAdapter(smartCrawlerDeps),
+    youtube_videos: new YouTubeAdapter({ httpGet: youtubeHttpGet, httpPostJson: defaultHttpPostJson, cursorRepository })
+  };
+  const sourceIngestionService = new SourceIngestionService({
+    repository: sourceIngestionRepository,
+    adapters: sourceAdapters
+  });
 
   const discussionRepository = new DiscussionRepository(prisma, realtimeEventRepository);
   const syntheticSourceService = new SyntheticSourceService(prisma);
@@ -143,17 +157,15 @@ async function start(role: Role) {
     promptRepository,
     artifactRepository,
     reportRepository,
-    claudeClient,
     cursorRepository,
+    claudeClient,
+    ingestionRepository: sourceIngestionRepository,
+    ingestionService: sourceIngestionService,
     mailer,
     watchlistNotifier,
     budgetGuard: usageService,
     onPhaseChange: (agentRunId, phase) => queue.setPhase(agentRunId, phase),
-    sourceAdapters: {
-      web_urls: new WebUrlAdapter(smartCrawlerDeps),
-      podcast_feeds: new PodcastFeedAdapter(smartCrawlerDeps),
-      youtube_videos: new YouTubeAdapter({ httpGet: youtubeHttpGet, httpPostJson: defaultHttpPostJson, cursorRepository })
-    }
+    sourceAdapters
   });
 
   const manualRunTrigger = new ManualRunTrigger(queue, agentRunner);
@@ -192,22 +204,9 @@ async function start(role: Role) {
     playbook: {
       playbookRepository,
       accessResolver,
-      runTrigger: {
-        triggerRun: async (playbookId: string, options?: { forcedEpisode?: { sourceType: string; sourceValue: string; itemLink: string } }) => {
-          const playbook = await playbookRepository.getPlaybook(playbookId);
-          if (!playbook) {
-            return { status: 'failed', errorCode: 'not_found' };
-          }
-          return manualRunTrigger.triggerRun(playbook.agentId, {
-            playbookRecipients: playbook.recipients,
-            playbookLanguage: playbook.language,
-            playbookNotificationsEnabled: playbook.notificationsEnabled,
-            playbookDigestFrequency: playbook.digestFrequency,
-            forcedEpisode: options?.forcedEpisode as ForcedEpisodeSelection | undefined
-          });
-        }
-      }
+      runTrigger: createPlaybookRunTrigger(manualRunTrigger, playbookRepository)
     },
+
     sourceProbe: {
       probeSource: (source, previewLimit) =>
         source.type === 'youtube_videos'
@@ -257,6 +256,7 @@ async function start(role: Role) {
       model: 'claude-sonnet-4-5',
       accessResolver
     },
+    catalog: { repository: catalogRepository },
     db: prisma
   });
 

@@ -372,6 +372,7 @@ export interface SourceProbePreviewItem {
   title: string;
   link: string | null;
   pubDate: string | null;
+  imageUrl?: string | null;
 }
 
 /** The sneak preview always shows the last N items regardless of the configured "per run" cap,
@@ -395,7 +396,12 @@ export interface SourceProbeResult {
 
 /** Maps parsed feed items down to the wizard preview shape, capped to `PREVIEW_ITEM_COUNT`. */
 export function toPreviewItems(items: FeedItem[], limit: number = PREVIEW_ITEM_COUNT): SourceProbePreviewItem[] {
-  return items.slice(0, limit).map((item) => ({ title: item.title || '(untitled)', link: item.link, pubDate: item.pubDate }));
+  return items.slice(0, limit).map((item) => ({
+    title: item.title || '(untitled)',
+    link: item.link,
+    pubDate: item.pubDate,
+    imageUrl: item.imageUrl ?? null
+  }));
 }
 
 /**

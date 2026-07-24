@@ -7,6 +7,7 @@ export type RunPhase = 'crawling' | 'analyzing' | 'notifying';
 
 export interface AgentScheduleRecord {
   agentId: string;
+  agentVersionId?: string;
   nextRunAt: Date;
   enabled: boolean;
   playbookId?: string;
@@ -15,6 +16,7 @@ export interface AgentScheduleRecord {
 export interface AgentRunRecord {
   id: string;
   agentId: string;
+  agentVersionId?: string;
   scheduledFor: Date;
   status: RunStatus;
   phase?: RunPhase | null;
@@ -31,11 +33,12 @@ export interface AgentRunRecord {
   playbookLanguage?: string;
   playbookNotificationsEnabled?: boolean;
   playbookDigestFrequency?: string;
+  playbookMaxItemsPerSource?: number;
 }
 
 export interface RunStore {
   getDueSchedules(now: Date): Promise<AgentScheduleRecord[]>;
-  upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string): Promise<void>;
+  upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string, agentVersionId?: string): Promise<void>;
   claimNextQueuedRun(workerId: string): Promise<AgentRunRecord | null>;
   setPhase(runId: string, phase: RunPhase): Promise<void>;
   completeRun(
@@ -60,7 +63,7 @@ export class InMemoryRunStore implements RunStore {
     return this.schedules.filter((s) => s.enabled && s.nextRunAt.getTime() <= now.getTime());
   }
 
-  async upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string): Promise<void> {
+  async upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string, agentVersionId?: string): Promise<void> {
     const exists = this.runs.some(
       (r) => r.agentId === agentId && r.scheduledFor.getTime() === scheduledFor.getTime()
     );
@@ -70,6 +73,7 @@ export class InMemoryRunStore implements RunStore {
     this.runs.push({
       id: `run-${this.seq}`,
       agentId,
+      agentVersionId,
       scheduledFor,
       status: 'queued',
       phase: null,
@@ -122,13 +126,18 @@ export class RunQueueService {
   async enqueueDueRuns(now: Date): Promise<number> {
     const due = await this.store.getDueSchedules(now);
     for (const schedule of due) {
-      await this.store.upsertQueuedRun(schedule.agentId, schedule.nextRunAt, schedule.playbookId);
+      await this.store.upsertQueuedRun(schedule.agentId, schedule.nextRunAt, schedule.playbookId, schedule.agentVersionId);
     }
     return due.length;
   }
 
-  async enqueueImmediateRun(agentId: string, now: Date = new Date()): Promise<void> {
-    await this.store.upsertQueuedRun(agentId, now);
+  async enqueueImmediateRun(
+    agentId: string,
+    now: Date = new Date(),
+    playbookId?: string,
+    agentVersionId?: string
+  ): Promise<void> {
+    await this.store.upsertQueuedRun(agentId, now, playbookId, agentVersionId);
   }
 
   async claimNextRun(workerId: string): Promise<AgentRunRecord | null> {

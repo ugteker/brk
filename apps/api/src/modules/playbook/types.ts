@@ -1,4 +1,5 @@
 export type PlaybookScheduleInput =
+  | { mode: 'manual' }
   | { mode: 'interval'; intervalMinutes: number }
   | { mode: 'daily'; dailyTime: string; timezone: string }
   | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string };
@@ -13,6 +14,7 @@ export type FollowTargetType = 'channel' | 'episode';
 
 export interface CreatePlaybookInput {
   agentId: string;
+  agentVersionId?: string;
   name: string;
   description?: string;
   enabled?: boolean;
@@ -49,6 +51,7 @@ export interface UpdatePlaybookInput {
 export interface Playbook {
   id: string;
   agentId: string;
+  agentVersionId: string | null;
   name: string;
   description: string;
   enabled: boolean;
@@ -66,7 +69,7 @@ export interface Playbook {
   followTargetTitle?: string | null;
   language: string;
   lastRunAt: Date | null;
-  nextRunAt: Date;
+  nextRunAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

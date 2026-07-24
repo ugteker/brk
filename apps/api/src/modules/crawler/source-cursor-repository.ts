@@ -97,7 +97,14 @@ export class InMemorySourceCursorRepository implements SourceCursorRepositoryLik
   }
 
   async saveCursor(state: SourceCursorState): Promise<void> {
-    this.cursors.set(this.key(state.agentId, state.sourceValue), state);
+    const key = this.key(state.agentId, state.sourceValue);
+    const existing = this.cursors.get(key);
+    const lastCrawledAt = state.lastCrawledAt ?? existing?.lastCrawledAt;
+    this.cursors.set(key, {
+      ...existing,
+      ...state,
+      ...(lastCrawledAt !== undefined ? { lastCrawledAt } : {})
+    });
   }
 
   async touchCrawlAttempt(agentId: string, sourceValue: string, timestampIso: string): Promise<void> {

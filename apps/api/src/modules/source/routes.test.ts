@@ -284,7 +284,7 @@ describe('source routes', () => {
     expect(deleteRes.statusCode).toBe(204);
   });
 
-  it('enforces ownership for non-admin users and allows admins to access all sources', async () => {
+  it('enforces ownership for non-admin users and keeps library list user-scoped for admins', async () => {
     const sourceRepo = new InMemorySourceRepository();
     const userRepository = new InMemoryUserRepository();
     const owner = await userRepository.createWithPassword('owner@example.com', 'hash', 'Owner', 'user');
@@ -316,7 +316,7 @@ describe('source routes', () => {
       headers: authCookieHeader(admin.id)
     });
     expect(adminList.statusCode).toBe(200);
-    expect(adminList.json<SourceRecord[]>()).toHaveLength(1);
+    expect(adminList.json<SourceRecord[]>()).toHaveLength(0);
   });
 
   it('adds source-scoped report counts to the library list', async () => {
@@ -745,6 +745,61 @@ describe('source routes', () => {
       coverImageUrl: 'https://cdn.example.com/cover.png'
     });
   });
+  it('lets authenticated users save and remove sources without cloning (idempotent and scoped)', async () => {
+    const inMemory = new InMemorySourceRepository();
+    // spy on cloneFromMarketplace to ensure it is NOT called
+    const cloneSpy = vi.fn(async () => ({ source: null, cloned: false }));
+    // wrap the repo to capture save/remove calls
+    const saveSpy = vi.fn(async (userId: string, sourceId: string) => {
+      return inMemory.getSource(sourceId);
+    });
+    const removeSpy = vi.fn(async (userId: string, sourceId: string) => {});
+
+    const wrapperRepo: SourceRepositoryLike = Object.assign(inMemory as unknown as SourceRepositoryLike, {
+      cloneFromMarketplace: cloneSpy as any,
+      saveSource: saveSpy as any,
+      removeSavedSource: removeSpy as any
+    });
+
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      source: { sourceRepository: wrapperRepo, accessResolver: new DomainAccessResolver(inMemory) }
+    });
+
+    // create a source as the authenticated test user
+    const createRes = await app.inject({ method: 'POST', url: '/api/sources', headers: authCookieHeader(), payload: { type: 'web_urls', value: 'https://save.example' } });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json<SourceRecord>();
+
+    // save it (should call saveSource with the authenticated user id)
+    const saveRes = await app.inject({ method: 'POST', url: `/api/sources/${created.id}/save`, headers: authCookieHeader() });
+    expect(saveRes.statusCode).toBe(200);
+    expect(saveSpy).toHaveBeenCalledWith('test-user', created.id);
+
+    // idempotent save
+    const saveAgain = await app.inject({ method: 'POST', url: `/api/sources/${created.id}/save`, headers: authCookieHeader() });
+    expect(saveAgain.statusCode).toBe(200);
+
+    // remove (idempotent)
+    const removeRes = await app.inject({ method: 'DELETE', url: `/api/sources/${created.id}/save`, headers: authCookieHeader() });
+    expect(removeRes.statusCode).toBe(200);
+    expect(removeSpy).toHaveBeenCalledWith('test-user', created.id);
+
+    const removeAgain = await app.inject({ method: 'DELETE', url: `/api/sources/${created.id}/save`, headers: authCookieHeader() });
+    expect(removeAgain.statusCode).toBe(200);
+
+    // unknown source returns 404
+    const unknownSave = await app.inject({ method: 'POST', url: '/api/sources/does-not-exist/save', headers: authCookieHeader() });
+    expect(unknownSave.statusCode).toBe(404);
+
+    const unknownRemove = await app.inject({ method: 'DELETE', url: '/api/sources/does-not-exist/save', headers: authCookieHeader() });
+    expect(unknownRemove.statusCode).toBe(404);
+
+    expect(cloneSpy).not.toHaveBeenCalled();
+  });
+
 });
 
 describe('source search route', () => {

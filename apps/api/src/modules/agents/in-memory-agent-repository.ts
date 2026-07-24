@@ -1,6 +1,6 @@
 import type { AgentRepositoryLike } from './routes';
 import { DEFAULT_CHARACTER_TYPE } from './types';
-import type { Agent, AgentListItem, CreateAgentInput, RecentRun } from './types';
+import type { Agent, AgentListItem, CreateAgentInput, CreateAgentVersionInput, PromptConfig, RecentRun } from './types';
 
 function deriveAgentName(characterType: string, personality?: string): string {
   const character = characterType
@@ -29,6 +29,9 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
   >();
   private nextGrantId = 1;
   private nextPublicationId = 1;
+  private agentVersions = new Map<string, { id: string; agentId: string; version: number; model: string; systemPrompt: string; name: string; description: string; characterType: string; promptConfig: PromptConfig; iconAssetKey: string | null; basedOnAgentVersionId?: string | null }[]>();
+  private savedVersions = new Map<string, Set<string>>();
+  private nextVersionId = 1;
 
   async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
     const id = `agent-${this.agents.size + 1}`;
@@ -55,18 +58,62 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
   async updateAgent(agentId: string, patch: Partial<CreateAgentInput>): Promise<Agent> {
     const existing = this.agents.get(agentId);
     if (!existing) throw new Error('not_found');
+
+    // If execution fields are being changed, create a new immutable version and update identity fields only
+    if (patch.characterType !== undefined || patch.promptConfig !== undefined) {
+      // Disallow when there's a public publication
+      const publication = [...this.publications.values()].find((p) => p.agentId === agentId && p.visibility === 'public' && p.retiredAt === null);
+      if (publication) throw new Error('immutable_agent_version');
+
+      const versions = this.agentVersions.get(agentId) ?? [];
+      const latest = versions.length > 0 ? versions[versions.length - 1] : undefined;
+      const latestPromptConfig = latest?.promptConfig ?? {};
+      const latestCharacterType = latest?.characterType ?? existing.characterType;
+
+      const characterType = patch.characterType ?? latestCharacterType;
+      const promptConfig = patch.promptConfig ?? latestPromptConfig;
+
+      const name = patch.name !== undefined ? (patch.name || '') : latest?.name ?? deriveAgentName(characterType, promptConfig.personality_label ?? promptConfig.personality_id);
+      const description = patch.description !== undefined ? patch.description : latest?.description ?? existing.description;
+
+      // Create a new version representing the execution change
+      await this.createAgentVersion(agentId, {
+        name,
+        description,
+        characterType: characterType,
+        promptConfig: promptConfig,
+        model: latest?.model ?? '',
+        systemPrompt: latest?.systemPrompt ?? '',
+        iconAssetKey: latest?.iconAssetKey ?? null,
+        basedOnAgentVersionId: latest?.id ?? null
+      } as CreateAgentVersionInput);
+
+      // Update identity/status fields only on the agent row
+      const updated: Agent = {
+        ...existing,
+        name: patch.name !== undefined ? patch.name.trim() : existing.name,
+        description: patch.description !== undefined ? patch.description : existing.description,
+        status: patch.active !== undefined ? (patch.active ? 'active' : 'disabled') : existing.status,
+        sources: patch.sources ? patch.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60, maxItems: s.maxItems ?? 1 })) : existing.sources,
+        preferences: patch.preferences ?? existing.preferences,
+        schedule: existing.schedule,
+        updatedAt: new Date()
+      };
+      this.agents.set(agentId, updated);
+      return updated;
+    }
+
+    // Non-execution-field updates simply update the agent row
     const characterType = patch.characterType ?? existing.characterType;
     const promptConfig = patch.promptConfig ?? existing.promptConfig;
     const updated: Agent = {
       ...existing,
-      name: deriveAgentName(characterType, promptConfig.personality_label ?? promptConfig.personality_id),
+      name: patch.name !== undefined ? patch.name.trim() : deriveAgentName(characterType, promptConfig.personality_label ?? promptConfig.personality_id),
       description: patch.description ?? existing.description,
       characterType,
       promptConfig,
       status: patch.active !== undefined ? (patch.active ? 'active' : 'disabled') : existing.status,
-      sources: patch.sources
-        ? patch.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60, maxItems: s.maxItems ?? 1 }))
-        : existing.sources,
+      sources: patch.sources ? patch.sources.map((s) => ({ ...s, frequencyMinutes: s.frequencyMinutes ?? 60, maxItems: s.maxItems ?? 1 })) : existing.sources,
       preferences: patch.preferences ?? existing.preferences,
       schedule: existing.schedule,
       updatedAt: new Date()
@@ -201,4 +248,60 @@ export class InMemoryAgentRepository implements AgentRepositoryLike {
     });
     return { agent: cloned, cloned: true };
   }
+
+  async createAgentVersion(agentId: string, input: CreateAgentVersionInput): Promise<{ id: string; agentId: string; version: number }> {
+    if (!this.agents.has(agentId)) throw new Error('not_found');
+    const versions = this.agentVersions.get(agentId) ?? [];
+    const nextVersion = (versions.length > 0 ? versions[versions.length - 1].version : 0) + 1;
+    const id = `version-${this.nextVersionId++}`;
+    const v = {
+      id,
+      agentId,
+      version: nextVersion,
+      model: input.model,
+      systemPrompt: input.systemPrompt,
+      name: input.name,
+      description: input.description ?? '',
+      characterType: input.characterType,
+      promptConfig: input.promptConfig ?? {},
+      iconAssetKey: input.iconAssetKey ?? null,
+      basedOnAgentVersionId: input.basedOnAgentVersionId ?? null
+    };
+    versions.push(v);
+    this.agentVersions.set(agentId, versions);
+    return { id: v.id, agentId: v.agentId, version: v.version };
+  }
+
+  async saveAgentVersion(userId: string, agentVersionId: string): Promise<void> {
+    // Locate the version and its agent
+    let found: { id: string; agentId: string } | undefined;
+    for (const versions of this.agentVersions.values()) {
+      const v = versions.find((vv) => vv.id === agentVersionId);
+      if (v) {
+        found = v;
+        break;
+      }
+    }
+    if (!found) throw new Error('not_found');
+    const agent = this.agents.get(found.agentId);
+    if (!agent) throw new Error('not_found');
+
+    const isOwner = agent.ownerUserId === userId;
+    const publication = [...this.publications.values()].find((p) => p.agentId === found!.agentId && p.visibility === 'public' && p.retiredAt === null);
+    const isPublic = !!publication;
+
+    // Fail closed: only owner or public publications may be saved
+    if (!isOwner && !isPublic) throw new Error('not_found');
+
+    const set = this.savedVersions.get(userId) ?? new Set<string>();
+    set.add(agentVersionId);
+    this.savedVersions.set(userId, set);
+  }
+
+  async removeSavedAgentVersion(userId: string, agentVersionId: string): Promise<void> {
+    const set = this.savedVersions.get(userId);
+    if (!set || !set.has(agentVersionId)) throw new Error('not_found');
+    set.delete(agentVersionId);
+  }
 }
+

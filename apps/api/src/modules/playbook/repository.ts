@@ -19,6 +19,9 @@ type PlaybookDb = Pick<PrismaClient, 'playbook' | 'playbookSource' | 'accessGran
 const noopRealtimeEventWriter: RealtimeEventWriter = { append: async () => {} };
 
 function scheduleFromRow(row: any): PlaybookScheduleInput {
+  if (row.mode === 'manual') {
+    return { mode: 'manual' };
+  }
   if (row.mode === 'weekly') {
     return {
       mode: 'weekly',
@@ -41,6 +44,16 @@ function scheduleFromRow(row: any): PlaybookScheduleInput {
 }
 
 function schedulePatchData(schedule: PlaybookScheduleInput, now: Date) {
+  if (schedule.mode === 'manual') {
+    return {
+      mode: 'manual',
+      intervalMinutes: null,
+      dailyTime: null,
+      timezone: null,
+      daysOfWeekJson: null,
+      nextRunAt: null
+    };
+  }
   return {
     mode: schedule.mode,
     intervalMinutes: schedule.mode === 'interval' ? schedule.intervalMinutes : null,
@@ -62,10 +75,11 @@ function parseRecipients(input: string | null | undefined): string[] {
   }
 }
 
-function mapPlaybook(row: any): Playbook {
+export function mapPlaybook(row: any): Playbook {
   return {
     id: row.id,
     agentId: row.agentId,
+    agentVersionId: row.agentVersionId ?? null,
     name: row.name,
     description: row.description ?? '',
     enabled: row.enabled,
@@ -116,6 +130,7 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
       const created = await tx.playbook.create({
         data: {
           agentId: input.agentId,
+          agentVersionId: input.agentVersionId ?? null,
           name: input.name,
           description: input.description ?? '',
           enabled: input.enabled ?? true,
@@ -253,6 +268,9 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
     const existing = await this.getPlaybook(playbookId);
     if (!existing) {
       throw new Error('not_found');
+    }
+    if (existing.schedule.mode === 'manual') {
+      return;
     }
     await this.db.playbook.update({
       where: { id: playbookId },

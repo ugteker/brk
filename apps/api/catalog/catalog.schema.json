@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maydoz.local/catalog.schema.json",
+  "title": "Curated catalog bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sources", "agents", "demos"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourceEntry"
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/agentEntry"
+      }
+    },
+    "demos": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/demoEntry"
+      }
+    }
+  },
+  "$defs": {
+    "locale": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(?:-[a-z0-9]+)*$"
+    },
+    "sourceType": {
+      "type": "string",
+      "enum": ["web_urls", "podcast_feeds", "youtube_videos"]
+    },
+    "characterType": {
+      "type": "string",
+      "enum": ["finance_expert", "teacher", "trainer", "philosopher", "influencer", "summarizer"]
+    },
+    "previewItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "link": { "type": "string", "minLength": 1 },
+        "pubDate": { "type": ["string", "null"] },
+        "hasAudio": { "type": "boolean" }
+      }
+    },
+    "sourceMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverImageUrl", "previewItems"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "coverImageUrl": { "type": ["string", "null"] },
+        "itemCount": { "type": "integer", "minimum": 0 },
+        "audioCount": { "type": "integer", "minimum": 0 },
+        "previewItems": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/previewItem" }
+        }
+      }
+    },
+    "sourceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slug",
+        "catalogVersion",
+        "locale",
+        "title",
+        "summary",
+        "type",
+        "value",
+        "sourceTypes",
+        "topics",
+        "editorialRank",
+        "metadata"
+      ],
+      "properties": {
+        "slug": { "type": "string", "minLength": 1 },
+        "catalogVersion": { "type": "integer", "minimum": 1 },
+        "locale": { "$ref": "#/$defs/locale" },
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string" },
+        "type": { "$ref": "#/$defs/sourceType" },
+        "value": { "type": "string", "minLength": 1 },
+        "sourceTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sourceType" },
+          "minItems": 1
+        },
+        "topics": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "editorialRank": { "type": "integer", "minimum": 0 },
+        "metadata": { "$ref": "#/$defs/sourceMetadata" }
+      }
+    },
+    "promptSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "characterType", "promptConfig", "model", "systemPrompt"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "characterType": { "$ref": "#/$defs/characterType" },
+        "promptConfig": { "type": "object" },
+        "model": { "type": "string", "minLength": 1 },
+        "systemPrompt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "agentEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slug",
+        "catalogVersion",
+        "locale",
+        "title",
+        "summary",
+        "sourceTypes",
+        "topics",
+        "language",
+        "editorialRank",
+        "iconAssetKey",
+        "iconLicense",
+        "promptSnapshot"
+      ],
+      "properties": {
+        "slug": { "type": "string", "minLength": 1 },
+        "catalogVersion": { "type": "integer", "minimum": 1 },
+        "locale": { "$ref": "#/$defs/locale" },
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string" },
+        "sourceTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sourceType" },
+          "minItems": 1
+        },
+        "topics": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "language": { "$ref": "#/$defs/locale" },
+        "editorialRank": { "type": "integer", "minimum": 0 },
+        "iconAssetKey": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "iconLicense": { "type": "string", "const": "MIT" },
+        "promptSnapshot": { "$ref": "#/$defs/promptSnapshot" }
+      }
+    },
+    "demoEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slug", "locale", "title", "disclosure", "sourceSlug", "agentSlug", "report"],
+      "properties": {
+        "slug": { "type": "string", "minLength": 1 },
+        "locale": { "$ref": "#/$defs/locale" },
+        "title": { "type": "string", "minLength": 1 },
+        "disclosure": { "type": "string", "minLength": 1 },
+        "sourceSlug": { "type": "string", "minLength": 1 },
+        "agentSlug": { "type": "string", "minLength": 1 },
+        "report": {}
+      }
+    }
+  }
+}

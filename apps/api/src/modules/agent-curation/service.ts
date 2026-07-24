@@ -21,15 +21,21 @@ export const MAX_CURATION_SOURCE_CONTEXT_CHARS = 16_000;
 export const MAX_CURATION_PROFILE_DRAFT_CHARS = 8_000;
 export const MAX_CURATION_CONVERSATION_MESSAGES = 20;
 export const MAX_CURATION_CLIENT_REQUEST_ID_CHARS = 128;
+export const MAX_CURATION_FOLLOW_UP_QUESTIONS = 2;
 
 export const CURATION_SYSTEM_INSTRUCTION = [
   'You help users curate an AI agent profile through a short, guided conversation.',
   'Return a concise assistant message, a profile-only draft patch, suggested replies, and the fields still missing.',
-  'Interview before you finalize: unless the user already gave a detailed brief, ask focused follow-up questions - one short question per reply - to learn (1) what the agent should watch or analyze, (2) the tone and audience, and (3) the desired output style and depth. A one-line or vague request (e.g. just a name or a two-word idea) must never be enough to complete the profile; ask at least two follow-up questions first.',
+  'Propose the most complete useful agent profile immediately from explicit user input and available source context.',
+  'Ask one short follow-up only when information essential to a useful result cannot be inferred safely.',
+  'Ask no more than two follow-up questions in the entire session.',
+  'When the follow-up limit is reached, make conservative editable choices and return a complete profile for review.',
   'Only fill systemPrompt once you have enough detail from the conversation to write a specific, useful prompt. Leave it out of the patch until then.',
+  'Never treat source-derived details as locked requirements.',
   'Always infer characterType yourself from the conversation; never ask the user about character types or mention the term.',
   'Suggested replies must be short, pickable answers to the question you just asked (2-4 of them), not generic phrases.',
-  'Respect explicit user corrections over any prior profile direction.'
+  'Respect explicit user corrections over any prior profile direction.',
+  'Explicit user corrections always win.'
 ].join('\n');
 
 const CURATION_SOURCE_OPENING_INSTRUCTION = [
@@ -62,6 +68,7 @@ export interface StartCurationInput {
   ownerUserId: string;
   mode: CurationSession['mode'];
   targetAgentId?: string | null;
+  baseAgentVersionId?: string | null;
   sourceContext?: CurationSession['sourceContext'];
   currentAgentProfile?: CurationDraftPatch;
   initialDraft?: CurationDraftPatch;
@@ -342,6 +349,10 @@ function hasSelectedSourceContext(sourceContext: CurationSession['sourceContext'
   );
 }
 
+function countAssistantFollowUpQuestions(messages: CurationSession['messages']): number {
+  return messages.filter((message) => message.role === 'assistant' && message.content.trim().endsWith('?')).length;
+}
+
 function toReplyResult(reply: CurationSavedReply, session: CurationSession): CurationReplyResult {
   return {
     assistantMessage: reply.assistantMessage,
@@ -382,6 +393,7 @@ export class AgentCurationService {
     return this.deps.repository.createSession(input.ownerUserId, {
       mode: input.mode,
       targetAgentId: input.targetAgentId,
+      baseAgentVersionId: input.baseAgentVersionId,
       sourceContext,
       draft
     });
@@ -427,10 +439,16 @@ export class AgentCurationService {
     assertValidCurationDraftPatch(currentAgentProfile);
     const isOpeningTurn = freshSession.messages.filter((message) => message.role === 'user').length === 1;
     const useSourceContext = isOpeningTurn && hasSelectedSourceContext(freshSession.sourceContext);
+    const questionCount = countAssistantFollowUpQuestions(freshSession.messages);
+    const followUpConstraint =
+      questionCount >= MAX_CURATION_FOLLOW_UP_QUESTIONS
+        ? '\nDo not ask another question; complete the editable proposal now.'
+        : '';
     const request: ClaudeAgentCurationRequest = {
       model: this.deps.model,
       systemInstruction:
         CURATION_SYSTEM_INSTRUCTION +
+        followUpConstraint +
         (useSourceContext ? `\n${CURATION_SOURCE_OPENING_INSTRUCTION}` : '') +
         curationLanguageDirective(freshSession.sourceContext),
       conversation: freshSession.messages

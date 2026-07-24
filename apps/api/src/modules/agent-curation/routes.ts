@@ -58,10 +58,20 @@ type CuratedAgentRepositoryLike = Pick<AgentRepositoryLike, 'getAgent' | 'update
 type CuratedPromptRepositoryLike = Pick<PromptRepository, 'savePromptVersion'> & {
   saveCuratedPromptVersion(
     agentId: string,
-    input: { model: string; systemPrompt: string; enabled: boolean },
+    input: { model: string; systemPrompt: string; enabled: boolean; basedOnAgentVersionId?: string | null },
     curationSessionId: string
   ): Promise<unknown>;
   getPromptVersionByCurationSessionId(curationSessionId: string): Promise<{ agentId: string } | null>;
+  getPromptVersionById(agentVersionId: string): Promise<{
+    id: string;
+    agentId: string;
+    enabled: boolean;
+    publishedAt: Date | null;
+    name: string;
+    description: string;
+    characterType: string;
+    systemPrompt: string;
+  } | null>;
 };
 
 export interface AgentCurationFeatureDeps {
@@ -195,6 +205,7 @@ function parseCurationDraft(value: unknown): CurationDraft {
 function parseStartInput(value: unknown): {
   mode: 'create' | 'update';
   targetAgentId?: string | null;
+  baseAgentVersionId?: string | null;
   sourceContext?: CurationSourceContext;
   currentAgentProfile?: CurationDraftPatch;
   initialDraft?: CurationDraftPatch;
@@ -209,6 +220,12 @@ function parseStartInput(value: unknown): {
   if (value.mode === 'update' && (typeof value.targetAgentId !== 'string' || value.targetAgentId.trim().length === 0)) {
     throw new CurationInputError('invalid_curation_draft_patch');
   }
+  if (value.baseAgentVersionId !== undefined && value.baseAgentVersionId !== null && typeof value.baseAgentVersionId !== 'string') {
+    throw new CurationInputError('invalid_curation_draft_patch');
+  }
+  if (value.mode !== 'create' && value.baseAgentVersionId !== undefined) {
+    throw new CurationInputError('invalid_curation_draft_patch');
+  }
   if (value.sourceContext !== undefined && !isRecord(value.sourceContext)) {
     throw new CurationInputError('invalid_curation_source_context');
   }
@@ -216,6 +233,7 @@ function parseStartInput(value: unknown): {
   return {
     mode: value.mode,
     ...(value.targetAgentId === undefined ? {} : { targetAgentId: value.targetAgentId }),
+    ...(value.baseAgentVersionId === undefined ? {} : { baseAgentVersionId: value.baseAgentVersionId }),
     ...(value.sourceContext === undefined ? {} : { sourceContext: value.sourceContext }),
     ...(value.currentAgentProfile === undefined ? {} : { currentAgentProfile: parseDraftPatch(value.currentAgentProfile) }),
     ...(value.initialDraft === undefined ? {} : { initialDraft: parseDraftPatch(value.initialDraft) }),
@@ -357,6 +375,8 @@ export async function registerAgentCurationRoutes(app: FastifyInstance, deps: Ag
     }
 
     let sourceContext = input.sourceContext;
+    let initialDraft = input.initialDraft;
+    let baseAgentVersionId: string | null = null;
     if (input.mode === 'update') {
       const access = await requireAgentEditAccess(deps, req, input.targetAgentId!);
       if (!access.ok) {
@@ -366,10 +386,37 @@ export async function registerAgentCurationRoutes(app: FastifyInstance, deps: Ag
         ...(input.sourceContext ?? {}),
         [CURATION_TARGET_AGENT_UPDATED_AT_KEY]: access.agent.updatedAt.toISOString()
       };
+    } else if (input.baseAgentVersionId) {
+      const baseVersion = await deps.promptRepository.getPromptVersionById(input.baseAgentVersionId);
+      if (!baseVersion) {
+        return reply.status(404).send({ code: 'not_found', message: 'Base agent version not found' });
+      }
+      const baseAgent = await deps.agentRepository.getAgent(baseVersion.agentId);
+      if (!baseAgent) {
+        return reply.status(404).send({ code: 'not_found', message: 'Base agent version not found' });
+      }
+      const accessible = (baseVersion.publishedAt !== null && baseVersion.enabled) || baseAgent.ownerUserId === req.userId;
+      if (!accessible) {
+        return reply.status(403).send({ code: 'forbidden', message: 'Agent access denied' });
+      }
+      baseAgentVersionId = baseVersion.id;
+      initialDraft = {
+        name: baseVersion.name,
+        description: baseVersion.description,
+        characterType: isCharacterType(baseVersion.characterType) ? baseVersion.characterType : 'summarizer',
+        systemPrompt: baseVersion.systemPrompt,
+        ...(initialDraft ?? {})
+      };
     }
 
     try {
-      const session = await service.start({ ownerUserId: req.userId!, ...input, sourceContext });
+      const session = await service.start({
+        ownerUserId: req.userId!,
+        ...input,
+        baseAgentVersionId,
+        sourceContext,
+        initialDraft
+      });
       return reply.status(201).send(session);
     } catch (error) {
       if (error instanceof CurationInputError) return sendInputError(reply, error);
@@ -595,7 +642,8 @@ export async function registerAgentCurationRoutes(app: FastifyInstance, deps: Ag
         {
           model: deps.model,
           systemPrompt: finalization.draft.systemPrompt,
-          enabled: true
+          enabled: true,
+          basedOnAgentVersionId: reservedSession.baseAgentVersionId
         },
         reservedSession.id
       );

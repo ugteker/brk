@@ -91,6 +91,19 @@ describe('parseFeedItems', () => {
     expect(items[1].imageUrl).toBe('https://cdn.example.com/show-cover.jpg');
   });
 
+  it('extracts YouTube media thumbnails as episode images', () => {
+    const xml = `<feed>
+      <entry>
+        <id>yt:video:abc123</id>
+        <title>Episode 12</title>
+        <link href="https://www.youtube.com/watch?v=abc123"/>
+        <media:thumbnail url="https://i.ytimg.com/vi/abc123/hqdefault.jpg"/>
+      </entry>
+    </feed>`;
+
+    expect(parseFeedItems(xml)[0].imageUrl).toBe('https://i.ytimg.com/vi/abc123/hqdefault.jpg');
+  });
+
   it('does not treat episode-level itunes images as feed metadata', () => {
     const xml = `<rss><channel>
       <title>Market Pulse</title>

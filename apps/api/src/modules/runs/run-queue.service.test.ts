@@ -40,4 +40,25 @@ describe('RunQueueService', () => {
 
     expect(store.runs.length).toBe(1);
   });
+
+  it('carries the pinned agent version from schedule to claimed run', async () => {
+    const store = new InMemoryRunStore();
+    await store.addSchedule({
+      agentId: 'agent-a',
+      agentVersionId: 'version-3',
+      playbookId: 'playbook-1',
+      nextRunAt: new Date('2026-07-10T10:00:00.000Z'),
+      enabled: true
+    });
+
+    const service = new RunQueueService(store);
+    await service.enqueueDueRuns(new Date('2026-07-10T10:00:00.000Z'));
+
+    const run = await service.claimNextRun('worker-a');
+
+    expect(run).toMatchObject({
+      playbookId: 'playbook-1',
+      agentVersionId: 'version-3'
+    });
+  });
 });

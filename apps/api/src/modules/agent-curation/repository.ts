@@ -120,9 +120,13 @@ function normalizeCreateSessionInput(input: unknown) {
   if (input.targetAgentId !== undefined && input.targetAgentId !== null && typeof input.targetAgentId !== 'string') {
     throw new Error('invalid_curation_session');
   }
+  if (input.baseAgentVersionId !== undefined && input.baseAgentVersionId !== null && typeof input.baseAgentVersionId !== 'string') {
+    throw new Error('invalid_curation_session');
+  }
 
   return {
     targetAgentId: input.targetAgentId ?? null,
+    baseAgentVersionId: input.baseAgentVersionId ?? null,
     mode: parseMode(input.mode),
     sourceContextJson: serializeSourceContext(input.sourceContext),
     draftJson: serializeDraft(input.draft)
@@ -237,6 +241,7 @@ function mapSession(row: any): CurationSession {
     id: row.id,
     ownerUserId: row.ownerUserId,
     targetAgentId: row.targetAgentId ?? null,
+    baseAgentVersionId: row.baseAgentVersionId ?? null,
     mode: row.mode,
     status: row.status,
     revision: parseRevision(row.revision),
@@ -258,6 +263,7 @@ export class AgentCurationRepository {
       data: {
         ownerUserId,
         targetAgentId: normalizedInput.targetAgentId,
+        baseAgentVersionId: normalizedInput.baseAgentVersionId,
         mode: normalizedInput.mode,
         sourceContextJson: normalizedInput.sourceContextJson,
         draftJson: normalizedInput.draftJson

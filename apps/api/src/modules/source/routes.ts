@@ -76,7 +76,9 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
   });
 
   app.get('/api/sources', async (req, reply) => {
-    const rows = await deps.sourceRepository.listSources(req.userRole === 'admin' ? undefined : req.userId!);
+    // Library view is always user-scoped (owned + explicitly saved). Admin users
+    // can still inspect other sources via marketplace/public endpoints.
+    const rows = await deps.sourceRepository.listSources(req.userId!);
     const counts = deps.reportRepository
       ? await deps.reportRepository.countReportsForSourceValues(rows.map((source) => source.value))
       : {};
@@ -247,6 +249,26 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
       suggestions.push({ ...curated, origin: 'curated', followed: ownValues.has(curated.value) });
     }
     return reply.status(200).send(suggestions);
+  });
+
+  app.post('/api/sources/:sourceId/save', async (req, reply) => {
+    const { sourceId } = req.params as { sourceId: string };
+    const source = await deps.sourceRepository.getSource(sourceId);
+    if (!source) {
+      return reply.status(404).send({ code: 'not_found', message: 'Source not found' });
+    }
+    const saved = await deps.sourceRepository.saveSource(req.userId!, sourceId);
+    return reply.status(200).send(saved);
+  });
+
+  app.delete('/api/sources/:sourceId/save', async (req, reply) => {
+    const { sourceId } = req.params as { sourceId: string };
+    const source = await deps.sourceRepository.getSource(sourceId);
+    if (!source) {
+      return reply.status(404).send({ code: 'not_found', message: 'Source not found' });
+    }
+    await deps.sourceRepository.removeSavedSource(req.userId!, sourceId);
+    return reply.status(200).send();
   });
 
   app.post('/api/sources/marketplace/:publicationId/clone', async (req, reply) => {

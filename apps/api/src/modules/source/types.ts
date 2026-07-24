@@ -7,6 +7,7 @@ export interface SourcePreviewItem {
   title: string;
   link?: string;
   pubDate?: string | null;
+  imageUrl?: string | null;
   /** Synthetic discussions: whether this run has rendered audio. */
   hasAudio?: boolean;
 }
@@ -37,6 +38,8 @@ export interface SourceRecord {
   };
   createdAt: Date;
   updatedAt: Date;
+  /** Whether the current user has saved this source into their library (membership). */
+  saved?: boolean;
 }
 
 export interface CreateSourceInput {

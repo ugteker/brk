@@ -1,6 +1,13 @@
 import { buildAnalysisRequest } from './prompt-builder';
 import { buildEffectiveSystemPrompt } from './character-prompt-strategy';
-import type { ClaudeAnalysisResult, EvidenceBlock, SourceAdapter, SourceConfig, SourceCursorState } from './types';
+import type {
+  ClaudeAnalysisResult,
+  EvidenceBlock,
+  SourceConfig,
+  SourceCursorState,
+  SourceFetchOptions,
+  SourceFetchResult
+} from './types';
 import type { ClaudeClient } from './claude-client';
 import type { Agent } from '../agents/types';
 import type { PromptRepository } from '../prompts/repository';
@@ -8,6 +15,7 @@ import type { ArtifactRepository } from '../artifacts/repository';
 import type { ReportRepository } from '../reports/repository';
 import type { RunReportRecord } from '../reports/types';
 import type { SourceCursorRepositoryLike } from '../crawler/source-cursor-repository';
+import type { SourceIngestionRepositoryLike, SourceItemRecord } from '../source/ingestion-repository';
 import type { RunPhase } from '../runs/run-queue.service';
 import { logger } from '../../lib/logger';
 import { sendReportNotification } from '../agents/notifications';
@@ -30,6 +38,9 @@ export interface ForcedEpisodeSelection {
 }
 
 export interface AgentRunOptions {
+  agentVersionId?: string;
+  playbookId?: string;
+  playbookMaxItemsPerSource?: number;
   forcedEpisode?: ForcedEpisodeSelection;
   playbookRecipients?: string[];
   playbookLanguage?: string;
@@ -41,12 +52,26 @@ export interface AgentRunOptions {
 
 export interface AgentRunnerDeps {
   agentRepository: { getAgent(agentId: string): Promise<Agent | null> };
-  promptRepository: Pick<PromptRepository, 'getLatestPromptVersion'>;
+  promptRepository: Pick<PromptRepository, 'getLatestPromptVersion' | 'getPromptVersionById'>;
   artifactRepository: Pick<ArtifactRepository, 'saveArtifact'>;
   reportRepository: Pick<ReportRepository, 'saveRunReport'>;
+  cursorRepository: Pick<SourceCursorRepositoryLike, 'getCursor' | 'saveCursor' | 'touchCrawlAttempt'>;
+  ingestionRepository: Pick<
+    SourceIngestionRepositoryLike,
+    'listPlaybookSources' | 'listUnconsumed' | 'markConsumed' | 'getSourceItemByLink'
+  >;
+  ingestionService: {
+    ensureFresh(sourceId: string, now: Date, options?: SourceFetchOptions): Promise<{ warning?: string }>;
+  };
   claudeClient: Pick<ClaudeClient, 'analyze'>;
-  sourceAdapters: Record<SourceConfig['type'], SourceAdapter>;
-  cursorRepository: SourceCursorRepositoryLike;
+  sourceAdapters: Partial<
+    Record<
+      SourceConfig['type'],
+      {
+        fetch(agentId: string, source: SourceConfig, options?: SourceFetchOptions): Promise<SourceFetchResult>;
+      }
+    >
+  >;
   // Best-effort mailer for the automatic post-run report notification - if omitted (or if sending
   // fails), the run itself still succeeds; email is a courtesy, not a run precondition.
   mailer?: MailerLike;
@@ -65,15 +90,150 @@ export interface AgentRunnerDeps {
   onPhaseChange?: (agentRunId: string, phase: RunPhase) => Promise<void>;
 }
 
+function normalizeFidelity(value: unknown): EvidenceBlock['fidelity'] {
+  return value === 'medium' || value === 'low' || value === 'high' ? value : 'high';
+}
+
+function readStringArray(value: unknown, fallback: string[]): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : fallback;
+}
+
+function storedItemToEvidence(item: SourceItemRecord): EvidenceBlock {
+  return {
+    sourceId: item.sourceValue,
+    sourceType: item.sourceType,
+    sourceRef: typeof item.metadata.sourceRef === 'string' ? item.metadata.sourceRef : item.link,
+    content: item.content,
+    fidelity: normalizeFidelity(item.metadata.fidelity),
+    citations: readStringArray(item.metadata.citations, [item.link]),
+    itemId: typeof item.metadata.itemId === 'string' ? item.metadata.itemId : item.id,
+    publishedAt: item.publishedAt.toISOString(),
+    title: item.title || undefined
+  };
+}
+
 export class AgentRunner {
   constructor(private readonly deps: AgentRunnerDeps) {}
 
   private async setPhase(agentRunId: string, phase: RunPhase): Promise<void> {
     try {
       await this.deps.onPhaseChange?.(agentRunId, phase);
-    } catch {
-      // Never let a phase-tracking failure fail the run itself.
+    } catch (error) {
+      logger.warn(`[agent-runner] Failed to persist phase ${phase} for run ${agentRunId}`, error);
     }
+  }
+
+  private async collectPlaybookEvidence(
+    playbookId: string,
+    forcedEpisode: ForcedEpisodeSelection | undefined,
+    maxItemsPerSource: number,
+    now: Date
+  ): Promise<{ evidence: EvidenceBlock[]; warnings: string[]; consumedSourceItemIds: string[] }> {
+    const warnings: string[] = [];
+    const evidence: EvidenceBlock[] = [];
+    const consumedSourceItemIds: string[] = [];
+    const playbookSources = await this.deps.ingestionRepository.listPlaybookSources(playbookId);
+    const sourcesToProcess = forcedEpisode
+      ? playbookSources.filter(
+          (source) => source.source.type === forcedEpisode.sourceType && source.source.value === forcedEpisode.sourceValue
+        )
+      : playbookSources;
+
+    if (forcedEpisode && sourcesToProcess.length === 0) {
+      return {
+        evidence: [],
+        warnings: [
+          `Could not find a playbook source matching ${forcedEpisode.sourceType}:${forcedEpisode.sourceValue} for forced item ${forcedEpisode.itemLink}.`
+        ],
+        consumedSourceItemIds: []
+      };
+    }
+
+    for (const source of sourcesToProcess) {
+      const refresh = await this.deps.ingestionService.ensureFresh(source.sourceId, now, {
+        forcedItemLink: forcedEpisode?.itemLink,
+        limit: maxItemsPerSource
+      });
+      if (refresh.warning) {
+        warnings.push(refresh.warning);
+      }
+
+      if (forcedEpisode) {
+        const item = await this.deps.ingestionRepository.getSourceItemByLink(source.sourceId, forcedEpisode.itemLink);
+        if (!item) {
+          warnings.push(
+            `Could not resolve stored source item ${forcedEpisode.itemLink} for canonical source ${source.source.value}.`
+          );
+          continue;
+        }
+        evidence.push(storedItemToEvidence(item));
+        continue;
+      }
+
+      const items = await this.deps.ingestionRepository.listUnconsumed(playbookId, source.sourceId, maxItemsPerSource);
+      for (const item of items) {
+        evidence.push(storedItemToEvidence(item));
+        consumedSourceItemIds.push(item.id);
+      }
+    }
+
+    return { evidence, warnings, consumedSourceItemIds };
+  }
+
+  private async collectLegacyEvidence(
+    agent: Agent,
+    forcedEpisode?: ForcedEpisodeSelection
+  ): Promise<{ evidence: EvidenceBlock[]; warnings: string[]; pendingCursorUpdates: SourceCursorState[] }> {
+    logger.warn(`[agent-runner] Run is missing playbookId; falling back to legacy agent.sources crawling for agent ${agent.id}`);
+
+    const configuredSources = forcedEpisode
+      ? (() => {
+          const matched = agent.sources.filter(
+            (source) => source.type === forcedEpisode.sourceType && source.value === forcedEpisode.sourceValue
+          );
+          return matched.length > 0
+            ? matched
+            : [{ type: forcedEpisode.sourceType, value: forcedEpisode.sourceValue, frequencyMinutes: 60, maxItems: 1 }];
+        })()
+      : agent.sources;
+
+    const evidence: EvidenceBlock[] = [];
+    const warnings: string[] = [];
+    const pendingCursorUpdates: SourceCursorState[] = [];
+
+    for (const source of configuredSources) {
+      try {
+        if (!forcedEpisode && source.frequencyMinutes) {
+          const cursor = await this.deps.cursorRepository.getCursor(agent.id, source.value);
+          if (cursor?.lastCrawledAt) {
+            const elapsedMs = Date.now() - new Date(cursor.lastCrawledAt).getTime();
+            if (elapsedMs < source.frequencyMinutes * 60_000) {
+              continue;
+            }
+          }
+        }
+
+        const adapter = this.deps.sourceAdapters[source.type];
+        if (!adapter) {
+          throw new Error(`unsupported_source_type:${source.type}`);
+        }
+        const result = await adapter.fetch(agent.id, source, forcedEpisode ? { forcedItemLink: forcedEpisode.itemLink } : undefined);
+        await this.deps.cursorRepository.touchCrawlAttempt(agent.id, source.value, new Date().toISOString());
+
+        if (result.warning) {
+          warnings.push(result.warning);
+        }
+        if (result.cursorUpdate) {
+          pendingCursorUpdates.push(result.cursorUpdate);
+        }
+        evidence.push(...result.evidence);
+      } catch (error) {
+        logger.warn(`[agent-runner] Failed to fetch source ${source.value}`, error);
+        warnings.push(`Failed to fetch source ${source.value}: ${error instanceof Error ? error.message : 'unknown error'}`);
+      }
+    }
+
+    return { evidence, warnings, pendingCursorUpdates };
   }
 
   async run(agentId: string, agentRunId: string, options?: AgentRunOptions): Promise<AgentRunResult> {
@@ -83,92 +243,53 @@ export class AgentRunner {
         return { status: 'failed', errorCode: 'agent_not_found' };
       }
 
-      const promptVersion = await this.deps.promptRepository.getLatestPromptVersion(agentId);
+      const promptVersion = options?.agentVersionId
+        ? await this.deps.promptRepository.getPromptVersionById(options.agentVersionId)
+        : await this.deps.promptRepository.getLatestPromptVersion(agentId);
       if (!promptVersion) {
         return { status: 'failed', errorCode: 'missing_prompt_version' };
       }
 
       await this.setPhase(agentRunId, 'crawling');
 
-      const evidence: EvidenceBlock[] = [];
+      const now = new Date();
       const sourceWarnings: string[] = [];
-      const pendingCursorUpdates: SourceCursorState[] = [];
+      let evidence: EvidenceBlock[] = [];
+      let consumedSourceItemIds: string[] = [];
+      let pendingCursorUpdates: SourceCursorState[] = [];
 
-      const forcedEpisode = options?.forcedEpisode;
-      let sourcesToCrawl: typeof agent.sources;
-      if (forcedEpisode) {
-        const matched = agent.sources.filter(
-          (source) => source.type === forcedEpisode.sourceType && source.value === forcedEpisode.sourceValue
+      if (options?.playbookId) {
+        const collected = await this.collectPlaybookEvidence(
+          options.playbookId,
+          options.forcedEpisode,
+          options.playbookMaxItemsPerSource ?? 1,
+          now
         );
-        // If the forced source isn't in agent.sources (e.g. it came from the library, not the agent's
-        // own source config), create an ad-hoc config so the run proceeds instead of silently
-        // returning succeeded_no_new_content.
-        sourcesToCrawl =
-          matched.length > 0
-            ? matched
-            : [{ type: forcedEpisode.sourceType, value: forcedEpisode.sourceValue, frequencyMinutes: 60, maxItems: 1 }];
+        evidence = collected.evidence;
+        sourceWarnings.push(...collected.warnings);
+        consumedSourceItemIds = collected.consumedSourceItemIds;
       } else {
-        sourcesToCrawl = agent.sources;
+        const collected = await this.collectLegacyEvidence(agent, options?.forcedEpisode);
+        evidence = collected.evidence;
+        sourceWarnings.push(...collected.warnings);
+        pendingCursorUpdates = collected.pendingCursorUpdates;
       }
 
-      for (const source of sourcesToCrawl) {
-        try {
-          // Enforce each source's own crawl cadence (frequencyMinutes), independent of how often
-          // the agent's overall schedule triggers a run. A forced episode-picker run always bypasses
-          // this, since it's an explicit user-initiated request for that specific source/item.
-          if (!forcedEpisode && source.frequencyMinutes) {
-            const cursor = await this.deps.cursorRepository.getCursor(agentId, source.value);
-            if (cursor?.lastCrawledAt) {
-              const elapsedMs = Date.now() - new Date(cursor.lastCrawledAt).getTime();
-              if (elapsedMs < source.frequencyMinutes * 60_000) {
-                continue;
-              }
-            }
-          }
-
-          const adapter = this.deps.sourceAdapters[source.type];
-          const fetchOptions = forcedEpisode ? { forcedItemLink: forcedEpisode.itemLink } : undefined;
-          const result = await adapter.fetch(agentId, source, fetchOptions);
-          // Recorded immediately (not deferred like pendingCursorUpdates) so the cadence is
-          // enforced even if this run ultimately fails or finds no new content.
-          await this.deps.cursorRepository.touchCrawlAttempt(agentId, source.value, new Date().toISOString());
-
-          if (result.warning) {
-            sourceWarnings.push(result.warning);
-          }
-
-          if (result.cursorUpdate) {
-            pendingCursorUpdates.push(result.cursorUpdate);
-          }
-
-          for (const block of result.evidence) {
-            evidence.push(block);
-            if (block.fidelity === 'low') {
-              sourceWarnings.push(`Low-fidelity evidence from ${block.sourceRef} (fell back to show notes/summary).`);
-            }
-            await this.deps.artifactRepository.saveArtifact({
-              agentId,
-              agentRunId,
-              kind: 'normalized_evidence',
-              sourceRef: block.sourceRef,
-              payloadJson: JSON.stringify(block),
-              fidelity: block.fidelity
-            });
-          }
-        } catch (error) {
-          logger.warn(`[agent-runner] Failed to fetch source ${source.value}`, error);
-          sourceWarnings.push(
-            `Failed to fetch source ${source.value}: ${error instanceof Error ? error.message : 'unknown error'}`
-          );
+      for (const block of evidence) {
+        if (block.fidelity === 'low') {
+          sourceWarnings.push(`Low-fidelity evidence from ${block.sourceRef} (fell back to show notes/summary).`);
         }
+        await this.deps.artifactRepository.saveArtifact({
+          agentId,
+          agentRunId,
+          kind: 'normalized_evidence',
+          sourceRef: block.sourceRef,
+          payloadJson: JSON.stringify(block),
+          fidelity: block.fidelity
+        });
       }
 
       if (evidence.length === 0) {
-        // Nothing new was found across any source this run: skip the Claude call/report entirely
-        // and leave cursors untouched (a failed/skipped source's items remain unseen for retry).
-        // Surface any collected warnings (e.g. a forced episode-picker selection that couldn't be
-        // found in the current feed fetch) via errorMessage so they're visible in the Runs view,
-        // instead of silently looking identical to "nothing new to report".
         return {
           status: 'succeeded_no_new_content',
           errorMessage: sourceWarnings.length > 0 ? sourceWarnings.join(' | ') : undefined
@@ -177,9 +298,6 @@ export class AgentRunner {
 
       await this.setPhase(agentRunId, 'analyzing');
 
-      // Budget gate sits after the no-new-content check (free) and before the Claude call (the
-      // costly part). Cursors haven't advanced yet, so blocked items are retried once the budget
-      // resets or is raised - nothing is silently lost.
       if (this.deps.budgetGuard) {
         const budgetCheck = await this.deps.budgetGuard.checkRunAllowed(agent.ownerUserId);
         if (!budgetCheck.allowed) {
@@ -222,28 +340,21 @@ export class AgentRunner {
         estimatedCostUsd
       });
 
-      // Cursor only advances on success: applying pending updates here (after the report is
-      // durably saved) ensures a failed Claude call or report save leaves cursors untouched so
-      // the same new items are retried on the next scheduled run rather than silently lost.
-      for (const cursorUpdate of pendingCursorUpdates) {
-        await this.deps.cursorRepository.saveCursor(cursorUpdate);
+      if (options?.playbookId && !options.forcedEpisode && consumedSourceItemIds.length > 0) {
+        await this.deps.ingestionRepository.markConsumed(options.playbookId, consumedSourceItemIds, new Date());
+      } else if (!options?.playbookId) {
+        for (const cursorUpdate of pendingCursorUpdates) {
+          await this.deps.cursorRepository.saveCursor(cursorUpdate);
+        }
       }
 
       await this.setPhase(agentRunId, 'notifying');
-      // Best-effort: sendReportNotification already catches/logs per-recipient failures
-      // internally and never throws, so a flaky SMTP server can't fail an otherwise-successful run.
-      // Falls back to the source URL for any evidence block without a resolved title (e.g. plain
-      // web-page sources), and de-dupes in case the same item appears from more than one source.
-      // Skipped when the playbook has muted notifications (notificationsEnabled === false) or uses
-      // a daily/weekly digest cadence - digest playbooks get one rollup email from the digest loop.
       const digestsDefer = options?.playbookDigestFrequency === 'daily' || options?.playbookDigestFrequency === 'weekly';
       if (options?.playbookNotificationsEnabled !== false && !digestsDefer) {
         const itemTitles = [...new Set(evidence.map((block) => block.title || block.sourceRef))];
         await sendReportNotification(this.deps.mailer, agent, report, itemTitles, options?.playbookRecipients ?? [], options?.playbookLanguage);
       }
 
-      // Watchlist alerts fire for every new report - a watchlist follow is the user's own explicit
-      // subscription, so playbook mute/digest settings don't suppress it. Never fails the run.
       if (this.deps.watchlistNotifier) {
         await this.deps.watchlistNotifier.notifyForReport({
           agentId,
@@ -255,11 +366,6 @@ export class AgentRunner {
 
       return { status: 'succeeded', reportId: report.id };
     } catch (error) {
-      // Evidence/artifacts for this run may already be durably saved (per-source, before this
-      // point) even though the overall run is reported as failed - e.g. a Claude analysis call or
-      // report save failing after fetch succeeded. Capture the real reason here instead of the
-      // previous bare `catch {}`, which silently discarded it and left only an opaque
-      // 'agent_run_failed' code with no way to tell why the run actually failed.
       return {
         status: 'failed',
         errorCode: 'agent_run_failed',

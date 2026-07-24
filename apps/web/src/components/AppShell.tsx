@@ -11,7 +11,6 @@ import {
   MenuOutlined,
   MoonOutlined,
   RobotOutlined,
-  RocketOutlined,
   SunOutlined,
   TeamOutlined,
   UserOutlined
@@ -24,13 +23,14 @@ import { useAuth } from '../auth/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { useTheme } from '../theme/ThemeContext';
 import { getBuildStampLabel } from '../lib/build-info';
+import { BrandLockup } from './BrandLockup';
 import { TouchSafeTooltip } from './TouchSafeTooltip';
 import { WatchlistMenu } from './WatchlistMenu';
 import { UsageBudgetModal } from './UsageBudgetModal';
 import { seedDemoData } from '../api/admin';
 
 const { Header, Content } = Layout;
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 // Always visible to every user, in both normal and admin mode.
 const COMMON_NAV_ITEMS = [
@@ -136,7 +136,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     bellDismissedIds,
     setBellDismissedIds,
     refreshAgents, refreshSources, refreshPlaybooks,
-    forceShowOnboarding, setForceShowOnboarding, setForceShowGuidedWizard,
     adminMode, setAdminMode
   } = useAppData();
 
@@ -197,24 +196,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         onClick: () => setAdminMode((prev) => !prev)
       },
       {
-        key: 'admin-preview-onboarding',
-        label: forceShowOnboarding ? t('onboarding.hidePreview') : t('onboarding.showPreview'),
-        icon: <RobotOutlined />,
-        onClick: () => {
-          setForceShowOnboarding((prev) => !prev);
-          navigate('/library');
-        }
-      },
-      {
-        key: 'admin-start-guided-wizard',
-        label: t('onboarding.showWizardPreview'),
-        icon: <RocketOutlined />,
-        onClick: () => {
-          setForceShowGuidedWizard(true);
-          navigate('/library');
-        }
-      },
-      {
         key: 'admin-seed-demo',
         label: t('admin.seedDemo'),
         icon: <DatabaseOutlined />,
@@ -255,22 +236,24 @@ export function AppShell({ children }: { children: ReactNode }) {
           {/* Logo */}
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Title
-                level={2}
+              <button
+                type="button"
                 onClick={() => navigate('/')}
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/'); }}
                 style={{
+                  appearance: 'none',
+                  background: 'transparent',
+                  border: 0,
+                  color: 'inherit',
+                  display: 'flex',
+                  lineHeight: 0,
                   margin: 0,
-                  whiteSpace: 'nowrap',
-                  fontSize: 'clamp(1.25rem, 5vw, 1.875rem)',
-                  letterSpacing: '-0.01em',
                   cursor: 'pointer',
+                  padding: 0,
                   transition: 'opacity 0.15s ease'
                 }}
               >
-                ChatTrader
-              </Title>
+                <BrandLockup size={34} textSize={26} inverse={theme === 'dark'} />
+              </button>
               {isAdmin && adminMode && (
                 <Tag color="orange" icon={<TeamOutlined />} style={{ fontSize: 12, borderRadius: 999 }}>
                   {t('nav.modeAdmin')}

@@ -11,6 +11,9 @@ export async function processNextRun(
 
   try {
     const result = await runner.run(run.agentId, run.id, {
+      agentVersionId: run.agentVersionId,
+      playbookId: run.playbookId,
+      playbookMaxItemsPerSource: run.playbookMaxItemsPerSource,
       playbookRecipients: run.playbookRecipients,
       playbookLanguage: run.playbookLanguage,
       playbookNotificationsEnabled: run.playbookNotificationsEnabled,
