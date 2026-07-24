@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_CATALOG_BUNDLE_PATH,
@@ -17,6 +17,25 @@ import { applyCatalogImport, planCatalogImport, type CatalogImportPlan } from '.
 const API_ROOT = path.join(REPO_ROOT, 'apps', 'api');
 const PRISMA_CLI = path.join(API_ROOT, 'node_modules', 'prisma', 'build', 'index.js');
 const TSX_CLI = path.join(API_ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+let prismaClientReady = false;
+
+function ensurePrismaClientReady() {
+  if (prismaClientReady) {
+    return;
+  }
+
+  execFileSync(process.execPath, [PRISMA_CLI, 'generate', '--schema', 'prisma/schema.prisma'], {
+    cwd: API_ROOT,
+    encoding: 'utf8'
+  });
+  prismaClientReady = true;
+}
+
+async function createPrismaClient(datasourceUrl: string): Promise<PrismaClient> {
+  ensurePrismaClientReady();
+  const { PrismaClient } = await import('@prisma/client');
+  return new PrismaClient({ datasourceUrl });
+}
 
 function cloneBundle(bundle: CatalogBundle): CatalogBundle {
   return JSON.parse(JSON.stringify(bundle)) as CatalogBundle;
@@ -32,6 +51,7 @@ async function withCatalogDatabase<T>(
 ): Promise<T> {
   const prismaDirectory = path.join(API_ROOT, 'prisma');
   mkdirSync(prismaDirectory, { recursive: true });
+  ensurePrismaClientReady();
 
   const databaseFileName = `catalog-tools.${label}.${process.pid}.${Date.now()}.db`;
   const databaseUrl = `file:./${databaseFileName}`;
@@ -57,7 +77,7 @@ async function withRealCatalogPrisma<T>(
   run: (db: PrismaClient, context: { databaseUrl: string; dbPath: string }) => Promise<T>
 ): Promise<T> {
   return withCatalogDatabase(label, async (context) => {
-    const db = new PrismaClient({ datasourceUrl: context.databaseUrl });
+    const db = await createPrismaClient(context.databaseUrl);
     try {
       return await run(db, context);
     } finally {
@@ -431,7 +451,7 @@ describe('catalog import', () => {
         })
       );
 
-      const db = new PrismaClient({ datasourceUrl: databaseUrl });
+      const db = await createPrismaClient(databaseUrl);
       try {
         const bundle = loadSeedBundle();
         expect(await db.marketplacePublication.count({ where: { origin: 'platform_curated' } })).toBe(bundle.sources.length + bundle.agents.length);
