@@ -3027,11 +3027,25 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                  key={ep.link}
                                                  className="grid grid-cols-[72px_minmax(0,1fr)] items-start gap-x-3 py-2.5 sm:grid-cols-[64px_minmax(0,1fr)_auto] sm:items-center"
                                                >
-                                                 <EpisodeArtwork
-                                                   episodeImageUrl={episodeImageUrl}
-                                                   coverImageUrl={coverImageUrl}
-                                                   sourceType={selectedSource.type}
-                                                 />
+                                                 {episodeImageUrl || coverImageUrl ? (
+                                                   <img
+                                                     src={episodeImageUrl ?? coverImageUrl ?? ''}
+                                                     alt=""
+                                                     className="h-12 w-[72px] shrink-0 rounded object-cover bg-muted sm:h-11 sm:w-16"
+                                                     onError={(e) => {
+                                                       const img = e.currentTarget;
+                                                       if (img.src !== coverImageUrl && coverImageUrl) {
+                                                         img.src = coverImageUrl;
+                                                       } else {
+                                                         img.style.display = 'none';
+                                                       }
+                                                     }}
+                                                   />
+                                                 ) : (
+                                                   <div className="flex h-12 w-[72px] shrink-0 items-center justify-center rounded bg-muted text-sm sm:h-11 sm:w-16">
+                                                     {selectedSource.type === 'youtube_videos' ? '📺' : selectedSource.type === 'podcast_feeds' ? '🎙️' : '🌐'}
+                                                   </div>
+                                                 )}
                                                  <div className="min-w-0">
                                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
                                                      <span className="truncate text-sm font-medium">{ep.title}</span>

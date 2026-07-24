@@ -17,7 +17,7 @@ export interface AgentSelectionViewProps {
   onCurate: (baseAgentVersionId?: string) => void;
 }
 
-const BEST_MATCHES_PAGE_SIZE = 6;
+const BEST_MATCHES_PAGE_SIZE = 4;
 
 async function parseErrorMessage(response: Response, fallback: string): Promise<string> {
   try {
