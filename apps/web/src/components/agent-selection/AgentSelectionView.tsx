@@ -90,7 +90,7 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
   const [ownedAgentMatches, setOwnedAgentMatches] = useState<AgentMatchDto[]>([]);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [visibleLimit, setVisibleLimit] = useState(BEST_MATCHES_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useState(0);
   const [retryKey, setRetryKey] = useState(0);
   const [activeDrawerMatch, setActiveDrawerMatch] = useState<AgentMatchDto | null>(null);
   const [loadingAgentVersionId, setLoadingAgentVersionId] = useState<string | null>(null);
@@ -108,7 +108,7 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
     let cancelled = false;
     setLoadState('loading');
     setErrorMessage(null);
-    setVisibleLimit(BEST_MATCHES_PAGE_SIZE);
+    setCurrentPage(0);
 
     void Promise.all([listAgentMatches(source.id), hydrateOwnedAgents(ownedAgents)])
       .then(([nextMatches, nextOwnedAgentMatches]) => {
@@ -138,7 +138,7 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
       setFocusAgentVersionId(null);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [focusAgentVersionId, visibleLimit, matches]);
+  }, [focusAgentVersionId, currentPage, matches]);
 
   const curatedBestMatches = useMemo(
     () => matches.filter((match) => match.ownership !== 'owned'),
@@ -156,11 +156,11 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
   );
 
   const visibleMatches = useMemo(
-    () => dedupedBestMatches.slice(0, visibleLimit),
-    [dedupedBestMatches, visibleLimit]
+    () => dedupedBestMatches.slice(0, (currentPage + 1) * BEST_MATCHES_PAGE_SIZE),
+    [dedupedBestMatches, currentPage]
   );
 
-  const hasMoreMatches = dedupedBestMatches.length > visibleLimit;
+  const hasMoreMatches = dedupedBestMatches.length > (currentPage + 1) * BEST_MATCHES_PAGE_SIZE;
 
   const remainingOwnedMatches = ownedAgentMatches;
   const showOwnedAgentsFirst = remainingOwnedMatches.length > 0;
@@ -289,7 +289,13 @@ export function AgentSelectionView({ source, ownedAgents, onAgentConnected, onCu
               </div>
               {hasMoreMatches ? (
                 <div className="flex justify-center">
-                  <Button onClick={() => setVisibleLimit((current) => current + BEST_MATCHES_PAGE_SIZE)}>
+                  <Button
+                    aria-label="Next best matches page"
+                    onClick={() => {
+                      const nextPage = currentPage + 1;
+                      setCurrentPage(nextPage);
+                    }}
+                  >
                     {t('agentSelection.showMore')}
                   </Button>
                 </div>
