@@ -42,6 +42,11 @@ export class PromptRepository {
     return prompt ? this.toRecord(prompt) : null;
   }
 
+  async getPromptVersionById(agentVersionId: string): Promise<PromptVersionRecord | null> {
+    const prompt = await this.db.agentPromptVersion.findUnique({ where: { id: agentVersionId } });
+    return prompt ? this.toRecord(prompt) : null;
+  }
+
   private async createPromptVersion(
     agentId: string,
     input: CreatePromptVersionInput,
@@ -61,6 +66,7 @@ export class PromptRepository {
         model: input.model,
         systemPrompt: input.systemPrompt,
         enabled: input.enabled,
+        basedOnAgentVersionId: input.basedOnAgentVersionId ?? null,
         ...(curationSessionId === undefined ? {} : { curationSessionId })
       }
     });
@@ -83,7 +89,14 @@ export class PromptRepository {
     version: number;
     model: string;
     systemPrompt: string;
+    name: string;
+    description: string;
+    characterType: string;
+    promptConfigJson: string;
+    iconAssetKey: string | null;
+    basedOnAgentVersionId: string | null;
     enabled: boolean;
+    publishedAt: Date | null;
     createdAt: Date;
   }): PromptVersionRecord {
     return {
@@ -93,6 +106,13 @@ export class PromptRepository {
       model: row.model,
       systemPrompt: row.systemPrompt,
       enabled: row.enabled,
+      name: row.name,
+      description: row.description,
+      characterType: row.characterType,
+      promptConfigJson: row.promptConfigJson,
+      iconAssetKey: row.iconAssetKey,
+      basedOnAgentVersionId: row.basedOnAgentVersionId,
+      publishedAt: row.publishedAt,
       createdAt: row.createdAt
     };
   }

@@ -14,6 +14,7 @@ test('@smoke app load shows dashboard on mobile viewport', async ({ page }) => {
   await expect(page.getByText('Agent Dashboard')).toBeVisible();
 });
 
+
 test('@smoke selected source actions replace the mobile picker list', async ({ page }) => {
   const agentsPage = await readFile(resolve(process.cwd(), 'src/pages/AgentsPage.tsx'), 'utf8');
   const guidedWizard = agentsPage.slice(agentsPage.indexOf('{/* Guided first-report wizard'));
@@ -118,4 +119,124 @@ test('@smoke feed cards render all key takeaways as essential insights', async (
   expect(focusSection.indexOf('common?.key_takeaways')).toBeLessThan(focusSection.indexOf('common?.recommendation'));
   expect(focusSection).toContain("label: t('report.keyTakeaways')");
   expect(focusSection).toContain('focusContent.items.map');
+});
+
+
+test('@smoke library renders creation before starter picks and saved sources', async () => {
+  const overview = await readFile(resolve(process.cwd(), 'src/components/library/LibraryOverview.tsx'), 'utf8');
+
+  expect(overview.indexOf('GhostCreateCard')).toBeLessThan(overview.indexOf('StarterSourceCard'));
+  expect(overview.indexOf("t('library.startHere')")).toBeLessThan(overview.indexOf("t('library.yourLibrary')"));
+});
+
+test('@smoke catalog demos are labeled and read only', async () => {
+  const preview = await readFile(resolve(process.cwd(), 'src/components/library/SampleReportPreview.tsx'), 'utf8');
+
+  expect(preview).toContain("t('library.sampleReport')");
+  expect(preview).toContain('demo.disclosure');
+  expect(preview).toContain('CharacterReportRenderer');
+  expect(preview).not.toContain('markReportRead');
+  expect(preview).not.toContain('dismissReport');
+});
+
+test('@smoke library guidance replaces forced onboarding and wizard preview', async () => {
+  const agentsPage = await readFile(resolve(process.cwd(), 'src/pages/AgentsPage.tsx'), 'utf8');
+  const appShell = await readFile(resolve(process.cwd(), 'src/components/AppShell.tsx'), 'utf8');
+
+  expect(agentsPage).not.toContain('forceShowOnboarding');
+  expect(agentsPage).not.toContain('forceShowGuidedWizard');
+  expect(appShell).not.toContain('admin-preview-onboarding');
+  expect(appShell).not.toContain('admin-start-guided-wizard');
+});
+
+test('@smoke saving a source offers optional agent selection', async () => {
+  const modal = await readFile(resolve(process.cwd(), 'src/components/library/PostSourceChoiceModal.tsx'), 'utf8');
+
+  expect(modal).toContain("t('library.chooseAgent')");
+  expect(modal).toContain("t('library.skipAgent')");
+  expect(modal).not.toContain('createPlaybook(');
+});
+
+test('@smoke agent selection uses compact source-aware cards', async () => {
+  const card = await readFile(resolve(process.cwd(), 'src/components/agent-selection/CompactAgentCard.tsx'), 'utf8');
+
+  expect(card).toContain('iconAssetKey');
+  expect(card).toContain('match.reasons.slice(0, 2)');
+  expect(card).toContain("t('agentSelection.useAgent')");
+  expect(card).not.toContain('systemPrompt');
+  expect(card).not.toContain('model');
+  expect(card).not.toContain('runCount');
+});
+
+test('@smoke agent selection keeps compact source-aware matches paged and deduped', async () => {
+  const selectionView = await readFile(resolve(process.cwd(), 'src/components/agent-selection/AgentSelectionView.tsx'), 'utf8');
+
+  expect(selectionView).toContain('BEST_MATCHES_PAGE_SIZE = 4');
+  expect(selectionView).toContain('setVisibleLimit((current) => current + BEST_MATCHES_PAGE_SIZE)');
+  expect(selectionView).toContain('matchedOwnedVersionIds');
+  expect(selectionView).toContain('window.requestAnimationFrame');
+  expect(selectionView).toContain('target?.focus()');
+  expect(selectionView).toContain("t('agentSelection.showMore')");
+  expect(selectionView).toContain("t('agentSelection.yourAgents')");
+  expect(selectionView).toContain("t('agentSelection.curateYourOwn')");
+  expect(selectionView).not.toContain("t('agent.createNew')");
+});
+
+test('@smoke agent selection rewires compact source-aware entry points', async () => {
+  const agentsPage = await readFile(resolve(process.cwd(), 'src/pages/AgentsPage.tsx'), 'utf8');
+
+  expect(agentsPage).toContain('AgentSelectionView');
+  expect(agentsPage).toContain('onAddAgent={(source) => onFollowSource(source)}');
+  expect(agentsPage).toContain("message.success(t('agentSelection.connectionSuccess'))");
+  expect(agentsPage).toContain('onAgentConnected={handleAgentSelectionConnected}');
+  expect(agentsPage).toContain('onCurate={openInlineAgentCuration}');
+});
+
+test('@smoke connected agent offers run before schedule', async () => {
+  const modal = await readFile(resolve(process.cwd(), 'src/components/agent-selection/AgentConnectedModal.tsx'), 'utf8');
+
+  expect(modal).toContain("t('agentSelection.runFirstReport')");
+  expect(modal).toContain("t('agentSelection.scheduleRecurring')");
+  expect(modal).not.toContain("schedule: { mode: 'daily'");
+});
+
+test('@smoke agent creation entry points stay AI curated', async () => {
+  const agentsPage = await readFile(resolve(process.cwd(), 'src/pages/AgentsPage.tsx'), 'utf8');
+
+  expect(agentsPage).toContain('openInlineAgentCuration');
+  expect(agentsPage).not.toContain('openInlineAgentCreate');
+  expect(agentsPage).not.toContain('Configure manually');
+});
+
+test('@smoke variant creation starts curation from immutable public versions', async () => {
+  const drawer = await readFile(resolve(process.cwd(), 'src/components/agent-selection/AgentDetailsDrawer.tsx'), 'utf8');
+  const curator = await readFile(resolve(process.cwd(), 'src/components/AgentCurator.tsx'), 'utf8');
+
+  expect(drawer).toContain("t('agentSelection.createVariant')");
+  expect(drawer).toContain('onCreateVariant(match.agentVersionId)');
+  expect(curator).toContain('baseAgentVersionId');
+  expect(curator).toContain('startAgentCuration({');
+});
+
+test('@smoke agent updates are explicit and opt-in', async () => {
+  const drawer = await readFile(resolve(process.cwd(), 'src/components/agent-selection/AgentDetailsDrawer.tsx'), 'utf8');
+  const api = await readFile(resolve(process.cwd(), 'src/api/agent-selection.ts'), 'utf8');
+
+  expect(drawer).toContain("t('agentSelection.updateAgent')");
+  expect(api).toContain('/api/catalog/agent-versions/${agentVersionId}/update');
+  expect(api).toContain('updateManualPlaybooks');
+});
+
+test('@smoke library next-action guidance is motion safe and localized', async () => {
+  const css = await readFile(resolve(process.cwd(), 'src/index.css'), 'utf8');
+  const english = await readFile(resolve(process.cwd(), 'src/i18n/locales/en.json'), 'utf8');
+  const german = await readFile(resolve(process.cwd(), 'src/i18n/locales/de.json'), 'utf8');
+
+  expect(css).toContain('.library-next-action');
+  expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+  expect(css).toContain('ghost-create-card-dash');
+  expect(english).toContain('"nextActionLabel"');
+  expect(english).toContain('"nextActionHint"');
+  expect(german).toContain('"nextActionLabel"');
+  expect(german).toContain('"nextActionHint"');
 });

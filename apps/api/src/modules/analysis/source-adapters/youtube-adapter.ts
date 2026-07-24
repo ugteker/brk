@@ -1,4 +1,15 @@
-import type { EvidenceBlock, SourceAdapter, SourceConfig, SourceCursorState, SourceFetchOptions, SourceFetchResult } from '../types';
+import { createHash } from 'node:crypto';
+import type {
+  CanonicalSourceAdapter,
+  CanonicalSourceFetchResult,
+  CanonicalSourceItemInput,
+  CanonicalSourceRef,
+  EvidenceBlock,
+  SourceConfig,
+  SourceCursorState,
+  SourceFetchOptions,
+  SourceFetchResult
+} from '../types';
 import type { HttpGet } from './web-url-adapter';
 import type { SourceCursorRepositoryLike } from '../../crawler/source-cursor-repository';
 import { parseFeedItems, parseFeedMetadata } from './feed-items';
@@ -97,9 +108,25 @@ function resolveMaxItems(source: SourceConfig): number {
   return Math.min(Math.floor(configured), ABSOLUTE_MAX_ITEMS_PER_RUN);
 }
 
+function resolveLimit(limit: unknown): number {
+  if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 1) return DEFAULT_MAX_ITEMS_PER_RUN;
+  return Math.min(Math.floor(limit), ABSOLUTE_MAX_ITEMS_PER_RUN);
+}
+
+function normalizeFetchOptions(configuredLimit: number | undefined, options?: SourceFetchOptions): SourceFetchOptions | undefined {
+  if (options?.forcedItemLink) {
+    return options;
+  }
+  return { ...options, limit: resolveLimit(options?.limit ?? configuredLimit) };
+}
+
 function mergeSeenItemIds(existing: string[], processed: string[]): string[] {
   const merged = [...existing, ...processed];
   return merged.length > MAX_SEEN_ITEM_IDS ? merged.slice(-MAX_SEEN_ITEM_IDS) : merged;
+}
+
+function hashContent(content: string): string {
+  return createHash('sha256').update(content).digest('hex');
 }
 
 /** Extracts a YouTube video ID from a watch/short/youtu.be URL, or null if the URL isn't a single video. */
@@ -364,80 +391,155 @@ export async function fetchYouTubeTranscript(
  * its public Atom feed and the N most recent not-yet-seen videos (per the source's configured
  * `maxItems`, mirroring the episode-count setting used elsewhere) have their transcripts fetched.
  */
-export class YouTubeAdapter implements SourceAdapter {
+function legacyCursorToCanonical(cursor: SourceCursorState | null): Record<string, unknown> {
+  return {
+    seenItemIds: cursor?.seenItemIds ?? [],
+    lastItemPublishedAt: cursor?.lastItemPublishedAt ?? null,
+    lastContentHash: cursor?.lastContentHash ?? null
+  };
+}
+
+function canonicalCursorToLegacy(agentId: string, sourceValue: string, cursor: Record<string, unknown>): SourceCursorState {
+  return {
+    agentId,
+    sourceValue,
+    strategy: 'feed_items',
+    seenItemIds: Array.isArray(cursor.seenItemIds) ? cursor.seenItemIds.filter((entry): entry is string => typeof entry === 'string') : [],
+    lastItemPublishedAt: typeof cursor.lastItemPublishedAt === 'string' ? cursor.lastItemPublishedAt : null,
+    lastContentHash: typeof cursor.lastContentHash === 'string' ? cursor.lastContentHash : null
+  };
+}
+
+function toLegacyResult(source: SourceConfig, agentId: string, result: CanonicalSourceFetchResult): SourceFetchResult {
+  return {
+    evidence: result.items.map((item) => ({
+      sourceId: source.value,
+      sourceType: source.type,
+      sourceRef: typeof item.metadata.sourceRef === 'string' ? item.metadata.sourceRef : item.link,
+      content: item.content,
+      fidelity:
+        item.metadata.fidelity === 'medium' || item.metadata.fidelity === 'low' || item.metadata.fidelity === 'high'
+          ? item.metadata.fidelity
+          : 'high',
+      citations: Array.isArray(item.metadata.citations)
+        ? item.metadata.citations.filter((entry): entry is string => typeof entry === 'string')
+        : [item.link],
+      itemId: typeof item.metadata.itemId === 'string' ? item.metadata.itemId : undefined,
+      publishedAt: item.publishedAt.toISOString(),
+      title: item.title
+    })),
+    cursorUpdate: canonicalCursorToLegacy(agentId, source.value, result.cursor),
+    warning: result.warning
+  };
+}
+
+export class YouTubeAdapter implements CanonicalSourceAdapter {
   constructor(private readonly deps: YouTubeAdapterDeps) {}
 
-  async fetch(agentId: string, source: SourceConfig, options?: SourceFetchOptions): Promise<SourceFetchResult> {
+  async fetch(agentId: string, source: SourceConfig, options?: SourceFetchOptions): Promise<SourceFetchResult>;
+  async fetch(source: CanonicalSourceRef, cursor: Record<string, unknown>, options?: SourceFetchOptions): Promise<CanonicalSourceFetchResult>;
+  async fetch(
+    first: string | CanonicalSourceRef,
+    second: SourceConfig | Record<string, unknown>,
+    third?: SourceFetchOptions
+  ): Promise<SourceFetchResult | CanonicalSourceFetchResult> {
+    if (typeof first === 'string') {
+      const agentId = first;
+      const source = second as SourceConfig;
+      const existingCursor = await this.deps.cursorRepository.getCursor(agentId, source.value);
+      const result = await this.fetchCanonical(
+        { id: source.value, type: source.type, value: source.value },
+        legacyCursorToCanonical(existingCursor),
+        normalizeFetchOptions(source.maxItems, third)
+      );
+      return toLegacyResult(source, agentId, result);
+    }
+
+    return this.fetchCanonical(first, second as Record<string, unknown>, normalizeFetchOptions(undefined, third));
+  }
+
+  private async fetchCanonical(
+    source: CanonicalSourceRef,
+    cursor: Record<string, unknown>,
+    options?: SourceFetchOptions
+  ): Promise<CanonicalSourceFetchResult> {
+    const fetchOptions = normalizeFetchOptions(undefined, options);
     const directVideoId = extractVideoId(source.value);
     if (directVideoId) {
-      return this.fetchSingleVideo(agentId, source, directVideoId, options);
+      return this.fetchSingleVideo(source, cursor, directVideoId, fetchOptions);
     }
 
     const feedUrl = toYouTubeFeedUrl(source.value) ?? (await resolveHandleFeedUrl(source.value, this.deps.httpGet));
     if (!feedUrl) {
       return {
-        evidence: [],
+        items: [],
+        cursor,
         warning: `Could not resolve ${source.value} to a YouTube video, playlist, or channel.`
       };
     }
 
-    return this.fetchFromFeed(agentId, source, feedUrl, options);
+    return this.fetchFromFeed(source, cursor, feedUrl, fetchOptions);
   }
 
   private async fetchSingleVideo(
-    agentId: string,
-    source: SourceConfig,
+    source: CanonicalSourceRef,
+    cursor: Record<string, unknown>,
     videoId: string,
     options?: SourceFetchOptions
-  ): Promise<SourceFetchResult> {
-    const cursor = await this.deps.cursorRepository.getCursor(agentId, source.value);
+  ): Promise<CanonicalSourceFetchResult> {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     // A forced re-run (episode picker) always processes the video, even if already seen.
-    if (!options?.forcedItemLink && cursor?.seenItemIds.includes(videoId)) {
-      return { evidence: [] };
+    const seenItemIds = Array.isArray(cursor.seenItemIds) ? cursor.seenItemIds.filter((entry): entry is string => typeof entry === 'string') : [];
+    if (!options?.forcedItemLink && seenItemIds.includes(videoId)) {
+      return { items: [], cursor };
     }
 
     try {
       const html = await this.deps.httpGet(videoUrl, YOUTUBE_WATCH_PAGE_HEADERS);
       const transcript = await fetchYouTubeTranscript(videoId, this.deps.httpGet, this.deps.httpPostJson, html);
-      const evidence: EvidenceBlock = {
-        sourceId: source.value,
-        sourceType: source.type,
-        sourceRef: videoUrl,
+      const item: CanonicalSourceItemInput = {
+        title: extractVideoTitle(html) ?? `Video ${videoId}`,
         content: transcript,
-        fidelity: 'high',
-        citations: [videoUrl],
-        itemId: videoId,
-        title: extractVideoTitle(html) ?? undefined
+        link: videoUrl,
+        publishedAt: new Date(0),
+        contentHash: hashContent(transcript),
+        metadata: {
+          fidelity: 'high',
+          citations: [videoUrl],
+          sourceRef: videoUrl,
+          itemId: videoId
+        }
       };
-      const cursorUpdate: SourceCursorState = {
-        agentId,
-        sourceValue: source.value,
-        strategy: 'feed_items',
-        seenItemIds: mergeSeenItemIds(cursor?.seenItemIds ?? [], [videoId]),
-        lastItemPublishedAt: cursor?.lastItemPublishedAt ?? null,
-        lastContentHash: cursor?.lastContentHash ?? null
+      return {
+        items: [item],
+        cursor: {
+          seenItemIds: mergeSeenItemIds(seenItemIds, [videoId]),
+          lastItemPublishedAt: typeof cursor.lastItemPublishedAt === 'string' ? cursor.lastItemPublishedAt : null,
+          lastContentHash: typeof cursor.lastContentHash === 'string' ? cursor.lastContentHash : null
+        }
       };
-      return { evidence: [evidence], cursorUpdate };
     } catch (error) {
       return {
-        evidence: [],
+        items: [],
+        cursor,
         warning: error instanceof Error ? error.message : `Failed to fetch transcript for ${videoUrl}`
       };
     }
   }
 
   private async fetchFromFeed(
-    agentId: string,
-    source: SourceConfig,
+    source: CanonicalSourceRef,
+    cursor: Record<string, unknown>,
     feedUrl: string,
     options?: SourceFetchOptions
-  ): Promise<SourceFetchResult> {
+  ): Promise<CanonicalSourceFetchResult> {
     const feedXml = await this.deps.httpGet(feedUrl, YOUTUBE_WATCH_PAGE_HEADERS);
     const items = parseFeedItems(feedXml);
-    const cursor = await this.deps.cursorRepository.getCursor(agentId, source.value);
-    const seenIds = new Set(cursor?.seenItemIds ?? []);
+    const seenIds = new Set(
+      Array.isArray(cursor.seenItemIds) ? cursor.seenItemIds.filter((entry): entry is string => typeof entry === 'string') : []
+    );
 
+    const maxItems = resolveLimit(options?.limit);
     const candidates = options?.forcedItemLink
       ? items
           .map((item) => ({ item, videoId: item.link ? extractVideoId(item.link) : null }))
@@ -448,7 +550,7 @@ export class YouTubeAdapter implements SourceAdapter {
       : items
           .map((item) => ({ item, videoId: item.link ? extractVideoId(item.link) : null }))
           .filter((entry): entry is { item: (typeof items)[number]; videoId: string } => entry.videoId !== null && !seenIds.has(entry.videoId))
-          .slice(0, resolveMaxItems(source));
+          .slice(0, maxItems);
 
     if (candidates.length === 0) {
       // If a specific episode was requested (episode picker) but isn't found in the current feed
@@ -457,14 +559,15 @@ export class YouTubeAdapter implements SourceAdapter {
       // 15 items) and no longer include the requested video, or the stored link may not match
       // exactly.
       return {
-        evidence: [],
+        items: [],
+        cursor,
         warning: options?.forcedItemLink
           ? `Could not find the requested episode (${options.forcedItemLink}) in the current feed fetch — it may have been removed, or no longer appear in YouTube's recent-items feed.`
           : undefined
       };
     }
 
-    const evidence: EvidenceBlock[] = [];
+    const canonicalItems: CanonicalSourceItemInput[] = [];
     const warnings: string[] = [];
     const processedIds: string[] = [];
 
@@ -472,16 +575,18 @@ export class YouTubeAdapter implements SourceAdapter {
       const videoUrl = item.link ?? `https://www.youtube.com/watch?v=${videoId}`;
       try {
         const transcript = await fetchYouTubeTranscript(videoId, this.deps.httpGet, this.deps.httpPostJson);
-        evidence.push({
-          sourceId: source.value,
-          sourceType: source.type,
-          sourceRef: videoUrl,
+        canonicalItems.push({
+          title: item.title || `Video ${videoId}`,
           content: transcript,
-          fidelity: 'high',
-          citations: [videoUrl],
-          itemId: videoId,
-          publishedAt: item.pubDate ?? undefined,
-          title: item.title || undefined
+          link: videoUrl,
+          publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(0),
+          contentHash: hashContent(transcript),
+          metadata: {
+            fidelity: 'high',
+            citations: [videoUrl],
+            sourceRef: videoUrl,
+            itemId: videoId
+          }
         });
       } catch (error) {
         warnings.push(error instanceof Error ? error.message : `Failed to fetch transcript for ${videoUrl}`);
@@ -490,18 +595,16 @@ export class YouTubeAdapter implements SourceAdapter {
       processedIds.push(videoId);
     }
 
-    const cursorUpdate: SourceCursorState = {
-      agentId,
-      sourceValue: source.value,
-      strategy: 'feed_items',
-      seenItemIds: mergeSeenItemIds(cursor?.seenItemIds ?? [], processedIds),
-      lastItemPublishedAt: cursor?.lastItemPublishedAt ?? null,
-      lastContentHash: cursor?.lastContentHash ?? null
-    };
-
     return {
-      evidence,
-      cursorUpdate,
+      items: canonicalItems,
+      cursor: {
+        seenItemIds: mergeSeenItemIds(
+          Array.isArray(cursor.seenItemIds) ? cursor.seenItemIds.filter((entry): entry is string => typeof entry === 'string') : [],
+          processedIds
+        ),
+        lastItemPublishedAt: typeof cursor.lastItemPublishedAt === 'string' ? cursor.lastItemPublishedAt : null,
+        lastContentHash: typeof cursor.lastContentHash === 'string' ? cursor.lastContentHash : null
+      },
       warning: warnings.length > 0 ? warnings.join(' ') : undefined
     };
   }

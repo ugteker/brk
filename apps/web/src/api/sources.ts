@@ -1,3 +1,5 @@
+import i18n from '../i18n';
+
 export type SourceType = 'web_urls' | 'podcast_feeds' | 'youtube_videos' | 'synthetic_discussion';
 export type SourceStatus = 'active' | 'disabled';
 export type SourceSharePermission = 'read' | 'update' | 'delete' | '*';
@@ -116,6 +118,17 @@ export async function getSource(sourceId: string): Promise<SourceRecord> {
     throw new Error(await parseErrorMessage(response, 'Failed to load source'));
   }
   return response.json();
+}
+
+export async function saveSource(sourceId: string): Promise<SourceRecord> {
+  const response = await fetch(`/api/sources/${sourceId}/save`, { method: 'POST' });
+  if (!response.ok) throw new Error(await parseErrorMessage(response, i18n.t('library.addSourceFailed')));
+  return response.json();
+}
+
+export async function removeSavedSource(sourceId: string): Promise<void> {
+  const response = await fetch(`/api/sources/${sourceId}/save`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(await parseErrorMessage(response, i18n.t('library.removeSourceFailed')));
 }
 
 /** Reports whose generating run actually crawled this source (across all agents) - not

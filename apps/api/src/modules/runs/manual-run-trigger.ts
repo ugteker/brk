@@ -13,12 +13,17 @@ export class ManualRunTrigger {
   ) {}
 
   async triggerRun(agentId: string, options?: AgentRunOptions): Promise<{ status: string; errorCode?: string; errorMessage?: string }> {
-    await this.queue.enqueueImmediateRun(agentId);
+    await this.queue.enqueueImmediateRun(agentId, new Date(), options?.playbookId, options?.agentVersionId);
     const run = await this.queue.claimNextRun('manual-trigger');
     if (!run) return { status: 'no_run_claimed' };
 
     try {
-      const result = await this.runner.run(run.agentId, run.id, options);
+      const result = await this.runner.run(run.agentId, run.id, {
+        ...options,
+        agentVersionId: run.agentVersionId ?? options?.agentVersionId,
+        playbookId: run.playbookId ?? options?.playbookId,
+        playbookMaxItemsPerSource: run.playbookMaxItemsPerSource ?? options?.playbookMaxItemsPerSource
+      });
       await this.queue.completeRun(run.id, result.status, result.errorCode, result.errorMessage);
       return { status: result.status, errorCode: result.errorCode, errorMessage: result.errorMessage };
     } catch (error) {

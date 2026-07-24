@@ -100,6 +100,7 @@ class MemoryCurationRepository implements CurationRepositoryLike {
       id: `session-${++this.sessionSequence}`,
       ownerUserId,
       targetAgentId: input.targetAgentId ?? null,
+      baseAgentVersionId: input.baseAgentVersionId ?? null,
       mode: input.mode,
       status: 'active',
       revision: 0,
@@ -274,6 +275,7 @@ class MemoryCurationRepository implements CurationRepositoryLike {
 
 class TestAgentRepository implements AgentRepositoryLike {
   private readonly agents = new Map<string, Agent>();
+  private nextAgentNumber = 1;
   readonly createCalls: Array<{ ownerUserId: string; input: CreateAgentInput }> = [];
   readonly updateCalls: Array<{ agentId: string; patch: Partial<CreateAgentInput> }> = [];
   readonly events: string[];
@@ -284,11 +286,25 @@ class TestAgentRepository implements AgentRepositoryLike {
     private readonly curationRepository: MemoryCurationRepository
   ) {
     this.events = events;
+    this.agents.set('agent-seed-public', {
+      id: 'agent-seed-public',
+      ownerUserId: 'seed-owner',
+      name: 'Public Market Analyst',
+      description: 'Tracks public market coverage.',
+      characterType: 'summarizer',
+      promptConfig: {},
+      status: 'active',
+      createdAt: new Date('2026-07-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-07-20T00:00:00.000Z'),
+      sources: [],
+      preferences: {},
+      schedule: null
+    });
   }
 
   async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
     const agent: Agent = {
-      id: `agent-${this.agents.size + 1}`,
+      id: `agent-${this.nextAgentNumber++}`,
       ownerUserId,
       name: input.name ?? 'Unnamed agent',
       description: input.description ?? '',
@@ -413,23 +429,100 @@ class TestAgentRepository implements AgentRepositoryLike {
 
 class TestPromptRepository {
   failOnSave = false;
-  readonly saves: Array<{ agentId: string; model: string; systemPrompt: string; enabled: boolean }> = [];
-  private readonly promptsByCurationSessionId = new Map<string, { id: string; agentId: string; version: number; model: string; systemPrompt: string; enabled: boolean; createdAt: Date }>();
+  readonly saves: Array<{ agentId: string; model: string; systemPrompt: string; enabled: boolean; basedOnAgentVersionId?: string | null }> = [];
+  private readonly promptsByCurationSessionId = new Map<
+    string,
+    {
+      id: string;
+      agentId: string;
+      version: number;
+      model: string;
+      systemPrompt: string;
+      enabled: boolean;
+      name: string;
+      description: string;
+      characterType: string;
+      promptConfigJson: string;
+      iconAssetKey: string | null;
+      basedOnAgentVersionId: string | null;
+      publishedAt: Date | null;
+      createdAt: Date;
+    }
+  >();
+  private readonly promptVersionsById = new Map<
+    string,
+    {
+      id: string;
+      agentId: string;
+      version: number;
+      model: string;
+      systemPrompt: string;
+      enabled: boolean;
+      name: string;
+      description: string;
+      characterType: string;
+      promptConfigJson: string;
+      iconAssetKey: string | null;
+      basedOnAgentVersionId: string | null;
+      publishedAt: Date | null;
+      createdAt: Date;
+    }
+  >();
   readonly events: string[];
 
   constructor(events: string[]) {
     this.events = events;
+    this.promptVersionsById.set('public-version-1', {
+      id: 'public-version-1',
+      agentId: 'agent-seed-public',
+      version: 4,
+      model: 'claude-sonnet-4-5',
+      systemPrompt: 'Summarize public market podcasts.',
+      enabled: true,
+      name: 'Public Market Analyst',
+      description: 'Tracks public market coverage.',
+      characterType: 'summarizer',
+      promptConfigJson: '{}',
+      iconAssetKey: 'market-analyst',
+      basedOnAgentVersionId: null,
+      publishedAt: new Date('2026-07-20T00:00:00.000Z'),
+      createdAt: new Date('2026-07-20T00:00:00.000Z')
+    });
   }
 
-  async savePromptVersion(agentId: string, input: { model: string; systemPrompt: string; enabled: boolean }) {
+  async savePromptVersion(agentId: string, input: { model: string; systemPrompt: string; enabled: boolean; basedOnAgentVersionId?: string | null }) {
     if (this.failOnSave) throw new Error('prompt_store_unavailable');
-    const saved = { id: `prompt-${this.saves.length + 1}`, agentId, version: this.saves.length + 1, ...input, createdAt: new Date() };
-    this.saves.push({ agentId, model: input.model, systemPrompt: input.systemPrompt, enabled: input.enabled });
+    const saved = {
+      id: `prompt-${this.saves.length + 1}`,
+      agentId,
+      version: this.saves.length + 1,
+      ...input,
+      name: '',
+      description: '',
+      characterType: 'summarizer',
+      promptConfigJson: '{}',
+      iconAssetKey: null,
+      basedOnAgentVersionId: input.basedOnAgentVersionId ?? null,
+      publishedAt: null,
+      createdAt: new Date()
+    };
+    this.saves.push({
+      agentId,
+      model: input.model,
+      systemPrompt: input.systemPrompt,
+      enabled: input.enabled,
+      ...(input.basedOnAgentVersionId ? { basedOnAgentVersionId: input.basedOnAgentVersionId } : {})
+    });
     this.events.push('prompt:save');
+    this.promptVersionsById.set(saved.id, saved);
     return saved;
   }
 
-  async saveCuratedPromptVersion(agentId: string, input: { model: string; systemPrompt: string; enabled: boolean }, curationSessionId: string) {
+  async saveCuratedPromptVersion(
+    agentId: string,
+    input: { model: string; systemPrompt: string; enabled: boolean; basedOnAgentVersionId?: string | null },
+    curationSessionId: string
+  ) {
     const existing = this.promptsByCurationSessionId.get(curationSessionId);
     if (existing) {
       if (existing.agentId !== agentId) throw new Error('curation_prompt_agent_mismatch');
@@ -442,6 +535,10 @@ class TestPromptRepository {
 
   async getPromptVersionByCurationSessionId(curationSessionId: string) {
     return this.promptsByCurationSessionId.get(curationSessionId) ?? null;
+  }
+
+  async getPromptVersionById(agentVersionId: string) {
+    return this.promptVersionsById.get(agentVersionId) ?? null;
   }
 
   async getLatestPromptVersion(): Promise<null> {
@@ -530,6 +627,42 @@ describe('agent curation routes', () => {
     expect(response.statusCode).toBe(201);
     expect(response.json()).toMatchObject({ mode: 'create', ownerUserId: 'owner-1', status: 'active' });
     expect(agents.createCalls).toEqual([]);
+  });
+
+  it('starts a variant from a published immutable version', async () => {
+    const { app } = await createCurationTestServer();
+
+    const { response } = await startCuration(app, 'owner-1', {
+      mode: 'create',
+      baseAgentVersionId: 'public-version-1'
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      mode: 'create',
+      baseAgentVersionId: 'public-version-1',
+      draft: { name: 'Public Market Analyst', description: 'Tracks public market coverage.' }
+    });
+  });
+
+  it('finalizes an independent private version with provenance', async () => {
+    const { app, prompts } = await createCurationTestServer();
+    const { sessionId } = await startCuration(app, 'owner-1', {
+      mode: 'create',
+      baseAgentVersionId: 'public-version-1'
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/agent-curations/${sessionId}/finalize`,
+      headers: authCookieHeader('owner-1'),
+      payload: readyDraft()
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(prompts.saves).toContainEqual(
+      expect.objectContaining({ basedOnAgentVersionId: 'public-version-1' })
+    );
   });
 
   it('creates the finalized agent, saves its prompt, then completes the session', async () => {
@@ -775,7 +908,7 @@ describe('agent curation routes', () => {
       payload: readyDraft()
     });
     expect(retry.statusCode).toBe(201);
-    await expect(agents.listAgents()).resolves.toHaveLength(1);
+    await expect(agents.listAgents()).resolves.toHaveLength(2);
   });
 
   it('keeps an updated agent finalizing when prompt persistence fails so retry can persist the prompt', async () => {

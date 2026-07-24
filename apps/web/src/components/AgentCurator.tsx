@@ -40,6 +40,7 @@ interface ActionError {
 export interface AgentCuratorProps {
   mode: 'create' | 'update';
   targetAgentId?: string | null;
+  baseAgentVersionId?: string | null;
   sourceContext?: CurationSourceContext;
   currentAgentProfile?: CurationDraftPatch;
   initialDraft?: CurationDraftPatch;
@@ -89,6 +90,7 @@ function fieldLabelKey(field: EditableReviewField): string {
 export function AgentCurator({
   mode,
   targetAgentId,
+  baseAgentVersionId,
   sourceContext,
   currentAgentProfile,
   initialDraft,
@@ -129,13 +131,13 @@ export function AgentCurator({
   // Start-config props are read through a ref and the effect below is keyed on their
   // serialized content: callers often pass inline object literals (new identity every
   // render), which would otherwise re-trigger initialization in an endless loop.
-  const startConfigRef = useRef({ mode, targetAgentId, sourceContext, currentAgentProfile, initialDraft, sessionId, language: i18n.language });
-  startConfigRef.current = { mode, targetAgentId, sourceContext, currentAgentProfile, initialDraft, sessionId, language: i18n.language };
+  const startConfigRef = useRef({ mode, targetAgentId, baseAgentVersionId, sourceContext, currentAgentProfile, initialDraft, sessionId, language: i18n.language });
+  startConfigRef.current = { mode, targetAgentId, baseAgentVersionId, sourceContext, currentAgentProfile, initialDraft, sessionId, language: i18n.language };
   const startConfigKey = JSON.stringify(startConfigRef.current);
 
   const initialize = useCallback(async () => {
     const generation = ++initializationGeneration.current;
-    const { mode, targetAgentId, sourceContext, currentAgentProfile, initialDraft, sessionId, language } = startConfigRef.current;
+    const { mode, targetAgentId, baseAgentVersionId, sourceContext, currentAgentProfile, initialDraft, sessionId, language } = startConfigRef.current;
     setLoading(true);
     setStartError(null);
     setActionError(null);
@@ -145,6 +147,7 @@ export function AgentCurator({
         : await startAgentCuration({
             mode,
             targetAgentId,
+            baseAgentVersionId,
             sourceContext,
             currentAgentProfile,
             initialDraft,

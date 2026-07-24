@@ -71,3 +71,4 @@ Thumbs.db
 # Google service-account keys (never commit)
 apps/api/keys/
 secrets/
+/.superpowers/catalog-preview/

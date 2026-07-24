@@ -19,6 +19,9 @@ function createFakeDb() {
         const matches = rows.filter((r) => r.agentId === where.agentId).sort((a, b) => b.version - a.version);
         return matches[0] ?? null;
       },
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        return rows.find((r) => r.id === where.id) ?? null;
+      },
       create: async ({
         data
       }: {
@@ -64,5 +67,18 @@ describe('PromptRepository', () => {
   it('returns null when no prompt version exists yet', async () => {
     const repo = new PromptRepository(createFakeDb() as never);
     expect(await repo.getLatestPromptVersion('agent-unknown')).toBeNull();
+  });
+
+  it('retrieves a prompt version by id', async () => {
+    const db = createFakeDb();
+    const repo = new PromptRepository(db as never);
+    const created = await repo.savePromptVersion('agent-1', {
+      model: 'claude-sonnet',
+      systemPrompt: 'v1',
+      enabled: true
+    });
+    const fetched = await repo.getPromptVersionById(created.id);
+    expect(fetched).not.toBeNull();
+    expect(fetched?.id).toBe(created.id);
   });
 });

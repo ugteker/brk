@@ -366,3 +366,44 @@ describe('PlaybookRepository follow target metadata', () => {
     expect(created.followTargetTitle).toBe('Episode 42');
   });
 });
+
+describe('PlaybookRepository manual playbooks', () => {
+  it('creates a version-pinned manual playbook without a next run time', async () => {
+    const fakeDb: any = {
+      playbook: {
+        create: vi.fn(async ({ data }: any) => ({
+          id: 'playbook-manual',
+          ...data,
+          nextRunAt: data.nextRunAt,
+          createdAt: new Date('2026-07-23T12:00:00.000Z'),
+          updatedAt: new Date('2026-07-23T12:00:00.000Z'),
+          sources: data.sources.create,
+          agent: { runs: [] }
+        }))
+      }
+    };
+    fakeDb.$transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(fakeDb));
+
+    const repository = new PlaybookRepository(fakeDb);
+    const created = await repository.createPlaybook('owner-1', {
+      agentId: 'agent-1',
+      agentVersionId: 'version-2',
+      name: 'Manual analysis',
+      sourceIds: ['source-1'],
+      schedule: { mode: 'manual' }
+    });
+
+    expect(created.schedule).toEqual({ mode: 'manual' });
+    expect(created.agentVersionId).toBe('version-2');
+    expect(created.nextRunAt).toBeNull();
+    expect(fakeDb.playbook.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          agentVersionId: 'version-2',
+          mode: 'manual',
+          nextRunAt: null
+        })
+      })
+    );
+  });
+});

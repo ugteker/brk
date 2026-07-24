@@ -24,7 +24,7 @@ function applyDomTheme(theme: ThemeMode) {
 function resolveInitialTheme(): ThemeMode {
   const stored = localStorage.getItem(THEME_KEY);
   if (stored === 'dark' || stored === 'light') return stored;
-  // ChatTrader defaults to dark — it's a trading terminal, not a document editor.
+  // Maydoz defaults to dark to keep long-form listening and research workflows comfortable.
   const prefersDark =
     typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches;
   return prefersDark ? 'dark' : 'dark';

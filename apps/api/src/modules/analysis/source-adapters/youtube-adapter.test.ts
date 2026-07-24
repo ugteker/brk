@@ -231,6 +231,24 @@ describe('YouTubeAdapter', () => {
     expect(result.evidence).toHaveLength(0);
     expect(result.warning).toMatch(/Could not resolve/);
   });
+
+  it('honors an explicit canonical limit for playlist refreshes instead of defaulting to one item', async () => {
+    const httpGet = async (url: string) => {
+      if (url.includes('feeds/videos.xml')) return SAMPLE_PLAYLIST_FEED;
+      if (url.includes('/watch?v=')) return SAMPLE_WATCH_HTML;
+      return SAMPLE_TIMEDTEXT_XML;
+    };
+    const adapter = new YouTubeAdapter(createDeps(httpGet));
+
+    const result = await adapter.fetch(
+      { id: 'source-1', type: 'youtube_videos', value: 'https://www.youtube.com/playlist?list=PLxyz' },
+      {},
+      { limit: 2 } as any
+    );
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items.map((item) => item.metadata.itemId)).toEqual(['vid1', 'vid2']);
+  });
 });
 
 describe('probeYouTubeSource', () => {

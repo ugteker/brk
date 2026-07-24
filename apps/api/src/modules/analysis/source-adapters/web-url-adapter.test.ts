@@ -42,4 +42,37 @@ describe('WebUrlAdapter', () => {
     const second = await adapter.fetch('agent-1', source);
     expect(second.evidence).toHaveLength(0);
   });
+
+  it('honors an explicit canonical limit for listing-page refreshes instead of defaulting to one item', async () => {
+    const httpGet = async (url: string) => {
+      if (url === 'https://example.com/blog') {
+        return `<html><body>
+          <a class="entry" href="https://example.com/p-1">Entry 1</a>
+          <a class="entry" href="https://example.com/p-2">Entry 2</a>
+          <a class="entry" href="https://example.com/p-3">Entry 3</a>
+        </body></html>`;
+      }
+
+      return `<html><body><article>Content for ${url}</article></body></html>`;
+    };
+    const adapter = new WebUrlAdapter(
+      createDeps(httpGet, async () => ({
+        siteType: 'listing_page',
+        itemLinkSelector: 'a.entry',
+        itemIdHint: null,
+        contentSelector: 'article',
+        paginationSelector: null,
+        confidence: 0.9
+      }))
+    );
+
+    const result = await adapter.fetch(
+      { id: 'source-1', type: 'web_urls', value: 'https://example.com/blog' },
+      {},
+      { limit: 2 } as any
+    );
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items.map((item) => item.link)).toEqual(['https://example.com/p-1', 'https://example.com/p-2']);
+  });
 });

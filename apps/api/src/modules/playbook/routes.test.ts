@@ -8,10 +8,11 @@ interface PlaybookRecord {
   id: string;
   ownerUserId: string;
   agentId: string;
+  agentVersionId: string | null;
   name: string;
   description: string;
   enabled: boolean;
-  mode: 'interval' | 'daily' | 'weekly';
+  mode: 'manual' | 'interval' | 'daily' | 'weekly';
   intervalMinutes: number | null;
   dailyTime: string | null;
   timezone: string | null;
@@ -21,7 +22,7 @@ interface PlaybookRecord {
   executionMode: 'latest_only' | 'all_sources';
   maxSourcesPerRun: number;
   maxItemsPerSource: number;
-  nextRunAt: Date;
+  nextRunAt: Date | null;
   lastRunAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -56,20 +57,21 @@ class InMemoryPlaybookRepository {
       id: `playbook-${this.nextPlaybookId++}`,
       ownerUserId,
       agentId: input.agentId,
+      agentVersionId: input.agentVersionId ?? null,
       name: input.name,
       description: input.description ?? '',
       enabled: input.enabled ?? true,
-      mode: input.mode ?? 'interval',
-      intervalMinutes: input.intervalMinutes ?? 60,
-      dailyTime: input.dailyTime ?? null,
-      timezone: input.timezone ?? null,
-      daysOfWeek: input.daysOfWeek ?? [],
+      mode: input.schedule?.mode ?? 'interval',
+      intervalMinutes: input.schedule?.mode === 'interval' ? input.schedule.intervalMinutes : input.intervalMinutes ?? 60,
+      dailyTime: input.schedule?.mode === 'daily' || input.schedule?.mode === 'weekly' ? input.schedule.dailyTime : input.dailyTime ?? null,
+      timezone: input.schedule?.mode === 'daily' || input.schedule?.mode === 'weekly' ? input.schedule.timezone : input.timezone ?? null,
+      daysOfWeek: input.schedule?.mode === 'weekly' ? input.schedule.daysOfWeek : input.daysOfWeek ?? [],
       sourceIds: input.sourceIds ?? [],
       recipients: input.recipients ?? [],
       executionMode: input.executionMode ?? 'latest_only',
       maxSourcesPerRun: input.maxSourcesPerRun ?? 3,
       maxItemsPerSource: input.maxItemsPerSource ?? 1,
-      nextRunAt: new Date('2026-07-14T08:00:00.000Z'),
+      nextRunAt: input.schedule?.mode === 'manual' ? null : new Date('2026-07-14T08:00:00.000Z'),
       lastRunAt: null,
       createdAt: new Date('2026-07-13T00:00:00.000Z'),
       updatedAt: new Date('2026-07-13T00:00:00.000Z')

@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import { DEFAULT_CHARACTER_TYPE } from './types';
 import type {
   Agent,
@@ -6,6 +6,7 @@ import type {
   AgentShareRecord,
   CloneAgentResult,
   CreateAgentInput,
+  CreateAgentVersionInput,
   MarketplaceAgentListItem,
   PromptConfig,
   PublishAgentInput,
@@ -235,11 +236,78 @@ export class AgentRepository {
 
   async updateAgent(agentId: string, patch: Partial<CreateAgentInput>): Promise<Agent> {
     const updated = await this.db.$transaction(async (tx: any) => {
+      // If the patch touches execution/prompt fields, delegate to the shared versioned update helper
+      if (patch.characterType !== undefined || patch.promptConfig !== undefined) {
+        return await this.createVersionedPromptAndUpdateAgentInTransaction(tx, agentId, patch);
+      }
+
       const updated = await this.updateAgentInTransaction(tx, agentId, patch);
       await this.realtime.append(tx, { userId: updated.ownerUserId, topic: 'agent.changed', entityId: agentId });
       return updated;
     });
     return mapAgent(updated);
+  }
+
+  private async createVersionedPromptAndUpdateAgentInTransaction(tx: any, agentId: string, patch: Partial<CreateAgentInput>): Promise<any> {
+    // Disallow changes when the agent is publicly published
+    const publication = await tx.marketplacePublication.findFirst({
+      where: { resourceType: 'agent', resourceId: agentId, status: 'published', visibility: 'public', retiredAt: null }
+    });
+    if (publication) {
+      throw new Error('immutable_agent_version');
+    }
+
+    const latest = await tx.agentPromptVersion.findFirst({ where: { agentId }, orderBy: { version: 'desc' } });
+    const latestPromptConfig = latest && latest.promptConfigJson ? JSON.parse(latest.promptConfigJson) : {};
+    const latestCharacterType = latest?.characterType ?? DEFAULT_CHARACTER_TYPE;
+    const model = latest?.model ?? '';
+    const systemPrompt = latest?.systemPrompt ?? '';
+
+    const name = patch.name !== undefined ? (patch.name || '') : latest?.name ?? deriveAgentName(patch.characterType ?? latestCharacterType, patch.promptConfig ?? latestPromptConfig);
+    const description = patch.description !== undefined ? patch.description : latest?.description ?? '';
+    const promptConfig = patch.promptConfig !== undefined ? patch.promptConfig : latestPromptConfig;
+    const characterType = patch.characterType !== undefined ? patch.characterType : latestCharacterType;
+
+    await this.createPromptVersionInTransaction(tx, agentId, {
+      name,
+      description,
+      characterType,
+      promptConfig: promptConfig ?? {},
+      model,
+      systemPrompt,
+      iconAssetKey: latest?.iconAssetKey ?? null,
+      basedOnAgentVersionId: latest?.id ?? null
+    });
+
+    // Handle sources updates if provided
+    if (patch.sources) {
+      await tx.agentSource.deleteMany({ where: { agentId } });
+      if (patch.sources && patch.sources.length > 0) {
+        await tx.agentSource.createMany({
+          data: patch.sources.map((s) => ({
+            agentId,
+            type: s.type,
+            value: s.value,
+            frequencyMinutes: s.frequencyMinutes ?? 60,
+            maxItems: s.maxItems ?? 1
+          }))
+        });
+      }
+    }
+
+    // Update agent identity/status fields only (do not persist execution fields on the agent row)
+    const data: Prisma.AgentUncheckedUpdateInput = {};
+    if (patch.name !== undefined) data.name = patch.name.trim();
+    if (patch.description !== undefined) data.description = patch.description;
+    if (patch.active !== undefined) data.status = patch.active ? 'active' : 'disabled';
+    if (patch.preferences !== undefined) data.preferencesJson = JSON.stringify(patch.preferences);
+
+    const updatedAgent = Object.keys(data).length > 0
+      ? await tx.agent.update({ where: { id: agentId }, data, include: { sources: true } })
+      : await tx.agent.findUnique({ where: { id: agentId }, include: { sources: true } });
+
+    await this.realtime.append(tx, { userId: updatedAgent.ownerUserId, topic: 'agent.changed', entityId: agentId });
+    return updatedAgent;
   }
 
   async updateFinalizedAgent(
@@ -249,18 +317,22 @@ export class AgentRepository {
     expectedRevision: number
   ): Promise<Agent> {
     const updated = await this.db.$transaction(async (tx: any) => {
-      const updated = await this.updateAgentInTransaction(tx, agentId, patch);
-      await this.recordCurationAgent(tx, curationSessionId, expectedRevision, updated.id);
-      await this.realtime.append(tx, { userId: updated.ownerUserId, topic: 'agent.changed', entityId: agentId });
-      return updated;
+      let updatedAgent;
+      if (patch.characterType !== undefined || patch.promptConfig !== undefined) {
+        // Use the same immutable-version creation logic as the regular PATCH flow
+        updatedAgent = await this.createVersionedPromptAndUpdateAgentInTransaction(tx, agentId, patch);
+      } else {
+        updatedAgent = await this.updateAgentInTransaction(tx, agentId, patch);
+      }
+
+      await this.recordCurationAgent(tx, curationSessionId, expectedRevision, updatedAgent.id);
+      await this.realtime.append(tx, { userId: updatedAgent.ownerUserId, topic: 'agent.changed', entityId: agentId });
+      return updatedAgent;
     });
     return mapAgent(updated);
   }
 
   private async updateAgentInTransaction(tx: any, agentId: string, patch: Partial<CreateAgentInput>): Promise<any> {
-    // Preserve explicitly supplied names (including names curated through the agent-creation
-    // flow). Keep the prior derived-name behavior for older patches that change character
-    // settings without supplying a name.
     if (patch.sources) {
       await tx.agentSource.deleteMany({ where: { agentId } });
       await tx.agentSource.createMany({
@@ -274,18 +346,9 @@ export class AgentRepository {
       });
     }
 
-    const data: any = {};
+    const data: Prisma.AgentUncheckedUpdateInput = {};
     if (patch.name !== undefined) data.name = patch.name.trim();
     if (patch.description !== undefined) data.description = patch.description;
-    if (patch.characterType !== undefined || patch.promptConfig !== undefined) {
-      const characterType = patch.characterType ?? DEFAULT_CHARACTER_TYPE;
-      const promptConfig = patch.promptConfig ?? {};
-      if (patch.name === undefined) data.name = deriveAgentName(characterType, promptConfig);
-      data.characterType = characterType;
-      if (patch.promptConfig !== undefined || patch.name === undefined) {
-        data.promptConfigJson = JSON.stringify(promptConfig);
-      }
-    }
     if (patch.active !== undefined) data.status = patch.active ? 'active' : 'disabled';
     if (patch.preferences !== undefined) data.preferencesJson = JSON.stringify(patch.preferences);
 
@@ -293,6 +356,85 @@ export class AgentRepository {
       where: { id: agentId },
       data,
       include: { sources: true }
+    });
+  }
+
+  private async createPromptVersionInTransaction(tx: any, agentId: string, input: CreateAgentVersionInput) {
+    const latest = await tx.agentPromptVersion.findFirst({ where: { agentId }, orderBy: { version: 'desc' } });
+    const nextVersion = (latest?.version ?? 0) + 1;
+    const created = await tx.agentPromptVersion.create({
+      data: {
+        agentId,
+        version: nextVersion,
+        model: input.model,
+        systemPrompt: input.systemPrompt,
+        name: input.name,
+        description: input.description ?? '',
+        characterType: input.characterType,
+        promptConfigJson: JSON.stringify(input.promptConfig ?? {}),
+        iconAssetKey: input.iconAssetKey ?? null,
+        basedOnAgentVersionId: input.basedOnAgentVersionId ?? null,
+        enabled: true
+      }
+    });
+    return created;
+  }
+
+  async createAgentVersion(agentId: string, input: CreateAgentVersionInput): Promise<{ id: string; agentId: string; version: number }> {
+    const created = await this.db.$transaction(async (tx: any) => {
+      const agentRow = await tx.agent.findUnique({ where: { id: agentId } });
+      if (!agentRow) {
+        throw new Error('not_found');
+      }
+      const created = await this.createPromptVersionInTransaction(tx, agentId, input);
+      return created;
+    });
+    return { id: created.id, agentId: created.agentId, version: created.version };
+  }
+
+  async saveAgentVersion(userId: string, agentVersionId: string): Promise<void> {
+    await this.db.$transaction(async (tx: any) => {
+      const version = await tx.agentPromptVersion.findUnique({ where: { id: agentVersionId }, include: { agent: true } });
+      if (!version) {
+        throw new Error('not_found');
+      }
+
+      const isOwner = !!version.agent && version.agent.ownerUserId === userId;
+
+      const publication = await tx.marketplacePublication.findFirst({
+        where: {
+          resourceType: 'agent',
+          resourceId: version.agentId,
+          status: 'published',
+          visibility: 'public',
+          retiredAt: null
+        }
+      });
+
+      const isPublic = !!publication;
+
+      if (!isOwner && !isPublic) {
+        throw new Error('not_found');
+      }
+
+      try {
+        await tx.userLibraryAgent.create({ data: { userId, agentVersionId, savedAt: new Date() } });
+      } catch (err) {
+        const e = err as { code?: string };
+        if (e?.code === 'P2002') {
+          // Unique constraint violation - the membership already exists; update its timestamp
+          await tx.userLibraryAgent.updateMany({ where: { userId, agentVersionId }, data: { savedAt: new Date() } });
+        } else {
+          throw err;
+        }
+      }
+    });
+  }
+
+  async removeSavedAgentVersion(userId: string, agentVersionId: string): Promise<void> {
+    await this.db.$transaction(async (tx: any) => {
+      const deleted = await tx.userLibraryAgent.deleteMany({ where: { userId, agentVersionId } });
+      if (deleted?.count === 0) throw new Error('not_found');
     });
   }
 

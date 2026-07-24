@@ -48,6 +48,11 @@ import { AgentPromptEditor } from '../components/AgentPromptEditor';
 import { EpisodePickerModal } from '../components/EpisodePickerModal';
 import { TouchSafeTooltip } from '../components/TouchSafeTooltip';
 import { ListenActiveButton, ListenIdleButton } from '../components/ListenButtons';
+import { GhostCreateCard } from '../components/library/GhostCreateCard';
+import { LibraryOverview } from '../components/library/LibraryOverview';
+import { PostSourceChoiceModal } from '../components/library/PostSourceChoiceModal';
+import { AgentConnectedModal } from '../components/agent-selection/AgentConnectedModal';
+import { AgentSelectionView } from '../components/agent-selection/AgentSelectionView';
 import { SymbolPerformancePage } from './SymbolPerformancePage';
 import { seedDemoData } from '../api/admin';
 import { useAppData } from '../context/AppDataContext';
@@ -100,6 +105,7 @@ import {
   probeSource,
   publishSource,
   shareSource,
+  saveSource,
   updateSource,
   type SourceRecord,
   type SourceType
@@ -164,6 +170,7 @@ function SourceTypeBadge({ type }: { type: string }) {
 
 const DEFAULT_LIBRARY_TAB_ID = 'library-default';
 const DEFAULT_LIBRARY_TAB_NAME = 'My Collection';
+const LIBRARY_GUIDANCE_KEY = 'brk:library:add-source-guidance-seen';
 
 interface AutoDetectedSource {
   type: SourceType;
@@ -173,52 +180,6 @@ interface AutoDetectedSource {
   coverImageUrl?: string;
   itemCount?: number;
   previewItems: Array<{ title: string; link: string | null; pubDate: string | null }>;
-}
-
-function GhostCreateCard({
-  ariaLabel,
-  onClick,
-  icon,
-  title,
-  sub,
-  className = ''
-}: {
-  ariaLabel: string;
-  onClick: () => void;
-  icon: ReactNode;
-  title: string;
-  sub?: string;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      onClick={onClick}
-      className={`group relative flex min-h-[170px] flex-col items-center justify-center
-                  rounded-lg p-4 text-center text-sky-700 transition-all
-                  hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200 ${className}`}
-    >
-      <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
-        <rect
-          x="1" y="1"
-          width="calc(100% - 2px)" height="calc(100% - 2px)"
-          rx="9" ry="9"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeDasharray="6 4"
-          style={{ animation: 'dash-march 14s linear infinite', opacity: 0.5 }}
-          className="transition-opacity group-hover:!opacity-100"
-        />
-      </svg>
-      <span className="relative z-10 flex flex-col items-center gap-2">
-        <span className="text-3xl transition-transform group-hover:scale-110">{icon}</span>
-        <span className="text-sm font-semibold">{title}</span>
-        {sub !== undefined && <span className="text-xs opacity-70">{sub}</span>}
-      </span>
-    </button>
-  );
 }
 
 function WizardSelectableCard({
@@ -381,19 +342,20 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const {
     agents, setAgents,
     sources,
+    catalog,
     playbooks,
     agentsLoadState: loadState,
     sourcesLoadState,
     playbooksLoadState,
+    catalogLoadState,
     marketplaceAgents, setMarketplaceAgents: _setMarketplaceAgents,
     marketplaceSources, setMarketplaceSources: _setMarketplaceSources,
     marketplacePlaybooks, setMarketplacePlaybooks: _setMarketplacePlaybooks,
     marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
-    refreshAgents: _refreshAgents, refreshSources: _refreshSources, refreshPlaybooks: _refreshPlaybooks,
+    refreshAgents: _refreshAgents, refreshSources: _refreshSources, refreshPlaybooks: _refreshPlaybooks, refreshCatalog,
     failedRunNotices, setFailedRunNotices,
     newReportNotices, setNewReportNotices,
     bellDismissedIds,
-    forceShowOnboarding, forceShowGuidedWizard, setForceShowGuidedWizard
   } = useAppData();
   const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
   const [agentEditor, setAgentEditor] = useState<AgentEditor>(null);
@@ -514,6 +476,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [isScheduleEditOpen, setIsScheduleEditOpen] = useState(false);
   const [scheduleEditPlaybook, setScheduleEditPlaybook] = useState<PlaybookRecord | null>(null);
   const [isScheduleEditSaving, setIsScheduleEditSaving] = useState(false);
+  const [connectedAgentPlaybook, setConnectedAgentPlaybook] = useState<PlaybookRecord | null>(null);
+  const [runningConnectedAgentPlaybook, setRunningConnectedAgentPlaybook] = useState(false);
   // Inline agent creation inside the follow wizard (step: pick agent) — full 4-step sub-wizard
   const [showInlineAgentCreate, setShowInlineAgentCreate] = useState(false);
   const [isInlineAgentSaving, setIsInlineAgentSaving] = useState(false);
@@ -530,6 +494,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [inlineAgentValidationError, setInlineAgentValidationError] = useState<string | null>(null);
   // AI curation inside the follow wizard's "pick agent" step (alternative to the manual sub-wizard)
   const [inlineAgentCurating, setInlineAgentCurating] = useState(false);
+  const [inlineCurationBaseAgentVersionId, setInlineCurationBaseAgentVersionId] = useState<string | null>(null);
   const [showSourcesMarketplace, setShowSourcesMarketplace] = useState(false);
   const [showPlaybooksMarketplace, setShowPlaybooksMarketplace] = useState(false);
   const [showAgentsMarketplace, setShowAgentsMarketplace] = useState(false);
@@ -566,6 +531,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [guidedWizardDismissed, setGuidedWizardDismissed] = useState(() =>
     localStorage.getItem('chattrader:guided-wizard:dismissed') === '1'
   );
+  const [libraryGuidanceSeen, setLibraryGuidanceSeen] = useState(() =>
+    localStorage.getItem(LIBRARY_GUIDANCE_KEY) === '1'
+  );
+  const [postSourceChoiceSource, setPostSourceChoiceSource] = useState<SourceRecord | null>(null);
   const [wizardShowAdvanced, setWizardShowAdvanced] = useState(false);
 
   /** Onboarding step completion */
@@ -659,11 +628,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     return _refreshAgents();
   }
 
-  function openManualAgentCreate() {
-    setAgentEditor({ mode: 'manual-create' });
-    setSelectedAgentId(null);
-  }
-
   function openCurationCreate() {
     setAgentEditor({ mode: 'curation-create' });
     setSelectedAgentId(null);
@@ -683,24 +647,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   }
 
 
-  // Auto-dismiss onboarding checklist once all 4 steps are complete
-  useEffect(() => {
-    if (onboardingAllDone && onboardingDataLoaded && !onboardingDismissed && !forceShowOnboarding) {
-      localStorage.setItem('chattrader:onboarding:dismissed', '1');
-      setOnboardingDismissed(true);
-    }
-  }, [onboardingAllDone, onboardingDataLoaded, onboardingDismissed, forceShowOnboarding]);
-
-  // Open guided first-run wizard for truly new users (nothing set up yet, not dismissed)
-  useEffect(() => {
-    if (!onboardingDataLoaded) return;
-    if (forceShowGuidedWizard) {
-      setGuidedWizardOpen(true);
-      return;
-    }
-    if (guidedWizardDismissed || sources.length > 0 || agents.length > 0 || playbooks.length > 0) return;
-    setGuidedWizardOpen(true);
-  }, [onboardingDataLoaded, forceShowGuidedWizard, guidedWizardDismissed, sources.length, agents.length, playbooks.length]);
+  // Library guidance replaces the old forced onboarding flows.
 
   // Load library tabs and source assignments from localStorage
   useEffect(() => {
@@ -1146,6 +1093,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   function onFollowSource(source: SourceRecord, event?: React.MouseEvent) {
     event?.stopPropagation();
+    clearPostSourceAgentGuidance(source.id);
     // Opening the follow wizard must never expose the admin-only Agents/Playbooks
     // tabs to non-admin users. The wizard is a standalone Modal reachable regardless
     // of tab state. Source is already known so we skip step 0 (Pick source).
@@ -1169,9 +1117,54 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
     setPlaybookAgentIdsDraft(alreadyLinkedAgentIds);
     setIsPlaybookCreateOpen(true);
-    if (agents.length === 0) {
-      openInlineAgentCreate();
+  }
+
+  function onChoosePostSourceAgent(source: SourceRecord) {
+    setPostSourceChoiceSource(null);
+    onFollowSource(source);
+  }
+
+  function onSkipPostSourceAgent(source: SourceRecord) {
+    setPostSourceAgentGuidancePending(source.id);
+    setPostSourceChoiceSource(null);
+  }
+
+  async function handleAgentSelectionConnected(playbook: PlaybookRecord) {
+    await Promise.all([refreshPlaybooks(), refreshSources()]);
+    if (playbook.sourceIds[0]) {
+      markSourceUpdated(playbook.sourceIds[0]);
     }
+    message.success(t('agentSelection.connectionSuccess'));
+    setPostSourceChoiceSource(null);
+    setIsPlaybookCreateOpen(false);
+    setFollowWizardSourcePreselected(false);
+    setInlineAgentCurating(false);
+    setPlaybookCreateStep(0);
+    setConnectedAgentPlaybook(playbook);
+  }
+
+  async function onRunFirstConnectedReport() {
+    if (!connectedAgentPlaybook) return;
+    setRunningConnectedAgentPlaybook(true);
+    try {
+      const result = await runPlaybookNow(connectedAgentPlaybook.id);
+      if (result.status === 'scheduled') {
+        message.success(t('agentSelection.runFirstReportScheduled'));
+      } else {
+        message.info(result.status);
+      }
+      await refreshPlaybooks();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('agentSelection.runFirstReportFailed'));
+    } finally {
+      setRunningConnectedAgentPlaybook(false);
+    }
+  }
+
+  function onScheduleConnectedAgentPlaybook() {
+    if (!connectedAgentPlaybook) return;
+    setConnectedAgentPlaybook(null);
+    onOpenScheduleEdit(connectedAgentPlaybook);
   }
 
   async function onRemoveAgentFromSource(playbook: PlaybookRecord, sourceId: string) {
@@ -1202,21 +1195,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setInlineAgentValidationError(null);
     setConfirmingUnfollow(false);
     setWizardShowAdvanced(false);
-  }
-
-  function openInlineAgentCreate() {
-    setInlineAgentCurating(false);
-    setInlineAgentStep(0);
-    setInlineAgentDescription('');
-    setInlineAgentPersonaId(DEFAULT_PROMPT_PERSONA_ID);
-    setInlineAgentCharacterId(DEFAULT_PROMPT_CHARACTER_ID);
-    setInlineAgentModel('claude-sonnet-4-5');
-    setInlineAgentSystemPrompt(getPromptCharacter(DEFAULT_PROMPT_PERSONA_ID, DEFAULT_PROMPT_CHARACTER_ID)?.systemPrompt ?? '');
-    setInlineAgentRiskLevel('medium');
-    setInlineAgentReportDetailLevel('standard');
-    setInlineAgentValidationError(null);
-    setPlaybookAgentIdsDraft([]);
-    setShowInlineAgentCreate(true);
+    setInlineCurationBaseAgentVersionId(null);
   }
 
   function closeInlineAgentCreate() {
@@ -1224,10 +1203,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setInlineAgentValidationError(null);
   }
 
-  function openInlineAgentCuration() {
+  function openInlineAgentCuration(baseAgentVersionId?: string) {
     setShowInlineAgentCreate(false);
     setInlineAgentValidationError(null);
     setPlaybookAgentIdsDraft([]);
+    setInlineCurationBaseAgentVersionId(baseAgentVersionId ?? null);
     setInlineAgentCurating(true);
   }
 
@@ -1680,6 +1660,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     if (!normalizedSourceSearch) return true;
     return `${item.title} ${item.value} ${item.summary}`.toLowerCase().includes(normalizedSourceSearch);
   });
+  const starterSources = [...catalog]
+    .filter((source) => !source.saved)
+    .filter((source) => {
+      if (!normalizedSourceSearch) return true;
+      return `${source.title} ${source.summary} ${source.value}`.toLowerCase().includes(normalizedSourceSearch);
+    })
+    .sort((left, right) => left.editorialRank - right.editorialRank);
+  const hasSavedSourcesInActiveTab = sources.some(
+    (source) => (sourceLibraryBySourceId[source.id] ?? DEFAULT_LIBRARY_TAB_ID) === activeLibraryTabId
+  );
   const normalizedMarketplaceAgentsSearch = marketplaceAgentsSearch.trim().toLowerCase();
   const normalizedMarketplacePlaybooksSearch = marketplacePlaybooksSearch.trim().toLowerCase();
   const filteredMarketplaceAgents = marketplaceAgents.filter((item) => {
@@ -1738,6 +1728,54 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   function getSourceEpisodeCount(source: SourceRecord): number {
     return source.metadata.itemCount ?? source.metadata.previewItems.length;
+  }
+
+  function markLibraryGuidanceSeen() {
+    if (libraryGuidanceSeen) return;
+    setLibraryGuidanceSeen(true);
+    localStorage.setItem(LIBRARY_GUIDANCE_KEY, '1');
+  }
+
+  function postSourceAgentGuidanceKey(sourceId: string): string {
+    return `brk:library:add-agent-guidance:${sourceId}`;
+  }
+
+  function setPostSourceAgentGuidancePending(sourceId: string) {
+    try {
+      localStorage.setItem(postSourceAgentGuidanceKey(sourceId), 'pending');
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function clearPostSourceAgentGuidance(sourceId: string) {
+    try {
+      localStorage.removeItem(postSourceAgentGuidanceKey(sourceId));
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function isPostSourceAgentGuidancePending(sourceId: string): boolean {
+    try {
+      return localStorage.getItem(postSourceAgentGuidanceKey(sourceId)) === 'pending';
+    } catch {
+      return false;
+    }
+  }
+
+  async function onSaveStarterSource(source: import('../api/catalog').CatalogSource) {
+    try {
+      const locale = i18n.resolvedLanguage ?? i18n.language;
+      const savedSource = await saveSource(source.sourceId);
+      markLibraryGuidanceSeen();
+      await Promise.all([refreshSources(), refreshCatalog(locale)]);
+      message.success(t('library.sourceSaved'));
+      setPostSourceChoiceSource(savedSource);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('library.addSourceFailed'));
+      throw error;
+    }
   }
 
   async function onDetectSourceFromUrl(url: string) {
@@ -1915,7 +1953,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   function dismissGuidedWizard() {
     setGuidedWizardOpen(false);
-    setForceShowGuidedWizard(false);
     localStorage.setItem('chattrader:guided-wizard:dismissed', '1');
     setGuidedWizardDismissed(true);
   }
@@ -1971,7 +2008,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       const savedSource = await persistGuidedWizardSource();
       if (!savedSource) return;
       void refreshSources().catch(() => undefined);
-      message.success('Source saved. No agent or playbook was created.');
+      message.success(t('library.sourceSavedWithoutAgent'));
       dismissGuidedWizard();
       setActiveHub('feed');
     } catch (err) {
@@ -2178,6 +2215,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
     setIsSourceSaving(true);
     try {
+      let createdSource: SourceRecord | null = null;
       if (editingSource) {
         if (autoDetectedSource.type !== editingSource.type) {
           message.warning('Source type cannot be changed on edit. Please create a new source instead.');
@@ -2197,7 +2235,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           }
         });
       } else {
-        const created = await createSource({
+        createdSource = await createSource({
           type: autoDetectedSource.type,
           value: autoDetectedSource.url,
           metadata: {
@@ -2211,11 +2249,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             }))
           }
         });
-        setSourceLibraryBySourceId((current) => ({ ...current, [created.id]: activeLibraryTabId }));
+        setSourceLibraryBySourceId((current) => ({ ...current, [createdSource!.id]: activeLibraryTabId }));
       }
       await refreshSources();
-      message.success(editingSource ? 'Source updated' : 'Source created');
+      message.success(editingSource ? 'Source updated' : t('library.sourceAdded'));
       closeSourceDialog();
+      if (!editingSource) {
+        setPostSourceChoiceSource(createdSource);
+      }
     } catch (err) {
       message.error(err instanceof Error ? err.message : editingSource ? 'Failed to update source' : 'Failed to create source');
     } finally {
@@ -2377,49 +2418,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                       </div>
                     }
                   >
-                   {/* First-run onboarding checklist — shown until all 4 steps complete or dismissed */}
-                   {(forceShowOnboarding || (!onboardingDismissed && !showAdminWorkspace && onboardingDataLoaded && !onboardingAllDone)) ? (
-                     <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950 px-5 py-4">
-                       <div className="flex items-start justify-between gap-3">
-                         <div className="min-w-0">
-                           <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-100">{t('onboarding.gettingStarted')}</p>
-                           <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">{t('onboarding.gettingStartedDesc')}</p>
-                         </div>
-                         <Button
-                           type="text"
-                           size="small"
-                           className="shrink-0 text-indigo-400 hover:text-indigo-600"
-                           onClick={() => {
-                             localStorage.setItem('chattrader:onboarding:dismissed', '1');
-                             setOnboardingDismissed(true);
-                           }}
-                         >
-                           {t('onboarding.dismiss')}
-                         </Button>
-                       </div>
-                       <div className="mt-3 space-y-2">
-                         {[
-                           { done: sources.length > 0, label: t('onboarding.step1'), desc: t('onboarding.step1Desc'), action: () => { setEditingSource(null); setIsSourceCreateOpen(true); setSourceUrlDraft(''); setAutoDetectedSource(null); } },
-                           { done: agents.length > 0, label: t('onboarding.step2'), desc: t('onboarding.step2Desc'), action: () => setActiveHub('agents') },
-                           { done: playbooks.length > 0, label: t('onboarding.step3'), desc: t('onboarding.step3Desc'), action: () => openPlaybookCreate() },
-                           { done: onboardingHasFirstReport, label: t('onboarding.step4'), desc: t('onboarding.step4Desc'), action: () => setActiveHub('feed') },
-                         ].map((step, i) => (
-                           <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 ${step.done ? 'opacity-50' : 'bg-white dark:bg-indigo-900'}`}>
-                             <span className="text-lg shrink-0">{step.done ? '✅' : '⬜'}</span>
-                             <div className="min-w-0 flex-1">
-                               <p className={`text-xs font-medium ${step.done ? 'line-through text-gray-400' : 'text-indigo-900 dark:text-indigo-100'}`}>{step.label}</p>
-                               <p className="text-xs text-indigo-500 dark:text-indigo-400">{step.desc}</p>
-                             </div>
-                             {!step.done && (
-                               <Button size="small" type="primary" onClick={step.action}>
-                                 {t('common.next')}
-                               </Button>
-                             )}
-                           </div>
-                         ))}
-                       </div>
-                     </div>
-                   ) : null}
                    {/* Unified inner tab bar: user library tabs + fixed Marketplace tab */}
                    <div
                      onDoubleClick={() => {
@@ -2658,6 +2656,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                  size="large"
                                  aria-label={t('library.addAgent')}
                                  icon={<PlusOutlined />}
+                                 className={isPostSourceAgentGuidancePending(selectedSource.id) ? 'library-next-action' : undefined}
                                  onClick={(event) => onFollowSource(selectedSource, event)}
                                />
                              </TouchSafeTooltip>
@@ -3147,270 +3146,31 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                        </Card>
                      ) : null;
                    })() : sourcesLoadState !== 'loading' ? (
-                   <div className="grid gap-3 sm:grid-cols-2">
-                     {filteredSources.map((source) => {
-                       const isRecentlyUpdated = recentlyUpdatedSourceId === source.id;
-                       const linkedForCard = playbooks.filter((p) => p.sourceIds.includes(source.id));
-                       const cardAgentLinks = linkedForCard
-                         .map((playbook) => {
-                           const agent = agents.find((candidate) => candidate.id === playbook.agentId);
-                           return agent ? { playbook, agent } : null;
-                         })
-                         .filter((link): link is { playbook: PlaybookRecord; agent: AgentSummary } => Boolean(link));
-                       const cardReportCount = source.reportCount ?? 0;
-                       const hasCardReports = cardReportCount > 0;
-                       const coverImageUrl = getSourceCoverImageUrl(source);
-                       return (
-                       <Card
-                         key={source.id}
-                         size="small"
-                         hoverable
-                         onClick={() => { setRecentlyUpdatedSourceId(null); setSelectedSourceId(source.id); setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports'); }}
-                         style={{ cursor: 'pointer', outline: isRecentlyUpdated ? '2px solid #722ed1' : undefined, outlineOffset: isRecentlyUpdated ? '2px' : undefined }}
-                         styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1, padding: 0 } }}
-                         className="overflow-hidden border border-[rgba(114,46,209,0.18)] shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-[rgba(114,46,209,0.38)] hover:shadow-md dark:border-[rgba(167,139,250,0.30)] dark:hover:border-[rgba(167,139,250,0.55)] flex flex-col"
-                       >
-                         <div className="relative h-44 overflow-hidden bg-slate-900">
-                           {source.type === 'synthetic_discussion' ? (
-                             <div className="relative flex h-full items-center justify-center overflow-hidden bg-gradient-to-br from-[#1e1239] via-[#54239a] to-[#164e78]">
-                               <div aria-hidden="true" className="absolute -left-12 -top-16 h-44 w-44 rounded-full bg-violet-300/30 blur-3xl" />
-                               <div aria-hidden="true" className="absolute -bottom-20 -right-8 h-52 w-52 rounded-full bg-sky-300/25 blur-3xl" />
-                               <div className="relative flex h-24 w-24 items-center justify-center rounded-[1.75rem] border border-white/25 bg-white/15 text-white shadow-xl shadow-violet-950/40 backdrop-blur-sm">
-                                 <AudioOutlined className="text-5xl" />
-                               </div>
-                             </div>
-                           ) : coverImageUrl ? (
-                             <>
-                               <img aria-hidden="true" src={coverImageUrl} className="absolute -inset-4 h-[calc(100%+2rem)] w-[calc(100%+2rem)] object-cover blur-xl opacity-60" />
-                               <img src={coverImageUrl} alt={`${getSourceDisplayTitle(source)} cover`} className="relative h-full w-full object-contain" />
-                             </>
-                           ) : (
-                             <div className="flex h-full items-center justify-center text-sm text-slate-300">{t('library.coverUnavailable')}</div>
-                           )}
-                           <div className="absolute left-3 top-3">
-                             <SourceTypeBadge type={source.type} />
-                           </div>
-                           <div className="absolute right-2 top-2" onClick={(event) => event.stopPropagation()}>
-                             <EntityActions
-                               entityLabel="source"
-                               isOwner={source.ownerUserId === user?.id}
-                               variant="menu"
-                               menuAriaLabel={t('library.manageSource')}
-                               onEdit={() => onEditSource(source)}
-                               onShare={(payload) =>
-                                 shareSource(source.id, {
-                                   granteeUserId: payload.granteeUserId,
-                                   permission: payload.permission as 'read' | 'update' | 'delete' | '*'
-                                 })
-                               }
-                               sharePermissions={['read', 'update', 'delete', '*']}
-                               onPublish={(payload) => publishSource(source.id, payload)}
-                               defaultPublishTitle={getSourceDisplayTitle(source)}
-                             />
-                           </div>
-                         </div>
-                         <div className="flex flex-1 flex-col p-4">
-                           <div className="min-w-0">
-                             <div className="text-base font-semibold leading-snug">{getSourceDisplayTitle(source)}</div>
-                             {source.type !== 'synthetic_discussion' && (
-                               <Text type="secondary" className="block truncate text-xs">{source.value}</Text>
-                             )}
-                             {getSourceSpeakers(source).length > 0 && (
-                               <div className="mt-2 flex flex-wrap gap-1.5">
-                                 {getSourceSpeakers(source).map((speaker) => (
-                                   <span
-                                     key={speaker}
-                                     className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50/80 px-2 py-0.5 text-[11px] font-medium text-violet-800 dark:border-violet-500/30 dark:bg-violet-950/40 dark:text-violet-200"
-                                   >
-                                     🎙 {speaker}
-                                   </span>
-                                 ))}
-                               </div>
-                             )}
-                           </div>
-                         <div className="mt-4 text-xs">
-                           {source.type === 'synthetic_discussion' && (source.metadata.itemCount ?? source.metadata.previewItems.length) > 0 ? (
-                             <div className="mb-2 flex flex-wrap gap-1.5" data-testid="library-material-chips">
-                               <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:border-slate-600/60 dark:bg-slate-800/60 dark:text-slate-200">
-                                 📄 {t('library.materialTranscripts', { count: source.metadata.itemCount ?? source.metadata.previewItems.length })}
-                               </span>
-                               {(source.metadata.audioCount ?? 0) > 0 ? (
-                                 <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50/80 px-2 py-0.5 text-[11px] font-medium text-violet-800 dark:border-violet-500/30 dark:bg-violet-950/40 dark:text-violet-200">
-                                   🔊 {t('library.materialAudio', { count: source.metadata.audioCount })}
-                                 </span>
-                               ) : null}
-                             </div>
-                           ) : null}
-                           {source.metadata.previewItems.length > 0 ? (
-                             <>
-                               <div className="mb-1 font-medium text-muted-foreground">
-                                 {source.type === 'synthetic_discussion' ? t('library.recentRuns') : t('library.recentItems')}
-                               </div>
-                               <ul className="space-y-1 text-foreground">
-                                 {source.metadata.previewItems.slice(0, 2).map((item) => (
-                                   <li key={`${source.id}:${item.link ?? item.title}`} className="truncate">
-                                     ▶ {item.title}
-                                     {item.hasAudio ? <span className="ml-1" title={t('library.materialHasAudio')} aria-label={t('library.materialHasAudio')}>🔊</span> : null}
-                                   </li>
-                                 ))}
-                               </ul>
-                             </>
-                           ) : (
-                             <span className="text-muted-foreground">
-                               {source.type === 'synthetic_discussion' ? t('library.noRuns') : t('library.noEpisodes')}
-                             </span>
-                           )}
-                         </div>
-                         <div className="mt-4" onClick={(event) => event.stopPropagation()}>
-                           <Button
-                             type="text"
-                             block
-                             className={`h-auto rounded-lg border px-3 py-2 text-left ${
-                               hasCardReports
-                                 ? 'border-violet-200 bg-violet-50/70 hover:!border-violet-300 hover:!bg-violet-100/70 dark:border-violet-500/30 dark:bg-violet-950/30 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/50'
-                                 : 'border-dashed border-border bg-muted/30 hover:!border-violet-300 hover:!bg-violet-50/50 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/30'
-                             }`}
-                             aria-label={hasCardReports ? t('library.openReports', { count: cardReportCount }) : t('library.noReportsYet')}
-                             onClick={() => {
-                               setRecentlyUpdatedSourceId(null);
-                               setSelectedSourceId(source.id);
-                               setActiveSourceTab('reports');
-                             }}
-                           >
-                             <span className="flex items-center gap-2">
-                               <CheckCircleOutlined
-                                 className={hasCardReports ? 'text-emerald-500 dark:text-emerald-400' : 'text-muted-foreground'}
-                               />
-                               <span className="min-w-0 flex-1">
-                                 <span className="block text-xs font-semibold text-foreground">
-                                   {hasCardReports ? t('library.reportsAvailable', { count: cardReportCount }) : t('library.noReportsYet')}
-                                 </span>
-                                 <span className="block truncate text-[11px] text-muted-foreground">
-                                   {hasCardReports ? t('library.sourceReportsAvailableHint') : t('library.reportsWillAppearHere')}
-                                 </span>
-                               </span>
-                               {hasCardReports ? <span className="text-base text-violet-500 dark:text-violet-300">›</span> : null}
-                             </span>
-                           </Button>
-                         </div>
-                         <div className="mt-6 border-t border-border pt-4" onClick={(event) => event.stopPropagation()}>
-                           <div className="mb-2 text-xs font-medium text-muted-foreground">{t('library.agentFollowLabel')}</div>
-                           <div className="rounded-lg border border-slate-200/80 bg-slate-50/60 p-3 dark:border-slate-700/80 dark:bg-slate-800/40">
-                             <div className="flex flex-wrap items-start gap-3">
-                               {cardAgentLinks.map(({ agent, playbook }) => {
-                                 const characterLabel = getAgentCharacterLabel(agent);
-                                 const personalityLabel = getAgentPersonalityLabel(agent);
-                                 const canRemove = source.ownerUserId === user?.id;
-                                 return (
-                                   <div key={playbook.id} className="group relative">
-                                     <TouchSafeTooltip
-                                       title={<div><div className="font-medium">{getAgentDisplayLabel(agent)}</div><div>{humanizeCharacterType(agent.characterType)}</div><div>{personalityLabel}</div></div>}
-                                     >
-                                       <Button
-                                         type="text"
-                                         aria-label={`${getAgentDisplayLabel(agent)}: ${characterLabel}, ${humanizeCharacterType(agent.characterType)}, ${personalityLabel}`}
-                                         className="h-auto w-12 p-0"
-                                       >
-                                         <span className="flex flex-col items-center gap-1 text-center">
-                                           <span className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${PERSONA_ICON_BG_MAP[agent.characterType ?? 'summarizer']}`}>
-                                             {getCharacterIcon(agent.characterType)}
-                                           </span>
-                                           <span className="w-full truncate text-[10px] leading-tight">{characterLabel}</span>
-                                         </span>
-                                       </Button>
-                                     </TouchSafeTooltip>
-                                     {canRemove ? (
-                                       <TouchSafeTooltip title={t('library.removeAgentFromSource')}>
-                                         <Popconfirm
-                                           title={t('library.removeAgentConfirm', { name: getAgentDisplayLabel(agent) })}
-                                           description={t('library.removeAgentConfirmDescription')}
-                                           okText={t('common.remove')}
-                                           cancelText={t('common.cancel')}
-                                           onConfirm={() => void onRemoveAgentFromSource(playbook, source.id)}
-                                         >
-                                           <Button
-                                             type="primary"
-                                             danger
-                                             shape="circle"
-                                             size="small"
-                                             aria-label={t('library.removeAgentFromSource')}
-                                             icon={<CloseOutlined />}
-                                             className="absolute -right-1 -top-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-                                             onClick={(event) => event.stopPropagation()}
-                                           />
-                                         </Popconfirm>
-                                       </TouchSafeTooltip>
-                                     ) : null}
-                                   </div>
-                                 );
-                               })}
-                               <TouchSafeTooltip title={t('library.addAgent')}>
-                                 <Button
-                                   type="dashed"
-                                   shape="circle"
-                                   size="large"
-                                   aria-label={t('library.addAgent')}
-                                   icon={<PlusOutlined />}
-                                   className="border-2 border-dashed border-sky-400 bg-sky-50 text-sky-700 shadow-sm transition-colors hover:border-sky-500 hover:bg-sky-100 hover:text-sky-800 dark:border-sky-500 dark:bg-sky-950/50 dark:text-sky-300"
-                                   onClick={(event) => onFollowSource(source, event)}
-                                 />
-                               </TouchSafeTooltip>
-                             </div>
-                           </div>
-                         </div>
-                         </div>
-                       </Card>
-                       );
-                     })}
-                     {sources.length === 0 ? (
-                       <div className="col-span-full flex flex-col items-center gap-4 rounded-xl border border-dashed border-border py-12 px-6 text-center">
-                         <span className="text-5xl">📚</span>
-                         <div>
-                           <p className="text-base font-semibold text-foreground">{t('library.emptyHeadline')}</p>
-                           <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">{t('library.emptyDesc')}</p>
-                         </div>
-                         <Button
-                           type="primary"
-                           size="large"
-                           icon={<PlusCircleOutlined />}
-                           onClick={() => {
-                             setEditingSource(null);
-                             setIsSourceCreateOpen(true);
-                             setSourceUrlDraft('');
-                             setAutoDetectedSource(null);
-                           }}
-                         >
-                           {t('library.emptyCta')}
-                         </Button>
-                         <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
-                           <span className="font-medium text-foreground">{t('library.howItWorks')}:</span>
-                           {[
-                             t('library.howStep1'),
-                             t('library.howStep2'),
-                             t('library.howStep3'),
-                           ].map((step, i, arr) => (
-                             <span key={step} className="flex items-center gap-1">
-                               <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700 dark:bg-sky-950 dark:text-sky-300">{step}</span>
-                               {i < arr.length - 1 ? <span className="text-muted-foreground/50">→</span> : null}
-                             </span>
-                           ))}
-                         </div>
-                       </div>
-                     ) : null}
-                     {sources.length > 0 && (
-                       <GhostCreateCard
-                         ariaLabel={t('library.addSource')}
-                         onClick={() => {
-                           setEditingSource(null);
-                           setIsSourceCreateOpen(true);
-                           setSourceUrlDraft('');
-                           setAutoDetectedSource(null);
-                         }}
-                         icon={<DatabaseOutlined />}
-                         title={t('library.addSource')}
-                         sub="YouTube, podcast, or any website"
-                       />
-                     )}
+                   <div className="space-y-4">
+                     {sourcesLoadState === 'error' ? <p className="text-sm text-red-700">{t('library.failedSources')}</p> : null}
+                     <LibraryOverview
+                       starterSources={starterSources}
+                       savedSources={filteredSources}
+                       isCatalogLoading={catalogLoadState === 'loading'}
+                       catalogError={catalogLoadState === 'error'}
+                       showAddSourceAttention={sources.length === 0 && !libraryGuidanceSeen}
+                       onAddSource={() => {
+                         markLibraryGuidanceSeen();
+                         setEditingSource(null);
+                         setIsSourceCreateOpen(true);
+                         setSourceUrlDraft('');
+                         setAutoDetectedSource(null);
+                       }}
+                       onSaveStarter={onSaveStarterSource}
+                       onOpenSource={(source) => {
+                         setRecentlyUpdatedSourceId(null);
+                         openSourceInLibrary(source);
+                         setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports');
+                       }}
+                       onAddAgent={(source) => onFollowSource(source)}
+                       onRetryCatalog={() => void refreshCatalog(i18n.resolvedLanguage ?? i18n.language)}
+                       hasAnySavedSources={sources.length > 0}
+                     />
                    </div>
                    ) : null}
                    </>
@@ -3704,9 +3464,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             <Button type="primary" icon={<BrainIcon />} onClick={openCurationCreate}>
                               Curate with AI
                             </Button>
-                            <Button icon={<EditOutlined />} onClick={openManualAgentCreate}>
-                              Configure manually
-                            </Button>
                             <Badge count={marketplaceAgentCount} size="small">
                               <Button
                                 aria-label="Browse marketplace agents"
@@ -3741,9 +3498,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             <div className="flex flex-wrap justify-center gap-2">
                               <Button type="primary" size="large" icon={<BrainIcon />} onClick={openCurationCreate}>
                                 Curate with AI
-                              </Button>
-                              <Button size="large" icon={<EditOutlined />} onClick={openManualAgentCreate}>
-                                Configure manually
                               </Button>
                             </div>
                             {sources.length === 0 ? (
@@ -4223,6 +3977,32 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         className="follow-source-modal mobile-fullscreen-modal"
         styles={{ body: { maxHeight: 'calc(100dvh - 9rem)', overflowX: 'hidden', overflowY: 'auto' } }}
       >
+        {followWizardSourcePreselected && !showInlineAgentCreate ? (
+          inlineAgentCurating ? (() => {
+            const inlineCurationSource = sources.find((s) => s.id === playbookSourceIdsDraft[0]);
+            return (
+              <AgentCurator
+                mode="create"
+                baseAgentVersionId={inlineCurationBaseAgentVersionId}
+                sourceContext={inlineCurationSource ? {
+                  title: getSourceDisplayTitle(inlineCurationSource),
+                  type: inlineCurationSource.type,
+                  url: inlineCurationSource.value,
+                  value: inlineCurationSource.value
+                } : undefined}
+                onCancel={() => setInlineAgentCurating(false)}
+                onComplete={(agent) => void onInlineAgentCurated(agent)}
+              />
+            );
+          })() : (
+            <AgentSelectionView
+              source={sources.find((s) => s.id === playbookSourceIdsDraft[0]) ?? null}
+              ownedAgents={agents}
+              onAgentConnected={handleAgentSelectionConnected}
+              onCurate={openInlineAgentCuration}
+            />
+          )
+        ) : (
         <div className="space-y-3">
           {/* Unified steps indicator — morphs between pick-agent path and create-agent path */}
           {showInlineAgentCreate ? (
@@ -4430,20 +4210,13 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                     </div>
                   );
                 })}
-                {/* "Create new agent" ghost cards — AI curation (primary) and manual sub-wizard */}
+                {/* "Create new agent" ghost card — AI curation */}
                 <GhostCreateCard
                   ariaLabel="Curate with AI"
                   onClick={openInlineAgentCuration}
                   icon={<RobotOutlined />}
                   title="Curate with AI"
                   sub="Describe the agent you want — AI drafts it with you"
-                />
-                <GhostCreateCard
-                  ariaLabel={t('agent.createNew')}
-                  onClick={openInlineAgentCreate}
-                  icon={<PlusOutlined />}
-                  title={t('agent.createNew')}
-                  sub={t('agent.createNewSub')}
                 />
               </div>
               ) : null}
@@ -4841,8 +4614,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             </>
           ) : null}
         </div>
+        )}
         {/* While the AI curator is embedded, it owns the only nav buttons (← Back / Continue →) — hide the wizard footer. */}
-        {inlineAgentCurating ? null : (
+        {inlineAgentCurating || followWizardSourcePreselected ? null : (
         <div className="mobile-workflow-actions mt-4 flex flex-row flex-wrap items-center justify-between gap-2 pt-3 pb-1">
           {showInlineAgentCreate || (!followWizardSourcePreselected && playbookCreateStep > 0) || editingPlaybookId ? (
           <div className={`flex flex-wrap items-center gap-2 ${showInlineAgentCreate ? 'shrink-0' : ''}`}>
@@ -5300,6 +5074,20 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           )}
         </div>
       </Modal>
+      <PostSourceChoiceModal
+        source={postSourceChoiceSource}
+        open={Boolean(postSourceChoiceSource)}
+        onChooseAgent={onChoosePostSourceAgent}
+        onSkip={onSkipPostSourceAgent}
+      />
+      <AgentConnectedModal
+        open={Boolean(connectedAgentPlaybook)}
+        playbook={connectedAgentPlaybook}
+        running={runningConnectedAgentPlaybook}
+        onRunFirstReport={onRunFirstConnectedReport}
+        onScheduleRecurring={onScheduleConnectedAgentPlaybook}
+        onDone={() => setConnectedAgentPlaybook(null)}
+      />
     </>
   );
 }

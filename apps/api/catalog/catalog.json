@@ -1,0 +1,271 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "slug": "acquired",
+      "catalogVersion": 1,
+      "locale": "en",
+      "title": "Acquired",
+      "summary": "Company and strategy coverage for market-moving acquisition stories.",
+      "type": "web_urls",
+      "value": "https://example.com/acquired",
+      "sourceTypes": ["web_urls"],
+      "topics": ["m&a", "strategy"],
+      "editorialRank": 1,
+      "metadata": {
+        "title": "Acquired",
+        "coverImageUrl": null,
+        "itemCount": 3,
+        "previewItems": [
+          {
+            "title": "Dealbook: a new roll-up playbook",
+            "link": "https://example.com/acquired/dealbook",
+            "pubDate": "2026-07-18T08:00:00.000Z"
+          },
+          {
+            "title": "Why founders still sell in down rounds",
+            "link": "https://example.com/acquired/down-rounds",
+            "pubDate": "2026-07-12T08:00:00.000Z"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "acquired",
+      "catalogVersion": 1,
+      "locale": "de",
+      "title": "Übernahme",
+      "summary": "Strategie- und Unternehmensanalysen zu marktbewegenden Übernahmen.",
+      "type": "web_urls",
+      "value": "https://example.com/acquired",
+      "sourceTypes": ["web_urls"],
+      "topics": ["m&a", "strategy"],
+      "editorialRank": 1,
+      "metadata": {
+        "title": "Acquired",
+        "coverImageUrl": null,
+        "itemCount": 3,
+        "previewItems": [
+          {
+            "title": "Dealbook: a new roll-up playbook",
+            "link": "https://example.com/acquired/dealbook",
+            "pubDate": "2026-07-18T08:00:00.000Z"
+          },
+          {
+            "title": "Why founders still sell in down rounds",
+            "link": "https://example.com/acquired/down-rounds",
+            "pubDate": "2026-07-12T08:00:00.000Z"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "knowledge-project",
+      "catalogVersion": 1,
+      "locale": "en",
+      "title": "Knowledge project",
+      "summary": "Long-form podcast analysis focused on durable mental models and research habits.",
+      "type": "podcast_feeds",
+      "value": "https://example.com/knowledge.xml",
+      "sourceTypes": ["podcast_feeds"],
+      "topics": ["audio", "research"],
+      "editorialRank": 2,
+      "metadata": {
+        "title": "Knowledge project",
+        "coverImageUrl": null,
+        "itemCount": 2,
+        "audioCount": 2,
+        "previewItems": [
+          {
+            "title": "Why expert operators write decision memos",
+            "pubDate": "2026-07-21T07:30:00.000Z",
+            "hasAudio": true
+          },
+          {
+            "title": "How to build a personal knowledge loop",
+            "pubDate": "2026-07-14T07:30:00.000Z",
+            "hasAudio": true
+          }
+        ]
+      }
+    },
+    {
+      "slug": "knowledge-project",
+      "catalogVersion": 1,
+      "locale": "de",
+      "title": "Wissensprojekt",
+      "summary": "Podcast-Analysen zu belastbaren Denkmodellen und besseren Research-Routinen.",
+      "type": "podcast_feeds",
+      "value": "https://example.com/knowledge.xml",
+      "sourceTypes": ["podcast_feeds"],
+      "topics": ["audio", "research"],
+      "editorialRank": 2,
+      "metadata": {
+        "title": "Knowledge project",
+        "coverImageUrl": null,
+        "itemCount": 2,
+        "audioCount": 2,
+        "previewItems": [
+          {
+            "title": "Why expert operators write decision memos",
+            "pubDate": "2026-07-21T07:30:00.000Z",
+            "hasAudio": true
+          },
+          {
+            "title": "How to build a personal knowledge loop",
+            "pubDate": "2026-07-14T07:30:00.000Z",
+            "hasAudio": true
+          }
+        ]
+      }
+    }
+  ],
+  "agents": [
+    {
+      "slug": "market-analyst",
+      "catalogVersion": 1,
+      "locale": "en",
+      "title": "Market analyst",
+      "summary": "Turns breaking company stories into concise investment-ready updates.",
+      "sourceTypes": ["web_urls"],
+      "topics": ["m&a", "strategy"],
+      "language": "en",
+      "editorialRank": 1,
+      "iconAssetKey": "chart-line",
+      "iconLicense": "MIT",
+      "promptSnapshot": {
+        "name": "Market analyst",
+        "description": "Synthesizes market-moving company news into concise investment notes.",
+        "characterType": "summarizer",
+        "promptConfig": {
+          "tone": "analytical",
+          "depth": "standard",
+          "format_style": "bullet_points",
+          "audience": "portfolio managers",
+          "output_length": "medium",
+          "risk_level": "balanced"
+        },
+        "model": "claude-sonnet-4-5",
+        "systemPrompt": "You are a market analyst. Summarize the source, explain what changed, why it matters, and the key watch items for investors."
+      }
+    },
+    {
+      "slug": "market-analyst",
+      "catalogVersion": 1,
+      "locale": "de",
+      "title": "Marktanalyst",
+      "summary": "Verdichtet Unternehmensmeldungen zu prägnanten, investierbaren Updates.",
+      "sourceTypes": ["web_urls"],
+      "topics": ["m&a", "strategy"],
+      "language": "de",
+      "editorialRank": 1,
+      "iconAssetKey": "chart-line",
+      "iconLicense": "MIT",
+      "promptSnapshot": {
+        "name": "Market analyst",
+        "description": "Synthesizes market-moving company news into concise investment notes.",
+        "characterType": "summarizer",
+        "promptConfig": {
+          "tone": "analytical",
+          "depth": "standard",
+          "format_style": "bullet_points",
+          "audience": "portfolio managers",
+          "output_length": "medium",
+          "risk_level": "balanced"
+        },
+        "model": "claude-sonnet-4-5",
+        "systemPrompt": "You are a market analyst. Summarize the source, explain what changed, why it matters, and the key watch items for investors."
+      }
+    },
+    {
+      "slug": "audio-briefing",
+      "catalogVersion": 1,
+      "locale": "en",
+      "title": "Audio briefing",
+      "summary": "Converts long-form podcast episodes into short learning briefs.",
+      "sourceTypes": ["podcast_feeds"],
+      "topics": ["audio", "research"],
+      "language": "en",
+      "editorialRank": 2,
+      "iconAssetKey": "microphone-stage",
+      "iconLicense": "MIT",
+      "promptSnapshot": {
+        "name": "Audio briefing",
+        "description": "Turns podcast episodes into crisp learning briefs with takeaways and action points.",
+        "characterType": "teacher",
+        "promptConfig": {
+          "tone": "clear",
+          "depth": "standard",
+          "format_style": "structured_summary",
+          "audience": "busy operators",
+          "output_length": "medium",
+          "risk_level": "conservative"
+        },
+        "model": "claude-sonnet-4-5",
+        "systemPrompt": "You are an audio briefing editor. Extract the core lesson, highlight memorable examples, and end with practical next steps."
+      }
+    },
+    {
+      "slug": "audio-briefing",
+      "catalogVersion": 1,
+      "locale": "de",
+      "title": "Audio-Briefing",
+      "summary": "Verdichtet lange Podcast-Folgen zu kurzen Lern-Briefings.",
+      "sourceTypes": ["podcast_feeds"],
+      "topics": ["audio", "research"],
+      "language": "de",
+      "editorialRank": 2,
+      "iconAssetKey": "microphone-stage",
+      "iconLicense": "MIT",
+      "promptSnapshot": {
+        "name": "Audio briefing",
+        "description": "Turns podcast episodes into crisp learning briefs with takeaways and action points.",
+        "characterType": "teacher",
+        "promptConfig": {
+          "tone": "clear",
+          "depth": "standard",
+          "format_style": "structured_summary",
+          "audience": "busy operators",
+          "output_length": "medium",
+          "risk_level": "conservative"
+        },
+        "model": "claude-sonnet-4-5",
+        "systemPrompt": "You are an audio briefing editor. Extract the core lesson, highlight memorable examples, and end with practical next steps."
+      }
+    }
+  ],
+  "demos": [
+    {
+      "slug": "acquired-analyst-demo",
+      "locale": "en",
+      "title": "Sample report",
+      "disclosure": "Synthetic example generated from the catalog seed bundle.",
+      "sourceSlug": "acquired",
+      "agentSlug": "market-analyst",
+      "report": {
+        "headline": "Roll-up software buyers stay selective",
+        "summary": "Acquired highlights a disciplined buyer that kept price discipline while still closing a strategic tuck-in acquisition.",
+        "signals": [
+          "Multiple bidders focused on customer retention, not only ARR growth.",
+          "Management framed integration speed as the leading post-close KPI."
+        ]
+      }
+    },
+    {
+      "slug": "acquired-analyst-demo",
+      "locale": "de",
+      "title": "Beispielbericht",
+      "disclosure": "Synthetisches Beispiel auf Basis des Catalog-Seed-Bundles.",
+      "sourceSlug": "acquired",
+      "agentSlug": "market-analyst",
+      "report": {
+        "headline": "Selektive Käufer bleiben bei Software-Roll-ups diszipliniert",
+        "summary": "Die Quelle beschreibt einen disziplinierten Erwerber, der Bewertung und Integrationsgeschwindigkeit priorisiert hat.",
+        "signals": [
+          "Bieter achteten stärker auf Kundenbindung als auf reines ARR-Wachstum.",
+          "Das Management nennt Integrationsgeschwindigkeit als wichtigste KPI nach dem Abschluss."
+        ]
+      }
+    }
+  ]
+}

@@ -89,34 +89,35 @@ describe('AgentRepository', () => {
     expect(reenabled.status).toBe('active');
   });
 
-  it('persists a curated explicit name alongside its character type without resetting prompt config', async () => {
-    const update = vi.fn(async ({ data }: { data: { name?: string; characterType?: string; promptConfigJson?: string } }) => ({
+  it('creates an immutable version when execution fields are patched and updates identity fields only on the agent row', async () => {
+    const update = vi.fn(async ({ data }: { data: { name?: string; status?: string } }) => ({
       id: 'agent_1',
       ownerUserId: 'owner-1',
       name: data.name ?? 'Existing agent',
       description: 'Existing description',
-      characterType: data.characterType ?? 'summarizer',
-      promptConfigJson: data.promptConfigJson ?? JSON.stringify({ tone: 'brief' }),
-      status: 'active',
+      characterType: 'summarizer',
+      promptConfigJson: JSON.stringify({ tone: 'brief' }),
+      status: data.status ?? 'active',
       preferencesJson: '{}',
       createdAt: new Date('2026-07-10T00:00:00.000Z'),
       updatedAt: new Date('2026-07-10T00:00:00.000Z'),
       sources: []
     }));
-    const fakeDb = { agent: { update }, $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fakeDb) };
+
+    const createdVersion = vi.fn(async ({ data }: any) => ({ id: 'version-3', agentId: data.agentId, version: data.version }));
+
+    const fakeDb: any = { agent: { update, findUnique: async () => ({ id: 'agent_1', ownerUserId: 'owner-1' }) }, agentPromptVersion: { findFirst: async () => ({ id: 'version-2', version: 2, model: 'm', systemPrompt: 's', name: 'v2', description: '', characterType: 'summarizer', promptConfigJson: '{}' }), create: createdVersion }, marketplacePublication: { findFirst: async () => null }, $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fakeDb) };
     const repo = new AgentRepository(fakeDb as never);
 
     await repo.updateAgent('agent_1', { name: 'Market Watcher', characterType: 'teacher' });
 
+    expect(createdVersion).toHaveBeenCalled();
+    // Agent update should be called only for identity fields (name), not for execution fields
     expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ name: 'Market Watcher', characterType: 'teacher' })
-      })
+      expect.objectContaining({ data: expect.objectContaining({ name: 'Market Watcher' }) })
     );
     expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.not.objectContaining({ promptConfigJson: expect.anything() })
-      })
+      expect.objectContaining({ data: expect.not.objectContaining({ characterType: expect.anything(), promptConfigJson: expect.anything() }) })
     );
   });
 
@@ -263,6 +264,73 @@ describe('AgentRepository', () => {
     expect(deletePlaybooks).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
     expect(deleteAgent).toHaveBeenCalledWith({ where: { id: 'agent_1' } });
   });
+
+  it('creates a new immutable version when a private agent changes', async () => {
+    const db: any = {
+      agentPromptVersion: {
+        findFirst: vi.fn(async ({ where }: any) => ({ id: 'version-2', agentId: where.agentId, version: 2 })),
+        create: vi.fn(async ({ data }: any) => ({ id: 'version-3', agentId: data.agentId, version: data.version })),
+        update: vi.fn(async () => ({}))
+      },
+      agent: { findUnique: vi.fn(async () => ({ id: 'agent-1', ownerUserId: 'owner-1' })) },
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db)
+    };
+
+    const repo = new AgentRepository(db as never);
+    const changed = await repo.createAgentVersion('agent-1', {
+      name: 'Revised teacher',
+      description: 'Explains difficult ideas',
+      characterType: 'teacher',
+      promptConfig: {},
+      model: 'claude-sonnet-4-5',
+      systemPrompt: 'Explain the evidence step by step.',
+      iconAssetKey: 'chalkboard-teacher'
+    } as any);
+
+    expect(changed.version).toBe(3);
+    expect(db.agentPromptVersion.update).not.toHaveBeenCalled();
+  });
+
+  it('saves a public version without cloning its agent', async () => {
+    const db: any = {
+      agentPromptVersion: {
+        findUnique: vi.fn(async ({ where }: any) => ({ id: where.id ?? 'version-3', agentId: 'agent-1' }))
+      },
+      agent: { create: vi.fn(async () => ({})), findUnique: vi.fn(async () => ({ id: 'agent-1', ownerUserId: 'owner-1' })) },
+      userLibraryAgent: { create: vi.fn(async () => ({ id: 'saved-1' })), updateMany: vi.fn(async () => ({ count: 1 })) },
+      marketplacePublication: { findFirst: vi.fn(async () => ({ id: 'pub-1', resourceId: 'agent-1', status: 'published', visibility: 'public', retiredAt: null })) },
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db)
+    };
+
+    const repo = new AgentRepository(db as never);
+    await repo.saveAgentVersion('user-2', 'version-3');
+    expect(db.agent.create).not.toHaveBeenCalled();
+    expect(db.userLibraryAgent.create).toHaveBeenCalled();
+  });
+
+  it('rethrows unexpected create error and does not call updateMany when saving agent version', async () => {
+    const db: any = {
+      agentPromptVersion: {
+        findUnique: vi.fn(async ({ where }: any) => ({ id: where.id ?? 'version-3', agentId: 'agent-1' }))
+      },
+      agent: { findUnique: vi.fn(async () => ({ id: 'agent-1', ownerUserId: 'owner-1' })) },
+      userLibraryAgent: {
+        create: vi.fn(async () => {
+          const e = new Error('db_fail') as unknown as { message: string; code?: string };
+          e.code = 'SOME_OTHER';
+          throw e;
+        }),
+        updateMany: vi.fn(async () => ({ count: 1 }))
+      },
+      marketplacePublication: { findFirst: vi.fn(async () => ({ id: 'pub-1', resourceId: 'agent-1', status: 'published', visibility: 'public', retiredAt: null })) },
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db)
+    };
+
+    const repo = new AgentRepository(db as never);
+    await expect(repo.saveAgentVersion('user-2', 'version-3')).rejects.toThrow('db_fail');
+    expect(db.userLibraryAgent.updateMany).not.toHaveBeenCalled();
+  });
+
 });
 
 describe('AgentRepository realtime event production', () => {

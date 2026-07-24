@@ -2,7 +2,33 @@ import { describe, expect, it, vi } from 'vitest';
 import { PrismaRunStore } from './prisma-run-store';
 
 describe('PrismaRunStore', () => {
-  it('upserts and claims queued runs through db adapter', async () => {
+  it('loads only recurring schedules and carries their pinned agent version', async () => {
+    const db: any = {
+      playbook: {
+        findMany: vi.fn(async () => [{
+          id: 'playbook-1',
+          agentId: 'agent-1',
+          agentVersionId: 'version-2',
+          nextRunAt: new Date('2026-07-10T10:00:00.000Z')
+        }])
+      }
+    };
+
+    const store = new PrismaRunStore(db as never);
+    const schedules = await store.getDueSchedules(new Date('2026-07-10T10:00:00.000Z'));
+
+    expect(schedules).toEqual([expect.objectContaining({ agentVersionId: 'version-2' })]);
+    expect(db.playbook.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          mode: { not: 'manual' },
+          nextRunAt: { lte: new Date('2026-07-10T10:00:00.000Z') }
+        })
+      })
+    );
+  });
+
+  it('upserts and claims queued runs through db adapter, including playbook ingestion metadata', async () => {
     const db: any = {
       agentSchedule: {
         findMany: vi.fn(async () => [{ agentId: 'agent-1', nextRunAt: new Date('2026-07-10T10:00:00.000Z'), enabled: true }])
@@ -15,19 +41,30 @@ describe('PrismaRunStore', () => {
         findFirst: vi.fn(async () => ({
           id: 'run-1',
           agentId: 'agent-1',
+          agentVersionId: 'version-2',
+          playbookId: 'playbook-1',
           scheduledFor: new Date('2026-07-10T10:00:00.000Z'),
           status: 'queued',
           workerId: null,
           retryCount: 0,
           errorCode: null,
           startedAt: null,
-          finishedAt: null
+          finishedAt: null,
+          playbook: {
+            recipientsJson: '["alerts@example.com"]',
+            language: 'de',
+            notificationsEnabled: false,
+            digestFrequency: 'daily',
+            maxItemsPerSource: 7
+          }
         })),
         update: vi
           .fn()
           .mockResolvedValueOnce({
             id: 'run-1',
             agentId: 'agent-1',
+            agentVersionId: 'version-2',
+            playbookId: 'playbook-1',
             scheduledFor: new Date('2026-07-10T10:00:00.000Z'),
             status: 'running',
             workerId: 'worker-a',
@@ -42,12 +79,28 @@ describe('PrismaRunStore', () => {
     db.$transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db));
 
     const store = new PrismaRunStore(db as never);
-    await store.upsertQueuedRun('agent-1', new Date('2026-07-10T10:00:00.000Z'));
+    await store.upsertQueuedRun('agent-1', new Date('2026-07-10T10:00:00.000Z'), 'playbook-1', 'version-2');
     const claimed = await store.claimNextQueuedRun('worker-a');
     await store.completeRun('run-1', 'succeeded');
 
     expect(db.agentRun.upsert).toHaveBeenCalledTimes(1);
+    expect(db.agentRun.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ agentVersionId: 'version-2' })
+      })
+    );
     expect(claimed?.status).toBe('running');
+    expect(claimed).toEqual(
+      expect.objectContaining({
+        playbookId: 'playbook-1',
+        agentVersionId: 'version-2',
+        playbookRecipients: ['alerts@example.com'],
+        playbookLanguage: 'de',
+        playbookNotificationsEnabled: false,
+        playbookDigestFrequency: 'daily',
+        playbookMaxItemsPerSource: 7
+      })
+    );
     expect(db.agentRun.update).toHaveBeenCalledTimes(2);
   });
 });

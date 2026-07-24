@@ -249,6 +249,26 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
     return reply.status(200).send(suggestions);
   });
 
+  app.post('/api/sources/:sourceId/save', async (req, reply) => {
+    const { sourceId } = req.params as { sourceId: string };
+    const source = await deps.sourceRepository.getSource(sourceId);
+    if (!source) {
+      return reply.status(404).send({ code: 'not_found', message: 'Source not found' });
+    }
+    const saved = await deps.sourceRepository.saveSource(req.userId!, sourceId);
+    return reply.status(200).send(saved);
+  });
+
+  app.delete('/api/sources/:sourceId/save', async (req, reply) => {
+    const { sourceId } = req.params as { sourceId: string };
+    const source = await deps.sourceRepository.getSource(sourceId);
+    if (!source) {
+      return reply.status(404).send({ code: 'not_found', message: 'Source not found' });
+    }
+    await deps.sourceRepository.removeSavedSource(req.userId!, sourceId);
+    return reply.status(200).send();
+  });
+
   app.post('/api/sources/marketplace/:publicationId/clone', async (req, reply) => {
     const { publicationId } = req.params as { publicationId: string };
     try {

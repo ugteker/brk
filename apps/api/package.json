@@ -10,7 +10,11 @@
     "prestart": "node ./scripts/prisma-generate-safe.cjs",
     "start": "cross-env NODE_EXTRA_CA_CERTS=./certs/netskope-root-ca.pem tsx src/main.ts",
     "dev": "cross-env NODE_EXTRA_CA_CERTS=./certs/netskope-root-ca.pem tsx watch src/main.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "catalog:validate": "tsx src/tools/catalog/validate.ts",
+    "catalog:preview": "tsx src/tools/catalog/preview.ts",
+    "catalog:import:dry-run": "tsx src/tools/catalog/import.ts --dry-run",
+    "catalog:import": "tsx src/tools/catalog/import.ts --apply"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

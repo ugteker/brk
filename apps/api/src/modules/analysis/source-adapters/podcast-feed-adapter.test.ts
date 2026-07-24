@@ -97,4 +97,22 @@ describe('PodcastFeedAdapter', () => {
       { title: 'Market Pulse', coverImageUrl: 'https://cdn.example.com/new-cover.jpg' }
     );
   });
+
+  it('honors an explicit canonical limit when refreshing a feed source directly', async () => {
+    const feedXml = `<rss><channel>
+      <item><guid>ep-1</guid><title>Episode 1</title><description>Notes 1</description></item>
+      <item><guid>ep-2</guid><title>Episode 2</title><description>Notes 2</description></item>
+      <item><guid>ep-3</guid><title>Episode 3</title><description>Notes 3</description></item>
+    </channel></rss>`;
+    const adapter = new PodcastFeedAdapter(createDeps(async () => feedXml));
+
+    const result = await adapter.fetch(
+      { id: 'source-1', type: 'podcast_feeds', value: 'https://example.com/feed.xml' },
+      {},
+      { limit: 2 } as any
+    );
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items.map((item) => item.metadata.itemId)).toEqual(['ep-1', 'ep-2']);
+  });
 });

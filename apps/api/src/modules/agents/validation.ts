@@ -1,5 +1,5 @@
 import { CHARACTER_TYPES, DEFAULT_CHARACTER_TYPE } from './types';
-import type { CharacterType, CreateAgentInput, PromptConfig, ValidationResult } from './types';
+import type { CharacterType, CreateAgentInput, CreateAgentVersionInput, PromptConfig, ValidationResult } from './types';
 
 function validateCharacterPromptRules(characterType: CharacterType, promptConfig: PromptConfig, errors: string[]): void {
   if (characterType === 'finance_expert') {
@@ -49,6 +49,30 @@ export function validatePatchAgentInput(existing: { characterType?: CharacterTyp
   const characterType = validateCharacterTypeValue((patch.characterType ?? existing.characterType) as string | undefined, errors);
   const promptConfig = patch.promptConfig ?? existing.promptConfig ?? {};
 
+  validateCharacterPromptRules(characterType, promptConfig, errors);
+
+  return { ok: errors.length === 0, errors };
+}
+
+export function validateCreateAgentVersionInput(input: CreateAgentVersionInput): ValidationResult {
+  const errors: string[] = [];
+  if (!input || typeof input !== 'object') {
+    errors.push('invalid_body');
+    return { ok: false, errors };
+  }
+
+  if (typeof input.name !== 'string' || input.name.trim().length === 0) {
+    errors.push('name is required');
+  }
+  if (typeof input.model !== 'string' || input.model.trim().length === 0) {
+    errors.push('model is required');
+  }
+  if (typeof input.systemPrompt !== 'string') {
+    errors.push('systemPrompt must be a string');
+  }
+
+  const characterType = validateCharacterTypeValue(input.characterType, errors);
+  const promptConfig = input.promptConfig ?? {};
   validateCharacterPromptRules(characterType, promptConfig, errors);
 
   return { ok: errors.length === 0, errors };

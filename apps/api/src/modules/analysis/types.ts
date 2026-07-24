@@ -29,12 +29,38 @@ export interface SourceConfig {
  * "N most recent unseen items" selection. Ignored by non-feed (web listing/single page) sources. */
 export interface SourceFetchOptions {
   forcedItemLink?: string;
+  limit?: number;
 }
 
 export interface SourceFetchResult {
   evidence: EvidenceBlock[];
   cursorUpdate?: SourceCursorState;
   warning?: string;
+}
+
+export interface CanonicalSourceRef {
+  id: string;
+  type: SourceConfig['type'];
+  value: string;
+}
+
+export interface CanonicalSourceItemInput {
+  title: string;
+  content: string;
+  link: string;
+  publishedAt: Date;
+  contentHash: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface CanonicalSourceFetchResult {
+  items: CanonicalSourceItemInput[];
+  cursor: Record<string, unknown>;
+  warning?: string;
+}
+
+export interface CanonicalSourceAdapter {
+  fetch(source: CanonicalSourceRef, cursor: Record<string, unknown>, options?: SourceFetchOptions): Promise<CanonicalSourceFetchResult>;
 }
 
 export interface SourceAdapter {

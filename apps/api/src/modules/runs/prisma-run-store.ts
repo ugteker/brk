@@ -28,22 +28,30 @@ export class PrismaRunStore implements RunStore {
 
   async getDueSchedules(now: Date) {
     const duePlaybooks = await this.db.playbook.findMany({
-      where: { enabled: true, nextRunAt: { lte: now } },
-      select: { id: true, agentId: true, nextRunAt: true }
+      where: { enabled: true, mode: { not: 'manual' }, nextRunAt: { lte: now } },
+      select: { id: true, agentId: true, agentVersionId: true, nextRunAt: true }
     });
     return duePlaybooks.map((pb) => ({
       agentId: pb.agentId,
-      nextRunAt: pb.nextRunAt,
+      agentVersionId: pb.agentVersionId ?? undefined,
+      nextRunAt: pb.nextRunAt!,
       enabled: true,
       playbookId: pb.id
     }));
   }
 
-  async upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string): Promise<void> {
+  async upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string, agentVersionId?: string): Promise<void> {
     await this.db.agentRun.upsert({
       where: { agentId_scheduledFor: { agentId, scheduledFor } },
       update: {},
-      create: { agentId, playbookId: playbookId ?? null, scheduledFor, status: 'queued', retryCount: 0 }
+      create: {
+        agentId,
+        playbookId: playbookId ?? null,
+        agentVersionId: agentVersionId ?? null,
+        scheduledFor,
+        status: 'queued',
+        retryCount: 0
+      }
     });
   }
 
@@ -52,7 +60,15 @@ export class PrismaRunStore implements RunStore {
       where: { status: 'queued' },
       orderBy: { scheduledFor: 'asc' },
       include: {
-        playbook: { select: { recipientsJson: true, language: true, notificationsEnabled: true, digestFrequency: true } }
+        playbook: {
+          select: {
+            recipientsJson: true,
+            language: true,
+            notificationsEnabled: true,
+            digestFrequency: true,
+            maxItemsPerSource: true
+          }
+        }
       }
     });
     if (!queued) return null;
@@ -74,12 +90,19 @@ export class PrismaRunStore implements RunStore {
     });
 
     const playbookData = (queued as typeof queued & {
-      playbook?: { recipientsJson: string; language: string; notificationsEnabled?: boolean; digestFrequency?: string } | null;
+      playbook?: {
+        recipientsJson: string;
+        language: string;
+        notificationsEnabled?: boolean;
+        digestFrequency?: string;
+        maxItemsPerSource?: number;
+      } | null;
     }).playbook;
 
     return {
       id: claimed.id,
       agentId: claimed.agentId,
+      agentVersionId: (claimed as { agentVersionId?: string | null }).agentVersionId ?? undefined,
       scheduledFor: claimed.scheduledFor,
       status: claimed.status as AgentRunRecord['status'],
       phase: (claimed as { phase?: string | null }).phase as RunPhase | null | undefined,
@@ -93,7 +116,8 @@ export class PrismaRunStore implements RunStore {
       playbookRecipients: playbookData ? parseRecipients(playbookData.recipientsJson) : undefined,
       playbookLanguage: playbookData?.language ?? undefined,
       playbookNotificationsEnabled: playbookData ? (playbookData.notificationsEnabled ?? true) : undefined,
-      playbookDigestFrequency: playbookData?.digestFrequency ?? undefined
+      playbookDigestFrequency: playbookData?.digestFrequency ?? undefined,
+      playbookMaxItemsPerSource: playbookData?.maxItemsPerSource ?? undefined
     };
   }
 

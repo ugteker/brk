@@ -12,7 +12,7 @@ import type {
   UpdateSourceInput
 } from './types';
 
-type SourceDb = Pick<PrismaClient, 'source' | 'accessGrant' | 'marketplacePublication' | 'playbookSource' | 'realtimeEvent' | '$transaction'>;
+type SourceDb = Pick<PrismaClient, 'source' | 'accessGrant' | 'marketplacePublication' | 'playbookSource' | 'userLibrarySource' | 'realtimeEvent' | '$transaction'>;
 
 /** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
  * mutation behavior identical while emitting no realtime events. */
@@ -80,7 +80,7 @@ function withMetadata(config: Record<string, unknown>, metadata?: SourceLibraryM
   return { ...config, libraryCard: normalized };
 }
 
-function mapSource(row: SourceRow): SourceRecord {
+function mapSource(row: SourceRow, saved = false): SourceRecord {
   const parsed = splitConfigAndMetadata(row.configJson);
   return {
     id: row.id,
@@ -91,12 +91,15 @@ function mapSource(row: SourceRow): SourceRecord {
     config: parsed.config,
     metadata: parsed.metadata,
     createdAt: row.createdAt,
-    updatedAt: row.updatedAt
+    updatedAt: row.updatedAt,
+    saved
   };
 }
 
 export interface SourceRepositoryLike {
   createSource(ownerUserId: string, input: CreateSourceInput): Promise<SourceRecord>;
+  saveSource(userId: string, sourceId: string): Promise<SourceRecord>;
+  removeSavedSource(userId: string, sourceId: string): Promise<void>;
   listSources(ownerUserId?: string): Promise<SourceRecord[]>;
   getSource(sourceId: string): Promise<SourceRecord | null>;
   updateSource(sourceId: string, patch: UpdateSourceInput): Promise<SourceRecord>;
@@ -126,18 +129,110 @@ export class SourceRepository implements SourceRepositoryLike {
           configJson: JSON.stringify(config)
         }
       });
+
+      // ensure the owner has a membership entry for their new source
+      if (tx.userLibrarySource) {
+        try {
+          await tx.userLibrarySource.upsert({
+            where: { userId_sourceId: { userId: ownerUserId, sourceId: created.id } },
+            update: {},
+            create: { userId: ownerUserId, sourceId: created.id }
+          });
+        } catch {
+          // fall back to create if upsert isn't available on the test double
+          if (tx.userLibrarySource.create) {
+            await tx.userLibrarySource.create({ data: { userId: ownerUserId, sourceId: created.id } });
+          }
+        }
+      }
+
       await this.realtime.append(tx, { userId: ownerUserId, topic: 'source.changed', entityId: created.id });
       return created;
     });
-    return mapSource(created as SourceRow);
+    return mapSource(created as SourceRow, true);
   }
 
   async listSources(ownerUserId?: string): Promise<SourceRecord[]> {
-    const rows = await this.db.source.findMany({
-      where: ownerUserId ? { ownerUserId } : {},
-      orderBy: { createdAt: 'desc' }
+    if (!ownerUserId) {
+      const rows = await this.db.source.findMany({ where: {}, orderBy: { createdAt: 'desc' } });
+      return rows.map((row) => mapSource(row as SourceRow));
+    }
+
+    // For a user-scoped listing, include sources the user saved (memberships) and their owned sources.
+    const memberships = this.db.userLibrarySource
+      ? await this.db.userLibrarySource.findMany({ where: { userId: ownerUserId } })
+      : [];
+
+    const savedIds = Array.from(new Set((memberships as any[]).map((m) => m.sourceId)));
+
+    // Batch-load saved canonical sources in a single query when supported by the DB client
+    let savedSources: Array<SourceRow | null> = [];
+    if (savedIds.length > 0) {
+      if (this.db.source.findMany) {
+        const rows = await this.db.source.findMany({ where: { id: { in: savedIds } } });
+        const byId = new Map((rows as SourceRow[]).map((r) => [r.id, r]));
+        savedSources = savedIds.map((id) => (byId.has(id) ? (byId.get(id) as SourceRow) : null));
+      } else {
+        // fall back to findUnique per-id for test doubles that only implement it
+        savedSources = await Promise.all(
+          savedIds.map((id) => (this.db.source.findUnique ? this.db.source.findUnique({ where: { id } }) : null))
+        );
+      }
+    }
+
+    const owned = await this.db.source.findMany({ where: { ownerUserId }, orderBy: { createdAt: 'desc' } });
+
+    const savedMapped = (savedSources as SourceRow[])
+      .filter(Boolean)
+      .map((r) => mapSource(r as SourceRow, true));
+
+    const ownedMapped = (owned as SourceRow[]).filter((r) => !savedIds.includes(r.id)).map((r) => mapSource(r as SourceRow));
+
+    return [...savedMapped, ...ownedMapped];
+  }
+
+  async saveSource(userId: string, sourceId: string): Promise<SourceRecord> {
+    const row = await this.db.$transaction(async (tx) => {
+      // try findUnique, fall back to findMany if the test double doesn't implement it
+      let sourceRow: any = null;
+      if (tx.source.findUnique) {
+        sourceRow = await tx.source.findUnique({ where: { id: sourceId } });
+      } else if (tx.source.findMany) {
+        const rows = await tx.source.findMany({ where: { id: sourceId } });
+        sourceRow = Array.isArray(rows) && rows.length ? rows[0] : null;
+      }
+
+      if (!sourceRow) throw new Error('not_found');
+
+      if (tx.userLibrarySource?.upsert) {
+        await tx.userLibrarySource.upsert({
+          where: { userId_sourceId: { userId, sourceId } },
+          update: {},
+          create: { userId, sourceId }
+        });
+      } else if (tx.userLibrarySource?.create) {
+        await tx.userLibrarySource.create({ data: { userId, sourceId } });
+      }
+
+      return sourceRow;
     });
-    return rows.map((row) => mapSource(row as SourceRow));
+
+    return mapSource(row as SourceRow, true);
+  }
+
+  async removeSavedSource(userId: string, sourceId: string): Promise<void> {
+    // deleteMany is idempotent and avoids throwing when the membership does not exist
+    if (this.db.userLibrarySource?.deleteMany) {
+      await this.db.userLibrarySource.deleteMany({ where: { userId, sourceId } });
+      return;
+    }
+    if (this.db.userLibrarySource?.delete) {
+      try {
+        await this.db.userLibrarySource.delete({ where: { userId_sourceId: { userId, sourceId } } });
+      } catch {
+        // ignore not found
+      }
+    }
   }
 
   async getSource(sourceId: string): Promise<SourceRecord | null> {

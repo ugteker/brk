@@ -17,6 +17,7 @@ function makeRow(overrides: Record<string, unknown> = {}) {
     id: 'session-1',
     ownerUserId: 'owner-1',
     targetAgentId: null,
+    baseAgentVersionId: null,
     mode: 'create',
     status: 'active',
     revision: 0,

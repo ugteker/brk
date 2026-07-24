@@ -13,6 +13,12 @@ export interface FeedMetadata {
   coverImageUrl?: string;
 }
 
+interface FeedCursorState {
+  seenItemIds: string[];
+  lastItemPublishedAt: string | null;
+  lastContentHash: string | null;
+}
+
 function extractItemBlocks(xml: string): string[] {
   const rssItems = xml.match(/<item[\s\S]*?<\/item>/gi);
   if (rssItems && rssItems.length > 0) return rssItems;
@@ -97,5 +103,63 @@ export function parseFeedMetadata(xml: string): FeedMetadata {
   return {
     title,
     coverImageUrl
+  };
+}
+
+function mergeSeenItemIds(existing: string[], processed: string[]): string[] {
+  const merged = [...existing, ...processed];
+  return merged.length > 200 ? merged.slice(-200) : merged;
+}
+
+function latestPublishedAt(current: string | null, candidates: Array<string | null>): string | null {
+  let latest = current ? new Date(current).getTime() : null;
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const time = new Date(candidate).getTime();
+    if (Number.isNaN(time)) continue;
+    if (latest === null || time > latest) latest = time;
+  }
+  return latest === null ? null : new Date(latest).toISOString();
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+}
+
+export function readFeedCursor(cursor: Record<string, unknown>): FeedCursorState {
+  return {
+    seenItemIds: readStringArray(cursor.seenItemIds),
+    lastItemPublishedAt: typeof cursor.lastItemPublishedAt === 'string' ? cursor.lastItemPublishedAt : null,
+    lastContentHash: typeof cursor.lastContentHash === 'string' ? cursor.lastContentHash : null
+  };
+}
+
+export function selectFeedItems(
+  items: FeedItem[],
+  cursor: Record<string, unknown>,
+  options?: { forcedItemLink?: string; limit?: number }
+): FeedItem[] {
+  const state = readFeedCursor(cursor);
+  if (options?.forcedItemLink) {
+    return items.filter((item) => item.link === options.forcedItemLink);
+  }
+
+  const seenIds = new Set(state.seenItemIds);
+  const unseen = items.filter((item) => !seenIds.has(item.itemId));
+  return typeof options?.limit === 'number' ? unseen.slice(0, options.limit) : unseen;
+}
+
+export function nextFeedCursor(cursor: Record<string, unknown>, processed: FeedItem[]): Record<string, unknown> {
+  const state = readFeedCursor(cursor);
+  return {
+    seenItemIds: mergeSeenItemIds(
+      state.seenItemIds,
+      processed.map((item) => item.itemId)
+    ),
+    lastItemPublishedAt: latestPublishedAt(
+      state.lastItemPublishedAt,
+      processed.map((item) => item.pubDate)
+    ),
+    lastContentHash: state.lastContentHash
   };
 }

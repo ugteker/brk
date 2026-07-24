@@ -4,6 +4,7 @@ import { GoogleOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import { GOOGLE_SIGN_IN_URL, forgotPassword, resendConfirmation, resetPassword } from '../api/auth';
+import { BrandLockup } from '../components/BrandLockup';
 
 const { Title, Paragraph } = Typography;
 
@@ -19,11 +20,11 @@ function readQueryParams() {
   };
 }
 
-const BRAND_FEATURES = [
-  'Multi-agent signal discussions',
-  'Real-time audio playback',
-  'Performance tracking per symbol'
-];
+const BRAND_FEATURE_KEYS = [
+  'auth.featureSources',
+  'auth.featureAgents',
+  'auth.featureInsights'
+] as const;
 
 export function AuthPage() {
   const { login, signup } = useAuth();
@@ -122,16 +123,14 @@ export function AuthPage() {
       <div
         className="ct-animate-fade hidden flex-col justify-between p-12 lg:flex lg:w-[45%]"
         style={{
-          background: 'hsl(225, 28%, 8%)',
+          background: 'radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.08), transparent 34%), hsl(225, 28%, 8%)',
           borderRight: '1px solid hsl(225, 18%, 16%)'
         }}
       >
         <div>
-          <Title level={2} style={{ color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>
-            ChatTrader
-          </Title>
+          <BrandLockup size={52} textColor="#fff" inverse />
           <p style={{ color: 'hsl(220, 14%, 55%)', marginTop: 6, fontSize: 14 }}>
-            AI-powered market discussions
+            {t('auth.subtitle')}
           </p>
         </div>
 
@@ -147,33 +146,31 @@ export function AuthPage() {
                 letterSpacing: '-0.03em'
               }}
             >
-              Markets move fast.<br />Stay ahead.
+              {t('auth.heroTitle')}
             </Title>
             <Paragraph style={{ color: 'hsl(220, 14%, 60%)', marginTop: 16, fontSize: 15, lineHeight: 1.6 }}>
-              AI agents discuss, debate, and signal — so you can decide.
+              {t('auth.heroSubtitle')}
             </Paragraph>
           </div>
 
           <div className="space-y-3">
-            {BRAND_FEATURES.map((feat) => (
-              <div key={feat} className="flex items-center gap-3">
-                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#9d6fe8', flexShrink: 0 }} />
-                <span style={{ color: 'hsl(220, 14%, 72%)', fontSize: 14 }}>{feat}</span>
+            {BRAND_FEATURE_KEYS.map((key) => (
+              <div key={key} className="flex items-center gap-3">
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#5ca875', flexShrink: 0 }} />
+                <span style={{ color: 'hsl(145, 12%, 74%)', fontSize: 14 }}>{t(key)}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <p style={{ color: 'hsl(220, 14%, 38%)', fontSize: 12 }}>© 2025 ChatTrader</p>
+        <p style={{ color: 'hsl(145, 10%, 40%)', fontSize: 12 }}>© 2026 Maydoz</p>
       </div>
 
       {/* Form panel */}
       <div className="flex flex-1 items-center justify-center p-6 lg:p-12">
         <div className="ct-animate-enter w-full max-w-[380px]">
           {/* Mobile-only logo */}
-          <Title level={3} className="lg:hidden" style={{ marginBottom: 24 }}>
-            ChatTrader
-          </Title>
+          <BrandLockup size={40} className="mb-6 lg:hidden" inverse />
 
           {infoBanner ? (
             <Alert

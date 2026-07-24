@@ -168,10 +168,11 @@ agent, playbook, or run. Advanced runtime configuration is outside the guided se
 ## 6. Improvement proposals (UX / layout / onboarding / empty states)
 
 ### Onboarding & first-run experience
-1. **Guided first-report wizard** ✅ Done: end-to-end flow on first login — paste URL → auto-probe → pick character → "Run now". Skip button dismisses to localStorage. Fully i18n (en+de).
-2. **Demo/sample content for empty accounts** ✅ Done: `POST /api/admin/seed-demo` creates a pre-seeded source + agent + playbook + completed run + report. Admin "Seed demo data" button in the menu. Idempotent (409 if already seeded).
-3. **Progress checklist upgrade** ✅ Done: 4-step checklist (source added, agent created, playbook scheduled, first report received) — live-checked from real data, auto-dismisses when all done, admin "Preview onboarding" toggle, load-state gating eliminates login flicker.
-4. **Marketplace as onboarding** ✅ Done: empty Playbooks hub shows up to 3 marketplace playbooks with Follow button; sky-blue "Source Marketplace" banner; 🧭 empty states in marketplace modal.
+- Signup creates no resources by default. New users land in the Feed (default landing) where they see recent reports; the Library remains the discovery surface presenting curated starter picks and sample reports.
+- Library behavior: presents curated Starter Picks cards and Sample Report previews, with explicit per-source membership controls. Each starter card exposes an "Add to library" action to record explicit membership; adding a source does not auto-create agents or playbooks.
+- Agent creation flow: when saving an agent/curator from the Library or Wizard, selecting an AI persona is required and the save step validates a chosen persona. Persona selection cannot be skipped.
+- Removed ephemeral first-run onboarding state: the prior auto-guided account bootstrap is replaced by the Feed-first discovery surface and a manual/explicit setup path. Demo/sample seed remains available as an admin action (`POST /api/admin/seed-demo`) but is not executed on signup.
+- All new Library UI strings and controls are i18n-ready (en/de).
 
 ### Layout & information architecture
 5. **Real routing** ✅ Done: react-router-dom v7 — BrowserRouter + routes (`/`, `/library`, `/agents`, `/playbooks`, `/studio`, `*`→redirect). `AgentsPage` accepts `hub` prop; `setActiveHub()` calls `navigate()`. nginx already supports SPA routing.
@@ -276,4 +277,28 @@ per-participant evidence rather than a fixed "last 3 reports" heuristic:
 ---
 
 *When priorities from §6/§7/§8 are picked up, move them into
-`docs/implementation/PROJECT.md` as requirements and track progress there.*
+`docs/implementation/PROJECT.md` as requirements and track progress there.
+
+---
+
+Foundation: the following shared-catalog foundation behaviors are implemented and verified in code (library/agent-selection UI not included):
+
+- Canonical shared Sources with user membership controls (sources are first-class, shareable entities; memberships grant read/edit per-source).
+- Immutable AgentPromptVersion snapshots persisted for every saved prompt edit (historical prompt versions are stored and not rewritten).
+- Manual Playbooks (user-created schedules connecting Agents and Sources) are pinned to AgentPromptVersion snapshots so runs reference the exact prompt version used.
+- Curated catalog metadata and frozen demo seed payloads are stored for reproducible demos where applicable.
+- Phosphor-first vendored icon set included and used for primary iconography (icons vendored into the repo rather than fetched at runtime).
+- Validate/preview/import tooling exists as repo scripts; the API exposes a read-only catalog listing endpoint at `GET /api/catalog` (see `apps/api/src/modules/catalog/routes.ts`).
+
+See `docs/implementation/PROJECT.md` for the ledger entry and tooling notes. (This section intentionally avoids naming uncommitted migration files or non-existent admin endpoints.)*
+
+---
+
+## Seeded Library + Source-aware Agent Selection (2026-07-24)
+
+- Library now leads with the ghost add-source card, then curated starter picks and sample reports, so new users do not land on an empty experience.
+- Source-agent connection is explicit and manual by default: using an agent from selection creates/reuses a **manual** playbook pinned to the selected immutable `AgentPromptVersion` (no automatic recurrence is enabled).
+- Agent selection uses compact source-aware cards with deterministic ranking, dedupe between curated and owned matches, and paged **Best matches** reveal.
+- Curate-your-own is AI-first in this flow; manual create entry points were removed from the source-follow selection surface.
+- Variant curation is supported from curated/public versions via `baseAgentVersionId`, producing an independent private version with `basedOnAgentVersionId` provenance.
+- Saved agent versions can be updated only through an explicit opt-in action (`POST /api/catalog/agent-versions/:agentVersionId/update`), with optional manual-playbook repinning.

@@ -8,7 +8,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { listAgents, type AgentSummary } from '../api/agents';
-import { listSources, type SourceRecord } from '../api/sources';
+import { listSources, type SourceRecord, saveSource, removeSavedSource } from '../api/sources';
 import { listPlaybooks, type PlaybookRecord } from '../api/playbooks';
 import {
   listMarketplaceAgents,
@@ -18,6 +18,8 @@ import {
   type MarketplaceSourceListItem,
   type MarketplacePlaybookListItem
 } from '../api/marketplace';
+import { listCatalog, type CatalogDemo, type CatalogSource } from '../api/catalog';
+
 
 export type LoadState = 'idle' | 'loading' | 'error';
 
@@ -60,10 +62,16 @@ export interface AppDataContextValue {
   marketplaceAgentCount: number;
   marketplaceSourceCount: number;
   marketplacePlaybookCount: number;
+  catalog: CatalogSource[];
+  catalogDemos: CatalogDemo[];
+  catalogLoadState: LoadState;
   refreshAgents: () => Promise<void>;
   refreshSources: () => Promise<void>;
   refreshPlaybooks: () => Promise<void>;
   refreshMarketplace: () => Promise<void>;
+  refreshCatalog: (locale?: string) => Promise<void>;
+  saveCatalogSource: (sourceId: string, locale?: string) => Promise<void>;
+  removeCatalogSource: (sourceId: string) => Promise<void>;
   setAgents: React.Dispatch<React.SetStateAction<AgentSummary[]>>;
   setSources: React.Dispatch<React.SetStateAction<SourceRecord[]>>;
   setPlaybooks: React.Dispatch<React.SetStateAction<PlaybookRecord[]>>;
@@ -75,10 +83,6 @@ export interface AppDataContextValue {
   setDiscussionNotices: React.Dispatch<React.SetStateAction<DiscussionEventNotice[]>>;
   bellDismissedIds: Set<string>;
   setBellDismissedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
-  forceShowOnboarding: boolean;
-  setForceShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
-  forceShowGuidedWizard: boolean;
-  setForceShowGuidedWizard: React.Dispatch<React.SetStateAction<boolean>>;
   adminMode: boolean;
   setAdminMode: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -106,15 +110,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [marketplaceAgentCount, setMarketplaceAgentCount] = useState(0);
   const [marketplaceSourceCount, setMarketplaceSourceCount] = useState(0);
   const [marketplacePlaybookCount, setMarketplacePlaybookCount] = useState(0);
+  const [catalog, setCatalog] = useState<CatalogSource[]>([]);
+  const [catalogDemos, setCatalogDemos] = useState<CatalogDemo[]>([]);
+  const [catalogLoadState, setCatalogLoadState] = useState<LoadState>('idle');
   const [failedRunNotices, setFailedRunNotices] = useState<FailedRunNotice[]>([]);
   const [newReportNotices, setNewReportNotices] = useState<NewReportNotice[]>([]);
   const [discussionNotices, setDiscussionNotices] = useState<DiscussionEventNotice[]>([]);
   const [bellDismissedIds, setBellDismissedIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('chattrader:bell:dismissed') ?? '[]')); } catch { return new Set(); }
   });
-  // In-memory only — resets on refresh, no localStorage (QA/preview tool, not a persisted preference).
-  const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
-  const [forceShowGuidedWizard, setForceShowGuidedWizard] = useState(false);
   // Admin-only nav visibility toggle (User Management/Agents/Playbooks). Persisted so it survives
   // reloads, but only ever shown/usable for admin users.
   const [adminMode, setAdminMode] = useState(() => localStorage.getItem('chattrader:adminMode') === '1');
@@ -176,6 +180,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setMarketplacePlaybookCount(mkPlaybooks.length);
   }
 
+  async function refreshCatalog(locale = 'en') {
+    try {
+      setCatalogLoadState('loading');
+      const response = await listCatalog(locale);
+      setCatalog(response.sources ?? []);
+      setCatalogDemos(response.demos ?? []);
+      setCatalogLoadState('idle');
+    } catch (error) {
+      // Catalog failures are best-effort: they should not sign the user out or clear existing sources.
+      // Surface an error state to the UI but otherwise continue.
+      setCatalogLoadState('error');
+    }
+  }
+
+  async function saveCatalogSource(sourceId: string, locale?: string) {
+    await saveSource(sourceId);
+    await Promise.all([refreshSources(), refreshCatalog(locale)]);
+  }
+
+  async function removeCatalogSource(sourceId: string) {
+    await removeSavedSource(sourceId);
+    await Promise.all([refreshSources(), refreshCatalog()]);
+  }
+
   useEffect(() => {
     if (initialLoadRef.current) return;
     initialLoadRef.current = true;
@@ -218,6 +246,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
         // Load marketplace data separately — don't block main data on this
         refreshMarketplace().catch(() => { /* non-fatal */ });
+
+        // Load catalog separately — failures here must not sign the user out or mutate sources.
+        refreshCatalog().catch(() => { /* non-fatal */ });
       } catch (error) {
         if (isSignInRequiredError(error)) { await logout(); return; }
         setAgentsLoadState('error');
@@ -239,13 +270,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     playbooks, playbooksLoadState,
     marketplaceAgents, marketplaceSources, marketplacePlaybooks,
     marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
+    catalog,     catalogDemos,
+    catalogLoadState,
     refreshAgents, refreshSources, refreshPlaybooks, refreshMarketplace,
+    refreshCatalog, saveCatalogSource, removeCatalogSource,
     setAgents, setSources, setPlaybooks,
     failedRunNotices, setFailedRunNotices,
     newReportNotices, setNewReportNotices,
     discussionNotices, setDiscussionNotices,
     bellDismissedIds, setBellDismissedIds,
-    forceShowOnboarding, setForceShowOnboarding, forceShowGuidedWizard, setForceShowGuidedWizard,
     adminMode, setAdminMode
   };
 

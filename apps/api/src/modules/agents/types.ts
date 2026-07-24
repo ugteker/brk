@@ -40,6 +40,17 @@ export interface CreateAgentInput {
   preferences?: Record<string, string[]>;
 }
 
+export interface CreateAgentVersionInput {
+  name: string;
+  description: string;
+  characterType: CharacterType;
+  promptConfig: PromptConfig;
+  model: string;
+  systemPrompt: string;
+  iconAssetKey: string | null;
+  basedOnAgentVersionId?: string | null;
+}
+
 export type AgentSharePermission = 'read' | 'edit' | 'delete';
 export type PublicationVisibility = 'public' | 'private';
 

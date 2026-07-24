@@ -22,12 +22,16 @@ function createFakeRepo() {
       retiredAt: Date | null;
     }
   >();
+  const versions = new Map<string, any>();
+  const userLibrary = new Map<string, Set<string>>();
   let nextId = 1;
   let nextGrantId = 1;
   let nextPublicationId = 1;
+  let nextVersionId = 1;
   const events: Array<{ userId: string; topic: string; entityId?: string }> = [];
   return {
     events,
+    userLibrary,
     async createAgent(ownerUserId: string, input: CreateAgentInput): Promise<Agent> {
       const agent: Agent = {
         id: `agent-${nextId++}`,
@@ -50,6 +54,12 @@ function createFakeRepo() {
     async updateAgent(agentId: string, patch: Partial<CreateAgentInput>): Promise<Agent> {
       const existing = agents.get(agentId);
       if (!existing) throw new Error('not_found');
+
+      const isPublic = [...publications.values()].some((p) => p.agentId === agentId && p.retiredAt === null && p.visibility === 'public');
+      if (isPublic && (patch.characterType !== undefined || patch.promptConfig !== undefined)) {
+        throw new Error('immutable_agent_version');
+      }
+
       const updated: Agent = {
         ...existing,
         name: patch.name ?? existing.name,
@@ -67,6 +77,7 @@ function createFakeRepo() {
       events.push({ userId: updated.ownerUserId, topic: 'agent.changed', entityId: agentId });
       return updated;
     },
+
     async disableAgent(agentId: string): Promise<void> {
       const existing = agents.get(agentId);
       if (!existing) throw new Error('not_found');
@@ -201,9 +212,36 @@ function createFakeRepo() {
       events.push({ userId: targetOwnerUserId, topic: 'marketplace.changed', entityId: publicationId });
       return { agent: cloned, cloned: true };
     },
+    async createAgentVersion(agentId: string, input: any) {
+      const agent = agents.get(agentId);
+      if (!agent) throw new Error('not_found');
+      const existing = [...versions.values()].filter((v) => v.agentId === agentId);
+      const nextVersion = existing.length === 0 ? 1 : Math.max(...existing.map((v) => v.version)) + 1;
+      const id = `version-${nextVersionId++}`;
+      const v = { id, agentId, version: nextVersion, model: input.model, systemPrompt: input.systemPrompt, agent };
+      versions.set(id, v);
+      return v;
+    },
+    async saveAgentVersion(userId: string, agentVersionId: string) {
+      const v = versions.get(agentVersionId);
+      if (!v) throw new Error('not_found');
+      const owner = v.agent.ownerUserId;
+      const isPublic = [...publications.values()].some((p) => p.agentId === v.agentId && p.retiredAt === null && p.visibility === 'public');
+      if (owner !== userId && !isPublic) throw new Error('not_found');
+      const set = userLibrary.get(userId) ?? new Set<string>();
+      set.add(agentVersionId);
+      userLibrary.set(userId, set);
+    },
+    async removeSavedAgentVersion(userId: string, agentVersionId: string) {
+      const set = userLibrary.get(userId) ?? new Set<string>();
+      const existed = set.delete(agentVersionId);
+      if (!existed) throw new Error('not_found');
+      userLibrary.set(userId, set);
+    },
     async findOwnerUserId(_resourceType: 'agent' | 'source' | 'playbook', resourceId: string): Promise<string | null> {
       return agents.get(resourceId)?.ownerUserId ?? null;
     },
+
     async hasGrant(input: { granteeUserId: string; resourceType: 'agent' | 'source' | 'playbook'; resourceId: string; permission: string }): Promise<boolean> {
       if (input.resourceType !== 'agent') return false;
       return (grants.get(input.resourceId) ?? []).some(
@@ -300,6 +338,21 @@ describe('agent routes', () => {
     });
 
     expect(disable.statusCode).toBe(204);
+  });
+
+  it('PATCH on a published agent returns 409 immutable_agent_version', async () => {
+    const repo = createFakeRepo();
+    const app = await buildServer({ agentRepository: repo, agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    const createRes = await app.inject({ method: 'POST', url: '/api/agents', headers: authCookieHeader('user-1'), payload: { name: 'Agent For Version' } });
+    expect(createRes.statusCode).toBe(201);
+    const agentId = createRes.json().id as string;
+
+    const publishRes = await app.inject({ method: 'POST', url: `/api/agents/${agentId}/publish`, headers: authCookieHeader('user-1'), payload: { title: 'Public', visibility: 'public' } });
+    expect(publishRes.statusCode).toBe(201);
+
+    const patchRes = await app.inject({ method: 'PATCH', url: `/api/agents/${agentId}`, headers: authCookieHeader('user-1'), payload: { characterType: 'teacher', promptConfig: {} } });
+    expect(patchRes.statusCode).toBe(409);
+    expect(patchRes.json().code).toBe('immutable_agent_version');
   });
 
   it('enables a disabled agent', async () => {
@@ -936,6 +989,50 @@ describe('agent routes', () => {
     expect(postUnpublishListRes.json()).toHaveLength(0);
 
     expect(agentRepository.events.filter((event) => event.topic === 'marketplace.changed' && event.userId === owner.id).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('creates a new agent version via POST /api/agents/:agentId/versions', async () => {
+    const repo = createFakeRepo();
+    const app = await buildServer({ agentRepository: repo, agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    const createRes = await app.inject({ method: 'POST', url: '/api/agents', headers: authCookieHeader('user-1'), payload: { name: 'Agent For Version' } });
+    expect(createRes.statusCode).toBe(201);
+    const agentId = createRes.json().id as string;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/agents/${agentId}/versions`,
+      headers: authCookieHeader('user-1'),
+      payload: {
+        name: 'Revised teacher',
+        description: 'Explains difficult ideas',
+        characterType: 'teacher',
+        promptConfig: {},
+        model: 'claude-sonnet-4-5',
+        systemPrompt: 'Explain the evidence step by step.',
+        iconAssetKey: null
+      }
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().version).toBe(1);
+  });
+
+  it('saves a public agent version via POST /api/agent-versions/:agentVersionId/save without cloning the agent', async () => {
+    const repo = createFakeRepo();
+    const app = await buildServer({ agentRepository: repo, agents: createFakeAgentsDeps(), auth: createTestAuthDeps() });
+    const createRes = await app.inject({ method: 'POST', url: '/api/agents', headers: authCookieHeader('user-1'), payload: { name: 'Public Agent' } });
+    const agentId = createRes.json().id as string;
+
+    const publishRes = await app.inject({ method: 'POST', url: `/api/agents/${agentId}/publish`, headers: authCookieHeader('user-1'), payload: { title: 'Public', visibility: 'public' } });
+    expect(publishRes.statusCode).toBe(201);
+
+    const versionRes = await app.inject({ method: 'POST', url: `/api/agents/${agentId}/versions`, headers: authCookieHeader('user-1'), payload: { name: 'v1', description: '', characterType: 'teacher', promptConfig: {}, model: 'm', systemPrompt: 's', iconAssetKey: null } });
+    expect(versionRes.statusCode).toBe(201);
+    const versionId = versionRes.json().id as string;
+
+    const saveRes = await app.inject({ method: 'POST', url: `/api/agent-versions/${versionId}/save`, headers: authCookieHeader('user-2') });
+    expect(saveRes.statusCode).toBe(204);
+    expect(repo.userLibrary.get('user-2')?.has(versionId)).toBe(true);
   });
 
   it('does not emit marketplace.changed events on denied publish/unpublish or already-cloned/not-found clone requests', async () => {

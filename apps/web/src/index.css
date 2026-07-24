@@ -6,6 +6,11 @@
   to { stroke-dashoffset: -40; }
 }
 
+.ghost-create-card-dash {
+  animation: dash-march 14s linear infinite;
+  opacity: 0.5;
+}
+
 @keyframes robot-pulse {
   0%, 100% { transform: scale(1); }
   50%       { transform: scale(1.3); }
@@ -24,6 +29,23 @@
 /* Draws attention to the notification bell while there are unread run-failure notices. */
 .ct-bell-badge-alert .ant-badge-count {
   animation: bell-alert-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes library-next-action-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(114, 46, 209, 0.18), 0 8px 24px rgba(114, 46, 209, 0.08);
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(114, 46, 209, 0.28), 0 12px 30px rgba(114, 46, 209, 0.14);
+    transform: translateY(-1px);
+  }
+}
+
+.library-next-action {
+  background: linear-gradient(180deg, rgba(114, 46, 209, 0.08), rgba(114, 46, 209, 0.03));
+  box-shadow: 0 0 0 1px rgba(114, 46, 209, 0.16), 0 8px 24px rgba(114, 46, 209, 0.08);
+  animation: library-next-action-pulse 2.4s ease-in-out 2;
 }
 
 @keyframes ct-slide-in-up {
@@ -89,6 +111,10 @@
     transition: none;
     transform: none;
     box-shadow: none;
+  }
+  .ghost-create-card-dash,
+  .library-next-action {
+    animation: none;
   }
 }
 

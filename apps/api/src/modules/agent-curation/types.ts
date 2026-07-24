@@ -65,6 +65,7 @@ export interface CurationSession {
   id: string;
   ownerUserId: string;
   targetAgentId: string | null;
+  baseAgentVersionId: string | null;
   mode: CurationMode;
   status: CurationSessionStatus;
   revision: number;
@@ -78,6 +79,7 @@ export interface CurationSession {
 
 export interface CreateCurationSessionInput {
   targetAgentId?: string | null;
+  baseAgentVersionId?: string | null;
   mode: CurationMode;
   sourceContext: CurationSourceContext;
   draft: CurationDraft;

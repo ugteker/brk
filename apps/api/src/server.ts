@@ -13,6 +13,7 @@ import { registerWatchlistRoutes, type WatchlistRoutesDeps } from './modules/wat
 import { registerUsageRoutes, type UsageRoutesDeps } from './modules/usage/routes';
 import { registerRealtimeRoutes, type RealtimeEventRepository } from './modules/realtime/routes';
 import { registerAgentCurationRoutes, type AgentCurationFeatureDeps, type AgentCurationRoutesDeps } from './modules/agent-curation/routes';
+import { registerCatalogRoutes, type CatalogRoutesDeps } from './modules/catalog/routes';
 import type { DomainAccessResolver } from './modules/access/permissions';
 import { config } from './config';
 import { verifySessionToken } from './modules/auth/jwt';
@@ -37,6 +38,7 @@ export interface ServerDeps {
   discussion?: DiscussionRoutesDeps;
   realtime?: { repository: RealtimeEventRepository };
   agentCuration?: AgentCurationFeatureDeps;
+  catalog?: CatalogRoutesDeps;
   accessResolver?: DomainAccessResolver;
   sourceProbe?: SourceProbeLike;
   runTrigger?: RunTriggerLike;
@@ -119,6 +121,9 @@ export async function buildServer(deps: ServerDeps) {
   }
   if (deps.realtime) {
     await registerRealtimeRoutes(app, deps.realtime);
+  }
+  if (deps.catalog) {
+    await registerCatalogRoutes(app, deps.catalog);
   }
   // Admin user-management routes reuse the same userRepository as auth - there's no separate
   // "admin service", just extra ADMIN_EMAIL-gated endpoints on top of the existing user store.
