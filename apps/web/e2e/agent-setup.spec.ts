@@ -172,11 +172,11 @@ test('@smoke agent selection keeps compact source-aware matches paged and dedupe
   const selectionView = await readFile(resolve(process.cwd(), 'src/components/agent-selection/AgentSelectionView.tsx'), 'utf8');
 
   expect(selectionView).toContain('BEST_MATCHES_PAGE_SIZE = 4');
-  expect(selectionView).toContain('setVisibleLimit((current) => current + BEST_MATCHES_PAGE_SIZE)');
-  expect(selectionView).toContain('matchedOwnedVersionIds');
+  expect(selectionView).toContain('setCurrentPage(nextPage)');
+  expect(selectionView).toContain("matches.filter((match) => match.ownership !== 'owned')");
   expect(selectionView).toContain('window.requestAnimationFrame');
   expect(selectionView).toContain('target?.focus()');
-  expect(selectionView).toContain("t('agentSelection.showMore')");
+  expect(selectionView).toContain('aria-label="Next best matches page"');
   expect(selectionView).toContain("t('agentSelection.yourAgents')");
   expect(selectionView).toContain("t('agentSelection.curateYourOwn')");
   expect(selectionView).not.toContain("t('agent.createNew')");
