@@ -78,32 +78,6 @@ export function LibraryOverview({
 
   return (
     <div className="space-y-8">
-      {hasOwnedSavedSources ? (
-        <section aria-labelledby="library-yours" className="space-y-4">
-          <Title id="library-yours" level={3} style={{ margin: 0 }}>{t('library.yourLibrary')}</Title>
-          <SavedSourceGrid
-            sources={savedSources}
-            currentUserId={currentUserId}
-            onOpenSource={onOpenSource}
-            onAddAgent={onAddAgent}
-            onRemoveAgent={onRemoveAgent}
-            hasAnySources={hasAnySavedSources}
-            leadingCard={(
-              <GhostCreateCard
-                attention={showAddSourceAttention}
-                ariaLabel={t('library.addSource')}
-                onClick={onAddSource}
-                icon={<DatabaseOutlined />}
-                title={t('library.addSource')}
-              />
-            )}
-            renderSourceActions={renderSavedSourceActions}
-            linkedAgentsBySourceId={linkedAgentsBySourceId}
-            highlightedAgentIdBySourceId={highlightedAgentIdBySourceId}
-          />
-        </section>
-      ) : null}
-
       <section aria-labelledby="library-start-here" className="space-y-4">
         <div className="space-y-1">
           {showAddSourceAttention ? (
@@ -168,22 +142,29 @@ export function LibraryOverview({
         </section>
       ) : null}
 
-      {!hasOwnedSavedSources ? (
-        <section aria-labelledby="library-yours" className="space-y-4">
-          <Title id="library-yours" level={3} style={{ margin: 0 }}>{t('library.yourLibrary')}</Title>
-          <SavedSourceGrid
-            sources={savedSources}
-            currentUserId={currentUserId}
-            onOpenSource={onOpenSource}
-            onAddAgent={onAddAgent}
-            onRemoveAgent={onRemoveAgent}
-            hasAnySources={hasAnySavedSources}
-            renderSourceActions={renderSavedSourceActions}
-            linkedAgentsBySourceId={linkedAgentsBySourceId}
-            highlightedAgentIdBySourceId={highlightedAgentIdBySourceId}
-          />
-        </section>
-      ) : null}
+      <section aria-labelledby="library-yours" className="space-y-4">
+        <Title id="library-yours" level={3} style={{ margin: 0 }}>{t('library.yourLibrary')}</Title>
+        <SavedSourceGrid
+          sources={savedSources}
+          currentUserId={currentUserId}
+          onOpenSource={onOpenSource}
+          onAddAgent={onAddAgent}
+          onRemoveAgent={onRemoveAgent}
+          hasAnySources={hasAnySavedSources}
+          leadingCard={hasOwnedSavedSources ? (
+            <GhostCreateCard
+              attention={showAddSourceAttention}
+              ariaLabel={t('library.addSource')}
+              onClick={onAddSource}
+              icon={<DatabaseOutlined />}
+              title={t('library.addSource')}
+            />
+          ) : undefined}
+          renderSourceActions={renderSavedSourceActions}
+          linkedAgentsBySourceId={linkedAgentsBySourceId}
+          highlightedAgentIdBySourceId={highlightedAgentIdBySourceId}
+        />
+      </section>
     </div>
   );
 }
