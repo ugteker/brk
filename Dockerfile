@@ -1,4 +1,4 @@
-# All-in-one ChatTrader image: API (Fastify/Prisma/SQLite) and the built SPA
+# All-in-one Maydoz image: API (Fastify/Prisma/SQLite) and the built SPA
 # served by nginx, running as sibling processes in a single container
 # (see deploy/entrypoint.sh for the rationale/trade-offs and
 # deploy/README.md for the overall architecture). Build from the repo root:

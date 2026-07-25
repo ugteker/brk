@@ -245,7 +245,7 @@ export function SavedSourceGrid({
                                   >
                                     {getCharacterTypeEmoji(agent.characterType)}
                                   </span>
-                                  <span className="line-clamp-2 min-h-[2.5em] w-full break-words text-[10px] leading-tight [overflow-wrap:anywhere]">
+                                  <span className="line-clamp-2 min-h-[2.5em] w-full whitespace-normal break-words text-[10px] leading-tight [overflow-wrap:anywhere]">
                                     {agent.label}
                                   </span>
                                 </span>

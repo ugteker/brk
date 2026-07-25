@@ -1,0 +1,96 @@
+<style>
+  .concept-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; margin-top:20px; }
+  .concept { cursor:pointer; border:2px solid transparent; border-radius:18px; padding:14px; background:#f8fafc; transition:.2s ease; }
+  .concept:hover,.concept.selected { border-color:#0ea5e9; transform:translateY(-2px); }
+  .app { background:#eef2f7; border-radius:14px; padding:14px; min-height:540px; color:#172033; font-family:"IBM Plex Sans","Segoe UI",sans-serif; }
+  .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .top strong { font-size:17px; }
+  .section-title { display:flex; align-items:center; justify-content:space-between; margin:12px 0 8px; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:#596579; }
+  .source-row { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .source { min-height:106px; border-radius:12px; padding:10px; background:#fff; box-shadow:0 2px 8px rgba(15,23,42,.06); position:relative; overflow:hidden; }
+  .source.ghost { display:flex; flex-direction:column; align-items:center; justify-content:center; border:1.5px dashed #0ea5e9; background:#f0f9ff; color:#0369a1; box-shadow:0 0 0 5px rgba(14,165,233,.08); }
+  .source-art { height:48px; margin:-10px -10px 8px; background:linear-gradient(135deg,#313b5a,#8a63d2); }
+  .source-art.orange { background:linear-gradient(135deg,#fb923c,#7c2d12); }
+  .source-art.blue { background:linear-gradient(135deg,#0f766e,#38bdf8); }
+  .source-name { font-size:11px; font-weight:800; line-height:1.2; }
+  .source-meta { font-size:9px; color:#718096; margin-top:3px; }
+  .agent-strip { display:flex; gap:7px; overflow:hidden; }
+  .agent { flex:0 0 138px; border-radius:12px; background:#fff; padding:10px; border:1px solid #e2e8f0; }
+  .agent-head { display:flex; gap:8px; align-items:center; }
+  .avatar { width:34px; height:34px; border-radius:10px; background:#dbeafe; display:grid; place-items:center; font-size:18px; }
+  .agent-name { font-size:11px; font-weight:800; }
+  .agent-role { font-size:9px; color:#64748b; }
+  .chips { display:flex; gap:4px; margin-top:8px; }
+  .chip { font-size:8px; background:#f1f5f9; border-radius:999px; padding:3px 6px; }
+  .action { margin-top:8px; width:100%; border:0; border-radius:8px; padding:6px; color:#0369a1; background:#e0f2fe; font-size:9px; font-weight:800; }
+  .sample { margin-top:12px; background:#172033; color:#fff; border-radius:12px; padding:11px; }
+  .sample small { color:#93c5fd; font-weight:800; }
+  .sample div { font-size:11px; font-weight:700; margin-top:4px; }
+  .dense-row { display:grid; grid-template-columns:1.1fr 2fr; gap:10px; }
+  .dense-list { display:flex; flex-direction:column; gap:6px; }
+  .dense-item { display:flex; gap:8px; align-items:center; background:#fff; border-radius:10px; padding:7px; }
+  .dense-item .avatar { width:28px; height:28px; border-radius:50%; font-size:14px; }
+  .dense-item .agent-name { font-size:10px; }
+  .dense-item .agent-role { font-size:8px; }
+  .own-row { display:grid; grid-template-columns:repeat(2,1fr); gap:7px; margin-top:6px; }
+  .own { background:#fff; border-radius:10px; padding:8px; font-size:9px; font-weight:700; }
+  @media(max-width:900px){.concept-grid{grid-template-columns:1fr}}
+</style>
+
+<h2>Choose the interaction rhythm</h2>
+<p class="subtitle">Both remove forced onboarding, lead with creation, and keep catalog items distinct from owned items.</p>
+
+<div class="concept-grid">
+  <div class="concept" data-choice="guided-showcase" onclick="toggleSelect(this)">
+    <div class="app">
+      <div class="top"><strong>Library</strong><span>Search · Filter</span></div>
+      <div class="section-title"><span>Start here</span><span>Curated for you</span></div>
+      <div class="source-row">
+        <div class="source ghost"><div style="font-size:26px">＋</div><div class="source-name">Add your source</div><div class="source-meta">Podcast, YouTube or web</div></div>
+        <div class="source"><div class="source-art"></div><div class="source-name">Acquired</div><div class="source-meta">Tech & business podcast</div></div>
+        <div class="source"><div class="source-art orange"></div><div class="source-name">The Knowledge Project</div><div class="source-meta">Ideas & decision-making</div></div>
+      </div>
+      <div class="sample"><small>SAMPLE REPORT</small><div>Five decisions that compound over a decade →</div></div>
+      <div class="section-title"><span>Best agent matches</span><span>Show more →</span></div>
+      <div class="agent-strip">
+        <div class="agent"><div class="agent-head"><div class="avatar">⌁</div><div><div class="agent-name">Signal Finder</div><div class="agent-role">Finds claims and evidence</div></div></div><div class="chips"><span class="chip">Podcast</span><span class="chip">English</span></div><button class="action">Use agent</button></div>
+        <div class="agent"><div class="agent-head"><div class="avatar">◫</div><div><div class="agent-name">Practical Teacher</div><div class="agent-role">Turns ideas into lessons</div></div></div><div class="chips"><span class="chip">Learning</span><span class="chip">Clear</span></div><button class="action">Use agent</button></div>
+      </div>
+      <div class="section-title"><span>Your library</span><span>0 sources</span></div>
+      <div class="source" style="min-height:56px;display:grid;place-items:center;color:#64748b">Your added sources will live here</div>
+    </div>
+    <h3>Guided showcase</h3>
+    <p>Editorial sections explain what is catalog, sample, recommended, and owned. Strongest first-run clarity.</p>
+  </div>
+
+  <div class="concept" data-choice="compact-workbench" onclick="toggleSelect(this)">
+    <div class="app">
+      <div class="top"><strong>Library</strong><span>＋ Add source</span></div>
+      <div class="dense-row">
+        <div>
+          <div class="section-title"><span>Starter picks</span><span>View all</span></div>
+          <div class="dense-list">
+            <div class="dense-item"><div class="avatar">＋</div><div><div class="agent-name">Add your source</div><div class="agent-role">Create from URL</div></div></div>
+            <div class="dense-item"><div class="avatar" style="background:#ede9fe">A</div><div><div class="agent-name">Acquired</div><div class="agent-role">Podcast · Business</div></div></div>
+            <div class="dense-item"><div class="avatar" style="background:#ffedd5">K</div><div><div class="agent-name">Knowledge Project</div><div class="agent-role">Podcast · Ideas</div></div></div>
+          </div>
+          <div class="section-title"><span>Your library</span><span>0</span></div>
+          <div class="own-row"><div class="own">Nothing added yet</div></div>
+        </div>
+        <div>
+          <div class="section-title"><span>Agents for Acquired</span><span>20 available</span></div>
+          <div class="dense-list">
+            <div class="dense-item"><div class="avatar">⌁</div><div style="flex:1"><div class="agent-name">Signal Finder</div><div class="agent-role">Claims, evidence and contradictions</div></div><span>＋</span></div>
+            <div class="dense-item"><div class="avatar">◫</div><div style="flex:1"><div class="agent-name">Practical Teacher</div><div class="agent-role">Lessons and exercises</div></div><span>＋</span></div>
+            <div class="dense-item"><div class="avatar">◎</div><div style="flex:1"><div class="agent-name">Strategy Lens</div><div class="agent-role">Moats and strategic choices</div></div><span>＋</span></div>
+          </div>
+          <div class="sample"><small>PREVIEW</small><div>See how Signal Finder analyzes this source →</div></div>
+          <div class="section-title"><span>Your agents</span><span>Curate new ＋</span></div>
+          <div class="own-row"><div class="own">No agents yet</div><div class="own" style="border:1px dashed #38bdf8;color:#0369a1">＋ Curate agent</div></div>
+        </div>
+      </div>
+    </div>
+    <h3>Compact workbench</h3>
+    <p>Source and agents stay visible together with minimal cards. Faster for repeat use, but denser for newcomers.</p>
+  </div>
+</div>

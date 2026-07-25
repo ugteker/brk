@@ -1,4 +1,4 @@
-name: ChatTrader Deploy
+name: Maydoz Deploy
 
 on:
   push:
@@ -63,6 +63,7 @@ jobs:
             else
               rm -f "$DEPLOY_PATH/secrets/google-tts-service-account.json"
             fi
+            umask 022
             cd "$DEPLOY_PATH"
             git pull --ff-only origin "$DEPLOY_BRANCH"
             export VITE_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -70,7 +71,7 @@ jobs:
             docker compose build --no-cache
             docker compose up -d --force-recreate --remove-orphans
             sleep 5
-            docker compose logs chattrader --tail 20
+            docker compose logs maydoz --tail 20
         env:
           HETZNER_APP_ENV: ${{ secrets.HETZNER_APP_ENV }}
           HETZNER_GOOGLE_TTS_SA_JSON_B64: ${{ secrets.HETZNER_GOOGLE_TTS_SA_JSON_B64 }}

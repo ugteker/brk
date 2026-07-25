@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Entrypoint for the all-in-one ChatTrader container: runs the API and nginx
+# Entrypoint for the all-in-one Maydoz container: runs the API and nginx
 # (static SPA + reverse proxy) as sibling processes in a single container.
 set -euo pipefail
 

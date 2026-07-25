@@ -1,0 +1,82 @@
+<style>
+  .cards { grid-template-columns: repeat(3, minmax(250px, 1fr)); }
+  .phone { width: 100%; min-height: 430px; border-radius: 24px; background: #10131c; color: #eef1f7; overflow: hidden; box-shadow: 0 18px 50px rgba(0,0,0,.28); }
+  .phone-head { display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid #292e3c; }
+  .phone-title { font-size:14px; font-weight:700; }
+  .icon-button { border:0; background:transparent; color:#9fa8bb; font-size:18px; padding:6px; }
+  .phone-body { min-height:305px; padding:20px 18px; }
+  .step { color:#969fb2; font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+  .agent { margin-top:15px; padding:15px; border:1px solid #303747; border-radius:14px; background:#181d28; }
+  .agent strong { display:block; font-size:14px; }
+  .agent span { color:#9fa8bb; font-size:12px; }
+  .scrim { padding:30px 16px 14px; background:linear-gradient(to bottom, transparent, #10131c 34%); }
+  .actions { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; border-radius:999px; padding:0 17px; font-size:13px; font-weight:700; }
+  .secondary { border:1px solid #343b4d; background:#171c27; color:#e2e6ef; }
+  .primary { border:0; background:#7c3aed; color:white; box-shadow:0 8px 22px rgba(124,58,237,.32); }
+  .icon-only { width:44px; padding:0; font-size:18px; }
+  .dock { display:flex; gap:5px; padding:6px; border:1px solid #343b4d; border-radius:18px; background:#181d28; box-shadow:0 12px 30px rgba(0,0,0,.3); }
+  .dock .button { flex:1; border-radius:13px; }
+  .state-row { display:flex; gap:6px; margin-top:18px; color:#9fa8bb; font-size:10px; }
+  .state-pill { flex:1; border:1px solid #303747; border-radius:8px; padding:7px; text-align:center; }
+  @media (max-width: 920px) { .cards { grid-template-columns: 1fr; } }
+</style>
+
+<h2>Welche Aktionsleiste passt zu den mobilen Wizards?</h2>
+<p class="subtitle">Alle Varianten halten die Positionen über Agentenauswahl, Create Agent und Curator stabil. Nur die Aktion und ihr Icon ändern sich.</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="phone-head"><span class="phone-title">Zusammenfassen: Tech-Podcast</span><button class="icon-button" aria-label="Schließen">×</button></div>
+        <div class="phone-body">
+          <div class="step">Schritt 2 von 3 · Agent auswählen</div>
+          <div class="agent"><strong>Executive-Briefer</strong><span>Prägnant · entscheidungsorientiert</span></div>
+          <div class="state-row"><div class="state-pill">← Zurück</div><div class="state-pill">Weiter →</div><div class="state-pill">Erstellen ✓</div></div>
+        </div>
+        <div class="scrim"><div class="actions"><button class="button secondary">← <span>Zurück</span></button><button class="button primary"><span>Weiter</span> →</button></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Stabiles Aktionspaar</h3>
+      <p>Empfohlen. Schließen bleibt oben. Unten stehen immer Zurück links und die primäre Aktion rechts – jeweils Icon plus Text. Kein sichtbarer Toolbar-Rahmen.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="phone-head"><span class="phone-title">Agent erstellen</span><button class="icon-button" aria-label="Schließen">×</button></div>
+        <div class="phone-body">
+          <div class="step">Persönlichkeit konfigurieren</div>
+          <div class="agent"><strong>Research Digestor</strong><span>System-Prompt und Modell</span></div>
+          <div class="state-row"><div class="state-pill">←</div><div class="state-pill">→</div><div class="state-pill">✓</div></div>
+        </div>
+        <div class="scrim"><div class="actions"><button class="button secondary icon-only" aria-label="Zurück">←</button><button class="button primary icon-only" aria-label="Weiter">→</button></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Nur Icons</h3>
+      <p>Sehr ruhig und kompakt, aber weniger eindeutig. Speichern, Erstellen und Fortsetzen lassen sich nur über unterschiedliche Symbole schwer sicher unterscheiden.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="phone-head"><span class="phone-title">Mit KI kuratieren</span><button class="icon-button" aria-label="Schließen">×</button></div>
+        <div class="phone-body">
+          <div class="step">Profil prüfen</div>
+          <div class="agent"><strong>Agent ist bereit</strong><span>Name und Anweisungen überprüfen</span></div>
+          <div class="state-row"><div class="state-pill">Abbrechen</div><div class="state-pill">Zurück</div><div class="state-pill">Erstellen</div></div>
+        </div>
+        <div class="scrim"><div class="dock"><button class="button secondary">×</button><button class="button secondary">←</button><button class="button primary">✓ Erstellen</button></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Kompaktes Action-Dock</h3>
+      <p>Alle Aktionen an einem Ort, aber es erzeugt erneut genau den „Frame im Frame“, den wir entfernen wollen, und macht Abbrechen zu prominent.</p>
+    </div>
+  </div>
+</div>

@@ -11,6 +11,7 @@ build/
 # Environment variables / secrets
 .env
 .env.*
+.env-*
 !.env.example
 
 # Logs
@@ -23,11 +24,15 @@ server.log
 api-dev.log
 api-dev-err.log
 
-# Prisma
-apps/api/prisma/dev.db
-apps/api/prisma/dev.db-journal
-apps/api/prisma/*.db
-apps/api/prisma/*.db-journal
+# Prisma / SQLite
+apps/api/dev.db
+apps/api/dev.db-journal
+apps/api/dev.db-shm
+apps/api/dev.db-wal
+apps/api/prisma/**/*.db
+apps/api/prisma/**/*.db-journal
+apps/api/prisma/**/*.db-shm
+apps/api/prisma/**/*.db-wal
 apps/api/prisma/migrations/dev/
 
 # Test artifacts
@@ -58,12 +63,12 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
-/.superpowers/brainstorm/1003-1784380496/state/server.pid
-/.superpowers/brainstorm/1018-1784396210/state/server.pid
-/.superpowers/brainstorm/1018-1784396210/state/server-info
-/.superpowers/brainstorm/1003-1784380496/state/server-instance-id
-/.superpowers/brainstorm/1018-1784396210/state/server-instance-id
-/.superpowers/brainstorm/1003-1784380496/state/server-stopped
+
+# Impeccable critique reports (scratch review output)
+.impeccable/
+
+# Brainstorm session runtime state (pid/instance-id/stopped flags) for any session ID
+/.superpowers/brainstorm/*/state/
 
 # Local-only sdd session artifacts (kept on disk, not tracked in git)
 /.superpowers/sdd/realtime-task-3-report.md

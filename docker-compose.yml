@@ -1,4 +1,4 @@
-# ChatTrader production stack — single Hetzner VPS, single all-in-one
+# Maydoz production stack — single Hetzner VPS, single all-in-one
 # container (API + web + cloudflared), fronted by a Cloudflare Quick Tunnel
 # (no owned domain yet; see deploy/README.md).
 #
@@ -7,7 +7,7 @@
 # Nothing sensitive is baked into the image or written into this file.
 
 services:
-  chattrader:
+  maydoz:
     build:
       context: .
       dockerfile: Dockerfile
