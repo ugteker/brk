@@ -41,13 +41,13 @@ On any machine with Docker running (your laptop or the Hetzner server itself):
 ```bash
 git clone https://github.com/ugteker/brk.git
 cd brk
-docker build -t chattrader:test .
-docker run -d --name chattrader-test -p 127.0.0.1:8080:80 \
-  -e JWT_SECRET=test-secret -e AUTH_COOKIE_SECURE=false chattrader:test
-docker logs chattrader-test   # confirm API/nginx/cloudflared all start
+docker build -t maydoz:test .
+docker run -d --name maydoz-test -p 127.0.0.1:8080:80 \
+  -e JWT_SECRET=test-secret -e AUTH_COOKIE_SECURE=false maydoz:test
+docker logs maydoz-test   # confirm API/nginx/cloudflared all start
 curl -i http://127.0.0.1:8080/          # expect 200 (SPA)
 curl -i http://127.0.0.1:8080/api/health  # any non-5xx confirms the proxy works
-docker rm -f chattrader-test
+docker rm -f maydoz-test
 ```
 
 Do not proceed until this build succeeds and both curl checks return.
@@ -123,7 +123,7 @@ docker compose up -d --build
 ## Step 5 — Get the public tunnel URL
 
 ```bash
-docker compose logs chattrader --tail 50 | grep trycloudflare.com
+docker compose logs maydoz --tail 50 | grep trycloudflare.com
 ```
 
 This prints a URL like `https://random-words-1234.trycloudflare.com`.
@@ -197,7 +197,7 @@ path/environment.
   git pull --ff-only origin master
   docker compose build
   docker compose up -d --remove-orphans
-  docker compose logs chattrader --tail 50 | grep trycloudflare.com
+  docker compose logs maydoz --tail 50 | grep trycloudflare.com
   ```
   This pulls the latest code, rebuilds the image, and restarts the container.
   For alpha, use `/opt/ChatTrader-alpha` and `origin alpha`.
@@ -215,11 +215,11 @@ existed in developers' local `apps/api/.env` files:
 
 | Symptom | Check |
 | --- | --- |
-| Can't find the tunnel URL | `docker compose logs chattrader --tail 100` — cloudflared logs its assigned URL a few seconds after startup |
-| SPA loads but API calls fail | Confirm the API process is running inside the container: `docker compose exec chattrader sh -c "wget -qO- http://127.0.0.1:3000/api/agents"` (expect 401, not a connection error) |
-| Container keeps restarting | `docker compose logs chattrader` — the entrypoint shuts down all three processes (API/nginx/cloudflared) if any one exits, so check which one failed first |
+| Can't find the tunnel URL | `docker compose logs maydoz --tail 100` — cloudflared logs its assigned URL a few seconds after startup |
+| SPA loads but API calls fail | Confirm the API process is running inside the container: `docker compose exec maydoz sh -c "wget -qO- http://127.0.0.1:3000/api/agents"` (expect 401, not a connection error) |
+| Container keeps restarting | `docker compose logs maydoz` — the entrypoint shuts down all three processes (API/nginx/cloudflared) if any one exits, so check which one failed first |
 | Data lost after redeploy | Confirm the `api-data` volume exists: `docker volume ls | grep api-data` — SQLite's `dev.db` lives there, not in the container filesystem |
-| Manual episode-picker run always shows "no content", but works fine locally | YouTube blocks caption/transcript requests from known datacenter/VPS IP ranges (Hetzner included) — confirmed via server logs showing `playabilityStatus: "LOGIN_REQUIRED"` on every client impersonation, even with realistic headers and multiple client impersonations (ANDROID/IOS/WEB). A signed-in session's `YOUTUBE_COOKIE` alone did **not** fix this (modern YouTube bot-detection is IP-reputation-based, not just session-based) — the fix that worked was routing YouTube requests through a residential IP via `YOUTUBE_PROXY_URL` (see "YouTube proxy dependency" below). Check the Runs view: the warning message always includes the failing episode's clickable URL, and `docker compose logs chattrader | grep youtube-adapter` shows exactly which stage failed (missing API key / per-client rejection reason / fallback scrape failure). |
+| Manual episode-picker run always shows "no content", but works fine locally | YouTube blocks caption/transcript requests from known datacenter/VPS IP ranges (Hetzner included) — confirmed via server logs showing `playabilityStatus: "LOGIN_REQUIRED"` on every client impersonation, even with realistic headers and multiple client impersonations (ANDROID/IOS/WEB). A signed-in session's `YOUTUBE_COOKIE` alone did **not** fix this (modern YouTube bot-detection is IP-reputation-based, not just session-based) — the fix that worked was routing YouTube requests through a residential IP via `YOUTUBE_PROXY_URL` (see "YouTube proxy dependency" below). Check the Runs view: the warning message always includes the failing episode's clickable URL, and `docker compose logs maydoz | grep youtube-adapter` shows exactly which stage failed (missing API key / per-client rejection reason / fallback scrape failure). |
 
 ### YouTube proxy dependency
 

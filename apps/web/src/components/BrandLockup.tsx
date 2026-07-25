@@ -1,3 +1,5 @@
+import logoUrl from '../assets/maydoz-logo.png';
+
 interface BrandLockupProps {
   size?: number;
   textSize?: number;
@@ -19,7 +21,7 @@ export function BrandLockup({
       style={{ gap: Math.max(8, size * 0.2) }}
     >
       <img
-        src="/maydoz-logo.png"
+        src={logoUrl}
         alt="Maydoz"
         width={size}
         height={size}
