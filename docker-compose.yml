@@ -1,6 +1,6 @@
 # Maydoz production stack — single Hetzner VPS, single all-in-one
-# container (API + web + cloudflared), fronted by a Cloudflare Quick Tunnel
-# (no owned domain yet; see deploy/README.md).
+# container (API + nginx), fronted by Cloudflare in "Full (strict)" proxy
+# mode against the www.maydoz.com A record (see deploy/README.md).
 #
 # Secrets: loaded from `.env` at the repo root on the server (git-ignored,
 # mode 600 — see apps/api/.env.example for the template of required keys).
@@ -24,14 +24,15 @@ services:
     volumes:
       - api-data:/app/api/prisma
       # Server-side secrets materialized by CI (not stored in git); mounted read-only
-      # so GOOGLE_TTS_CREDENTIALS can point at /run/secrets/google-tts-service-account.json.
+      # so GOOGLE_TTS_CREDENTIALS can point at /run/secrets/google-tts-service-account.json,
+      # and nginx's 443 server block can load the Cloudflare Origin Certificate at
+      # /run/secrets/cloudflare-origin.{pem,key} — see deploy/nginx.conf.
       - ./secrets:/run/secrets:ro
-    # Published on the host so the server's public IP works directly
-    # (temporary, until a real domain + named Cloudflare tunnel replaces
-    # this — see deploy/README.md). cloudflared's Quick Tunnel keeps
-    # running alongside this regardless; both access paths work.
+    # 80 redirects to 443 (see deploy/nginx.conf); 443 terminates TLS with the
+    # Cloudflare Origin Certificate for Cloudflare's "Full (strict)" mode.
     ports:
       - "80:80"
+      - "443:443"
 
 volumes:
   api-data:

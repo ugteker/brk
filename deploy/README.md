@@ -1,4 +1,4 @@
-# ChatTrader Deployment (Hetzner + Cloudflare Tunnel)
+# Maydoz Deployment (Hetzner + Cloudflare)
 
 This documents how the stack in `docker-compose.yml` gets from a fresh
 Hetzner server to a running, internet-reachable app, and how it's kept
@@ -19,44 +19,81 @@ server working directories + separate deploy concurrency groups.
 ## Architecture
 
 ```
-Internet ──(Cloudflare edge, Quick Tunnel)── cloudflared (same container, sibling process)
-                                                  │
-                                      nginx (same container, sibling process)
-                                      ├── /       → serves built SPA directly
-                                      └── /api/*  → node API process (127.0.0.1:3000, same container)
+Internet ──HTTPS── Cloudflare edge (proxied A record, "Full (strict)" mode)
+                        │  HTTPS, Cloudflare Origin Certificate
+                        ▼
+                    nginx :443 (redirects :80 → :443)  ── same container
+                    ├── /       → serves built SPA directly
+                    └── /api/*  → node API process (127.0.0.1:3000, same container)
 ```
 
 - **A single all-in-one container** (`docker-compose.yml` service
-  `maydoz`, built from the root `Dockerfile`). `deploy/entrypoint.sh`
-  starts three sibling processes inside it: the Node API, nginx (serving the
-  built SPA and reverse-proxying `/api/*` to the API on `127.0.0.1:3000`),
-  and `cloudflared` in Quick Tunnel mode. If any one of the three exits, the
-  entrypoint shuts the others down and the container exits, so Docker's
-  `restart: unless-stopped` policy restarts the whole thing cleanly rather
-  than silently limping along with one process missing.
+  `maydoz`, built from the root `Dockerfile`). `deploy/entrypoint.sh` starts
+  two sibling processes inside it: the Node API, and nginx (serving the
+  built SPA, terminating TLS on 443, and reverse-proxying `/api/*` to the
+  API on `127.0.0.1:3000`). If either exits, the entrypoint shuts the other
+  down and the container exits, so Docker's `restart: unless-stopped` policy
+  restarts the whole thing cleanly rather than silently limping along with
+  one process missing.
   **Trade-off, made deliberately for this small/no-real-traffic-yet
   deployment**: this is far simpler to build, ship, and restart than
   separate containers, at the cost of not following the usual
-  "one process per container" convention — the three processes can't be
-  scaled, updated, or restarted independently, and a crash in any one of
-  them takes the other two down with it. If the app grows real traffic or
-  needs independent scaling of the API vs. tunnel, split them back into
-  separate `docker-compose.yml` services (each already has its own build
-  stage in the `Dockerfile` to make that split easy later).
-- **No domain is registered.** `cloudflared` runs in **Quick Tunnel** mode
-  (`cloudflared tunnel --url http://127.0.0.1:80`), which dials out to
-  Cloudflare and gets assigned a random `https://<random>.trycloudflare.com`
-  hostname. No inbound firewall ports need to be opened on the server.
-- **This hostname is not stable.** It changes every time the container
-  restarts (including on every deploy). Read the current URL with:
-  ```
-  docker compose logs maydoz --tail 50 | grep trycloudflare.com
-  ```
-  Read the current URL by running `docker compose logs maydoz --tail 50 | grep trycloudflare.com` on the server.
+  "one process per container" convention — the two processes can't be
+  scaled, updated, or restarted independently, and a crash in either takes
+  the other down with it. If the app grows real traffic or needs
+  independent scaling, split them back into separate `docker-compose.yml`
+  services (each already has its own build stage in the `Dockerfile` to
+  make that split easy later).
+- **`www.maydoz.com` is a Cloudflare-proxied A record** pointing at the
+  Hetzner server's public IP. Cloudflare's SSL/TLS mode is **Full
+  (strict)**: the edge always connects to this origin over HTTPS and
+  validates the origin's certificate — which is why nginx's 443 server
+  block uses a **Cloudflare Origin Certificate** (see "SSL/TLS setup"
+  below) rather than a public CA cert. Port 80 on the origin only serves a
+  redirect to https; it isn't used for real traffic once Cloudflare is
+  proxying.
+- **No cloudflared / tunnel is involved.** The server's port 80/443 are
+  reachable directly from the internet (via the A record, proxied through
+  Cloudflare's edge) — unlike the original no-domain bootstrap, which used
+  a `cloudflared` Quick Tunnel to avoid opening inbound ports. If you later
+  want to close the origin's inbound ports entirely, switch to a **named
+  Cloudflare Tunnel** instead (see "Upgrading later").
 - **Database is SQLite**, stored in the `api-data` named Docker volume,
   mounted at `/app/api/prisma` in the container — survives
   `docker compose up`/rebuilds, but has no separate backup mechanism yet.
   Fine for a single instance / low concurrency; revisit if usage grows.
+
+## SSL/TLS setup (Cloudflare "Full (strict)")
+
+One-time setup in the Cloudflare dashboard for the `maydoz.com` zone:
+
+1. **DNS → Records**: confirm the `www` (and/or root) A record points at
+   the Hetzner server's IP with the proxy status **Proxied** (orange
+   cloud). A grey-clouded (DNS-only) record bypasses Cloudflare entirely
+   and none of this applies.
+2. **SSL/TLS → Overview**: set the encryption mode to **Full (strict)**.
+3. **SSL/TLS → Origin Server → Create Certificate**: generate a Cloudflare
+   Origin Certificate for `maydoz.com` and `*.maydoz.com` (15-year validity
+   is fine — Cloudflare's own CA, not renewed via Let's Encrypt/certbot).
+   Cloudflare shows the certificate and private key **once** — save both.
+4. Base64-encode each and store as repository secrets (see "Required
+   repository secrets" below):
+   ```bash
+   base64 -w 0 origin-cert.pem   # → CLOUDFLARE_ORIGIN_CERT_B64
+   base64 -w 0 origin-key.pem    # → CLOUDFLARE_ORIGIN_KEY_B64
+   ```
+   CI decodes these into `$DEPLOY_PATH/secrets/cloudflare-origin.{pem,key}`
+   on the server before every `docker compose up` (mode 600), which nginx's
+   443 server block reads via the existing `./secrets:/run/secrets:ro`
+   mount (see `deploy/nginx.conf`).
+5. (Optional) **SSL/TLS → Edge Certificates**: enable **Always Use HTTPS**
+   so plain-http links get redirected at Cloudflare's edge too, not just at
+   the origin.
+
+**Without both secrets set, the deploy step fails fast** (a preflight check
+in `.github/workflows/deploy.yml`) rather than shipping an nginx config
+that can't start — nginx would otherwise crash-loop the whole container
+since `ssl_certificate`/`ssl_certificate_key` point at files that don't exist.
 
 ### SQLite & WAL
 
@@ -82,17 +119,24 @@ git clone https://github.com/ugteker/brk.git /opt/ChatTrader-alpha
 cd /opt/ChatTrader
 cp apps/api/.env.example .env
 # edit .env with real values: JWT_SECRET (generate: openssl rand -base64 48),
-# ANTHROPIC_API_KEY, SMTP_*, ADMIN_EMAIL/ADMIN_PASSWORD, AUTH_COOKIE_SECURE=true.
-# APP_BASE_URL / GOOGLE_CALLBACK_URL should point at the tunnel URL once known
-# (see below) — update and redeploy after the first run if using Google OAuth.
+# ANTHROPIC_API_KEY, SMTP_*, ADMIN_EMAIL/ADMIN_PASSWORD, AUTH_COOKIE_SECURE=true,
+# APP_BASE_URL=https://www.maydoz.com, GOOGLE_CALLBACK_URL (if using Google OAuth).
 chmod 600 .env
+
+# nginx's 443 server block needs these before the container will even start —
+# see "SSL/TLS setup" above for how to generate them.
+mkdir -p secrets
+cp /path/to/origin-cert.pem secrets/cloudflare-origin.pem
+cp /path/to/origin-key.pem secrets/cloudflare-origin.key
+chmod 600 secrets/cloudflare-origin.pem secrets/cloudflare-origin.key
+
 docker compose up -d --build
-docker compose logs maydoz --tail 50 | grep trycloudflare.com
+docker compose logs maydoz --tail 50
 ```
 
-Verify: `curl https://<the-tunnel-url>/api/agents` (should get a 401 without
-a session cookie — confirms the proxy chain works end to end) and open the
-tunnel URL in a browser to confirm the SPA loads.
+Verify: `curl https://www.maydoz.com/api/agents` (should get a 401 without
+a session cookie — confirms the proxy chain works end to end) and open
+`https://www.maydoz.com` in a browser to confirm the SPA loads.
 
 After this, all future deploys are handled automatically by CI (see GitHub Actions below), or can be triggered manually — see the "Ongoing deploys" section.
 
@@ -107,7 +151,7 @@ After a deploy, verify it end to end:
 # Use a real browser session cookie; expect headers immediately and ': keepalive'
 # within 15 seconds when idle.
 curl -N --cookie "brokerino_session=<value>" \
-  "https://<tunnel-host>/api/realtime/stream?cursor=0"
+  "https://www.maydoz.com/api/realtime/stream?cursor=0"
 ```
 
 Also run the two-tab browser acceptance test: in tab A, create/clone a
@@ -150,6 +194,8 @@ Use the same key names in both environments:
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
 | `HETZNER_APP_ENV` | The **entire contents** of the production `.env` file (same keys as `apps/api/.env.example`, with real values). For Google service-account auth set `GOOGLE_TTS_CREDENTIALS=/run/secrets/google-tts-service-account.json` here. |
 | `HETZNER_GOOGLE_TTS_SA_JSON_B64` | Optional. Base64-encoded Google service-account JSON key; CI decodes this into `$DEPLOY_PATH/secrets/google-tts-service-account.json` on the server before `docker compose up`. |
+| `CLOUDFLARE_ORIGIN_CERT_B64` | **Required.** Base64-encoded Cloudflare Origin Certificate (see "SSL/TLS setup" above); CI decodes this into `$DEPLOY_PATH/secrets/cloudflare-origin.pem`. Deploy fails fast if missing. |
+| `CLOUDFLARE_ORIGIN_KEY_B64` | **Required.** Base64-encoded private key matching the Origin Certificate; CI decodes this into `$DEPLOY_PATH/secrets/cloudflare-origin.key`. Deploy fails fast if missing. |
 
 ### Recommended branch protection
 
@@ -167,9 +213,9 @@ Suggested GitHub UI path:
 
 `HETZNER_APP_ENV` is written to the server via an SSH heredoc, never passed
 as a CLI argument or echoed — it won't appear in workflow logs. Whenever a
-value in it changes (e.g. rotating `JWT_SECRET`, updating `APP_BASE_URL` to a
-new tunnel hostname), update the secret and re-run the workflow (or push any
-commit to the target branch: `alpha` or `master`).
+value in it changes (e.g. rotating `JWT_SECRET` or `APP_BASE_URL`), update
+the secret and re-run the workflow (or push any commit to the target
+branch: `alpha` or `master`).
 
 For Google TTS service-account auth, set `HETZNER_GOOGLE_TTS_SA_JSON_B64` to:
 ```bash
@@ -194,25 +240,26 @@ beyond internal testing:
 
 ## Upgrading later
 
-- **Real domain in Cloudflare** → switch from Quick Tunnel to a **named
-  tunnel** (`cloudflared tunnel create`, plus a `cloudflared.yml` config and
-  a DNS CNAME) for a stable hostname. Update the `cloudflared` invocation in
-  `deploy/entrypoint.sh` accordingly (or, if the tunnel's credentials/config
-  need their own lifecycle independent of the app container, split
-  `cloudflared` back out into its own `docker-compose.yml` service at that
-  point — each of the three processes already has an isolated build stage
-  in the root `Dockerfile`, so that split is a compose-file change only, no
-  application code changes needed).
+- **Close the origin's inbound ports entirely** → switch from the current
+  direct-IP + Cloudflare-proxy setup to a **named Cloudflare Tunnel**
+  (`cloudflared tunnel create`, plus a `cloudflared.yml` config and a DNS
+  CNAME to `<tunnel-id>.cfargotunnel.com`) so `cloudflared` dials out to
+  Cloudflare instead of the server accepting inbound connections on 80/443.
+  This reintroduces `cloudflared` as a sibling process (or its own
+  `docker-compose.yml` service — each process already has an isolated
+  build stage in the root `Dockerfile`, so that split is a compose-file
+  change only) and removes the need for the Origin Certificate, since
+  Cloudflare terminates TLS at the tunnel instead.
 - This deployment stack is production-oriented (built SPA served by nginx). For local frontend iteration with instant UI updates, run `npm run dev` in `apps/web` (Vite HMR) instead of the container/preview path.
 - **Postgres instead of SQLite** → swap `apps/api/prisma/schema.prisma`
   `datasource db.provider`, add a `postgres` service to
   `docker-compose.yml`, and update `DATABASE_URL` in `.env`. Out of scope for
   this pass per current decision to keep SQLite.
 - **Real traffic / need to scale API and web independently** → split the
-  single `maydoz` service back into separate `api`/`web`/`cloudflared`
-  services (each already has its own build stage in the `Dockerfile`); this
-  undoes the single-container simplification made for this initial,
-  no-real-traffic deployment.
+  single `maydoz` service back into separate `api`/`web` services (each
+  already has its own build stage in the `Dockerfile`); this undoes the
+  single-container simplification made for this initial, no-real-traffic
+  deployment.
 
 ## Known gaps / build verification history
 

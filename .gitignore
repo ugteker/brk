@@ -77,3 +77,8 @@ Thumbs.db
 apps/api/keys/
 secrets/
 /.superpowers/catalog-preview/
+
+# Cloudflare Origin Certificate/key (never commit — belongs in GitHub secrets only)
+apps/web/certs/
+*.pem
+*.key
