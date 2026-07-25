@@ -1,6 +1,6 @@
-# ChatTrader Deployment Procedure
+# Maydoz Deployment Procedure
 
-Step-by-step instructions to deploy ChatTrader to the Hetzner server and keep
+Step-by-step instructions to deploy Maydoz to the Hetzner server and keep
 it updated. For architecture background, trade-offs, and upgrade paths
 (named tunnel, Postgres, splitting the container back up), see
 [`deploy/README.md`](../deploy/README.md).
@@ -27,11 +27,13 @@ Implementation status:
 ## Prerequisites
 
 - SSH access to the existing Hetzner server (Ubuntu 24.04, Docker already installed).
-- A Cloudflare account (used only for the outbound Quick Tunnel — no domain
-  or DNS setup required for this procedure).
+- A Cloudflare account with the `maydoz.com` zone added, the `www` A record
+  pointed at the Hetzner server's IP and **Proxied** (orange cloud), SSL/TLS
+  mode set to **Full (strict)**, and a Cloudflare Origin Certificate
+  generated — see `deploy/README.md`'s "SSL/TLS setup" section.
 - Push access to `ugteker/brk` (for the GitHub Actions steps).
 - The all-in-one Docker image has been build-tested locally end-to-end
-  (image builds, and the API/nginx/cloudflared trio start and serve traffic
+  (image builds, and the API/nginx pair start and serve traffic
   correctly). See "Build verification notes" below.
 
 ## Step 1 — Build-test the image before first deploy
@@ -42,12 +44,25 @@ On any machine with Docker running (your laptop or the Hetzner server itself):
 git clone https://github.com/ugteker/brk.git
 cd brk
 docker build -t maydoz:test .
-docker run -d --name maydoz-test -p 127.0.0.1:8080:80 \
+
+# nginx's 443 server block requires cert files present at container start
+# (see deploy/nginx.conf) — a throwaway self-signed pair is enough for this
+# local smoke test; the real deploy uses a Cloudflare Origin Certificate.
+mkdir -p /tmp/maydoz-test-secrets
+openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+  -keyout /tmp/maydoz-test-secrets/cloudflare-origin.key \
+  -out /tmp/maydoz-test-secrets/cloudflare-origin.pem \
+  -subj "/CN=localhost"
+
+docker run -d --name maydoz-test -p 127.0.0.1:8080:80 -p 127.0.0.1:8443:443 \
+  -v /tmp/maydoz-test-secrets:/run/secrets:ro \
   -e JWT_SECRET=test-secret -e AUTH_COOKIE_SECURE=false maydoz:test
-docker logs maydoz-test   # confirm API/nginx/cloudflared all start
-curl -i http://127.0.0.1:8080/          # expect 200 (SPA)
-curl -i http://127.0.0.1:8080/api/health  # any non-5xx confirms the proxy works
+docker logs maydoz-test   # confirm API/nginx both start
+curl -i http://127.0.0.1:8080/            # expect 301 redirect to https
+curl -ik https://127.0.0.1:8443/          # expect 200 (SPA); -k skips validation of the self-signed test cert
+curl -ik https://127.0.0.1:8443/api/health  # any non-5xx confirms the proxy works
 docker rm -f maydoz-test
+rm -rf /tmp/maydoz-test-secrets
 ```
 
 Do not proceed until this build succeeds and both curl checks return.
@@ -102,11 +117,11 @@ Edit `.env` with real values:
 | Key | What to set |
 | --- | --- |
 | `JWT_SECRET` | Long random value, e.g. `openssl rand -base64 48` — never reuse the dev placeholder |
-| `AUTH_COOKIE_SECURE` | `true` (app is served over HTTPS via the Cloudflare tunnel) |
+| `AUTH_COOKIE_SECURE` | `true` (app is served over HTTPS via Cloudflare) |
 | `ANTHROPIC_API_KEY` | Real Anthropic key |
 | `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_PORT` / `SMTP_SECURE` | Real SMTP credentials, or leave `SMTP_HOST` blank to disable email |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Optional bootstrap admin account |
-| `APP_BASE_URL` / `GOOGLE_CALLBACK_URL` | Leave as-is for now — update after Step 5 once you know the tunnel URL, only needed if using Google sign-in |
+| `APP_BASE_URL` / `GOOGLE_CALLBACK_URL` | `https://www.maydoz.com` / `https://www.maydoz.com/api/auth/google/callback` (only the callback is needed if using Google sign-in) |
 
 Lock down the file permissions:
 
@@ -114,36 +129,34 @@ Lock down the file permissions:
 chmod 600 .env
 ```
 
-## Step 4 — First deploy
+## Step 4 — Place the Cloudflare Origin Certificate
+
+nginx's 443 server block (`deploy/nginx.conf`) refuses to start without
+these files present — see `deploy/README.md`'s "SSL/TLS setup" section for
+how to generate them in the Cloudflare dashboard.
+
+```bash
+mkdir -p secrets
+cp /path/to/origin-cert.pem secrets/cloudflare-origin.pem
+cp /path/to/origin-key.pem secrets/cloudflare-origin.key
+chmod 600 secrets/cloudflare-origin.pem secrets/cloudflare-origin.key
+```
+
+## Step 5 — First deploy
 
 ```bash
 docker compose up -d --build
 ```
 
-## Step 5 — Get the public tunnel URL
-
-```bash
-docker compose logs maydoz --tail 50 | grep trycloudflare.com
-```
-
-This prints a URL like `https://random-words-1234.trycloudflare.com`.
-**This URL changes on every container restart/redeploy** — it is not
-stable without a registered domain (see `deploy/README.md` for the upgrade
-path to a named tunnel).
-
-If you set `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` in Step 3, update
-`APP_BASE_URL` and `GOOGLE_CALLBACK_URL` in `.env` to this tunnel URL now,
-then re-run Step 4 to pick up the change.
-
 ## Step 6 — Verify
 
 ```bash
-curl https://<the-tunnel-url>/api/agents
+curl https://www.maydoz.com/api/agents
 ```
 
 Expect a `401` (confirms the request reached the API through the proxy —
-you're just not authenticated). Then open the tunnel URL in a browser and
-confirm the ChatTrader SPA loads and you can sign up/log in.
+you're just not authenticated). Then open `https://www.maydoz.com` in a
+browser and confirm the Maydoz SPA loads and you can sign up/log in.
 
 ## Step 7 — Set up GitHub Actions for future deploys
 
@@ -160,6 +173,8 @@ Create both environments and add the same key names in each:
 | `HETZNER_USER` | SSH user with access to `/opt/ChatTrader` and Docker |
 | `HETZNER_SSH_KEY` | Private key for that user (add the matching public key to the server's `~/.ssh/authorized_keys`) |
 | `HETZNER_APP_ENV` | The entire contents of the production `.env` file from Step 3 |
+| `CLOUDFLARE_ORIGIN_CERT_B64` | **Required.** Base64-encoded Cloudflare Origin Certificate from Step 4 (`base64 -w 0 origin-cert.pem`) |
+| `CLOUDFLARE_ORIGIN_KEY_B64` | **Required.** Base64-encoded private key from Step 4 (`base64 -w 0 origin-key.pem`) |
 
 If these are not present in the target environment (`alpha` or `production`), deployment fails in
 `appleboy/ssh-action` with `Error: missing server host` because host/user/key
@@ -197,7 +212,7 @@ path/environment.
   git pull --ff-only origin master
   docker compose build
   docker compose up -d --remove-orphans
-  docker compose logs maydoz --tail 50 | grep trycloudflare.com
+  docker compose logs maydoz --tail 50
   ```
   This pulls the latest code, rebuilds the image, and restarts the container.
   For alpha, use `/opt/ChatTrader-alpha` and `origin alpha`.
@@ -215,9 +230,9 @@ existed in developers' local `apps/api/.env` files:
 
 | Symptom | Check |
 | --- | --- |
-| Can't find the tunnel URL | `docker compose logs maydoz --tail 100` — cloudflared logs its assigned URL a few seconds after startup |
+| Site unreachable over https / SSL handshake fails | Confirm `secrets/cloudflare-origin.pem` and `.key` exist on the server (`ls -la secrets/` in `$DEPLOY_PATH`) — nginx's 443 server block won't start without them. Also check Cloudflare's SSL/TLS mode is **Full (strict)** and the A record is **Proxied** (orange cloud), not DNS-only. |
 | SPA loads but API calls fail | Confirm the API process is running inside the container: `docker compose exec maydoz sh -c "wget -qO- http://127.0.0.1:3000/api/agents"` (expect 401, not a connection error) |
-| Container keeps restarting | `docker compose logs maydoz` — the entrypoint shuts down all three processes (API/nginx/cloudflared) if any one exits, so check which one failed first |
+| Container keeps restarting | `docker compose logs maydoz` — the entrypoint shuts down the other process (API or nginx) if either exits, so check which one failed first. A missing/invalid Cloudflare Origin Certificate makes nginx fail immediately on startup — look for `cannot load certificate` in the logs. |
 | Data lost after redeploy | Confirm the `api-data` volume exists: `docker volume ls | grep api-data` — SQLite's `dev.db` lives there, not in the container filesystem |
 | Manual episode-picker run always shows "no content", but works fine locally | YouTube blocks caption/transcript requests from known datacenter/VPS IP ranges (Hetzner included) — confirmed via server logs showing `playabilityStatus: "LOGIN_REQUIRED"` on every client impersonation, even with realistic headers and multiple client impersonations (ANDROID/IOS/WEB). A signed-in session's `YOUTUBE_COOKIE` alone did **not** fix this (modern YouTube bot-detection is IP-reputation-based, not just session-based) — the fix that worked was routing YouTube requests through a residential IP via `YOUTUBE_PROXY_URL` (see "YouTube proxy dependency" below). Check the Runs view: the warning message always includes the failing episode's clickable URL, and `docker compose logs maydoz | grep youtube-adapter` shows exactly which stage failed (missing API key / per-client rejection reason / fallback scrape failure). |
 

@@ -50,9 +50,13 @@ jobs:
           host: ${{ secrets.HETZNER_HOST }}
           username: ${{ secrets.HETZNER_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
-          envs: HETZNER_APP_ENV,HETZNER_GOOGLE_TTS_SA_JSON_B64,DEPLOY_PATH,DEPLOY_BRANCH
+          envs: HETZNER_APP_ENV,HETZNER_GOOGLE_TTS_SA_JSON_B64,CLOUDFLARE_ORIGIN_CERT_B64,CLOUDFLARE_ORIGIN_KEY_B64,DEPLOY_PATH,DEPLOY_BRANCH
           script: |
             set -e
+            if [ -z "$CLOUDFLARE_ORIGIN_CERT_B64" ] || [ -z "$CLOUDFLARE_ORIGIN_KEY_B64" ]; then
+              echo "Missing CLOUDFLARE_ORIGIN_CERT_B64/CLOUDFLARE_ORIGIN_KEY_B64 — nginx's 443 server block requires these, deploy would just crash-loop the container. See deploy/README.md." >&2
+              exit 1
+            fi
             umask 077
             printf '%s\n' "$HETZNER_APP_ENV" > "$DEPLOY_PATH/.env"
             chmod 600 "$DEPLOY_PATH/.env"
@@ -63,6 +67,9 @@ jobs:
             else
               rm -f "$DEPLOY_PATH/secrets/google-tts-service-account.json"
             fi
+            printf '%s' "$CLOUDFLARE_ORIGIN_CERT_B64" | base64 -d > "$DEPLOY_PATH/secrets/cloudflare-origin.pem"
+            printf '%s' "$CLOUDFLARE_ORIGIN_KEY_B64" | base64 -d > "$DEPLOY_PATH/secrets/cloudflare-origin.key"
+            chmod 600 "$DEPLOY_PATH/secrets/cloudflare-origin.pem" "$DEPLOY_PATH/secrets/cloudflare-origin.key"
             umask 022
             cd "$DEPLOY_PATH"
             git pull --ff-only origin "$DEPLOY_BRANCH"
@@ -75,3 +82,5 @@ jobs:
         env:
           HETZNER_APP_ENV: ${{ secrets.HETZNER_APP_ENV }}
           HETZNER_GOOGLE_TTS_SA_JSON_B64: ${{ secrets.HETZNER_GOOGLE_TTS_SA_JSON_B64 }}
+          CLOUDFLARE_ORIGIN_CERT_B64: ${{ secrets.CLOUDFLARE_ORIGIN_CERT_B64 }}
+          CLOUDFLARE_ORIGIN_KEY_B64: ${{ secrets.CLOUDFLARE_ORIGIN_KEY_B64 }}
