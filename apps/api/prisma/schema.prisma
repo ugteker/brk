@@ -395,7 +395,7 @@ model SourceItem {
   content     String
   link        String
   publishedAt DateTime
-  contentHash String
+  contentHash String   @default("")
   metadataJson String   @default("{}")
   createdAt   DateTime @default(now())
   source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)

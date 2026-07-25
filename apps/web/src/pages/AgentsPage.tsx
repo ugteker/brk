@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { useTranslation } from 'react-i18next';
-import { Alert, App, Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Popconfirm, Progress, Select, Skeleton, Steps, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, Badge, Button, Card, Drawer, Dropdown, Empty, Input, Modal, Progress, Select, Skeleton, Steps, Tabs, Tag, Typography } from 'antd';
 import {
   ArrowLeftOutlined,
   ArrowRightOutlined,
@@ -3330,26 +3330,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                              defaultPublishTitle={getSourceDisplayTitle(source)}
                            />
                          ) : (
-                           <Popconfirm
-                             title={t('library.removeFromLibrary')}
-                             okText={t('common.remove')}
-                             cancelText={t('common.cancel')}
+                           <InlineDeleteButton
+                             ariaLabel={t('library.removeFromLibrary')}
+                             confirmText={t('common.remove')}
                              onConfirm={() => {
                                void removeCatalogSource(source.id).catch(() => {
                                  message.error(t('library.removeSourceFailed'));
                                });
                              }}
-                           >
-                             <Button
-                               aria-label={t('library.removeFromLibrary')}
-                               shape="circle"
-                               type="text"
-                               danger
-                               icon={<DeleteOutlined />}
-                               className="border border-white/40 bg-black/50 text-white shadow-sm transition-colors hover:!border-white/55 hover:!bg-black/65 hover:!text-white"
-                               onClick={(event) => event.stopPropagation()}
-                             />
-                           </Popconfirm>
+                           />
                          )
                        )}
                      />
