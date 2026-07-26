@@ -652,6 +652,9 @@ describe('CatalogRepository', () => {
       userLibraryAgent: {
         upsert: vi.fn(async () => ({ id: 'saved-1' }))
       },
+      user: {
+        findUnique: vi.fn(async () => ({ email: 'owner@example.com', language: 'de' }))
+      },
       playbook: {
         findFirst: vi.fn(async () => null),
         create: playbookCreate
@@ -675,6 +678,11 @@ describe('CatalogRepository', () => {
     expect(result.playbook.name).toBe('My own analyst');
     expect(result.playbook.description).toBe('My own description');
     expect(result.playbook.nextRunAt).toBeNull();
+    // Connecting an agent to a source should notify its owner and write reports in their
+    // current language with no separate config step.
+    expect(result.playbook.recipients).toEqual(['owner@example.com']);
+    expect(result.playbook.language).toBe('de');
+    expect(db.user.findUnique).toHaveBeenCalledWith({ where: { id: 'user-1' }, select: { email: true, language: true } });
     expect(db.userLibraryAgent.upsert).toHaveBeenCalledWith({
       where: {
         userId_agentVersionId: {
@@ -709,6 +717,9 @@ describe('CatalogRepository', () => {
       userLibraryAgent: {
         upsert: vi.fn(async () => ({ id: 'saved-1' }))
       },
+      user: {
+        findUnique: vi.fn(async () => ({ email: 'owner@example.com', language: 'en' }))
+      },
       playbook: {
         findFirst: vi.fn(async () => null),
         create: vi.fn(async () => ({
@@ -727,7 +738,7 @@ describe('CatalogRepository', () => {
           timezone: null,
           daysOfWeekJson: null,
           nextRunAt: null,
-          recipientsJson: '[]',
+          recipientsJson: '["owner@example.com"]',
           executionMode: 'latest_only',
           maxSourcesPerRun: 3,
           maxItemsPerSource: 1,

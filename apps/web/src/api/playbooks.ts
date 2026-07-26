@@ -1,4 +1,5 @@
 export type PlaybookSchedule =
+  | { mode: 'manual' }
   | { mode: 'interval'; intervalMinutes: number }
   | { mode: 'daily'; dailyTime: string; timezone: string }
   | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string };

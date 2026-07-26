@@ -100,6 +100,8 @@ class InMemoryPlaybookRepository {
       ...(patch.description !== undefined ? { description: patch.description } : {}),
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
       ...(patch.sourceIds !== undefined ? { sourceIds: patch.sourceIds } : {}),
+      ...(patch.recipients !== undefined ? { recipients: patch.recipients } : {}),
+      ...(patch.schedule !== undefined ? { mode: patch.schedule.mode } : {}),
       updatedAt: new Date('2026-07-13T01:00:00.000Z')
     };
     this.playbooks.set(playbookId, updated);
@@ -417,6 +419,51 @@ describe('playbook routes', () => {
     });
     expect(explicitRes.statusCode).toBe(201);
     expect(explicitRes.json<PlaybookRecord>().language).toBe('en');
+  });
+
+  it('rejects a malformed daily/weekly schedule with 400 instead of crashing on missing dailyTime', async () => {
+    const playbookRepo = new InMemoryPlaybookRepository();
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      playbook: {
+        playbookRepository: playbookRepo,
+        accessResolver: new DomainAccessResolver(playbookRepo),
+        userRepository: new InMemoryUserRepository(),
+        runTrigger: { triggerRun: async () => ({ status: 'queued' }) }
+      }
+    } as any);
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/playbooks',
+      headers: authCookieHeader('owner-1'),
+      payload: { agentId: 'agent-1', name: 'Manual Playbook', sourceIds: ['source-1'], schedule: { mode: 'manual' } }
+    });
+    expect(createRes.statusCode).toBe(201);
+    const playbookId = createRes.json<PlaybookRecord>().id;
+
+    // Reproduces the frontend bug where a manual-schedule playbook's edit form mislabeled its
+    // schedule as "daily" without dailyTime/timezone, crashing computeNextRun() server-side.
+    const badPatch = await app.inject({
+      method: 'PATCH',
+      url: `/api/playbooks/${playbookId}`,
+      headers: authCookieHeader('owner-1'),
+      payload: { schedule: { mode: 'daily' }, recipients: ['alerts@example.com'] }
+    });
+    expect(badPatch.statusCode).toBe(400);
+    expect(badPatch.json().code).toBe('validation_error');
+
+    // The correct payload for a manual-schedule playbook must still work.
+    const goodPatch = await app.inject({
+      method: 'PATCH',
+      url: `/api/playbooks/${playbookId}`,
+      headers: authCookieHeader('owner-1'),
+      payload: { schedule: { mode: 'manual' }, recipients: ['alerts@example.com'] }
+    });
+    expect(goodPatch.statusCode).toBe(200);
+    expect(goodPatch.json<PlaybookRecord>().recipients).toEqual(['alerts@example.com']);
   });
 
   it('enforces execute permission separately from read/edit/delete', async () => {

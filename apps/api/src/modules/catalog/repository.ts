@@ -8,7 +8,7 @@ import type { AgentMatch, CatalogAgent, CatalogDemo, CatalogResponse, CatalogSou
 
 type CatalogDb = Pick<
   PrismaClient,
-  'marketplacePublication' | 'catalogDemo' | 'source' | 'agentPromptVersion' | 'userLibraryAgent' | 'playbook' | 'realtimeEvent' | '$transaction'
+  'marketplacePublication' | 'catalogDemo' | 'source' | 'agentPromptVersion' | 'userLibraryAgent' | 'playbook' | 'realtimeEvent' | 'user' | '$transaction'
 >;
 
 type CatalogPublicationRow = Prisma.MarketplacePublicationGetPayload<{
@@ -517,6 +517,10 @@ export class CatalogRepository implements CatalogRepositoryLike {
         }
       })) as PlaybookRow | null;
 
+      // A freshly connected agent should notify its owner and write reports in their current
+      // language with zero extra setup - mirrors the same defaulting POST /api/playbooks does.
+      const owner = existing ? null : await tx.user.findUnique({ where: { id: input.userId }, select: { email: true, language: true } });
+
       const playbook =
         existing ??
         ((await tx.playbook.create({
@@ -526,11 +530,11 @@ export class CatalogRepository implements CatalogRepositoryLike {
             name: agentVersion.name.trim().length > 0 ? agentVersion.name : agentVersion.agent.name,
             description: agentVersion.description.trim().length > 0 ? agentVersion.description : agentVersion.agent.description,
             enabled: true,
-            recipientsJson: '[]',
+            recipientsJson: JSON.stringify(owner?.email ? [owner.email] : []),
             executionMode: 'latest_only',
             maxSourcesPerRun: 3,
             maxItemsPerSource: 1,
-            language: 'en',
+            language: owner?.language ?? 'en',
             mode: 'manual',
             intervalMinutes: null,
             dailyTime: null,

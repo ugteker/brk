@@ -26,10 +26,40 @@ export interface PlaybookRoutesDeps {
 }
 
 const PLAYBOOK_SHARE_PERMISSIONS = new Set(['read', 'edit', 'delete', 'execute']);
-const PLAYBOOK_MODES = new Set(['interval', 'daily', 'weekly']);
+const PLAYBOOK_MODES = new Set(['manual', 'interval', 'daily', 'weekly']);
 const EXECUTION_MODES = new Set(['latest_only', 'all_sources']);
 const FOLLOW_TARGET_TYPES = new Set(['channel', 'episode']);
 const DIGEST_FREQUENCIES = new Set(['immediate', 'daily', 'weekly']);
+
+/** Validates a schedule payload's shape before it ever reaches computeNextRun(), which assumes
+ * dailyTime/timezone/daysOfWeek are present for daily/weekly and does not itself guard against
+ * missing fields - a malformed schedule used to reach it and crash the request with an unhandled
+ * TypeError instead of a clean 400 (e.g. a client sending "daily" without a dailyTime). */
+function validateScheduleInput(schedule: unknown): string | null {
+  if (schedule === undefined) return null;
+  if (typeof schedule !== 'object' || schedule === null || !('mode' in schedule)) {
+    return 'schedule must be an object with a mode';
+  }
+  const s = schedule as { mode: unknown; intervalMinutes?: unknown; dailyTime?: unknown; timezone?: unknown; daysOfWeek?: unknown };
+  if (!PLAYBOOK_MODES.has(s.mode as string)) {
+    return 'schedule.mode must be manual, interval, daily, or weekly';
+  }
+  if (s.mode === 'interval' && (typeof s.intervalMinutes !== 'number' || s.intervalMinutes <= 0)) {
+    return 'schedule.intervalMinutes must be a positive number for interval schedules';
+  }
+  if (s.mode === 'daily' || s.mode === 'weekly') {
+    if (typeof s.dailyTime !== 'string' || s.dailyTime.trim().length === 0) {
+      return 'schedule.dailyTime is required for daily/weekly schedules';
+    }
+    if (typeof s.timezone !== 'string' || s.timezone.trim().length === 0) {
+      return 'schedule.timezone is required for daily/weekly schedules';
+    }
+  }
+  if (s.mode === 'weekly' && (!Array.isArray(s.daysOfWeek) || s.daysOfWeek.length === 0)) {
+    return 'schedule.daysOfWeek must be a non-empty array for weekly schedules';
+  }
+  return null;
+}
 
 async function requirePlaybookAccess(
   deps: PlaybookRoutesDeps,
@@ -74,8 +104,9 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
     if (!Array.isArray(input.sourceIds) || input.sourceIds.length === 0 || input.sourceIds.some((sourceId) => typeof sourceId !== 'string' || sourceId.trim().length === 0)) {
       return reply.status(400).send({ code: 'validation_error', message: 'sourceIds must contain at least one source id' });
     }
-    if (input.schedule?.mode !== undefined && !PLAYBOOK_MODES.has(input.schedule.mode)) {
-      return reply.status(400).send({ code: 'validation_error', message: 'mode must be interval, daily, or weekly' });
+    const scheduleError = validateScheduleInput(input.schedule);
+    if (scheduleError) {
+      return reply.status(400).send({ code: 'validation_error', message: scheduleError });
     }
     if (input.executionMode !== undefined && !EXECUTION_MODES.has(input.executionMode)) {
       return reply.status(400).send({ code: 'validation_error', message: 'executionMode must be latest_only or all_sources' });
@@ -159,6 +190,10 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
       if (!Array.isArray(patch.sourceIds) || patch.sourceIds.some((sourceId) => typeof sourceId !== 'string' || sourceId.trim().length === 0)) {
         return reply.status(400).send({ code: 'validation_error', message: 'sourceIds must be an array of source ids' });
       }
+    }
+    const scheduleError = validateScheduleInput(patch.schedule);
+    if (scheduleError) {
+      return reply.status(400).send({ code: 'validation_error', message: scheduleError });
     }
     if (patch.recipients !== undefined) {
       if (
