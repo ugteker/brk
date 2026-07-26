@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { DomainAccessResolver } from '../access/permissions';
 import type { CreatePlaybookInput, PublishPlaybookInput, SharePlaybookInput, UpdatePlaybookInput } from './types';
 import type { PlaybookRepositoryLike } from './repository';
+import type { UserRepositoryLike } from '../auth/repository';
 
 export interface PlaybookForcedEpisode {
   sourceType: string;
@@ -20,6 +21,7 @@ export interface PlaybookRunTriggerLike {
 export interface PlaybookRoutesDeps {
   playbookRepository: PlaybookRepositoryLike;
   accessResolver: DomainAccessResolver;
+  userRepository: Pick<UserRepositoryLike, 'findById'>;
   runTrigger?: PlaybookRunTriggerLike;
 }
 
@@ -84,22 +86,34 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
 
     const schedule = input.schedule ?? { mode: 'interval' as const, intervalMinutes: 60 };
 
+    const recipients = Array.isArray(input.recipients)
+      ? input.recipients.filter((entry) => typeof entry === 'string').map((entry) => entry.trim()).filter(Boolean)
+      : [];
+    // Default a freshly created playbook's notification recipient/language to its creator, so a
+    // manual run works out of the box with no separate config step, and reports come back in
+    // whatever language the owner is currently using the app in - only kicks in when the caller
+    // didn't explicitly set these (an update that clears recipients later is untouched, this
+    // only applies at creation time).
+    const needsOwnerDefaults = recipients.length === 0 || typeof input.language !== 'string';
+    const owner = needsOwnerDefaults ? await deps.userRepository.findById(req.userId!) : null;
+    if (recipients.length === 0 && owner?.email) {
+      recipients.push(owner.email);
+    }
+
     const created = await deps.playbookRepository.createPlaybook(req.userId!, {
       agentId: input.agentId,
       name: input.name,
       description: input.description,
       enabled: input.enabled,
       sourceIds: input.sourceIds,
-      recipients: Array.isArray(input.recipients)
-        ? input.recipients.filter((entry) => typeof entry === 'string').map((entry) => entry.trim()).filter(Boolean)
-        : undefined,
+      recipients,
       executionMode: input.executionMode,
       maxSourcesPerRun: input.maxSourcesPerRun,
       maxItemsPerSource: input.maxItemsPerSource,
       followTargetType: input.followTargetType,
       followTargetKey: input.followTargetKey,
       followTargetTitle: input.followTargetTitle,
-      language: typeof input.language === 'string' ? input.language : 'en',
+      language: typeof input.language === 'string' ? input.language : (owner?.language ?? 'en'),
       schedule
     });
     return reply.status(201).send(created);
@@ -164,8 +178,14 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
     try {
       const updated = await deps.playbookRepository.updatePlaybook(playbookId, patch);
       return reply.status(200).send(updated);
-    } catch {
-      return reply.status(404).send({ code: 'not_found', message: 'Playbook not found' });
+    } catch (error) {
+      // Only the repository's own "row vanished between the access check and the update"
+      // race maps to 404 here - any other failure (e.g. a bad sourceId FK) must surface as a
+      // real error instead of being misreported as "not found".
+      if (error instanceof Error && error.message === 'not_found') {
+        return reply.status(404).send({ code: 'not_found', message: 'Playbook not found' });
+      }
+      throw error;
     }
   });
 
@@ -178,8 +198,11 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
     try {
       await deps.playbookRepository.deletePlaybook(playbookId);
       return reply.status(204).send();
-    } catch {
-      return reply.status(404).send({ code: 'not_found', message: 'Playbook not found' });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'not_found') {
+        return reply.status(404).send({ code: 'not_found', message: 'Playbook not found' });
+      }
+      throw error;
     }
   });
 

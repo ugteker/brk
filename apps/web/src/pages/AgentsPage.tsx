@@ -1398,6 +1398,22 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     updatedHighlightTimerRef.current = setTimeout(() => setRecentlyUpdatedSourceId(null), 4000);
   }
 
+  // Deselecting an agent in the source-linking wizard means "stop running this agent on these
+  // sources" - NOT "delete whatever else this agent's playbook is configured for". A sibling
+  // playbook picked up by the wizard's "already linked" match may cover other sources too, so
+  // only drop the sources this wizard session is actually managing, and delete the playbook
+  // outright only once that leaves it with none.
+  async function unlinkPlaybookFromSources(playbookId: string, sourceIdsToUnlink: string[]) {
+    const pb = playbooks.find((p) => p.id === playbookId);
+    if (!pb) return;
+    const remainingSourceIds = pb.sourceIds.filter((id) => !sourceIdsToUnlink.includes(id));
+    if (remainingSourceIds.length === 0) {
+      await deletePlaybook(playbookId);
+    } else {
+      await updatePlaybook(playbookId, { sourceIds: remainingSourceIds });
+    }
+  }
+
   async function onCreatePlaybook() {
     // In follow mode, deselecting all agents is valid — it means "remove all" (diff will delete them).
     // Only block empty selection in admin-hub create mode where you must pick at least one agent.
@@ -1438,7 +1454,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule: explicitSchedule, executionMode: 'latest_only', language: lang })),
           ...toDelete.map((id) => {
             const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
-            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
+            return pb ? unlinkPlaybookFromSources(pb.playbookId, playbookSourceIdsDraft) : Promise.resolve();
           })
         ]);
       } else {
@@ -1449,7 +1465,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: recipientsForNew, schedule: scheduleForNew, executionMode: 'latest_only', language: lang })),
           ...toDelete.map((id) => {
             const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
-            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
+            return pb ? unlinkPlaybookFromSources(pb.playbookId, playbookSourceIdsDraft) : Promise.resolve();
           })
         ]);
       }
@@ -2473,8 +2489,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                           key={report.id}
                                           report={report}
                                           characterType={reportAgent?.characterType}
-                                          characterLabel={reportAgent ? getAgentCharacterLabel(reportAgent) : report.agentName}
-                                          personalityLabel={reportAgent ? getAgentPersonalityLabel(reportAgent) : undefined}
+                                          agentName={reportAgent ? getAgentDisplayLabel(reportAgent) : report.agentName}
                                           sourceTitle={source ? getSourceDisplayTitle(source) : report.playbookName}
                                           sourceCoverImageUrl={(source ? getSourceCoverImageUrl(source) : null) ?? getReportEpisodeThumbnailUrl(report)}
                                           isSyntheticSource={source?.type === 'synthetic_discussion'}
@@ -3861,10 +3876,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                           items={[
                             {
                               key: 'reports',
-                              label: 'Reports',
+                              label: t('library.reportsTab'),
                               children: (
                                 <AgentReportsBrowser
                                   agentId={selectedPlaybook.agentId}
+                                  agentName={agents.find((a) => a.id === selectedPlaybook.agentId)?.name}
                                   reports={selectedPlaybookReports}
                                   highlightedReportId={highlightedReportId}
                                   onSelectSymbol={setViewingSymbol}

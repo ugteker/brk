@@ -218,6 +218,25 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesD
     return reply.status(200).send(toAuthUser(user));
   });
 
+  // Keeps the account's report/notification language in sync with the frontend's language
+  // switcher. Cascades to every playbook the user owns (see UserRepository.updateLanguage) so
+  // existing agents pick up the change immediately, not just newly created ones.
+  app.patch('/api/auth/me/language', async (req, reply) => {
+    const token = req.cookies[config.auth.cookieName];
+    const payload = token ? verifySessionToken(token) : null;
+    if (!payload) {
+      return reply.status(401).send({ code: 'unauthenticated', message: 'Not signed in' });
+    }
+
+    const { language } = (req.body ?? {}) as { language?: string };
+    if (language !== 'en' && language !== 'de') {
+      return reply.status(400).send({ code: 'validation_error', message: 'language must be "en" or "de"' });
+    }
+
+    await userRepository.updateLanguage(payload.userId, language);
+    return reply.status(204).send();
+  });
+
   app.get('/api/auth/google', async (_req, reply) => {
     if (!isGoogleOAuthConfigured()) {
       return reply.status(503).send({ code: 'google_oauth_not_configured', message: 'Google sign-in is not configured' });

@@ -1,5 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { getCurrentUser, login as apiLogin, logout as apiLogout, signup as apiSignup, type AuthUser, type SignupResult } from '../api/auth';
+import {
+  getCurrentUser,
+  login as apiLogin,
+  logout as apiLogout,
+  signup as apiSignup,
+  updateAccountLanguage,
+  type AuthUser,
+  type SignupResult
+} from '../api/auth';
+import i18n from '../i18n';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -55,6 +64,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setStatus('unauthenticated');
   }, []);
+
+  // Keeps the account's persisted report/notification language in sync with whatever language
+  // the app is actually displayed in - covers both an explicit toggle and a user who was simply
+  // already on their preferred language on first login (browser-detected, never toggled).
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    const syncLanguage = (lng: string) => {
+      const normalized = lng.startsWith('de') ? 'de' : 'en';
+      setUser((prev) => {
+        if (!prev || prev.language === normalized) return prev;
+        void updateAccountLanguage(normalized);
+        return { ...prev, language: normalized };
+      });
+    };
+    syncLanguage(i18n.language);
+    i18n.on('languageChanged', syncLanguage);
+    return () => {
+      i18n.off('languageChanged', syncLanguage);
+    };
+  }, [status]);
 
   const isAdmin = user?.role === 'admin';
 

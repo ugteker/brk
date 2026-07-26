@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapse,
   Form,
   Input,
   Progress,
@@ -13,10 +14,11 @@ import {
   Tag,
   message
 } from 'antd';
-import { AudioOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, ArrowRightOutlined, AudioOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
+import { useAuth } from '../auth/AuthContext';
 import { listAgents, listAgentReports, type AgentSummary, type RunReportDto } from '../api/agents';
 import {
   createDiscussion,
@@ -29,8 +31,11 @@ import {
   type TranscriptOptionDto,
   type TtsProviderDto
 } from '../api/discussions';
+import { cloneMarketplaceAgent, listMarketplaceAgents, type MarketplaceAgentListItem } from '../api/marketplace';
 import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
 import { getAgentDisplayLabel } from '../utils/agent-label';
+
+const PUBLIC_AGENTS_PAGE_SIZE = 4;
 
 type Format = 'free_form' | 'structured' | 'hosted' | 'hybrid';
 type Voice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
@@ -91,6 +96,7 @@ export function NewDiscussionWizard() {
   const { t, i18n } = useTranslation();
   const navigate = useSafeNavigate();
   const location = useLocation();
+  const { user } = useAuth();
 
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
@@ -108,6 +114,14 @@ export function NewDiscussionWizard() {
 
   // Experts step
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [marketplaceAgents, setMarketplaceAgents] = useState<MarketplaceAgentListItem[]>([]);
+  const [loadingMarketplaceAgents, setLoadingMarketplaceAgents] = useState(true);
+  const [selectedPublicationIds, setSelectedPublicationIds] = useState<string[]>([]);
+  const [publicAgentsPage, setPublicAgentsPage] = useState(0);
+  // Publication -> already-cloned owned agent id, so re-visiting the experts step and going
+  // back to setup doesn't re-clone (and doesn't lose track of) the same public agent.
+  const [clonedAgentIdByPublication, setClonedAgentIdByPublication] = useState<Record<string, string>>({});
+  const [cloningAgents, setCloningAgents] = useState(false);
 
   // Pre-fill support for entry points that jump in from a report or Library source
   // (rather than the default blank topic-first flow). The preselected reports land in
@@ -139,10 +153,10 @@ export function NewDiscussionWizard() {
   const effectiveTtsProvider: 'google' | 'openai' | null =
     ttsProvider !== 'auto' && capabilities.ttsProviders.includes(ttsProvider)
       ? ttsProvider
-      : capabilities.ttsProviders.includes('google')
-        ? 'google'
-        : capabilities.ttsProviders.includes('openai')
-          ? 'openai'
+      : capabilities.ttsProviders.includes('openai')
+        ? 'openai'
+        : capabilities.ttsProviders.includes('google')
+          ? 'google'
           : null;
 
   // Material step: the shared, agent-independent pool - any report from any agent plus
@@ -171,6 +185,10 @@ export function NewDiscussionWizard() {
       .then(setAgents)
       .catch(() => {})
       .finally(() => setLoadingAgents(false));
+    listMarketplaceAgents()
+      .then(setMarketplaceAgents)
+      .catch(() => {})
+      .finally(() => setLoadingMarketplaceAgents(false));
   }, []);
 
   useEffect(() => {
@@ -233,6 +251,58 @@ export function NewDiscussionWizard() {
     );
   }
 
+  function handlePublicAgentToggle(publicationId: string, checked: boolean) {
+    setSelectedPublicationIds((prev) =>
+      checked ? [...prev, publicationId] : prev.filter((id) => id !== publicationId)
+    );
+  }
+
+  // GET /api/agents returns every agent platform-wide for admins (needed for admin management
+  // views), not just the caller's own - narrow it down here so an admin account doesn't see
+  // every other user's agent listed as their own in this picker.
+  const ownedAgents = useMemo(
+    () => agents.filter((agent) => agent.ownerUserId === user?.id),
+    [agents, user]
+  );
+  const ownedAgentIds = useMemo(() => new Set(ownedAgents.map((agent) => agent.id)), [ownedAgents]);
+  // Also drop marketplace listings for agents the user already owns/published, so they aren't
+  // offered twice (once as "yours", once as "public").
+  const publicAgents = useMemo(
+    () => marketplaceAgents.filter((item) => !ownedAgentIds.has(item.agent.id)),
+    [marketplaceAgents, ownedAgentIds]
+  );
+
+  const totalPublicAgentPages = Math.max(1, Math.ceil(publicAgents.length / PUBLIC_AGENTS_PAGE_SIZE));
+  const visiblePublicAgents = publicAgents.slice(
+    publicAgentsPage * PUBLIC_AGENTS_PAGE_SIZE,
+    publicAgentsPage * PUBLIC_AGENTS_PAGE_SIZE + PUBLIC_AGENTS_PAGE_SIZE
+  );
+
+  const totalSelectedExperts = selectedAgentIds.length + selectedPublicationIds.length;
+
+  /** Clones any newly selected public agents into the user's own library (skipping ones already
+   * cloned in this session) so every discussion participant ends up backed by an agent the
+   * current user actually owns - discussions can't reference someone else's agent directly. */
+  async function resolveSelectedAgentIds(): Promise<string[]> {
+    const toClone = selectedPublicationIds.filter((id) => !clonedAgentIdByPublication[id]);
+    let clonedThisRun: Record<string, string> = {};
+    if (toClone.length > 0) {
+      setCloningAgents(true);
+      try {
+        const results = await Promise.all(toClone.map((id) => cloneMarketplaceAgent(id)));
+        clonedThisRun = Object.fromEntries(toClone.map((id, index) => [id, results[index].agent.id]));
+        setClonedAgentIdByPublication((prev) => ({ ...prev, ...clonedThisRun }));
+        // Refresh so name/character-type lookups (suggestName, the participants list) resolve
+        // for the newly cloned agents instead of falling back to a raw id.
+        setAgents(await listAgents());
+      } finally {
+        setCloningAgents(false);
+      }
+    }
+    const merged = { ...clonedAgentIdByPublication, ...clonedThisRun };
+    return [...selectedAgentIds, ...selectedPublicationIds.map((id) => merged[id])];
+  }
+
   function buildInitialParticipants(agentIds: string[]): ParticipantConfig[] {
     return agentIds.map((agentId, i) => ({
       agentId,
@@ -291,13 +361,20 @@ export function NewDiscussionWizard() {
     setCurrentKey('experts');
   }
 
-  function goToSetup() {
-    if (selectedAgentIds.length < 2) {
+  async function goToSetup() {
+    if (totalSelectedExperts < 2) {
       message.warning(t('studio.minParticipants'));
       return;
     }
-    setParticipants(buildInitialParticipants(selectedAgentIds));
-    setDiscussionName(suggestName(selectedAgentIds));
+    let agentIds: string[];
+    try {
+      agentIds = await resolveSelectedAgentIds();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to add selected public agents');
+      return;
+    }
+    setParticipants(buildInitialParticipants(agentIds));
+    setDiscussionName(suggestName(agentIds));
     setCurrentKey('setup');
   }
 
@@ -463,7 +540,7 @@ export function NewDiscussionWizard() {
               {loadingAgents ? (
                 <span>Loading agents…</span>
               ) : (
-                agents.map((agent) => (
+                ownedAgents.map((agent) => (
                   <Card
                     key={agent.id}
                     size="small"
@@ -492,12 +569,62 @@ export function NewDiscussionWizard() {
               )}
             </div>
           </div>
+
+          <div className="mt-5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="m-0 text-sm font-medium">{t('studio.publicAgents')}</p>
+              {totalPublicAgentPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="small"
+                    aria-label={t('common.back')}
+                    icon={<ArrowLeftOutlined />}
+                    onClick={() => setPublicAgentsPage((p) => (p - 1 < 0 ? totalPublicAgentPages - 1 : p - 1))}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {publicAgentsPage + 1} / {totalPublicAgentPages}
+                  </span>
+                  <Button
+                    size="small"
+                    aria-label={t('common.next')}
+                    icon={<ArrowRightOutlined />}
+                    onClick={() => setPublicAgentsPage((p) => (p + 1 >= totalPublicAgentPages ? 0 : p + 1))}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {loadingMarketplaceAgents ? (
+                <span>Loading agents…</span>
+              ) : (
+                visiblePublicAgents.map((item) => (
+                  <Card
+                    key={item.publicationId}
+                    size="small"
+                    hoverable
+                    style={{
+                      cursor: 'pointer',
+                      borderColor: selectedPublicationIds.includes(item.publicationId) ? '#722ed1' : undefined,
+                      background: selectedPublicationIds.includes(item.publicationId) ? 'rgba(114,46,209,0.08)' : undefined
+                    }}
+                    onClick={() => handlePublicAgentToggle(item.publicationId, !selectedPublicationIds.includes(item.publicationId))}
+                  >
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                      <Checkbox checked={selectedPublicationIds.includes(item.publicationId)} />
+                      <strong style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{item.agent.name}</strong>
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
+          </div>
+
           <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
             <Button onClick={() => setCurrentKey(groundingMode === 'material' ? 'material' : 'topic')}>
               {t('common.back')}
             </Button>
-            <Button type="primary" onClick={goToSetup} disabled={selectedAgentIds.length < 2}>
-              {t('common.next')}
+            <Button type="primary" loading={cloningAgents} onClick={goToSetup} disabled={totalSelectedExperts < 2}>
+              {cloningAgents ? t('studio.cloningAgents') : t('common.next')}
             </Button>
           </div>
         </Card>
@@ -507,30 +634,18 @@ export function NewDiscussionWizard() {
       {currentKey === 'setup' && (
         <Card>
           <Form layout="vertical">
-            <Form.Item label="Discussion name" required>
+            <Form.Item label={t('studio.discussionNameLabel')} required>
               <Input
                 value={discussionName}
                 onChange={(e) => setDiscussionName(e.target.value)}
-                placeholder="e.g. Weekly Market Roundtable"
+                placeholder={t('studio.discussionNamePlaceholder')}
               />
             </Form.Item>
-            <Form.Item label={t('studio.formatLabel')}>
-              <Select
-                value={format}
-                onChange={(v) => setFormat(v as Format)}
-                options={[
-                  { value: 'free_form', label: t('studio.format_free_form') },
-                  { value: 'structured', label: t('studio.format_structured') },
-                  { value: 'hosted', label: t('studio.format_hosted') },
-                  { value: 'hybrid', label: t('studio.format_hybrid') }
-                ]}
-              />
-            </Form.Item>
-            <Form.Item label="Total turns (depth of discussion)">
+            <Form.Item label={t('studio.totalTurnsLabel')}>
               <Select
                 value={totalTurnTarget}
                 onChange={setTotalTurnTarget}
-                options={[6, 8, 10, 12, 16, 20].map((n) => ({ value: n, label: `${n} turns` }))}
+                options={[6, 8, 10, 12, 16, 20].map((n) => ({ value: n, label: t('studio.turnsCount', { count: n }) }))}
               />
             </Form.Item>
             <Form.Item label={t('studio.turnLengthLabel')}>
@@ -544,68 +659,94 @@ export function NewDiscussionWizard() {
                 ]}
               />
             </Form.Item>
-            <Form.Item label={t('studio.languageLabel')}>
-              <Select
-                value={language}
-                onChange={(v) => setLanguage(v as 'en' | 'de')}
-                options={[
-                  { value: 'en', label: t('studio.languageEnglish') },
-                  { value: 'de', label: t('studio.languageGerman') }
-                ]}
-              />
-            </Form.Item>
-            {capabilities.ttsProviders.length > 1 && (
-              <Form.Item label={t('studio.voiceApiLabel')} extra={t('studio.voiceApiHint')}>
-                <Select
-                  value={ttsProvider}
-                  onChange={(v) => setTtsProvider(v as TtsProviderDto)}
-                  options={[
-                    { value: 'auto', label: t('studio.voiceApiAuto') },
-                    ...capabilities.ttsProviders.map((provider) => ({
-                      value: provider,
-                      label: provider === 'google' ? t('studio.voiceApiGoogle') : t('studio.voiceApiOpenai')
-                    }))
-                  ]}
-                />
-              </Form.Item>
-            )}
-            <Form.Item label={t('studio.participants')}>
-              {participants.map((p, i) => {
-                const agent = agents.find((a) => a.id === p.agentId);
-                return (
-                  <div key={p.agentId} style={{ marginBottom: 8 }}>
-                    <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>
-                      {agent ? getAgentDisplayLabel(agent) : p.agentId}
-                    </strong>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      <Select
-                        value={p.role}
-                        onChange={(v) => updateParticipant(i, 'role', v)}
-                        style={{ width: 110 }}
-                        options={[
-                          { value: 'speaker', label: t('studio.roleSpeaker') },
-                          { value: 'host', label: t('studio.roleHost') }
-                        ]}
-                      />
-                      <Select
-                        value={p.voiceId}
-                        onChange={(v) => updateParticipant(i, 'voiceId', v)}
-                        style={{ flex: '1 1 160px', minWidth: 160, maxWidth: 230 }}
-                        options={VOICES.map((v) => ({
-                          value: v,
-                          // When Google renders the audio, show the actual Google voice each
-                          // character maps to so the picker matches the underlying API.
-                          label:
-                            effectiveTtsProvider === 'google'
-                              ? `${VOICE_LABELS[v]} · ${GOOGLE_VOICE_NAMES[language][v]}`
-                              : VOICE_LABELS[v]
-                        }))}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </Form.Item>
+            <Collapse
+              ghost
+              className="mb-4"
+              items={[
+                {
+                  key: 'more',
+                  label: t('studio.moreOptions'),
+                  children: (
+                    <>
+                      <Form.Item label={t('studio.formatLabel')}>
+                        <Select
+                          value={format}
+                          onChange={(v) => setFormat(v as Format)}
+                          options={[
+                            { value: 'free_form', label: t('studio.format_free_form') },
+                            { value: 'structured', label: t('studio.format_structured') },
+                            { value: 'hosted', label: t('studio.format_hosted') },
+                            { value: 'hybrid', label: t('studio.format_hybrid') }
+                          ]}
+                        />
+                      </Form.Item>
+                      <Form.Item label={t('studio.languageLabel')}>
+                        <Select
+                          value={language}
+                          onChange={(v) => setLanguage(v as 'en' | 'de')}
+                          options={[
+                            { value: 'en', label: t('studio.languageEnglish') },
+                            { value: 'de', label: t('studio.languageGerman') }
+                          ]}
+                        />
+                      </Form.Item>
+                      {capabilities.ttsProviders.length > 1 && (
+                        <Form.Item label={t('studio.voiceApiLabel')} extra={t('studio.voiceApiHint')}>
+                          <Select
+                            value={ttsProvider}
+                            onChange={(v) => setTtsProvider(v as TtsProviderDto)}
+                            options={[
+                              { value: 'auto', label: t('studio.voiceApiAuto') },
+                              ...capabilities.ttsProviders.map((provider) => ({
+                                value: provider,
+                                label: provider === 'google' ? t('studio.voiceApiGoogle') : t('studio.voiceApiOpenai')
+                              }))
+                            ]}
+                          />
+                        </Form.Item>
+                      )}
+                      <Form.Item label={t('studio.participants')}>
+                        {participants.map((p, i) => {
+                          const agent = agents.find((a) => a.id === p.agentId);
+                          return (
+                            <div key={p.agentId} style={{ marginBottom: 8 }}>
+                              <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>
+                                {agent ? getAgentDisplayLabel(agent) : p.agentId}
+                              </strong>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                <Select
+                                  value={p.role}
+                                  onChange={(v) => updateParticipant(i, 'role', v)}
+                                  style={{ width: 110 }}
+                                  options={[
+                                    { value: 'speaker', label: t('studio.roleSpeaker') },
+                                    { value: 'host', label: t('studio.roleHost') }
+                                  ]}
+                                />
+                                <Select
+                                  value={p.voiceId}
+                                  onChange={(v) => updateParticipant(i, 'voiceId', v)}
+                                  style={{ flex: '1 1 160px', minWidth: 160, maxWidth: 230 }}
+                                  options={VOICES.map((v) => ({
+                                    value: v,
+                                    // When Google renders the audio, show the actual Google voice each
+                                    // character maps to so the picker matches the underlying API.
+                                    label:
+                                      effectiveTtsProvider === 'google'
+                                        ? `${VOICE_LABELS[v]} · ${GOOGLE_VOICE_NAMES[language][v]}`
+                                        : VOICE_LABELS[v]
+                                  }))}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </Form.Item>
+                    </>
+                  )
+                }
+              ]}
+            />
           </Form>
           <Space>
             <Button onClick={() => setCurrentKey('experts')}>{t('common.back')}</Button>

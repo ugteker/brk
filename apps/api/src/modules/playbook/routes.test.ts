@@ -19,6 +19,7 @@ interface PlaybookRecord {
   daysOfWeek: number[];
   sourceIds: string[];
   recipients: string[];
+  language: string;
   executionMode: 'latest_only' | 'all_sources';
   maxSourcesPerRun: number;
   maxItemsPerSource: number;
@@ -68,6 +69,7 @@ class InMemoryPlaybookRepository {
       daysOfWeek: input.schedule?.mode === 'weekly' ? input.schedule.daysOfWeek : input.daysOfWeek ?? [],
       sourceIds: input.sourceIds ?? [],
       recipients: input.recipients ?? [],
+      language: input.language ?? 'en',
       executionMode: input.executionMode ?? 'latest_only',
       maxSourcesPerRun: input.maxSourcesPerRun ?? 3,
       maxItemsPerSource: input.maxItemsPerSource ?? 1,
@@ -262,7 +264,12 @@ describe('playbook routes', () => {
       agentRepository: createFakeAgentRepo(),
       agents: createFakePromptDeps(),
       auth: createTestAuthDeps(),
-      playbook: { playbookRepository: playbookRepo, accessResolver: new DomainAccessResolver(playbookRepo), runTrigger: { triggerRun: async () => ({ status: 'queued' }) } }
+      playbook: {
+        playbookRepository: playbookRepo,
+        accessResolver: new DomainAccessResolver(playbookRepo),
+        userRepository: new InMemoryUserRepository(),
+        runTrigger: { triggerRun: async () => ({ status: 'queued' }) }
+      }
     } as any);
 
     const createRes = await app.inject({
@@ -341,6 +348,77 @@ describe('playbook routes', () => {
     expect(deleteRes.statusCode).toBe(204);
   });
 
+  it('defaults a new playbook\'s recipients to the creating user\'s email when none are given', async () => {
+    const playbookRepo = new InMemoryPlaybookRepository();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner@example.com', 'hash', 'Owner', 'user');
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      playbook: {
+        playbookRepository: playbookRepo,
+        accessResolver: new DomainAccessResolver(playbookRepo),
+        userRepository,
+        runTrigger: { triggerRun: async () => ({ status: 'queued' }) }
+      }
+    } as any);
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/playbooks',
+      headers: authCookieHeader(owner.id),
+      payload: { agentId: 'agent-1', name: 'No Recipients Given', sourceIds: ['source-1'] }
+    });
+    expect(createRes.statusCode).toBe(201);
+    expect(createRes.json<PlaybookRecord>().recipients).toEqual(['owner@example.com']);
+
+    const explicitRes = await app.inject({
+      method: 'POST',
+      url: '/api/playbooks',
+      headers: authCookieHeader(owner.id),
+      payload: { agentId: 'agent-1', name: 'Explicit Recipients', sourceIds: ['source-1'], recipients: ['alerts@example.com'] }
+    });
+    expect(explicitRes.statusCode).toBe(201);
+    expect(explicitRes.json<PlaybookRecord>().recipients).toEqual(['alerts@example.com']);
+  });
+
+  it('defaults a new playbook\'s language to the creating user\'s current account language', async () => {
+    const playbookRepo = new InMemoryPlaybookRepository();
+    const userRepository = new InMemoryUserRepository();
+    const owner = await userRepository.createWithPassword('owner@example.com', 'hash', 'Owner', 'user');
+    await userRepository.updateLanguage(owner.id, 'de');
+    const app = await buildServer({
+      agentRepository: createFakeAgentRepo(),
+      agents: createFakePromptDeps(),
+      auth: createTestAuthDeps(),
+      playbook: {
+        playbookRepository: playbookRepo,
+        accessResolver: new DomainAccessResolver(playbookRepo),
+        userRepository,
+        runTrigger: { triggerRun: async () => ({ status: 'queued' }) }
+      }
+    } as any);
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/playbooks',
+      headers: authCookieHeader(owner.id),
+      payload: { agentId: 'agent-1', name: 'No Language Given', sourceIds: ['source-1'] }
+    });
+    expect(createRes.statusCode).toBe(201);
+    expect(createRes.json<PlaybookRecord>().language).toBe('de');
+
+    const explicitRes = await app.inject({
+      method: 'POST',
+      url: '/api/playbooks',
+      headers: authCookieHeader(owner.id),
+      payload: { agentId: 'agent-1', name: 'Explicit Language', sourceIds: ['source-1'], language: 'en' }
+    });
+    expect(explicitRes.statusCode).toBe(201);
+    expect(explicitRes.json<PlaybookRecord>().language).toBe('en');
+  });
+
   it('enforces execute permission separately from read/edit/delete', async () => {
     const playbookRepo = new InMemoryPlaybookRepository();
     const userRepository = new InMemoryUserRepository();
@@ -355,7 +433,12 @@ describe('playbook routes', () => {
       agentRepository: createFakeAgentRepo(),
       agents: createFakePromptDeps(),
       auth: { ...createTestAuthDeps(), userRepository },
-      playbook: { playbookRepository: playbookRepo, accessResolver: new DomainAccessResolver(playbookRepo), runTrigger: { triggerRun: async () => ({ status: 'queued' }) } }
+      playbook: {
+        playbookRepository: playbookRepo,
+        accessResolver: new DomainAccessResolver(playbookRepo),
+        userRepository: new InMemoryUserRepository(),
+        runTrigger: { triggerRun: async () => ({ status: 'queued' }) }
+      }
     } as any);
 
     const createRes = await app.inject({
@@ -398,7 +481,12 @@ describe('playbook routes', () => {
       agentRepository: createFakeAgentRepo(),
       agents: createFakePromptDeps(),
       auth: createTestAuthDeps(),
-      playbook: { playbookRepository: playbookRepo, accessResolver: new DomainAccessResolver(playbookRepo), runTrigger: { triggerRun: async () => ({ status: 'queued' }) } }
+      playbook: {
+        playbookRepository: playbookRepo,
+        accessResolver: new DomainAccessResolver(playbookRepo),
+        userRepository: new InMemoryUserRepository(),
+        runTrigger: { triggerRun: async () => ({ status: 'queued' }) }
+      }
     } as any);
 
     const createRes = await app.inject({
@@ -441,7 +529,12 @@ describe('playbook routes', () => {
       agentRepository: createFakeAgentRepo(),
       agents: createFakePromptDeps(),
       auth: { ...createTestAuthDeps(), userRepository },
-      playbook: { playbookRepository: playbookRepo, accessResolver: new DomainAccessResolver(playbookRepo), runTrigger: { triggerRun: async () => ({ status: 'queued' }) } }
+      playbook: {
+        playbookRepository: playbookRepo,
+        accessResolver: new DomainAccessResolver(playbookRepo),
+        userRepository: new InMemoryUserRepository(),
+        runTrigger: { triggerRun: async () => ({ status: 'queued' }) }
+      }
     } as any);
 
     const createRes = await app.inject({
@@ -509,7 +602,12 @@ describe('playbook routes', () => {
       agentRepository: createFakeAgentRepo(),
       agents: createFakePromptDeps(),
       auth: { ...createTestAuthDeps(), userRepository },
-      playbook: { playbookRepository: playbookRepo, accessResolver: new DomainAccessResolver(playbookRepo), runTrigger: { triggerRun: async () => ({ status: 'queued' }) } }
+      playbook: {
+        playbookRepository: playbookRepo,
+        accessResolver: new DomainAccessResolver(playbookRepo),
+        userRepository: new InMemoryUserRepository(),
+        runTrigger: { triggerRun: async () => ({ status: 'queued' }) }
+      }
     } as any);
 
     const createRes = await app.inject({

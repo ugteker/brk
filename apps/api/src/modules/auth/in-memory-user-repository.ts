@@ -36,6 +36,7 @@ export class InMemoryUserRepository implements UserRepositoryLike {
       locked: false,
       passwordResetToken: null,
       passwordResetExpiresAt: null,
+      language: 'en',
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -62,6 +63,7 @@ export class InMemoryUserRepository implements UserRepositoryLike {
       locked: false,
       passwordResetToken: null,
       passwordResetExpiresAt: null,
+      language: 'en',
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -150,5 +152,11 @@ export class InMemoryUserRepository implements UserRepositoryLike {
   async deleteUser(userId: string): Promise<void> {
     if (!this.users.has(userId)) throw new Error('not_found');
     this.users.delete(userId);
+  }
+
+  async updateLanguage(userId: string, language: string): Promise<void> {
+    const existing = this.users.get(userId);
+    if (!existing) throw new Error('not_found');
+    this.users.set(userId, { ...existing, language, updatedAt: new Date() });
   }
 }
