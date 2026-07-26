@@ -70,6 +70,28 @@ describe('buildEffectiveSystemPrompt', () => {
     }
   });
 
+  it('explicitly instructs English output for non-German language (including when unset)', () => {
+    const promptDe = buildEffectiveSystemPrompt({
+      characterType: 'summarizer',
+      promptConfig: {},
+      promptVersionSystemPrompt: '',
+      language: 'de'
+    });
+    expect(promptDe).toContain('Schreibe deine gesamte Antwort auf Deutsch');
+    expect(promptDe).not.toContain('Write your entire response in English');
+
+    for (const language of ['en', undefined]) {
+      const prompt = buildEffectiveSystemPrompt({
+        characterType: 'summarizer',
+        promptConfig: {},
+        promptVersionSystemPrompt: '',
+        language
+      });
+      expect(prompt).toContain('Write your entire response in English');
+      expect(prompt).not.toContain('Schreibe deine gesamte Antwort auf Deutsch');
+    }
+  });
+
   it('expands structured promptConfig fields into the prompt body', () => {
     const prompt = buildEffectiveSystemPrompt({
       characterType: 'finance_expert',

@@ -128,8 +128,13 @@ export function buildEffectiveSystemPrompt(input: BuildEffectiveSystemPromptInpu
     sections.push(`Custom instructions override:\n${customInstructions}`);
   }
 
+  // Explicit for every supported language (not just non-English) - without this, the model
+  // infers output language from the evidence/persona text instead of the user's actual
+  // configured language, which silently drifts once evidence is in a different language.
   if (input.language === 'de') {
     sections.push('WICHTIG: Schreibe deine gesamte Antwort auf Deutsch.');
+  } else {
+    sections.push('IMPORTANT: Write your entire response in English.');
   }
 
   // Always appended last — overrides any conflicting instructions from user-editable sections.

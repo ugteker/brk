@@ -6,6 +6,7 @@ export interface AuthUser {
   hasPassword: boolean;
   hasGoogleLinked: boolean;
   emailVerified: boolean;
+  language: string;
   createdAt: Date;
 }
 
@@ -22,6 +23,7 @@ export interface UserRecord {
   locked: boolean;
   passwordResetToken: string | null;
   passwordResetExpiresAt: Date | null;
+  language: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +37,7 @@ export function toAuthUser(user: UserRecord): AuthUser {
     hasPassword: user.passwordHash !== null,
     hasGoogleLinked: user.googleId !== null,
     emailVerified: user.emailVerified,
+    language: user.language,
     createdAt: user.createdAt
   };
 }

@@ -204,6 +204,7 @@ async function start(role: Role) {
     playbook: {
       playbookRepository,
       accessResolver,
+      userRepository,
       runTrigger: createPlaybookRunTrigger(manualRunTrigger, playbookRepository)
     },
 

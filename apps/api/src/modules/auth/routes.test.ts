@@ -194,6 +194,53 @@ describe('auth routes', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it('updates the account language via PATCH /api/auth/me/language and reflects it on /api/auth/me', async () => {
+    const { app, userRepository } = await createApp();
+    await signUpAndConfirm(userRepository, app, 'trader@example.com', 'super-secret-1');
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'trader@example.com', password: 'super-secret-1' }
+    });
+    const cookieHeader = login.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: '/api/auth/me/language',
+      headers: { cookie: cookieHeader },
+      payload: { language: 'de' }
+    });
+    expect(patch.statusCode).toBe(204);
+
+    const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: cookieHeader } });
+    expect(me.json().language).toBe('de');
+  });
+
+  it('rejects an unsupported language value for PATCH /api/auth/me/language', async () => {
+    const { app, userRepository } = await createApp();
+    await signUpAndConfirm(userRepository, app, 'trader@example.com', 'super-secret-1');
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'trader@example.com', password: 'super-secret-1' }
+    });
+    const cookieHeader = login.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: '/api/auth/me/language',
+      headers: { cookie: cookieHeader },
+      payload: { language: 'fr' }
+    });
+    expect(patch.statusCode).toBe(400);
+  });
+
+  it('returns 401 from PATCH /api/auth/me/language without a session cookie', async () => {
+    const { app } = await createApp();
+    const res = await app.inject({ method: 'PATCH', url: '/api/auth/me/language', payload: { language: 'de' } });
+    expect(res.statusCode).toBe(401);
+  });
+
   it('logs out by clearing the session cookie', async () => {
     const { app } = await createApp();
     const res = await app.inject({ method: 'POST', url: '/api/auth/logout' });

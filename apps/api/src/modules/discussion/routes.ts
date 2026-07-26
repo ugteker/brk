@@ -61,8 +61,8 @@ export interface DiscussionRoutesDeps {
 export async function registerDiscussionRoutes(app: FastifyInstance, deps: DiscussionRoutesDeps) {
   const availableTtsProviders = (): Array<'google' | 'openai'> => {
     const providers: Array<'google' | 'openai'> = [];
-    if (deps.ttsClients?.google) providers.push('google');
     if (deps.ttsClients?.openai) providers.push('openai');
+    if (deps.ttsClients?.google) providers.push('google');
     return providers;
   };
 
@@ -75,8 +75,8 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     if (provider === 'google' || provider === 'openai') {
       return deps.ttsClients?.[provider] ?? null;
     }
-    // 'auto' / undefined: server preference (google first), falling back to legacy single client.
-    return deps.ttsClients?.google ?? deps.ttsClients?.openai ?? deps.ttsClient ?? null;
+    // 'auto' / undefined: server preference (OpenAI first), falling back to legacy single client.
+    return deps.ttsClients?.openai ?? deps.ttsClients?.google ?? deps.ttsClient ?? null;
   };
 
   // Tracks in-flight/failed audio renders per run so the UI can poll for progress -

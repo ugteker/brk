@@ -5,6 +5,7 @@ export interface AuthUser {
   role: 'user' | 'admin';
   hasPassword: boolean;
   hasGoogleLinked: boolean;
+  language: string;
   createdAt: string;
 }
 
@@ -53,6 +54,17 @@ export async function login(email: string, password: string): Promise<AuthUser> 
     throw new Error(await parseErrorMessage(response, 'Invalid email or password'));
   }
   return response.json();
+}
+
+// Keeps the account's report/notification language in sync with the app's language switcher -
+// cascades server-side to every playbook the user owns (see UserRepository.updateLanguage).
+export async function updateAccountLanguage(language: 'en' | 'de'): Promise<void> {
+  await fetch('/api/auth/me/language', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ language })
+  });
 }
 
 export async function logout(): Promise<void> {

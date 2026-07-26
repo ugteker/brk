@@ -46,10 +46,9 @@ export function groupReportsByDay<T extends { createdAt: string }>(
 export interface FeedCardProps {
   report: RunReportDto;
   characterType?: CharacterType | null;
-  /** Character label, e.g. "Teacher" */
-  characterLabel: string;
-  /** The agent's specific personality within its character, e.g. "Balanced Analyst" */
-  personalityLabel?: string;
+  /** The agent's own chosen title/name, e.g. "Lernstrategie-Coach" - not the generic
+   * character/personality archetype, which the avatar emoji already conveys. */
+  agentName: string;
   /** Source or playbook title shown in the meta row / banner */
   sourceTitle: string;
   sourceCoverImageUrl: string | null;
@@ -66,8 +65,7 @@ export interface FeedCardProps {
 export function FeedCard({
   report,
   characterType,
-  characterLabel,
-  personalityLabel,
+  agentName,
   sourceTitle,
   sourceCoverImageUrl,
   isSyntheticSource,
@@ -214,8 +212,7 @@ export function FeedCard({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              <span className="font-semibold text-gray-800 dark:text-gray-200">{characterLabel}</span>
-              {personalityLabel ? <span className="text-muted-foreground">· {personalityLabel}</span> : null}
+              <span className="font-semibold text-gray-800 dark:text-gray-200">{agentName}</span>
               <Tag className={`m-0 ml-1 shrink-0 border-0 text-[10px] font-semibold ${accent.badge}`}>
                 {t(`feedCard.resultType.${resultType}`)}
               </Tag>

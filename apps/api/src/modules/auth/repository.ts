@@ -27,9 +27,10 @@ export interface UserRepositoryLike {
   listUsers(): Promise<UserRecord[]>;
   setLocked(userId: string, locked: boolean): Promise<UserRecord>;
   deleteUser(userId: string): Promise<void>;
+  updateLanguage(userId: string, language: string): Promise<void>;
 }
 
-type UserDb = Pick<PrismaClient, 'user'>;
+type UserDb = Pick<PrismaClient, 'user' | 'playbook' | '$transaction'>;
 type DbUserRow = Awaited<ReturnType<UserDb['user']['findUnique']>>;
 
 function normalizeRole(role: string): UserRecord['role'] {
@@ -146,5 +147,14 @@ export class UserRepository implements UserRepositoryLike {
 
   async deleteUser(userId: string): Promise<void> {
     await this.db.user.delete({ where: { id: userId } });
+  }
+
+  // Cascades to every playbook owned by this user's agents so existing agents immediately
+  // start writing reports/notifications in the new language too, not just newly created ones.
+  async updateLanguage(userId: string, language: string): Promise<void> {
+    await this.db.$transaction([
+      this.db.user.update({ where: { id: userId }, data: { language } }),
+      this.db.playbook.updateMany({ where: { agent: { ownerUserId: userId } }, data: { language } })
+    ]);
   }
 }
