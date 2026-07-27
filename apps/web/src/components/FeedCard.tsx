@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Card, Tag } from 'antd';
-import { ExportOutlined, EyeInvisibleOutlined, LinkOutlined, MessageOutlined, ReadOutlined } from '@ant-design/icons';
+import { ExportOutlined, EyeInvisibleOutlined, LinkOutlined, MailOutlined, MessageOutlined, ReadOutlined } from '@ant-design/icons';
 import type { CharacterType, RunReportDto } from '../api/agents';
 import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
 import { getReportAccent, getReportAccentClasses } from '../utils/reportAccent';
+import { TouchSafeTooltip } from './TouchSafeTooltip';
 
 export interface FeedDayGroup<T> {
   key: string;
@@ -60,6 +61,9 @@ export interface FeedCardProps {
   onDiscuss: () => void;
   /** Hides the report from the feed (it stays in the Library's report list). */
   onDismiss?: () => void;
+  /** Re-sends the report's email notification to its playbook's recipients. */
+  onResendEmail?: () => void;
+  isResendingEmail?: boolean;
 }
 
 export function FeedCard({
@@ -72,7 +76,9 @@ export function FeedCard({
   onOpenFullReport,
   onOpenSource,
   onDiscuss,
-  onDismiss
+  onDismiss,
+  onResendEmail,
+  isResendingEmail
 }: FeedCardProps) {
   const { t, i18n } = useTranslation();
   const common = report.report?.common;
@@ -346,6 +352,22 @@ export function FeedCard({
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-3">
+            {onResendEmail ? (
+              <TouchSafeTooltip title={t('library.resendEmail')}>
+                <Button
+                  type="text"
+                  size="small"
+                  aria-label={t('library.resendEmail')}
+                  icon={<MailOutlined />}
+                  loading={isResendingEmail}
+                  className="h-auto px-0 text-xs font-medium text-violet-600 hover:!text-violet-800 dark:text-violet-300 dark:hover:!text-violet-100"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onResendEmail();
+                  }}
+                />
+              </TouchSafeTooltip>
+            ) : null}
             <Button
               type="text"
               size="small"
