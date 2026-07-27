@@ -169,6 +169,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: AdminRoute
       const playbook = await tx.playbook.create({
         data: {
           agentId: agent.id,
+          sourceId: source.id,
           name: '📅 Demo Playbook — Weekly',
           description: 'Sample weekly playbook (created by seed).',
           mode: 'daily',
@@ -178,10 +179,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: AdminRoute
           enabled: true,
           notificationsEnabled: false,
           recipientsJson: '[]',
-          language: 'en',
-          sources: {
-            create: [{ sourceId: source.id, position: 0 }]
-          }
+          language: 'en'
         }
       });
 
@@ -189,6 +187,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: AdminRoute
       const run = await tx.agentRun.create({
         data: {
           agentId: agent.id,
+          sourceId: source.id,
           playbookId: playbook.id,
           scheduledFor: new Date(now.getTime() - 86400000),
           status: 'completed',
@@ -226,6 +225,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: AdminRoute
       await tx.agentRunReport.create({
         data: {
           agentId: agent.id,
+          sourceId: source.id,
           agentRunId: run.id,
           promptVersionId: promptVersion.id,
           summary: '🎙️ This week\'s "We Study Billionaires" covers Berkshire\'s annual letter, Buffett\'s Apple/BofA position updates, and macro themes around energy and consumer staples.',
