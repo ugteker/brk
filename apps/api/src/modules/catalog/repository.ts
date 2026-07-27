@@ -52,7 +52,6 @@ type CatalogAgentPublicationMetadataRow = Prisma.MarketplacePublicationGetPayloa
 
 type PlaybookRow = Prisma.PlaybookGetPayload<{
   include: {
-    sources: { orderBy: { position: 'asc' } };
     agent: { select: { runs: { orderBy: { createdAt: 'desc' }; take: 1; select: { createdAt: true } } } };
   };
 }>;
@@ -506,13 +505,9 @@ export class CatalogRepository implements CatalogRepositoryLike {
           agentVersionId: input.agentVersionId,
           mode: 'manual',
           nextRunAt: null,
-          sources: {
-            some: { sourceId: input.sourceId },
-            every: { sourceId: input.sourceId }
-          }
+          sourceId: input.sourceId
         },
         include: {
-          sources: { orderBy: { position: 'asc' } },
           agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
         }
       })) as PlaybookRow | null;
@@ -526,13 +521,12 @@ export class CatalogRepository implements CatalogRepositoryLike {
         ((await tx.playbook.create({
           data: {
             agentId: agentVersion.agentId,
+            sourceId: input.sourceId,
             agentVersionId: input.agentVersionId,
             name: agentVersion.name.trim().length > 0 ? agentVersion.name : agentVersion.agent.name,
             description: agentVersion.description.trim().length > 0 ? agentVersion.description : agentVersion.agent.description,
             enabled: true,
             recipientsJson: JSON.stringify(owner?.email ? [owner.email] : []),
-            executionMode: 'latest_only',
-            maxSourcesPerRun: 3,
             maxItemsPerSource: 1,
             language: owner?.language ?? 'en',
             mode: 'manual',
@@ -540,19 +534,9 @@ export class CatalogRepository implements CatalogRepositoryLike {
             dailyTime: null,
             timezone: null,
             daysOfWeekJson: null,
-            nextRunAt: null,
-            sources: {
-              create: [
-                {
-                  sourceId: input.sourceId,
-                  enabled: true,
-                  position: 0
-                }
-              ]
-            }
+            nextRunAt: null
           },
           include: {
-            sources: { orderBy: { position: 'asc' } },
             agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
           }
         })) as PlaybookRow);

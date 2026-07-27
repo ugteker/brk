@@ -75,7 +75,7 @@ import {
   type ForcedEpisodeSelection,
   type RunDetailDto
 } from '../api/agents';
-import { dismissReport, getLatestAgentPrompt, listAgentReports, markReportRead, type PromptVersionDto, type RunReportDto } from '../api/agents';
+import { dismissReport, getLatestAgentPrompt, listAgentReports, markReportRead, resendReportNotification, type PromptVersionDto, type RunReportDto } from '../api/agents';
 import { grantAgentAccess, listAgentAccessGrants } from '../api/access';
 import { getDiscussionRun, type DiscussionPreselect } from '../api/discussions';
 import { getCharacterTypeColor, getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
@@ -102,6 +102,7 @@ import {
   createSource,
   deleteSource,
   listSourceReports,
+  listSourceRuns,
   probeSource,
   publishSource,
   shareSource,
@@ -116,267 +117,43 @@ import { InlineDeleteButton } from '../components/InlineDeleteButton';
 import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID, type PersonaId } from '../data/prompt-personas';
 import { getAgentDisplayLabel } from '../utils/agent-label';
 import { extractYoutubeVideoId, getYoutubeCoverImageFallback, getYoutubeThumbnailUrl } from '../utils/youtube';
+import {
+  type HubKey,
+  type ProbeKind,
+  type AgentEditor,
+  type LibraryTabRecord,
+  type AutoDetectedSource,
+  WEEKDAY_LABELS,
+  TIMEZONE_OPTIONS,
+  DEFAULT_LIBRARY_TAB_ID,
+  DEFAULT_LIBRARY_TAB_NAME,
+  LIBRARY_GUIDANCE_KEY
+} from './agents/types';
+import {
+  BrainIcon,
+  YouTubeLogo,
+  SourceTypeBadge,
+  EpisodeArtwork,
+  WizardSelectableCard,
+  detectSourceTypeCandidates,
+  probeRankScore,
+  formatPlaybookSchedule,
+  PersonaIcon,
+  getCharacterIcon,
+  humanizeCharacterType,
+  getAgentCharacterLabel,
+  getAgentPersonalityLabel,
+  PERSONA_ICON_MAP,
+  PERSONA_ICON_BG_MAP,
+  getAgentCardDisplay,
+  hasEpisodicSource,
+  getSourceDisplayTitle,
+  getSourceCoverImageUrl,
+  getReportEpisodeThumbnailUrl
+} from './agents/helpers';
+import { FeedTab } from './agents/FeedTab';
 
 const { Title, Text, Paragraph } = Typography;
-
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const TIMEZONE_OPTIONS = [
-  { value: 'UTC', label: 'UTC' },
-  { value: 'Europe/Berlin', label: 'Europe/Berlin' },
-  { value: 'Europe/London', label: 'Europe/London' },
-  { value: 'America/New_York', label: 'America/New_York' },
-  { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
-  { value: 'Asia/Tokyo', label: 'Asia/Tokyo' }
-];
-type HubKey = 'feed' | 'sources' | 'agents' | 'playbooks';
-type ProbeKind = 'feed' | 'listing_page' | 'single_page' | 'unknown';
-type AgentEditor =
-  | { mode: 'manual-create' }
-  | { mode: 'manual-edit'; detail: AgentDetail; prompt: PromptVersionDto | null }
-  | { mode: 'curation-create' }
-  | { mode: 'curation-update'; detail: AgentDetail; prompt: PromptVersionDto | null }
-  | null;
-interface LibraryTabRecord {
-  id: string;
-  name: string;
-}
-
-const BrainIcon = ({ style, className }: { style?: CSSProperties; className?: string }) => (
-  <span role="img" aria-label="brain" className={`anticon${className ? ` ${className}` : ''}`} style={{ fontSize: '1em', lineHeight: 1, ...style }}>
-    🧠
-  </span>
-);
-
-const YouTubeLogo = () => (
-  <span className="inline-flex items-center gap-1" style={{ verticalAlign: 'middle' }}>
-    <svg viewBox="0 0 18 15" width="18" height="15" aria-hidden="true">
-      <path d="M17.6 3.2A2.3 2.3 0 0 0 15.9 1.5C14.5 1 9 1 9 1S3.5 1 2.1 1.5A2.3 2.3 0 0 0 .4 3.2C0 4.6 0 7.5 0 7.5s0 2.9.4 4.3c.2.9.9 1.5 1.7 1.7C3.5 14 9 14 9 14s5.5 0 6.9-.5c.9-.2 1.5-.8 1.7-1.7C18 10.4 18 7.5 18 7.5s0-2.9-.4-4.3z" fill="#FF0000"/>
-      <path d="M7 10.5V4.5l5.5 3-5.5 3z" fill="white"/>
-    </svg>
-    <span style={{ fontWeight: 700, fontSize: '0.8em', letterSpacing: '-0.2px', lineHeight: 1 }} aria-label="YouTube">YouTube</span>
-  </span>
-);
-
-function SourceTypeBadge({ type }: { type: string }) {
-  if (type === 'youtube_videos') return <YouTubeLogo />;
-  if (type === 'podcast_feeds') return (
-    <Tag icon={<AudioOutlined />} color="purple" className="m-0">Podcast</Tag>
-  );
-  if (type === 'synthetic_discussion') return (
-    <Tag icon={<AudioOutlined />} color="geekblue" className="m-0">Discussion</Tag>
-  );
-  return <Tag icon={<GlobalOutlined />} className="m-0">Web</Tag>;
-}
-
-const DEFAULT_LIBRARY_TAB_ID = 'library-default';
-const DEFAULT_LIBRARY_TAB_NAME = 'My Collection';
-const LIBRARY_GUIDANCE_KEY = 'brk:library:add-source-guidance-seen';
-
-interface AutoDetectedSource {
-  type: SourceType;
-  url: string;
-  kind: ProbeKind;
-  title?: string;
-  coverImageUrl?: string;
-  itemCount?: number;
-  previewItems: Array<{ title: string; link: string | null; pubDate: string | null; imageUrl?: string | null }>;
-}
-
-function EpisodeArtwork({
-  episodeImageUrl,
-  coverImageUrl,
-  sourceType
-}: {
-  episodeImageUrl?: string | null;
-  coverImageUrl?: string | null;
-  sourceType: SourceRecord['type'];
-}) {
-  const candidates = useMemo(
-    () => Array.from(new Set([episodeImageUrl, coverImageUrl].filter((url): url is string => Boolean(url)))),
-    [coverImageUrl, episodeImageUrl]
-  );
-  const [candidateIndex, setCandidateIndex] = useState(0);
-
-  useEffect(() => {
-    setCandidateIndex(0);
-  }, [candidates.join('|')]);
-
-  const imageUrl = candidates[candidateIndex];
-  if (imageUrl) {
-    return (
-      <img
-        src={imageUrl}
-        alt=""
-        className="h-12 w-[72px] shrink-0 rounded object-cover bg-muted sm:h-11 sm:w-16"
-        onError={() => setCandidateIndex((index) => index + 1)}
-      />
-    );
-  }
-
-  return (
-    <div className="flex h-12 w-[72px] shrink-0 items-center justify-center rounded bg-muted text-sm sm:h-11 sm:w-16">
-      {sourceType === 'youtube_videos' ? '📺' : sourceType === 'podcast_feeds' ? '🎙️' : '🌐'}
-    </div>
-  );
-}
-
-function WizardSelectableCard({
-  ariaLabel,
-  selected,
-  onClick,
-  children
-}: {
-  ariaLabel: string;
-  selected: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={ariaLabel}
-      aria-pressed={selected}
-      onClick={onClick}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
-      className="relative block h-full w-full text-left cursor-pointer"
-    >
-      {selected && (
-        <span
-          aria-hidden
-          className="absolute -top-[11px] right-2.5 z-10 flex h-[26px] w-[26px]
-                     items-center justify-center rounded-full bg-sky-500 text-white text-[13px]
-                     shadow-md ring-2 ring-white dark:ring-slate-900"
-        >
-          ✓
-        </span>
-      )}
-      <Card
-        size="small"
-        hoverable={!selected}
-        className={`h-full min-h-[190px] transition-all ${
-          selected ? 'bg-sky-50 dark:bg-sky-950/40' : ''
-        }`}
-        style={{
-          cursor: 'pointer',
-          ...(selected ? { outline: '2px solid #38bdf8', outlineOffset: '-2px' } : {})
-        }}
-      >
-        {children}
-      </Card>
-    </div>
-  );
-}
-
-function detectSourceTypeCandidates(url: string): SourceType[] {
-  const lower = url.toLowerCase();
-  if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
-    return ['youtube_videos', 'podcast_feeds', 'web_urls'];
-  }
-  if (lower.endsWith('.xml') || lower.includes('/feed') || lower.includes('rss')) {
-    return ['podcast_feeds', 'web_urls', 'youtube_videos'];
-  }
-  return ['web_urls', 'podcast_feeds', 'youtube_videos'];
-}
-
-function probeRankScore(probe: { reachable: boolean; kind: ProbeKind; confidence?: number }, type: SourceType): number {
-  let score = probe.reachable ? 100 : 0;
-  if (probe.kind === 'feed') score += 30;
-  if (probe.kind === 'listing_page') score += 20;
-  if (probe.kind === 'single_page') score += 10;
-  if (typeof probe.confidence === 'number') score += Math.round(probe.confidence * 10);
-  if (type === 'podcast_feeds' && probe.kind === 'feed') score += 8;
-  if (type === 'youtube_videos' && probe.kind !== 'unknown') score += 5;
-  return score;
-}
-
-function formatPlaybookSchedule(schedule: PlaybookRecord['schedule']): string {
-  if (!schedule || typeof schedule !== 'object' || !('mode' in schedule)) {
-    return 'Schedule unavailable';
-  }
-  if (schedule.mode === 'manual') return 'Manual (run on demand)';
-  if (schedule.mode === 'interval') return `Every ${schedule.intervalMinutes} min`;
-  if (schedule.mode === 'daily') return `Daily ${schedule.dailyTime} (${schedule.timezone})`;
-  const weeklyDays = Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [];
-  const days = (weeklyDays.length > 0 ? weeklyDays : [1]).map((d) => WEEKDAY_LABELS[d] ?? d).join(', ');
-  return `Weekly ${schedule.dailyTime} on ${days} (${schedule.timezone})`;
-}
-
-const PersonaIcon = ({ personaId, style }: { personaId: string; style?: CSSProperties }) => {
-  const emoji = getCharacterTypeEmoji(personaId);
-  return (
-    <span role="img" aria-label={personaId} className="anticon" style={{ fontSize: '1em', lineHeight: 1, ...style }}>
-      {emoji}
-    </span>
-  );
-};
-
-function getCharacterIcon(characterType?: AgentSummary['characterType']) {
-  return <PersonaIcon personaId={characterType ?? 'summarizer'} />;
-}
-
-function humanizeCharacterType(characterType?: AgentSummary['characterType']): string {
-  if (!characterType) return 'Summarizer';
-  return characterType
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
-}
-
-function getAgentCharacterLabel(agent: AgentSummary): string {
-  return getPromptPersona(agent.characterType ?? 'summarizer')?.name ?? humanizeCharacterType(agent.characterType);
-}
-
-function getAgentPersonalityLabel(agent: AgentSummary): string {
-  const personaId = agent.characterType ?? 'summarizer';
-  const personalityId = agent.promptConfig?.personality_id;
-  if (personalityId) {
-    const mapped = getPromptCharacter(personaId, personalityId);
-    if (mapped) return mapped.name;
-  }
-  if (agent.promptConfig?.personality_label?.trim()) {
-    return agent.promptConfig.personality_label;
-  }
-  const defaultCharacter = getPromptCharactersForPersona(personaId)[0];
-  return defaultCharacter?.name ?? 'Default Personality';
-}
-
-const PERSONA_ICON_MAP: Record<string, ReactNode> = {
-  finance_expert: <PersonaIcon personaId="finance_expert" />,
-  teacher:        <PersonaIcon personaId="teacher" />,
-  influencer:     <PersonaIcon personaId="influencer" />,
-  trainer:        <PersonaIcon personaId="trainer" />,
-  philosopher:    <PersonaIcon personaId="philosopher" />,
-  summarizer:     <PersonaIcon personaId="summarizer" />,
-};
-
-const PERSONA_ICON_BG_MAP: Record<string, string> = {
-  finance_expert: 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-300',
-  teacher:        'bg-purple-50 text-purple-600 dark:bg-purple-950 dark:text-purple-300',
-  influencer:     'bg-orange-50 text-orange-600 dark:bg-orange-950 dark:text-orange-300',
-  trainer:        'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300',
-  philosopher:    'bg-cyan-50 text-cyan-600 dark:bg-cyan-950 dark:text-cyan-300',
-  summarizer:     'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
-};
-
-function getAgentCardDisplay(agent: AgentSummary, t: (key: string) => string): { intro: string; icon: ReactNode; characterLabel: string; personalityLabel: string; personaId: string } {
-  const characterId = agent.promptConfig?.personality_id ?? '';
-  const personaId = agent.characterType ?? 'summarizer';
-  const introKey = `personas.${personaId}.characters.${characterId}.intro`;
-  const intro = t(introKey) !== introKey
-    ? t(introKey)
-    : `I'm a ${getAgentPersonalityLabel(agent)} in the ${getAgentCharacterLabel(agent)} family. Give me a source and I'll get to work.`;
-  const icon = PERSONA_ICON_MAP[personaId] ?? <FileTextOutlined />;
-  const characterLabel = getAgentCharacterLabel(agent);
-  const personalityLabel = getAgentPersonalityLabel(agent);
-  return { intro, icon, characterLabel, personalityLabel, personaId };
-}
-
-/** Only podcast/YouTube sources have "episodes" to pick from - web_urls sources (single/listing
- * pages) keep the old "run now = crawl immediately" behavior with no picker. */
-function hasEpisodicSource(agent: AgentSummary): boolean {
-  return agent.sources.some((source) => source.type === 'podcast_feeds' || source.type === 'youtube_videos');
-}
 
 export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const { user, isAdmin, logout } = useAuth();
@@ -412,6 +189,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [togglingPlaybookId, setTogglingPlaybookId] = useState<string | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
   const [runningAgentId, setRunningAgentId] = useState<string | null>(null);
+  const [resendingReportId, setResendingReportId] = useState<string | null>(null);
   const [episodePickerAgent, setEpisodePickerAgent] = useState<AgentSummary | null>(null);
   const [episodeOptions, setEpisodeOptions] = useState<EpisodeOptionDto[]>([]);
   const [loadingEpisodeOptions, setLoadingEpisodeOptions] = useState(false);
@@ -509,7 +287,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [wizardAlreadyLinkedPlaybooks, setWizardAlreadyLinkedPlaybooks] = useState<{ agentId: string; playbookId: string }[]>([]);
   // The agent whose playbook settings are shown in the schedule step (edit mode via ✎ button)
   const [wizardFocusedAgentId, setWizardFocusedAgentId] = useState<string | null>(null);
-  const [playbookSourceIdsDraft, setPlaybookSourceIdsDraft] = useState<string[]>([]);
+  const [playbookSourceIdDraft, setPlaybookSourceIdDraft] = useState<string | null>(null);
   const [playbookScheduleModeDraft, setPlaybookScheduleModeDraft] = useState<'manual' | 'interval' | 'daily' | 'weekly'>('daily');
   const [playbookIntervalMinutesDraft, setPlaybookIntervalMinutesDraft] = useState(60);
   const [playbookDailyTimeDraft, setPlaybookDailyTimeDraft] = useState('07:30');
@@ -926,7 +704,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reports]);
 
-  // Load reports + runs for the selected source (merged from all agents analyzing it)
+  // Load reports + runs for the selected source (merged from all agents analyzing it), both via
+  // the source-scoped endpoints - only reports/runs whose generating run actually crawled this
+  // source, never another source an agent's playbook happens to also link to.
   useEffect(() => {
     if (!selectedSourceId) {
       setSourceDetailReports([]);
@@ -934,21 +714,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       return;
     }
     let alive = true;
-    const linked = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
+    const linked = playbooks.filter((p) => p.sourceId === selectedSourceId);
     if (linked.length === 0) {
       setSourceDetailReports([]);
       setSourceDetailRuns([]);
       return;
     }
     setSourceDetailLoading(true);
-    // Reports come from the source-scoped endpoint (only reports whose run actually crawled
-    // this source); runs are still per-agent since they have no source-level endpoint.
-    const runPromises = linked.map((pb) => listAgentRuns(pb.agentId));
-    Promise.all([listSourceReports<RunReportDto>(selectedSourceId), ...runPromises])
-      .then((results) => {
+    Promise.all([listSourceReports<RunReportDto>(selectedSourceId), listSourceRuns<RunDetailDto>(selectedSourceId)])
+      .then(([allReports, allRuns]) => {
         if (!alive) return;
-        const allReports = results[0] as RunReportDto[];
-        const allRuns = (results.slice(1) as RunDetailDto[][]).flat();
         allReports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         allRuns.sort((a, b) => new Date(b.scheduledFor).getTime() - new Date(a.scheduledFor).getTime());
         setSourceDetailReports(allReports);
@@ -1129,7 +904,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setPlaybookAgentIdsDraft([]);
     setWizardAlreadyLinkedAgentIds([]);
     setWizardAlreadyLinkedPlaybooks([]);
-    setPlaybookSourceIdsDraft(sources[0] ? [sources[0].id] : []);
+    setPlaybookSourceIdDraft(sources[0]?.id ?? null);
     setPlaybookScheduleModeDraft('daily');
     setPlaybookIntervalMinutesDraft(60);
     setPlaybookDailyTimeDraft('07:30');
@@ -1151,7 +926,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setEditingPlaybookId(null);
     setWizardFocusedAgentId(null);
     setPlaybookCreateStep(1);
-    setPlaybookSourceIdsDraft([source.id]);
+    setPlaybookSourceIdDraft(source.id);
     setPlaybookScheduleModeDraft('daily');
     setPlaybookIntervalMinutesDraft(60);
     setPlaybookDailyTimeDraft('07:30');
@@ -1160,7 +935,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setPlaybookRecipientsDraft(user?.email ? [user.email] : []);
     // Pre-select agents that already watch this source; track their playbook IDs for the
     // save diff (delete removed, create added, skip unchanged).
-    const linkedPbs = playbooks.filter((p) => p.sourceIds.includes(source.id));
+    const linkedPbs = playbooks.filter((p) => p.sourceId === source.id);
     const alreadyLinkedAgentIds = linkedPbs.map((p) => p.agentId);
     setWizardAlreadyLinkedAgentIds(alreadyLinkedAgentIds);
     setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
@@ -1180,7 +955,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   async function handleAgentSelectionConnected(playbook: PlaybookRecord) {
     await Promise.all([refreshAgents(), refreshPlaybooks(), refreshSources()]);
-    const sourceId = playbook.sourceIds[0];
+    const sourceId = playbook.sourceId;
     if (sourceId) {
       markSourceUpdated(sourceId);
       if (connectedAgentHighlightTimerRef.current) {
@@ -1228,7 +1003,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     if (!playbook) return;
 
     await Promise.all([refreshAgents(), refreshPlaybooks(), refreshSources()]);
-    const sourceId = playbook.sourceIds[0];
+    const sourceId = playbook.sourceId;
     if (!sourceId) return;
 
     if (agentAssignmentOrigin === 'library') {
@@ -1239,14 +1014,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
   }
 
-  async function onRemoveAgentFromSource(playbook: PlaybookRecord, sourceId: string) {
+  async function onRemoveAgentFromSource(playbook: PlaybookRecord) {
     try {
-      const remainingSourceIds = playbook.sourceIds.filter((id) => id !== sourceId);
-      if (remainingSourceIds.length === 0) {
-        await deletePlaybook(playbook.id);
-      } else {
-        await updatePlaybook(playbook.id, { sourceIds: remainingSourceIds });
-      }
+      await deletePlaybook(playbook.id);
       await refreshPlaybooks();
       message.success(t('library.agentRemovedFromSource'));
     } catch (error) {
@@ -1366,17 +1136,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
   }
 
-  function derivePlaybookName(agentId: string, sourceIds: string[]): string {
+  function derivePlaybookName(agentId: string, sourceId: string): string {
     const selectedAgent = agents.find((agent) => agent.id === agentId);
     const agentName = selectedAgent ? getAgentDisplayLabel(selectedAgent) : 'Agent';
-    const primarySourceId = sourceIds[0];
-    const primarySource = sources.find((source) => source.id === primarySourceId);
+    const primarySource = sources.find((source) => source.id === sourceId);
     const sourceTitle = primarySource?.metadata.title ?? primarySource?.value ?? 'Source';
     return `${agentName} · ${sourceTitle}`;
   }
 
   function onNextPlaybookCreateStep() {
-    if (playbookCreateStep === 0 && playbookSourceIdsDraft.length === 0) {
+    if (playbookCreateStep === 0 && !playbookSourceIdDraft) {
       message.warning('Pick a source first');
       return;
     }
@@ -1399,22 +1168,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     updatedHighlightTimerRef.current = setTimeout(() => setRecentlyUpdatedSourceId(null), 4000);
   }
 
-  // Deselecting an agent in the source-linking wizard means "stop running this agent on these
-  // sources" - NOT "delete whatever else this agent's playbook is configured for". A sibling
-  // playbook picked up by the wizard's "already linked" match may cover other sources too, so
-  // only drop the sources this wizard session is actually managing, and delete the playbook
-  // outright only once that leaves it with none.
-  async function unlinkPlaybookFromSources(playbookId: string, sourceIdsToUnlink: string[]) {
-    const pb = playbooks.find((p) => p.id === playbookId);
-    if (!pb) return;
-    const remainingSourceIds = pb.sourceIds.filter((id) => !sourceIdsToUnlink.includes(id));
-    if (remainingSourceIds.length === 0) {
-      await deletePlaybook(playbookId);
-    } else {
-      await updatePlaybook(playbookId, { sourceIds: remainingSourceIds });
-    }
-  }
-
   async function onCreatePlaybook() {
     // In follow mode, deselecting all agents is valid — it means "remove all" (diff will delete them).
     // Only block empty selection in admin-hub create mode where you must pick at least one agent.
@@ -1423,10 +1176,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       message.warning(t('playbook.pickAgentFirst'));
       return;
     }
-    if (playbookSourceIdsDraft.length === 0) {
+    if (!playbookSourceIdDraft) {
       message.warning(t('playbook.pickSourceFirst'));
       return;
     }
+    const sourceId = playbookSourceIdDraft;
     setIsPlaybookSaving(true);
     try {
       const lang = i18n.language.startsWith('de') ? 'de' : 'en';
@@ -1449,15 +1203,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       if (editingPlaybookId) {
         // Admin-hub edit mode: update the explicit playbook + diff agent selection
         const agentId = wizardFocusedAgentId ?? playbookAgentIdsDraft[0] ?? '';
-        await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(agentId, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule: explicitSchedule });
+        await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(agentId, sourceId), recipients: cleanedRecipients, schedule: explicitSchedule });
         // Diff: additions and removals relative to the originally linked set
         const toCreate = playbookAgentIdsDraft.filter((id) => !wizardAlreadyLinkedAgentIds.includes(id));
         const toDelete = wizardAlreadyLinkedAgentIds.filter((id) => !playbookAgentIdsDraft.includes(id) && id !== agentId);
         await Promise.all([
-          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule: explicitSchedule, executionMode: 'latest_only', language: lang })),
+          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, sourceId), sourceId, recipients: cleanedRecipients, schedule: explicitSchedule, language: lang })),
           ...toDelete.map((id) => {
             const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
-            return pb ? unlinkPlaybookFromSources(pb.playbookId, playbookSourceIdsDraft) : Promise.resolve();
+            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
           })
         ]);
       } else {
@@ -1465,15 +1219,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         const toCreate = playbookAgentIdsDraft.filter((id) => !wizardAlreadyLinkedAgentIds.includes(id));
         const toDelete = wizardAlreadyLinkedAgentIds.filter((id) => !playbookAgentIdsDraft.includes(id));
         await Promise.all([
-          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: recipientsForNew, schedule: scheduleForNew, executionMode: 'latest_only', language: lang })),
+          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, sourceId), sourceId, recipients: recipientsForNew, schedule: scheduleForNew, language: lang })),
           ...toDelete.map((id) => {
             const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
-            return pb ? unlinkPlaybookFromSources(pb.playbookId, playbookSourceIdsDraft) : Promise.resolve();
+            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
           })
         ]);
       }
       await refreshPlaybooks();
-      if (playbookSourceIdsDraft[0]) markSourceUpdated(playbookSourceIdsDraft[0]);
+      markSourceUpdated(sourceId);
       message.success(t('playbook.updatePlaybook'));
       setIsPlaybookCreateOpen(false);
       setPlaybookCreateStep(0);
@@ -1570,6 +1324,26 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     dismissReport(report.agentId, report.id).catch(() => undefined);
   }
 
+  /** Re-sends the email notification for an already-analysed report to its owning playbook's
+   * recipients. Used by the Feed cards and the Episodes tab, which - unlike AgentReportsBrowser -
+   * aren't scoped to a single playbook, so the recipients are looked up per-report here. */
+  async function onResendReportEmail(report: Pick<RunReportDto, 'id' | 'agentId' | 'playbookId'>) {
+    const recipients = report.playbookId ? (playbooks.find((p) => p.id === report.playbookId)?.recipients ?? []) : [];
+    if (recipients.length === 0) {
+      message.warning(t('library.resendNoRecipients'));
+      return;
+    }
+    setResendingReportId(report.id);
+    try {
+      const result = await resendReportNotification(report.agentId, report.id, recipients);
+      message.success(t('library.resendSuccess', { count: result.recipientCount }));
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t('library.resendFailed'));
+    } finally {
+      setResendingReportId(null);
+    }
+  }
+
   async function onEditSource(source: SourceRecord) {
     setEditingSource(source);
     setSourceUrlDraft(source.value);
@@ -1629,14 +1403,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setEditingPlaybookId(playbook.id);
     setWizardFocusedAgentId(playbook.agentId);
     setPlaybookCreateStep(1);
-    setPlaybookSourceIdsDraft(playbook.sourceIds);
+    setPlaybookSourceIdDraft(playbook.sourceId);
     applyScheduleDraft(playbook.schedule);
     setPlaybookRecipientsDraft(playbook.recipients);
     // Pre-fill detail level from existing agent if available
     const existingAgent = agents.find((a) => a.id === playbook.agentId);
     setInlineAgentReportDetailLevel((existingAgent?.promptConfig as { report_detail_level?: 'brief' | 'standard' | 'detailed' } | undefined)?.report_detail_level ?? 'standard');
     // Pre-select ALL linked agents for this source; track their playbook IDs for the save diff
-    const linkedPbs = playbooks.filter((p) => p.sourceIds.some((sid) => playbook.sourceIds.includes(sid)));
+    const linkedPbs = playbooks.filter((p) => p.sourceId === playbook.sourceId);
     const alreadyLinkedAgentIds = linkedPbs.map((p) => p.agentId);
     setWizardAlreadyLinkedAgentIds(alreadyLinkedAgentIds);
     setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
@@ -1762,11 +1536,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         characterLabel: agent ? getAgentCharacterLabel(agent) : undefined,
         personalityLabel: agent ? getAgentPersonalityLabel(agent) : undefined
       };
-      for (const sourceId of playbook.sourceIds) {
-        const current = result[sourceId] ?? [];
-        if (!current.some((candidate) => candidate.agentId === linkedAgent.agentId)) {
-          result[sourceId] = [...current, linkedAgent];
-        }
+      const current = result[playbook.sourceId] ?? [];
+      if (!current.some((candidate) => candidate.agentId === linkedAgent.agentId)) {
+        result[playbook.sourceId] = [...current, linkedAgent];
       }
       return result;
     },
@@ -1782,7 +1554,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   });
   const filteredPlaybooks = playbooks.filter((playbook) => {
     if (!normalizedPlaybooksSearch) return true;
-    return `${playbook.name} ${playbook.description} ${playbook.sourceIds.join(' ')}`.toLowerCase().includes(normalizedPlaybooksSearch);
+    return `${playbook.name} ${playbook.description} ${playbook.sourceId}`.toLowerCase().includes(normalizedPlaybooksSearch);
   });
   const filteredMarketplaceSources = marketplaceSources.filter((item) => {
     if (!normalizedSourceSearch) return true;
@@ -1809,44 +1581,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     return `${item.title} ${item.summary} ${item.playbook.name}`.toLowerCase().includes(normalizedMarketplacePlaybooksSearch);
   });
 
-  function getSourceDisplayTitle(source: SourceRecord): string {
-    if (source.metadata.title?.trim()) return source.metadata.title;
-    // Synthetic discussions store the name in config (for sources created before libraryCard.title was set)
-    if (source.type === 'synthetic_discussion' && typeof source.config.name === 'string' && source.config.name.trim()) {
-      return source.config.name.trim();
-    }
-    try {
-      const url = new URL(source.value);
-      return url.hostname;
-    } catch {
-      return source.value;
-    }
-  }
-
   function getSourceSpeakers(source: SourceRecord): string[] {
     if (source.type !== 'synthetic_discussion') return [];
     const p = source.config.participants;
     if (Array.isArray(p)) return p.filter((n): n is string => typeof n === 'string');
     return [];
-  }
-
-  function getSourceCoverImageUrl(source: SourceRecord): string | null {
-    if (source.metadata.coverImageUrl) return source.metadata.coverImageUrl;
-    if (source.type !== 'youtube_videos') return null;
-    const firstPreviewVideoId = extractYoutubeVideoId(source.metadata.previewItems[0]?.link);
-    if (firstPreviewVideoId) return getYoutubeThumbnailUrl(firstPreviewVideoId);
-    return getYoutubeCoverImageFallback(source.value);
-  }
-
-  // A report's own cited video URL is fresher and more accurate than the source's cached
-  // (creation-time-only, never refreshed by crawls) preview snapshot above — prefer it.
-  function getReportEpisodeThumbnailUrl(report: RunReportDto): string | null {
-    const references = report.report?.common?.source_references ?? [];
-    for (const reference of references) {
-      const videoId = extractYoutubeVideoId(reference.reference);
-      if (videoId) return getYoutubeThumbnailUrl(videoId);
-    }
-    return null;
   }
 
   function getSourceKindLabel(source: SourceRecord): string {
@@ -2168,14 +1907,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       const currentSetup = guidedWizardSetupRef.current;
       if (!currentSetup.playbookId) {
         const matchingPlaybook = (await listPlaybooks()).find(
-          (playbook) => playbook.agentId === agent.id && playbook.sourceIds.includes(source.id)
+          (playbook) => playbook.agentId === agent.id && playbook.sourceId === source.id
         );
         const playbook =
           matchingPlaybook ??
           (await createPlaybook({
             name: `${getSourceDisplayTitle(source)} — ${agent.name}`,
             agentId: agent.id,
-            sourceIds: [source.id],
+            sourceId: source.id,
             recipients: user?.email ? [user.email] : [],
             schedule: { mode: 'daily', dailyTime: '08:00', timezone: 'UTC' },
             language: 'en'
@@ -2269,7 +2008,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   async function onRunSourceEpisode(episode?: { title: string; link: string; pubDate?: string | null }) {
     if (!selectedSourceId) return;
-    const linked = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
+    const linked = playbooks.filter((p) => p.sourceId === selectedSourceId);
     if (linked.length === 0) return;
 
     // When multiple agents watch this source, ask the user which one to run
@@ -2426,90 +2165,24 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 key: 'feed',
                 label: <span><FileTextOutlined /> {t('nav.feed')}</span>,
                 children: (
-                  <>
-                    <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}><FileTextOutlined /> {t('nav.feed')}</Title>}>
-                      {feedLoading ? (
-                        <div className="space-y-3">
-                          {[1,2,3].map(i => <Skeleton key={i} active paragraph={{ rows: 2 }} />)}
-                        </div>
-                      ) : feedReports.length === 0 ? (
-                        <div className="flex flex-col items-center gap-4 py-12 text-center">
-                          <span className="text-5xl">📰</span>
-                          <div>
-                            <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('nav.feedEmpty')}</p>
-                            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('nav.feedEmptyDesc')}</p>
-                          </div>
-                          <Button type="primary" onClick={() => setActiveHub('sources')}>{t('nav.library')}</Button>
-                        </div>
-                      ) : (() => {
-                        const normalizedFeedSearch = feedSearch.trim().toLowerCase();
-                        const searchFilteredReports = !normalizedFeedSearch ? feedReports : feedReports.filter((report) => {
-                          const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
-                          const source = playbook?.sourceIds.length ? sources.find((candidate) => candidate.id === playbook.sourceIds[0]) : undefined;
-                          const reportAgent = agents.find((agent) => agent.id === report.agentId);
-                          const sourceTitle = source ? getSourceDisplayTitle(source) : report.playbookName;
-                          const characterLabel = reportAgent ? getAgentCharacterLabel(reportAgent) : report.agentName;
-                          const headline = report.report?.common?.headline ?? '';
-                          return `${headline} ${report.summary} ${report.agentName} ${sourceTitle} ${characterLabel}`.toLowerCase().includes(normalizedFeedSearch);
-                        });
-                        return (
-                          <>
-                            <div className="mb-4">
-                              <Input
-                                aria-label={t('feed.searchAriaLabel')}
-                                value={feedSearch}
-                                onChange={(event) => setFeedSearch(event.currentTarget.value)}
-                                placeholder={t('feed.searchPlaceholder')}
-                                prefix={<SearchOutlined />}
-                                allowClear
-                                style={{ maxWidth: 420 }}
-                              />
-                            </div>
-                            {searchFilteredReports.length === 0 ? (
-                              <Empty description={t('feed.searchNoResults')} />
-                            ) : (
-                              <div className="space-y-6">
-                                {groupReportsByDay(searchFilteredReports.slice(0, 30)).map((group) => (
-                                  <div key={group.key} className="space-y-3">
-                                    <div className="mb-1 flex items-center gap-3">
-                                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                        {group.kind === 'today'
-                                          ? t('feed.groupToday')
-                                          : group.kind === 'yesterday'
-                                            ? t('feed.groupYesterday')
-                                            : new Date(group.dateISO).toLocaleDateString(i18n.language, { year: 'numeric', month: 'short', day: 'numeric' })}
-                                      </span>
-                                      <span className="h-px flex-1 bg-border" />
-                                    </div>
-                                    {group.reports.map((report) => {
-                                      const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
-                                      const source = playbook?.sourceIds.length ? sources.find((candidate) => candidate.id === playbook.sourceIds[0]) : undefined;
-                                      const reportAgent = agents.find((agent) => agent.id === report.agentId);
-                                      return (
-                                        <FeedCard
-                                          key={report.id}
-                                          report={report}
-                                          characterType={reportAgent?.characterType}
-                                          agentName={reportAgent ? getAgentDisplayLabel(reportAgent) : report.agentName}
-                                          sourceTitle={source ? getSourceDisplayTitle(source) : report.playbookName}
-                                          sourceCoverImageUrl={(source ? getSourceCoverImageUrl(source) : null) ?? getReportEpisodeThumbnailUrl(report)}
-                                          isSyntheticSource={source?.type === 'synthetic_discussion'}
-                                          onOpenFullReport={() => openReportDrawer(report)}
-                                          onOpenSource={source ? () => openSourceInLibrary(source) : undefined}
-                                          onDiscuss={() => openDiscussionFromReport(report)}
-                                          onDismiss={() => dismissFeedReport(report)}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </Card>
-                  </>
+                  <FeedTab
+                    t={t}
+                    language={i18n.language}
+                    feedLoading={feedLoading}
+                    feedReports={feedReports}
+                    feedSearch={feedSearch}
+                    onFeedSearchChange={setFeedSearch}
+                    agents={agents}
+                    sources={sources}
+                    playbooks={playbooks}
+                    onGoToLibrary={() => setActiveHub('sources')}
+                    onOpenFullReport={openReportDrawer}
+                    onOpenSource={openSourceInLibrary}
+                    onDiscuss={openDiscussionFromReport}
+                    onDismiss={dismissFeedReport}
+                    onResendEmail={(report) => void onResendReportEmail(report)}
+                    resendingReportId={resendingReportId}
+                  />
                 )
               },
               {
@@ -2749,7 +2422,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                    ) : null}
                    {sourcesLoadState !== 'loading' && selectedSourceId ? (() => {
                      const selectedSource = sources.find((s) => s.id === selectedSourceId);
-                     const linkedPlaybooks = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
+                     const linkedPlaybooks = playbooks.filter((p) => p.sourceId === selectedSourceId);
                      return selectedSource ? (
                        <Card
                          className="min-w-0"
@@ -3089,6 +2762,18 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                        />
                                                      </TouchSafeTooltip>
                                                    ) : null}
+                                                   {episodeReport ? (
+                                                     <TouchSafeTooltip title={t('library.resendEmail')}>
+                                                       <Button
+                                                         size="small"
+                                                         shape="circle"
+                                                         aria-label={t('library.resendEmail')}
+                                                         icon={<MailOutlined />}
+                                                         loading={resendingReportId === episodeReport.id}
+                                                         onClick={() => void onResendReportEmail(episodeReport)}
+                                                       />
+                                                     </TouchSafeTooltip>
+                                                   ) : null}
                                                    {ep.link ? (
                                                      <TouchSafeTooltip title={t('library.openLink')}>
                                                        <Button
@@ -3317,10 +3002,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports');
                        }}
                        onAddAgent={(source) => onFollowSource(source)}
-                       onRemoveAgent={(playbookId, sourceId) => {
+                       onRemoveAgent={(playbookId) => {
                          const playbook = playbooks.find((candidate) => candidate.id === playbookId);
                          if (playbook) {
-                           return onRemoveAgentFromSource(playbook, sourceId);
+                           return onRemoveAgentFromSource(playbook);
                          }
                        }}
                        linkedAgentsBySourceId={linkedAgentsBySourceId}
@@ -3867,7 +3552,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                         }
                       >
                         <p className="mb-3 text-xs text-gray-600">
-                          Sources: {selectedPlaybook.sourceIds.length} · Last run:{' '}
+                          Source: {(() => {
+                            const src = sources.find((s) => s.id === selectedPlaybook.sourceId);
+                            return src ? getSourceDisplayTitle(src) : selectedPlaybook.sourceId;
+                          })()} · Last run:{' '}
                           {selectedPlaybook.lastRunAt ? new Date(selectedPlaybook.lastRunAt).toLocaleString() : 'Never'} · Next run:{' '}
                           {new Date(selectedPlaybook.nextRunAt).toLocaleString()}
                         </p>
@@ -3885,6 +3573,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                   reports={selectedPlaybookReports}
                                   highlightedReportId={highlightedReportId}
                                   onSelectSymbol={setViewingSymbol}
+                                  recipients={selectedPlaybook.recipients}
                                 />
                               )
                             },
@@ -4015,7 +3704,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                 ) : (
                                   <Tag color="default">{t('playbook.paused')}</Tag>
                                 )}
-                                <Tag>Sources: {playbook.sourceIds.length}</Tag>
                                 <Tag>Recipients: {playbook.recipients.length}</Tag>
                                 <Tag icon={<ClockCircleOutlined />}>Schedule: {formatPlaybookSchedule(playbook.schedule)}</Tag>
                               </div>
@@ -4149,7 +3837,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       <Modal
         title={(() => {
           if (followWizardSourcePreselected) {
-            const src = sources.find((s) => s.id === playbookSourceIdsDraft[0]);
+            const src = sources.find((s) => s.id === playbookSourceIdDraft);
             const srcTitle = src ? getSourceDisplayTitle(src) : null;
             return editingPlaybookId
               ? t('listen.dialogTitleEdit', { title: srcTitle ?? t('listen.thisSource') })
@@ -4167,7 +3855,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       >
         {followWizardSourcePreselected && !showInlineAgentCreate ? (
           inlineAgentCurating ? (() => {
-            const inlineCurationSource = sources.find((s) => s.id === playbookSourceIdsDraft[0]);
+            const inlineCurationSource = sources.find((s) => s.id === playbookSourceIdDraft);
             return (
               <AgentCurator
                 mode="create"
@@ -4184,7 +3872,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             );
           })() : (
             <AgentSelectionView
-              source={sources.find((s) => s.id === playbookSourceIdsDraft[0]) ?? null}
+              source={sources.find((s) => s.id === playbookSourceIdDraft) ?? null}
               ownedAgents={agents.filter((agent) => agent.ownerUserId === user?.id)}
               onAgentConnected={handleAgentSelectionConnected}
               onCurate={openInlineAgentCuration}
@@ -4240,14 +3928,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           {playbookCreateStep === 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {sources.map((source) => {
-                const selected = playbookSourceIdsDraft[0] === source.id;
+                const selected = playbookSourceIdDraft === source.id;
 
                 return (
                   <WizardSelectableCard
                     key={source.id}
                     ariaLabel={`Select source ${getSourceDisplayTitle(source)}`}
                     selected={selected}
-                    onClick={() => setPlaybookSourceIdsDraft([source.id])}
+                    onClick={() => setPlaybookSourceIdDraft(source.id)}
                   >
                     <div className="grid grid-cols-[56px_1fr] gap-3">
                       {getSourceCoverImageUrl(source) ? (
@@ -4409,7 +4097,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
               </div>
               ) : null}
               {inlineAgentCurating ? (() => {
-                const inlineCurationSource = sources.find((s) => s.id === playbookSourceIdsDraft[0]);
+                const inlineCurationSource = sources.find((s) => s.id === playbookSourceIdDraft);
                 return (
                   <AgentCurator
                     mode="create"

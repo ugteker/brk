@@ -12,8 +12,12 @@ export interface SourceProbeLike {
 }
 
 export interface SourceScopedReportRepositoryLike {
-  listReportsForSource(sourceValue: string): Promise<unknown[]>;
-  countReportsForSourceValues(sourceValues: string[]): Promise<Record<string, number>>;
+  listReportsForSource(sourceId: string): Promise<unknown[]>;
+  countReportsForSourceValues(sourceIds: string[]): Promise<Record<string, number>>;
+}
+
+export interface SourceScopedRunRepositoryLike {
+  listRunDetailsForSource(sourceId: string): Promise<unknown[]>;
 }
 
 /** `GET /api/sources` response shape: each source annotated with its source-scoped report
@@ -27,6 +31,7 @@ export interface SourceRoutesDeps {
   sourceProbe?: SourceProbeLike;
   sourceSearch?: SourceSearchLike;
   reportRepository?: SourceScopedReportRepositoryLike;
+  runsRepository?: SourceScopedRunRepositoryLike;
 }
 
 function isSupportedSourceType(value: unknown): value is SourceConfig['type'] {
@@ -80,11 +85,11 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
     // can still inspect other sources via marketplace/public endpoints.
     const rows = await deps.sourceRepository.listSources(req.userId!);
     const counts = deps.reportRepository
-      ? await deps.reportRepository.countReportsForSourceValues(rows.map((source) => source.value))
+      ? await deps.reportRepository.countReportsForSourceValues(rows.map((source) => source.id))
       : {};
     const rowsWithReportCount: SourceRecordWithReportCount[] = rows.map((source) => ({
       ...source,
-      reportCount: counts[source.value] ?? 0
+      reportCount: counts[source.id] ?? 0
     }));
     return reply.status(200).send(rowsWithReportCount);
   });
@@ -98,17 +103,30 @@ export async function registerSourceRoutes(app: FastifyInstance, deps: SourceRou
     return reply.status(200).send(access.source);
   });
 
-  /** Reports scoped to this concrete source: only reports whose generating run saved evidence
-   * artifacts referencing this source's value. Prevents an agent's unrelated reports from
-   * leaking onto every source its playbook happens to link to. */
+  /** Reports scoped to this concrete source via the real sourceId FK. Prevents an agent's
+   * unrelated reports from leaking onto every source its playbook happens to link to. */
   app.get('/api/sources/:sourceId/reports', async (req, reply) => {
     const { sourceId } = req.params as { sourceId: string };
     const access = await requireSourceAccess(deps, req, sourceId, 'read');
     if (!access.ok) {
       return reply.status(access.statusCode).send({ code: access.code, message: access.message });
     }
-    const reports = deps.reportRepository ? await deps.reportRepository.listReportsForSource(access.source.value) : [];
+    const reports = deps.reportRepository ? await deps.reportRepository.listReportsForSource(access.source.id) : [];
     return reply.status(200).send(reports);
+  });
+
+  /** Runs scoped to this concrete source via the real sourceId FK - previously the frontend
+   * had to fetch every linked agent's full run history client-side (no source-level endpoint
+   * existed), which leaked an agent's unrelated runs onto every source its playbook happened
+   * to link to. */
+  app.get('/api/sources/:sourceId/runs', async (req, reply) => {
+    const { sourceId } = req.params as { sourceId: string };
+    const access = await requireSourceAccess(deps, req, sourceId, 'read');
+    if (!access.ok) {
+      return reply.status(access.statusCode).send({ code: access.code, message: access.message });
+    }
+    const runs = deps.runsRepository ? await deps.runsRepository.listRunDetailsForSource(access.source.id) : [];
+    return reply.status(200).send(runs);
   });
 
   app.patch('/api/sources/:sourceId', async (req, reply) => {

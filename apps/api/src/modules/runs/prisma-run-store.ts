@@ -29,18 +29,19 @@ export class PrismaRunStore implements RunStore {
   async getDueSchedules(now: Date) {
     const duePlaybooks = await this.db.playbook.findMany({
       where: { enabled: true, mode: { not: 'manual' }, nextRunAt: { lte: now } },
-      select: { id: true, agentId: true, agentVersionId: true, nextRunAt: true }
+      select: { id: true, agentId: true, agentVersionId: true, nextRunAt: true, sourceId: true }
     });
     return duePlaybooks.map((pb) => ({
       agentId: pb.agentId,
       agentVersionId: pb.agentVersionId ?? undefined,
       nextRunAt: pb.nextRunAt!,
       enabled: true,
-      playbookId: pb.id
+      playbookId: pb.id,
+      sourceId: pb.sourceId
     }));
   }
 
-  async upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string, agentVersionId?: string): Promise<void> {
+  async upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string, agentVersionId?: string, sourceId?: string): Promise<void> {
     await this.db.agentRun.upsert({
       where: { agentId_scheduledFor: { agentId, scheduledFor } },
       update: {},
@@ -48,6 +49,7 @@ export class PrismaRunStore implements RunStore {
         agentId,
         playbookId: playbookId ?? null,
         agentVersionId: agentVersionId ?? null,
+        sourceId: sourceId ?? null,
         scheduledFor,
         status: 'queued',
         retryCount: 0
@@ -113,6 +115,7 @@ export class PrismaRunStore implements RunStore {
       startedAt: claimed.startedAt ?? undefined,
       finishedAt: claimed.finishedAt ?? undefined,
       playbookId: (claimed as { playbookId?: string | null }).playbookId ?? undefined,
+      sourceId: (claimed as { sourceId?: string | null }).sourceId ?? undefined,
       playbookRecipients: playbookData ? parseRecipients(playbookData.recipientsJson) : undefined,
       playbookLanguage: playbookData?.language ?? undefined,
       playbookNotificationsEnabled: playbookData ? (playbookData.notificationsEnabled ?? true) : undefined,

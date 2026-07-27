@@ -221,9 +221,7 @@ describe('ReportRepository', () => {
     expect(await repo.getReportById('report-unknown')).toBeNull();
   });
 
-  it('filters source-scoped reports by run artifacts that reference the source value', async () => {
-    // The nested relation filter is what makes this query source-scoped; a fake in-memory
-    // join would only re-test the fake, so this asserts the exact Prisma filter shape.
+  it('filters source-scoped reports by the real sourceId FK', async () => {
     let captured: { where?: unknown } | undefined;
     const db = {
       agentRunReport: {
@@ -235,73 +233,34 @@ describe('ReportRepository', () => {
     };
     const repo = new ReportRepository(db as never);
 
-    const result = await repo.listReportsForSource('https://example.com/feed.xml');
+    const result = await repo.listReportsForSource('source-1');
 
     expect(result).toEqual([]);
-    expect(captured?.where).toEqual({
-      agentRun: {
-        artifacts: { some: { payloadJson: { contains: '"sourceId":"https://example.com/feed.xml"' } } }
-      }
-    });
+    expect(captured?.where).toEqual({ sourceId: 'source-1' });
   });
 
-  it('counts each report only for source values referenced by its evidence artifacts', async () => {
-    const reportRows = [
-      // References feed-a via a single evidence artifact.
-      {
-        id: 'report-1',
-        agentId: 'agent-1',
-        agentRun: { artifacts: [{ payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-a.xml' }) }] }
-      },
-      // References feed-a twice (two artifacts) - must still contribute 1, not 2.
-      {
-        id: 'report-2',
-        agentId: 'agent-1',
-        agentRun: {
-          artifacts: [
-            { payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-a.xml' }) },
-            { payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-a.xml' }) }
-          ]
-        }
-      },
-      // References feed-b only.
-      {
-        id: 'report-3',
-        agentId: 'agent-2',
-        agentRun: { artifacts: [{ payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-b.xml' }) }] }
-      },
-      // Unrelated report owned by the same agent as report-1/report-2, but its evidence
-      // artifact references a source that was not requested - must be absent from both counts.
-      {
-        id: 'report-4',
-        agentId: 'agent-1',
-        agentRun: { artifacts: [{ payloadJson: JSON.stringify({ sourceId: 'https://example.com/feed-unrelated.xml' }) }] }
-      }
-    ];
-    const db = {
-      agentRunReport: {
-        findMany: async () => reportRows
-      }
-    };
-    const repo = new ReportRepository(db as never);
+  it('counts reports per requested sourceId via a groupBy on the real FK', async () => {
+    const groupBy = vi.fn(async ({ where }: { where: { sourceId: { in: string[] } } }) =>
+      [
+        { sourceId: 'source-a', _count: { _all: 2 } },
+        { sourceId: 'source-b', _count: { _all: 1 } },
+        // Not in the requested list - must be ignored by the caller's zero-init map.
+        { sourceId: 'source-unrelated', _count: { _all: 5 } }
+      ].filter((row) => where.sourceId.in.includes(row.sourceId))
+    );
+    const repo = new ReportRepository({ agentRunReport: { groupBy } } as never);
 
-    const result = await repo.countReportsForSourceValues([
-      'https://example.com/feed-a.xml',
-      'https://example.com/feed-b.xml'
-    ]);
+    const result = await repo.countReportsForSourceValues(['source-a', 'source-b']);
 
-    expect(result).toEqual({
-      'https://example.com/feed-a.xml': 2,
-      'https://example.com/feed-b.xml': 1
-    });
+    expect(result).toEqual({ 'source-a': 2, 'source-b': 1 });
   });
 
-  it('returns a zero count for every requested source value without querying when the list is empty', async () => {
-    const findMany = vi.fn(async () => []);
-    const repo = new ReportRepository({ agentRunReport: { findMany } } as never);
+  it('returns a zero count for every requested source id without querying when the list is empty', async () => {
+    const groupBy = vi.fn(async () => []);
+    const repo = new ReportRepository({ agentRunReport: { groupBy } } as never);
 
     expect(await repo.countReportsForSourceValues([])).toEqual({});
-    expect(findMany).not.toHaveBeenCalled();
+    expect(groupBy).not.toHaveBeenCalled();
   });
 
   it('persists AI usage/cost stats when provided', async () => {

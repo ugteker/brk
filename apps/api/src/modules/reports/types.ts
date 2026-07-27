@@ -116,6 +116,7 @@ export interface UnifiedCharacterReport {
 
 export interface CreateRunReportInput {
   agentId: string;
+  sourceId?: string;
   agentRunId: string;
   promptVersionId: string;
   characterType?: CharacterType;
@@ -134,6 +135,7 @@ export interface CreateRunReportInput {
 export interface RunReportRecord {
   id: string;
   agentId: string;
+  sourceId: string | null;
   agentRunId: string;
   playbookId: string | null;
   promptVersionId: string;

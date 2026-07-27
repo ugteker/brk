@@ -6,7 +6,7 @@ import { toAuthUser } from '../auth/types';
 
 export interface AdminRoutesDeps {
   userRepository: UserRepositoryLike;
-  db?: Pick<PrismaClient, 'agent' | 'agentPromptVersion' | 'agentRun' | 'agentRunReport' | 'agentSignal' | 'source' | 'playbook' | 'playbookSource' | '$transaction'>;
+  db?: Pick<PrismaClient, 'agent' | 'agentPromptVersion' | 'agentRun' | 'agentRunReport' | 'agentSignal' | 'source' | 'playbook' | '$transaction'>;
 }
 
 export interface AdminUserView extends AuthUser {

@@ -12,7 +12,7 @@ import type {
   UpdateSourceInput
 } from './types';
 
-type SourceDb = Pick<PrismaClient, 'source' | 'accessGrant' | 'marketplacePublication' | 'playbookSource' | 'userLibrarySource' | 'realtimeEvent' | '$transaction'>;
+type SourceDb = Pick<PrismaClient, 'source' | 'accessGrant' | 'marketplacePublication' | 'playbook' | 'userLibrarySource' | 'realtimeEvent' | '$transaction'>;
 
 /** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
  * mutation behavior identical while emitting no realtime events. */
@@ -298,7 +298,16 @@ export class SourceRepository implements SourceRepositoryLike {
       if (!existing) {
         throw new Error('not_found');
       }
-      await tx.playbookSource.deleteMany({ where: { sourceId } });
+      // Playbook.sourceId is a required, FK-enforced column (onDelete: Restrict) - a playbook
+      // pointing at this source must be deleted (along with its own grants/publications) before
+      // the source itself can go, mirroring PlaybookRepository.deletePlaybook's cleanup.
+      const linkedPlaybooks = await tx.playbook.findMany({ where: { sourceId }, select: { id: true } });
+      const linkedPlaybookIds = linkedPlaybooks.map((p) => p.id);
+      if (linkedPlaybookIds.length > 0) {
+        await tx.accessGrant.deleteMany({ where: { playbookId: { in: linkedPlaybookIds } } });
+        await tx.marketplacePublication.deleteMany({ where: { playbookId: { in: linkedPlaybookIds } } });
+        await tx.playbook.deleteMany({ where: { id: { in: linkedPlaybookIds } } });
+      }
       await tx.accessGrant.deleteMany({ where: { sourceId } });
       await tx.marketplacePublication.deleteMany({ where: { sourceId } });
       await tx.source.delete({ where: { id: sourceId } });

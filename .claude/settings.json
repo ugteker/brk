@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(apps/api/data/audio/**)",
+      "Glob(apps/api/data/audio/**)",
+      "Read(**/node_modules/**)",
+      "Glob(**/node_modules/**)",
+      "Read(**/dist/**)",
+      "Glob(**/dist/**)",
+      "Read(**/build/**)",
+      "Glob(**/build/**)",
+      "Read(.idea/**)",
+      "Glob(.idea/**)"
+    ]
+  }
+}

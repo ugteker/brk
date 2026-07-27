@@ -17,11 +17,9 @@ interface PlaybookRecord {
   dailyTime: string | null;
   timezone: string | null;
   daysOfWeek: number[];
-  sourceIds: string[];
+  sourceId: string;
   recipients: string[];
   language: string;
-  executionMode: 'latest_only' | 'all_sources';
-  maxSourcesPerRun: number;
   maxItemsPerSource: number;
   nextRunAt: Date | null;
   lastRunAt: Date | null;
@@ -67,11 +65,9 @@ class InMemoryPlaybookRepository {
       dailyTime: input.schedule?.mode === 'daily' || input.schedule?.mode === 'weekly' ? input.schedule.dailyTime : input.dailyTime ?? null,
       timezone: input.schedule?.mode === 'daily' || input.schedule?.mode === 'weekly' ? input.schedule.timezone : input.timezone ?? null,
       daysOfWeek: input.schedule?.mode === 'weekly' ? input.schedule.daysOfWeek : input.daysOfWeek ?? [],
-      sourceIds: input.sourceIds ?? [],
+      sourceId: input.sourceId,
       recipients: input.recipients ?? [],
       language: input.language ?? 'en',
-      executionMode: input.executionMode ?? 'latest_only',
-      maxSourcesPerRun: input.maxSourcesPerRun ?? 3,
       maxItemsPerSource: input.maxItemsPerSource ?? 1,
       nextRunAt: input.schedule?.mode === 'manual' ? null : new Date('2026-07-14T08:00:00.000Z'),
       lastRunAt: null,
@@ -99,7 +95,6 @@ class InMemoryPlaybookRepository {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.description !== undefined ? { description: patch.description } : {}),
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
-      ...(patch.sourceIds !== undefined ? { sourceIds: patch.sourceIds } : {}),
       ...(patch.recipients !== undefined ? { recipients: patch.recipients } : {}),
       ...(patch.schedule !== undefined ? { mode: patch.schedule.mode } : {}),
       updatedAt: new Date('2026-07-13T01:00:00.000Z')
@@ -281,7 +276,7 @@ describe('playbook routes', () => {
       payload: {
         agentId: 'agent-1',
         name: 'Morning Brief',
-        sourceIds: ['source-1', 'source-2'],
+        sourceId: 'source-1',
         recipients: ['alerts@example.com'],
         mode: 'interval',
         intervalMinutes: 60
@@ -370,7 +365,7 @@ describe('playbook routes', () => {
       method: 'POST',
       url: '/api/playbooks',
       headers: authCookieHeader(owner.id),
-      payload: { agentId: 'agent-1', name: 'No Recipients Given', sourceIds: ['source-1'] }
+      payload: { agentId: 'agent-1', name: 'No Recipients Given', sourceId: 'source-1' }
     });
     expect(createRes.statusCode).toBe(201);
     expect(createRes.json<PlaybookRecord>().recipients).toEqual(['owner@example.com']);
@@ -379,7 +374,7 @@ describe('playbook routes', () => {
       method: 'POST',
       url: '/api/playbooks',
       headers: authCookieHeader(owner.id),
-      payload: { agentId: 'agent-1', name: 'Explicit Recipients', sourceIds: ['source-1'], recipients: ['alerts@example.com'] }
+      payload: { agentId: 'agent-1', name: 'Explicit Recipients', sourceId: 'source-1', recipients: ['alerts@example.com'] }
     });
     expect(explicitRes.statusCode).toBe(201);
     expect(explicitRes.json<PlaybookRecord>().recipients).toEqual(['alerts@example.com']);
@@ -406,7 +401,7 @@ describe('playbook routes', () => {
       method: 'POST',
       url: '/api/playbooks',
       headers: authCookieHeader(owner.id),
-      payload: { agentId: 'agent-1', name: 'No Language Given', sourceIds: ['source-1'] }
+      payload: { agentId: 'agent-1', name: 'No Language Given', sourceId: 'source-1' }
     });
     expect(createRes.statusCode).toBe(201);
     expect(createRes.json<PlaybookRecord>().language).toBe('de');
@@ -415,7 +410,7 @@ describe('playbook routes', () => {
       method: 'POST',
       url: '/api/playbooks',
       headers: authCookieHeader(owner.id),
-      payload: { agentId: 'agent-1', name: 'Explicit Language', sourceIds: ['source-1'], language: 'en' }
+      payload: { agentId: 'agent-1', name: 'Explicit Language', sourceId: 'source-1', language: 'en' }
     });
     expect(explicitRes.statusCode).toBe(201);
     expect(explicitRes.json<PlaybookRecord>().language).toBe('en');
@@ -439,7 +434,7 @@ describe('playbook routes', () => {
       method: 'POST',
       url: '/api/playbooks',
       headers: authCookieHeader('owner-1'),
-      payload: { agentId: 'agent-1', name: 'Manual Playbook', sourceIds: ['source-1'], schedule: { mode: 'manual' } }
+      payload: { agentId: 'agent-1', name: 'Manual Playbook', sourceId: 'source-1', schedule: { mode: 'manual' } }
     });
     expect(createRes.statusCode).toBe(201);
     const playbookId = createRes.json<PlaybookRecord>().id;
@@ -492,7 +487,7 @@ describe('playbook routes', () => {
       method: 'POST',
       url: '/api/playbooks',
       headers: authCookieHeader(owner.id),
-      payload: { agentId: 'agent-1', name: 'Execute ACL', sourceIds: ['source-1'] }
+      payload: { agentId: 'agent-1', name: 'Execute ACL', sourceId: 'source-1' }
     });
     const playbookId = createRes.json<PlaybookRecord>().id;
 
@@ -540,7 +535,7 @@ describe('playbook routes', () => {
       method: 'POST',
       url: '/api/playbooks',
       headers: authCookieHeader('owner-1'),
-      payload: { agentId: 'agent-1', name: 'Unpublishable Playbook', sourceIds: ['source-1'] }
+      payload: { agentId: 'agent-1', name: 'Unpublishable Playbook', sourceId: 'source-1' }
     });
     const playbook = createRes.json<PlaybookRecord>();
 
@@ -588,7 +583,7 @@ describe('playbook routes', () => {
       method: 'POST',
       url: '/api/playbooks',
       headers: authCookieHeader(owner.id),
-      payload: { agentId: 'agent-1', name: 'Owner Playbook', sourceIds: ['source-1'] }
+      payload: { agentId: 'agent-1', name: 'Owner Playbook', sourceId: 'source-1' }
     });
     const playbook = createRes.json<PlaybookRecord>();
 
@@ -661,7 +656,7 @@ describe('playbook routes', () => {
       method: 'POST',
       url: '/api/playbooks',
       headers: authCookieHeader(owner.id),
-      payload: { agentId: 'agent-1', name: 'Own Topic Playbook', sourceIds: ['source-1'] }
+      payload: { agentId: 'agent-1', name: 'Own Topic Playbook', sourceId: 'source-1' }
     });
     const playbook = createRes.json<PlaybookRecord>();
     expect(playbookRepo.events).toContainEqual(

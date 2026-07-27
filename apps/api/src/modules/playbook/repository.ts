@@ -12,7 +12,7 @@ import type {
 } from './types';
 import type { RealtimeEventWriter } from '../realtime/types';
 
-type PlaybookDb = Pick<PrismaClient, 'playbook' | 'playbookSource' | 'accessGrant' | 'marketplacePublication' | 'agent' | 'source' | 'realtimeEvent' | '$transaction'>;
+type PlaybookDb = Pick<PrismaClient, 'playbook' | 'accessGrant' | 'marketplacePublication' | 'agent' | 'source' | 'realtimeEvent' | '$transaction'>;
 
 /** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
  * mutation behavior identical while emitting no realtime events. */
@@ -87,10 +87,8 @@ export function mapPlaybook(row: any): Playbook {
     digestFrequency: row.digestFrequency ?? 'immediate',
     lastDigestSentAt: row.lastDigestSentAt ?? null,
     schedule: scheduleFromRow(row),
-    sourceIds: (row.sources ?? []).map((sourceRow: any) => sourceRow.sourceId),
+    sourceId: row.sourceId,
     recipients: parseRecipients(row.recipientsJson),
-    executionMode: row.executionMode,
-    maxSourcesPerRun: row.maxSourcesPerRun,
     maxItemsPerSource: row.maxItemsPerSource,
     followTargetType: row.followTargetType ?? null,
     followTargetKey: row.followTargetKey ?? null,
@@ -127,35 +125,34 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
     const now = new Date();
     const schedule = input.schedule ?? { mode: 'interval', intervalMinutes: 60 };
     const created = await this.db.$transaction(async (tx: any) => {
-      const created = await tx.playbook.create({
-        data: {
-          agentId: input.agentId,
-          agentVersionId: input.agentVersionId ?? null,
-          name: input.name,
-          description: input.description ?? '',
-          enabled: input.enabled ?? true,
-          recipientsJson: JSON.stringify(input.recipients ?? []),
-          executionMode: input.executionMode ?? 'latest_only',
-          maxSourcesPerRun: input.maxSourcesPerRun ?? 3,
-          maxItemsPerSource: input.maxItemsPerSource ?? 1,
-          followTargetType: input.followTargetType ?? null,
-          followTargetKey: input.followTargetKey ?? null,
-          followTargetTitle: input.followTargetTitle ?? null,
-          language: input.language ?? 'en',
-          ...schedulePatchData(schedule, now),
-          sources: {
-            create: input.sourceIds.map((sourceId, index) => ({
-              sourceId,
-              enabled: true,
-              position: index
-            }))
+      let created;
+      try {
+        created = await tx.playbook.create({
+          data: {
+            agentId: input.agentId,
+            sourceId: input.sourceId,
+            agentVersionId: input.agentVersionId ?? null,
+            name: input.name,
+            description: input.description ?? '',
+            enabled: input.enabled ?? true,
+            recipientsJson: JSON.stringify(input.recipients ?? []),
+            maxItemsPerSource: input.maxItemsPerSource ?? 1,
+            followTargetType: input.followTargetType ?? null,
+            followTargetKey: input.followTargetKey ?? null,
+            followTargetTitle: input.followTargetTitle ?? null,
+            language: input.language ?? 'en',
+            ...schedulePatchData(schedule, now)
+          },
+          include: {
+            agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
           }
-        },
-        include: {
-          sources: { orderBy: { position: 'asc' } },
-          agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
+        });
+      } catch (error: any) {
+        if (error?.code === 'P2002') {
+          throw new Error('already_exists: this agent is already attached to this source - edit its schedule instead');
         }
-      });
+        throw error;
+      }
       // The creating user is the known-good owner path here: the route only lets a
       // caller create a playbook against their own agentId, so we target them directly
       // rather than re-querying the just-created row's linked agent.
@@ -169,7 +166,6 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
     const rows = await this.db.playbook.findMany({
       where: ownerUserId ? { agent: { ownerUserId } } : {},
       include: {
-        sources: { orderBy: { position: 'asc' } },
         agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
       },
       orderBy: { createdAt: 'desc' }
@@ -181,7 +177,6 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
     const row = await this.db.playbook.findUnique({
       where: { id: playbookId },
       include: {
-        sources: { orderBy: { position: 'asc' } },
         agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
       }
     });
@@ -203,20 +198,6 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
         throw new Error(`invariant_violation: playbook ${playbookId} references missing agent ${existing.agentId}`);
       }
 
-      if (patch.sourceIds) {
-        await tx.playbookSource.deleteMany({ where: { playbookId } });
-        if (patch.sourceIds.length > 0) {
-          await tx.playbookSource.createMany({
-            data: patch.sourceIds.map((sourceId, index) => ({
-              playbookId,
-              sourceId,
-              enabled: true,
-              position: index
-            }))
-          });
-        }
-      }
-
       const changed = await tx.playbook.update({
         where: { id: playbookId },
         data: {
@@ -225,8 +206,6 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
           ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
           ...(patch.notificationsEnabled !== undefined ? { notificationsEnabled: patch.notificationsEnabled } : {}),
           ...(patch.digestFrequency !== undefined ? { digestFrequency: patch.digestFrequency } : {}),
-          ...(patch.executionMode !== undefined ? { executionMode: patch.executionMode } : {}),
-          ...(patch.maxSourcesPerRun !== undefined ? { maxSourcesPerRun: patch.maxSourcesPerRun } : {}),
           ...(patch.maxItemsPerSource !== undefined ? { maxItemsPerSource: patch.maxItemsPerSource } : {}),
           ...(patch.followTargetType !== undefined ? { followTargetType: patch.followTargetType } : {}),
           ...(patch.followTargetKey !== undefined ? { followTargetKey: patch.followTargetKey } : {}),
@@ -236,7 +215,6 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
           ...(patch.schedule ? schedulePatchData(patch.schedule, now) : {})
         },
         include: {
-          sources: { orderBy: { position: 'asc' } },
           agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
         }
       });
@@ -257,7 +235,11 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
         throw new Error(`invariant_violation: playbook ${playbookId} references missing agent ${existing.agentId}`);
       }
 
-      await tx.playbookSource.deleteMany({ where: { playbookId } });
+      // A deleted playbook's grants/publications are meaningless, and both are FK-enforced
+      // (onDelete: Restrict) against playbookId - clear them explicitly before the delete
+      // rather than loosening those FKs, so future code paths can't silently orphan a grant.
+      await tx.accessGrant.deleteMany({ where: { playbookId } });
+      await tx.marketplacePublication.deleteMany({ where: { resourceType: 'playbook', resourceId: playbookId } });
       await tx.playbook.delete({ where: { id: playbookId } });
 
       await this.realtime.append(tx, { userId: agent.ownerUserId, topic: 'playbook.changed', entityId: playbookId });
@@ -310,7 +292,6 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
       const row = await tx.playbook.findUnique({
         where: { id: playbookId },
         include: {
-          sources: { orderBy: { position: 'asc' } },
           agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
         }
       });
@@ -416,7 +397,6 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
       include: {
         playbook: {
           include: {
-            sources: { orderBy: { position: 'asc' } },
             agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
           }
         }
@@ -449,7 +429,7 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
           retiredAt: null
         },
         include: {
-          playbook: { include: { sources: { orderBy: { position: 'asc' } } } }
+          playbook: true
         }
       });
       if (!publication?.playbook) {
@@ -502,44 +482,36 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
           }
         }));
 
-      const sourceIdMap = new Map<string, string>();
-      for (const sourceRow of publication.playbook.sources) {
-        const source = await tx.source.findUnique({ where: { id: sourceRow.sourceId } });
-        if (!source) {
-          throw new Error('not_found');
+      const source = await tx.source.findUnique({ where: { id: publication.playbook.sourceId } });
+      if (!source) {
+        throw new Error('not_found');
+      }
+      const existingTargetSource = await tx.source.findFirst({
+        where: {
+          ownerUserId: targetOwnerUserId,
+          type: source.type,
+          value: source.value
         }
-
-        const existingTargetSource = await tx.source.findFirst({
-          where: {
+      });
+      const resolvedSource =
+        existingTargetSource ??
+        (await tx.source.create({
+          data: {
             ownerUserId: targetOwnerUserId,
             type: source.type,
-            value: source.value
+            value: source.value,
+            status: source.status,
+            configJson: source.configJson
           }
-        });
-
-        const resolvedSource =
-          existingTargetSource ??
-          (await tx.source.create({
-            data: {
-              ownerUserId: targetOwnerUserId,
-              type: source.type,
-              value: source.value,
-              status: source.status,
-              configJson: source.configJson
-            }
-          }));
-
-        sourceIdMap.set(sourceRow.sourceId, resolvedSource.id);
-      }
+        }));
 
       const existing = await tx.playbook.findFirst({
         where: {
           agent: { ownerUserId: targetOwnerUserId },
           agentId: resolvedAgent.id,
-          name: publication.playbook.name
+          sourceId: resolvedSource.id
         },
         include: {
-          sources: { orderBy: { position: 'asc' } },
           agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
         }
       });
@@ -550,6 +522,7 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
       const created = await tx.playbook.create({
         data: {
           agentId: resolvedAgent.id,
+          sourceId: resolvedSource.id,
           name: publication.playbook.name,
           description: publication.playbook.description,
           mode: publication.playbook.mode,
@@ -559,23 +532,13 @@ export class PlaybookRepository implements PlaybookRepositoryLike {
           daysOfWeekJson: publication.playbook.daysOfWeekJson,
           nextRunAt: publication.playbook.nextRunAt,
           enabled: publication.playbook.enabled,
-          executionMode: publication.playbook.executionMode,
-          maxSourcesPerRun: publication.playbook.maxSourcesPerRun,
           maxItemsPerSource: publication.playbook.maxItemsPerSource,
           followTargetType: publication.playbook.followTargetType,
           followTargetKey: publication.playbook.followTargetKey,
           followTargetTitle: publication.playbook.followTargetTitle,
-          recipientsJson: publication.playbook.recipientsJson ?? '[]',
-          sources: {
-            create: publication.playbook.sources.map((sourceRow: any) => ({
-              sourceId: sourceIdMap.get(sourceRow.sourceId) ?? sourceRow.sourceId,
-              enabled: sourceRow.enabled,
-              position: sourceRow.position
-            }))
-          }
+          recipientsJson: publication.playbook.recipientsJson ?? '[]'
         },
         include: {
-          sources: { orderBy: { position: 'asc' } },
           agent: { select: { runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } } } }
         }
       });

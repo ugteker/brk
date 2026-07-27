@@ -55,13 +55,6 @@ function createDeps(overrides: Partial<Parameters<typeof AgentRunner>[0]> = {}) 
     saveRunReport: vi.fn(async (input) => ({ ...input, id: 'report-1', createdAt: new Date() }))
   };
   const ingestionRepository = {
-    listPlaybookSources: vi.fn(async () => [
-      {
-        playbookId: 'playbook-1',
-        sourceId: 'source-1',
-        source: { id: 'source-1', type: 'web_urls' as const, value: 'https://example.com/article' }
-      }
-    ]),
     listUnconsumed: vi.fn(async () => [
       {
         id: 'item-1',
@@ -187,7 +180,6 @@ function createSharedSourceHarness() {
     releaseRefresh: vi.fn(async () => {
       state.leased = false;
     }),
-    listPlaybookSources: vi.fn(async (playbookId: string) => [{ playbookId, sourceId: source.id, source }]),
     listUnconsumed: vi.fn(async (playbookId: string) =>
       state.items.filter((item) => !state.consumptions.has(`${playbookId}::${item.id}`))
     ),
@@ -233,6 +225,7 @@ describe('AgentRunner', () => {
 
     const result = await runner.run('agent-1', 'run-1', {
       playbookId: 'playbook-1',
+      sourceId: 'source-1',
       playbookMaxItemsPerSource: 1
     });
 
@@ -252,6 +245,7 @@ describe('AgentRunner', () => {
 
     const result = await runner.run('agent-1', 'run-1', {
       playbookId: 'playbook-1',
+      sourceId: 'source-1',
       playbookMaxItemsPerSource: 1
     });
 
@@ -264,6 +258,7 @@ describe('AgentRunner', () => {
     const runner = new AgentRunner(deps as never);
     const options = {
       playbookId: 'playbook-1',
+      sourceId: 'source-1',
       forcedEpisode: {
         sourceType: 'web_urls' as const,
         sourceValue: 'https://example.com/article',
@@ -318,8 +313,8 @@ describe('AgentRunner', () => {
       sourceAdapters: {}
     } as never);
 
-    const first = await runner.run('agent-1', 'run-1', { playbookId: 'playbook-1', playbookMaxItemsPerSource: 1 });
-    const second = await runner.run('agent-2', 'run-2', { playbookId: 'playbook-2', playbookMaxItemsPerSource: 1 });
+    const first = await runner.run('agent-1', 'run-1', { playbookId: 'playbook-1', sourceId: 'source-1', playbookMaxItemsPerSource: 1 });
+    const second = await runner.run('agent-2', 'run-2', { playbookId: 'playbook-2', sourceId: 'source-1', playbookMaxItemsPerSource: 1 });
 
     expect(first.status).toBe('succeeded');
     expect(second.status).toBe('succeeded');

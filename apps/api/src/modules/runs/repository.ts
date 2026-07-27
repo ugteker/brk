@@ -81,6 +81,23 @@ export class RunsRepository {
     return (rows as unknown as RunRow[]).map((row) => this.toRecord(row));
   }
 
+  /** Runs scoped to the given source's real sourceId FK, across all agents - mirrors
+   * `listRunDetailsForAgent` but for the Source detail page's Runs tab, which previously had
+   * to fetch every linked agent's full run history and had no way to scope it to one source. */
+  async listRunDetailsForSource(sourceId: string, limit = 50): Promise<RunDetailRecord[]> {
+    const rows = await this.db.agentRun.findMany({
+      where: { sourceId },
+      orderBy: { scheduledFor: 'desc' },
+      take: limit,
+      include: {
+        artifacts: true,
+        report: { include: { signals: true } }
+      }
+    });
+
+    return (rows as unknown as RunRow[]).map((row) => this.toRecord(row));
+  }
+
   /**
    * Fetches the full (untruncated) evidence text for a single artifact, scoped to a specific
    * agent/run so a caller can't download an artifact belonging to a different agent by guessing

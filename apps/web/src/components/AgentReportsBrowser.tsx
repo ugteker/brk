@@ -19,6 +19,10 @@ interface AgentReportsBrowserProps {
   onSelectReport?: (report: RunReportDto) => void;
   onSelectSymbol?: (symbol: string) => void;
   highlightedReportId?: string | null;
+  /** Email addresses to notify when a report's email is re-sent, i.e. the owning playbook's
+   * recipients. The resend button is still shown with none configured, but sending then
+   * surfaces a warning instead of calling the API (the backend requires at least one). */
+  recipients?: string[];
 }
 
 // Emoji/label only - pill color now comes from the shared getCharacterTypeColor() so it
@@ -97,7 +101,7 @@ export function computeAiTotals(reports: RunReportDto[]): AiTotals {
   return { reportCountWithUsage, totalInputTokens, totalOutputTokens, totalEstimatedCostUsd, hasAnyCost };
 }
 
-export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, onSelectReport, onSelectSymbol, highlightedReportId }: AgentReportsBrowserProps) {
+export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, onSelectReport, onSelectSymbol, highlightedReportId, recipients }: AgentReportsBrowserProps) {
   const { t } = useTranslation();
   const navigate = useSafeNavigate();
   const highlightedRef = useRef<HTMLDivElement | null>(null);
@@ -198,12 +202,16 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
 
   async function onResendNotification(reportId: string, event: React.MouseEvent) {
     event.stopPropagation();
+    if (!recipients || recipients.length === 0) {
+      message.warning(t('library.resendNoRecipients'));
+      return;
+    }
     setSendingReportId(reportId);
     try {
-      const result = await resendReportNotification(agentId, reportId, []);
-      message.success(`Notification sent to ${result.recipientCount} recipient${result.recipientCount === 1 ? '' : 's'}`);
+      const result = await resendReportNotification(agentId, reportId, recipients);
+      message.success(t('library.resendSuccess', { count: result.recipientCount }));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to send notification');
+      message.error(err instanceof Error ? err.message : t('library.resendFailed'));
     } finally {
       setSendingReportId(null);
     }
@@ -330,9 +338,9 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
                     onClick={(event) => onDiscussReport(report, event)}
                   />
                 </TouchSafeTooltip>
-                <TouchSafeTooltip title="Re-send email notification">
+                <TouchSafeTooltip title={t('library.resendEmail')}>
                   <Button
-                    aria-label="Re-send email notification"
+                    aria-label={t('library.resendEmail')}
                     shape="circle"
                     icon={<MailOutlined />}
                     loading={sendingReportId === report.id}

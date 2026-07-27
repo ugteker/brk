@@ -189,6 +189,7 @@ async function start(role: Role) {
       sourceRepository,
       accessResolver,
       reportRepository,
+      runsRepository,
       sourceSearch: createSourceSearch({
         httpGet: defaultHttpGet,
         youtubeHttpGet,

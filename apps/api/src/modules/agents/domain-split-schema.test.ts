@@ -21,7 +21,6 @@ describe('domain split schema foundation', () => {
 
     expect(schema).toContain('model Source {');
     expect(schema).toContain('model Playbook {');
-    expect(schema).toContain('model PlaybookSource {');
     expect(schema).toContain('model AccessGrant {');
     expect(schema).toContain('model MarketplacePublication {');
   });

@@ -142,6 +142,15 @@ export async function listSourceReports<T = unknown>(sourceId: string): Promise<
   return response.json();
 }
 
+/** Runs scoped to this concrete source (across all agents) - mirrors `listSourceReports`. */
+export async function listSourceRuns<T = unknown>(sourceId: string): Promise<T[]> {
+  const response = await fetch(`/api/sources/${sourceId}/runs`);
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response, 'Failed to load source runs'));
+  }
+  return response.json();
+}
+
 export async function updateSource(sourceId: string, payload: UpdateSourcePayload): Promise<SourceRecord> {
   const response = await fetch(`/api/sources/${sourceId}`, {
     method: 'PATCH',

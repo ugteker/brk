@@ -9,18 +9,6 @@ function createFakeDb() {
   const sourceItems = new Map<string, any>();
   const sourceItemsBySourceAndLink = new Map<string, string>();
   const playbookSourceItems = new Map<string, any>();
-  const playbookSources = [
-    {
-      playbookId: 'playbook-1',
-      sourceId: 'source-1',
-      source: { id: 'source-1', type: 'podcast_feeds', value: 'https://example.com/feed.xml' }
-    },
-    {
-      playbookId: 'playbook-2',
-      sourceId: 'source-1',
-      source: { id: 'source-1', type: 'podcast_feeds', value: 'https://example.com/feed.xml' }
-    }
-  ];
   let nextSourceItemId = 1;
 
   const sourceKey = (sourceId: string, link: string) => `${sourceId}::${link}`;
@@ -92,9 +80,6 @@ function createFakeDb() {
         playbookSourceItems.set(key, row);
         return row;
       }
-    },
-    playbookSource: {
-      findMany: async ({ where }: any) => playbookSources.filter((row) => row.playbookId === where.playbookId)
     }
   };
   db.$transaction = async (callback: (tx: any) => Promise<unknown>) => callback(db);

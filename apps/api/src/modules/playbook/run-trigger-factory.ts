@@ -14,6 +14,7 @@ export function createPlaybookRunTrigger(manualRunTrigger: ManualRunTriggerLike,
       }
       const runOptions: AgentRunOptions = {
         playbookId: playbook.id,
+        sourceId: playbook.sourceId,
         agentVersionId: playbook.agentVersionId ?? undefined,
         playbookRecipients: playbook.recipients,
         playbookLanguage: playbook.language,

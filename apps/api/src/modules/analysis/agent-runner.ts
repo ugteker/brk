@@ -40,6 +40,7 @@ export interface ForcedEpisodeSelection {
 export interface AgentRunOptions {
   agentVersionId?: string;
   playbookId?: string;
+  sourceId?: string;
   playbookMaxItemsPerSource?: number;
   forcedEpisode?: ForcedEpisodeSelection;
   playbookRecipients?: string[];
@@ -58,7 +59,7 @@ export interface AgentRunnerDeps {
   cursorRepository: Pick<SourceCursorRepositoryLike, 'getCursor' | 'saveCursor' | 'touchCrawlAttempt'>;
   ingestionRepository: Pick<
     SourceIngestionRepositoryLike,
-    'listPlaybookSources' | 'listUnconsumed' | 'markConsumed' | 'getSourceItemByLink'
+    'listUnconsumed' | 'markConsumed' | 'getSourceItemByLink'
   >;
   ingestionService: {
     ensureFresh(sourceId: string, now: Date, options?: SourceFetchOptions): Promise<{ warning?: string }>;
@@ -123,8 +124,11 @@ export class AgentRunner {
     }
   }
 
+  // Playbook now owns exactly one source (Source 1-M Playbook), so this is a single lookup
+  // rather than a loop over multiple candidate sources.
   private async collectPlaybookEvidence(
     playbookId: string,
+    sourceId: string,
     forcedEpisode: ForcedEpisodeSelection | undefined,
     maxItemsPerSource: number,
     now: Date
@@ -132,49 +136,29 @@ export class AgentRunner {
     const warnings: string[] = [];
     const evidence: EvidenceBlock[] = [];
     const consumedSourceItemIds: string[] = [];
-    const playbookSources = await this.deps.ingestionRepository.listPlaybookSources(playbookId);
-    const sourcesToProcess = forcedEpisode
-      ? playbookSources.filter(
-          (source) => source.source.type === forcedEpisode.sourceType && source.source.value === forcedEpisode.sourceValue
-        )
-      : playbookSources;
 
-    if (forcedEpisode && sourcesToProcess.length === 0) {
-      return {
-        evidence: [],
-        warnings: [
-          `Could not find a playbook source matching ${forcedEpisode.sourceType}:${forcedEpisode.sourceValue} for forced item ${forcedEpisode.itemLink}.`
-        ],
-        consumedSourceItemIds: []
-      };
+    const refresh = await this.deps.ingestionService.ensureFresh(sourceId, now, {
+      forcedItemLink: forcedEpisode?.itemLink,
+      limit: maxItemsPerSource
+    });
+    if (refresh.warning) {
+      warnings.push(refresh.warning);
     }
 
-    for (const source of sourcesToProcess) {
-      const refresh = await this.deps.ingestionService.ensureFresh(source.sourceId, now, {
-        forcedItemLink: forcedEpisode?.itemLink,
-        limit: maxItemsPerSource
-      });
-      if (refresh.warning) {
-        warnings.push(refresh.warning);
+    if (forcedEpisode) {
+      const item = await this.deps.ingestionRepository.getSourceItemByLink(sourceId, forcedEpisode.itemLink);
+      if (!item) {
+        warnings.push(`Could not resolve stored source item ${forcedEpisode.itemLink} for this playbook's source.`);
+        return { evidence, warnings, consumedSourceItemIds };
       }
+      evidence.push(storedItemToEvidence(item));
+      return { evidence, warnings, consumedSourceItemIds };
+    }
 
-      if (forcedEpisode) {
-        const item = await this.deps.ingestionRepository.getSourceItemByLink(source.sourceId, forcedEpisode.itemLink);
-        if (!item) {
-          warnings.push(
-            `Could not resolve stored source item ${forcedEpisode.itemLink} for canonical source ${source.source.value}.`
-          );
-          continue;
-        }
-        evidence.push(storedItemToEvidence(item));
-        continue;
-      }
-
-      const items = await this.deps.ingestionRepository.listUnconsumed(playbookId, source.sourceId, maxItemsPerSource);
-      for (const item of items) {
-        evidence.push(storedItemToEvidence(item));
-        consumedSourceItemIds.push(item.id);
-      }
+    const items = await this.deps.ingestionRepository.listUnconsumed(playbookId, sourceId, maxItemsPerSource);
+    for (const item of items) {
+      evidence.push(storedItemToEvidence(item));
+      consumedSourceItemIds.push(item.id);
     }
 
     return { evidence, warnings, consumedSourceItemIds };
@@ -259,8 +243,16 @@ export class AgentRunner {
       let pendingCursorUpdates: SourceCursorState[] = [];
 
       if (options?.playbookId) {
+        if (!options.sourceId) {
+          return {
+            status: 'failed',
+            errorCode: 'missing_source_id',
+            errorMessage: `Run for playbook ${options.playbookId} is missing sourceId`
+          };
+        }
         const collected = await this.collectPlaybookEvidence(
           options.playbookId,
+          options.sourceId,
           options.forcedEpisode,
           options.playbookMaxItemsPerSource ?? 1,
           now
@@ -325,6 +317,7 @@ export class AgentRunner {
         : null;
       const report = await this.deps.reportRepository.saveRunReport({
         agentId,
+        sourceId: options?.sourceId,
         agentRunId,
         promptVersionId: promptVersion.id,
         characterType: agent.characterType,

@@ -4,7 +4,7 @@ import type { SourceType } from './types';
 
 type IngestionDb = Pick<
   PrismaClient,
-  'source' | 'sourceIngestionState' | 'sourceItem' | 'playbookSource' | 'playbookSourceItem' | '$transaction'
+  'source' | 'sourceIngestionState' | 'sourceItem' | 'playbookSourceItem' | '$transaction'
 >;
 
 export interface CanonicalSourceRecord {
@@ -27,12 +27,6 @@ export interface SourceItemRecord {
   createdAt: Date;
 }
 
-export interface PlaybookSourceRecord {
-  playbookId: string;
-  sourceId: string;
-  source: CanonicalSourceRecord;
-}
-
 export interface SourceIngestionStateRecord {
   cursor: Record<string, unknown>;
   refreshedAt: Date | null;
@@ -44,7 +38,6 @@ export interface SourceIngestionRepositoryLike {
   claimRefresh(sourceId: string, now: Date, leaseMs: number, freshnessMs: number): Promise<boolean>;
   completeRefresh(sourceId: string, items: CanonicalSourceItemInput[], cursor: Record<string, unknown>, now: Date): Promise<void>;
   releaseRefresh(sourceId: string): Promise<void>;
-  listPlaybookSources(playbookId: string): Promise<PlaybookSourceRecord[]>;
   listUnconsumed(playbookId: string, sourceId: string, limit: number): Promise<SourceItemRecord[]>;
   markConsumed(playbookId: string, sourceItemIds: string[], consumedAt: Date): Promise<void>;
   getSourceItemByLink(sourceId: string, link: string): Promise<SourceItemRecord | null>;
@@ -209,24 +202,6 @@ export class SourceIngestionRepository implements SourceIngestionRepositoryLike 
       where: { sourceId },
       data: { leaseUntil: null }
     });
-  }
-
-  async listPlaybookSources(playbookId: string): Promise<PlaybookSourceRecord[]> {
-    const rows = await this.db.playbookSource.findMany({
-      where: { playbookId, enabled: true },
-      orderBy: { position: 'asc' },
-      select: {
-        playbookId: true,
-        sourceId: true,
-        source: { select: { id: true, type: true, value: true } }
-      }
-    });
-
-    return rows.map((row) => ({
-      playbookId: row.playbookId,
-      sourceId: row.sourceId,
-      source: mapSource(row.source)
-    }));
   }
 
   async listUnconsumed(playbookId: string, sourceId: string, limit: number): Promise<SourceItemRecord[]> {

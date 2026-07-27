@@ -27,7 +27,6 @@ export interface PlaybookRoutesDeps {
 
 const PLAYBOOK_SHARE_PERMISSIONS = new Set(['read', 'edit', 'delete', 'execute']);
 const PLAYBOOK_MODES = new Set(['manual', 'interval', 'daily', 'weekly']);
-const EXECUTION_MODES = new Set(['latest_only', 'all_sources']);
 const FOLLOW_TARGET_TYPES = new Set(['channel', 'episode']);
 const DIGEST_FREQUENCIES = new Set(['immediate', 'daily', 'weekly']);
 
@@ -101,15 +100,12 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
     if (typeof input.agentId !== 'string' || input.agentId.trim().length === 0 || typeof input.name !== 'string' || input.name.trim().length === 0) {
       return reply.status(400).send({ code: 'validation_error', message: 'agentId and name are required' });
     }
-    if (!Array.isArray(input.sourceIds) || input.sourceIds.length === 0 || input.sourceIds.some((sourceId) => typeof sourceId !== 'string' || sourceId.trim().length === 0)) {
-      return reply.status(400).send({ code: 'validation_error', message: 'sourceIds must contain at least one source id' });
+    if (typeof input.sourceId !== 'string' || input.sourceId.trim().length === 0) {
+      return reply.status(400).send({ code: 'validation_error', message: 'sourceId is required' });
     }
     const scheduleError = validateScheduleInput(input.schedule);
     if (scheduleError) {
       return reply.status(400).send({ code: 'validation_error', message: scheduleError });
-    }
-    if (input.executionMode !== undefined && !EXECUTION_MODES.has(input.executionMode)) {
-      return reply.status(400).send({ code: 'validation_error', message: 'executionMode must be latest_only or all_sources' });
     }
     if (input.followTargetType !== undefined && !FOLLOW_TARGET_TYPES.has(input.followTargetType)) {
       return reply.status(400).send({ code: 'validation_error', message: 'followTargetType must be channel or episode' });
@@ -131,23 +127,28 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
       recipients.push(owner.email);
     }
 
-    const created = await deps.playbookRepository.createPlaybook(req.userId!, {
-      agentId: input.agentId,
-      name: input.name,
-      description: input.description,
-      enabled: input.enabled,
-      sourceIds: input.sourceIds,
-      recipients,
-      executionMode: input.executionMode,
-      maxSourcesPerRun: input.maxSourcesPerRun,
-      maxItemsPerSource: input.maxItemsPerSource,
-      followTargetType: input.followTargetType,
-      followTargetKey: input.followTargetKey,
-      followTargetTitle: input.followTargetTitle,
-      language: typeof input.language === 'string' ? input.language : (owner?.language ?? 'en'),
-      schedule
-    });
-    return reply.status(201).send(created);
+    try {
+      const created = await deps.playbookRepository.createPlaybook(req.userId!, {
+        agentId: input.agentId,
+        name: input.name,
+        description: input.description,
+        enabled: input.enabled,
+        sourceId: input.sourceId,
+        recipients,
+        maxItemsPerSource: input.maxItemsPerSource,
+        followTargetType: input.followTargetType,
+        followTargetKey: input.followTargetKey,
+        followTargetTitle: input.followTargetTitle,
+        language: typeof input.language === 'string' ? input.language : (owner?.language ?? 'en'),
+        schedule
+      });
+      return reply.status(201).send(created);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('already_exists')) {
+        return reply.status(409).send({ code: 'already_exists', message: 'This agent is already attached to this source - edit its schedule instead' });
+      }
+      throw error;
+    }
   });
 
   app.get('/api/playbooks', async (req, reply) => {
@@ -185,11 +186,6 @@ export async function registerPlaybookRoutes(app: FastifyInstance, deps: Playboo
     const access = await requirePlaybookAccess(deps, req, playbookId, 'edit');
     if (!access.ok) {
       return reply.status(access.statusCode).send({ code: access.code, message: access.message });
-    }
-    if (patch.sourceIds) {
-      if (!Array.isArray(patch.sourceIds) || patch.sourceIds.some((sourceId) => typeof sourceId !== 'string' || sourceId.trim().length === 0)) {
-        return reply.status(400).send({ code: 'validation_error', message: 'sourceIds must be an array of source ids' });
-      }
     }
     const scheduleError = validateScheduleInput(patch.schedule);
     if (scheduleError) {

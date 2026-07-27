@@ -222,7 +222,6 @@ export class AgentRepository {
       const agentPlaybooks = await tx.playbook.findMany({ where: { agentId }, select: { id: true } });
       const playbookIds = agentPlaybooks.map((p: { id: string }) => p.id);
       if (playbookIds.length > 0) {
-        await tx.playbookSource.deleteMany({ where: { playbookId: { in: playbookIds } } });
         await tx.accessGrant.deleteMany({ where: { playbookId: { in: playbookIds } } });
         await tx.marketplacePublication.deleteMany({ where: { playbookId: { in: playbookIds } } });
       }

@@ -6,6 +6,7 @@ describe('PlaybookRepository marketplace clone', () => {
     const playbookCreate = vi.fn(async ({ data }: any) => ({
       id: 'playbook-cloned',
       agentId: data.agentId,
+      sourceId: data.sourceId,
       name: data.name,
       description: data.description,
       mode: data.mode,
@@ -15,16 +16,9 @@ describe('PlaybookRepository marketplace clone', () => {
       daysOfWeekJson: data.daysOfWeekJson,
       nextRunAt: new Date('2026-07-13T09:00:00.000Z'),
       enabled: data.enabled,
-      executionMode: data.executionMode,
-      maxSourcesPerRun: data.maxSourcesPerRun,
       maxItemsPerSource: data.maxItemsPerSource,
       createdAt: new Date('2026-07-13T09:00:00.000Z'),
       updatedAt: new Date('2026-07-13T09:00:00.000Z'),
-      sources: data.sources.create.map((source: any) => ({
-        sourceId: source.sourceId,
-        enabled: source.enabled,
-        position: source.position
-      })),
       agent: { runs: [] }
     }));
 
@@ -35,6 +29,7 @@ describe('PlaybookRepository marketplace clone', () => {
           playbook: {
             id: 'playbook-original',
             agentId: 'agent-original',
+            sourceId: 'source-a',
             name: 'Morning Brief',
             description: 'desc',
             mode: 'interval',
@@ -44,13 +39,7 @@ describe('PlaybookRepository marketplace clone', () => {
             daysOfWeekJson: null,
             nextRunAt: new Date('2026-07-13T08:00:00.000Z'),
             enabled: true,
-            executionMode: 'latest_only',
-            maxSourcesPerRun: 3,
-            maxItemsPerSource: 1,
-            sources: [
-              { sourceId: 'source-a', enabled: true, position: 0 },
-              { sourceId: 'source-b', enabled: true, position: 1 }
-            ]
+            maxItemsPerSource: 1
           }
         }))
       },
@@ -79,33 +68,19 @@ describe('PlaybookRepository marketplace clone', () => {
       },
       source: {
         findFirst: vi.fn(async ({ where }: any) => (where.value === 'https://example.com/a' ? { id: 'source-existing' } : null)),
-        findUnique: vi.fn(async ({ where }: any) =>
-          where.id === 'source-a'
-            ? {
-                id: 'source-a',
-                ownerUserId: 'owner-1',
-                type: 'web_urls',
-                value: 'https://example.com/a',
-                status: 'active',
-                configJson: '{}',
-                createdAt: new Date(),
-                updatedAt: new Date()
-              }
-            : {
-                id: 'source-b',
-                ownerUserId: 'owner-1',
-                type: 'web_urls',
-                value: 'https://example.com/b',
-                status: 'active',
-                configJson: '{}',
-                createdAt: new Date(),
-                updatedAt: new Date()
-              }
-        ),
+        findUnique: vi.fn(async () => ({
+          id: 'source-a',
+          ownerUserId: 'owner-1',
+          type: 'web_urls',
+          value: 'https://example.com/a',
+          status: 'active',
+          configJson: '{}',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })),
         create: vi.fn(async () => ({ id: 'source-cloned' }))
       },
-      accessGrant: { create: vi.fn() },
-      playbookSource: { deleteMany: vi.fn(), createMany: vi.fn() },
+      accessGrant: { create: vi.fn(), deleteMany: vi.fn() },
       $transaction: vi.fn(async (callback: any) => callback(fakeDb))
     };
 
@@ -116,12 +91,7 @@ describe('PlaybookRepository marketplace clone', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           agentId: 'agent-cloned',
-          sources: {
-            create: [
-              expect.objectContaining({ sourceId: 'source-existing' }),
-              expect.objectContaining({ sourceId: 'source-cloned' })
-            ]
-          }
+          sourceId: 'source-existing'
         })
       })
     );
@@ -161,6 +131,7 @@ describe('PlaybookRepository realtime event production', () => {
     return {
       id: overrides.id ?? 'playbook-1',
       agentId: overrides.agentId ?? 'agent-1',
+      sourceId: 'source-1',
       name: 'Playbook',
       description: '',
       mode: 'interval',
@@ -173,8 +144,6 @@ describe('PlaybookRepository realtime event production', () => {
       notificationsEnabled: true,
       digestFrequency: 'immediate',
       lastDigestSentAt: null,
-      executionMode: 'latest_only',
-      maxSourcesPerRun: 3,
       maxItemsPerSource: 1,
       recipientsJson: '[]',
       followTargetType: null,
@@ -182,8 +151,7 @@ describe('PlaybookRepository realtime event production', () => {
       followTargetTitle: null,
       language: 'en',
       createdAt: new Date(),
-      updatedAt: new Date(),
-      sources: []
+      updatedAt: new Date()
     };
   }
 
@@ -191,19 +159,13 @@ describe('PlaybookRepository realtime event production', () => {
     let publication: any = null;
     const fakeDb: any = {
       playbook: {
-        create: vi.fn(async ({ data }: any) => ({ ...basePlaybookRow({ agentId: data.agentId }), sources: [], agent: { runs: [] } })),
-        update: vi.fn(async ({ where }: any) => ({ ...basePlaybookRow({ id: where.id }), sources: [], agent: { runs: [] } })),
+        create: vi.fn(async ({ data }: any) => ({ ...basePlaybookRow({ agentId: data.agentId }), agent: { runs: [] } })),
+        update: vi.fn(async ({ where }: any) => ({ ...basePlaybookRow({ id: where.id }), agent: { runs: [] } })),
         findUnique: vi.fn(async ({ where }: any) => basePlaybookRow({ id: where.id })),
         findFirst: vi.fn(async () => null),
         delete: vi.fn(async () => ({}))
       },
-      playbookSource: { deleteMany: vi.fn(async () => ({ count: 0 })), createMany: vi.fn(async () => ({ count: 0 })) },
-      accessGrant: { create: vi.fn(async () => ({})) },
-      agent: {
-        findUnique: vi.fn(async ({ where }: any) => baseAgentRow({ id: where.id })),
-        findFirst: vi.fn(async () => null),
-        create: vi.fn(async () => ({ id: 'agent-cloned' }))
-      },
+      accessGrant: { create: vi.fn(async () => ({})), deleteMany: vi.fn(async () => ({ count: 0 })) },
       marketplacePublication: {
         findFirst: vi.fn(async () => publication),
         create: vi.fn(async ({ data }: any) => {
@@ -213,7 +175,13 @@ describe('PlaybookRepository realtime event production', () => {
         update: vi.fn(async ({ data }: any) => {
           publication = { ...publication, ...data };
           return publication;
-        })
+        }),
+        deleteMany: vi.fn(async () => ({ count: 0 }))
+      },
+      agent: {
+        findUnique: vi.fn(async ({ where }: any) => baseAgentRow({ id: where.id })),
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async () => ({ id: 'agent-cloned' }))
       }
     };
     fakeDb.$transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(fakeDb));
@@ -225,7 +193,7 @@ describe('PlaybookRepository realtime event production', () => {
     const realtime = createMockRealtime();
     const repo = new PlaybookRepository(fakeDb, realtime);
 
-    const created = await repo.createPlaybook('owner-1', { agentId: 'agent-1', name: 'P', sourceIds: [] });
+    const created = await repo.createPlaybook('owner-1', { agentId: 'agent-1', name: 'P', sourceId: 'source-1' });
     await repo.updatePlaybook(created.id, { description: 'Updated' });
     await repo.sharePlaybook(created.id, 'owner-1', { granteeUserId: 'grantee-1', permission: 'read' });
     await repo.deletePlaybook(created.id);
@@ -268,10 +236,15 @@ describe('PlaybookRepository realtime event production', () => {
 
     fakeDb.marketplacePublication.findFirst = vi.fn(async () => ({
       id: 'publication-1',
-      playbook: { ...basePlaybookRow(), sources: [] }
+      playbook: basePlaybookRow()
     }));
     fakeDb.agent.findFirst = vi.fn(async () => null);
     fakeDb.agent.create = vi.fn(async () => ({ id: 'agent-cloned' }));
+    fakeDb.source = {
+      findUnique: vi.fn(async () => ({ id: 'source-1', type: 'web_urls', value: 'https://example.com', status: 'active', configJson: '{}' })),
+      findFirst: vi.fn(async () => null),
+      create: vi.fn(async () => ({ id: 'source-cloned' }))
+    };
     await repo.cloneFromMarketplace('publication-1', 'owner-2');
 
     const ownerEvents = realtime.events.filter((e) => e.userId === 'owner-1');
@@ -307,6 +280,7 @@ describe('PlaybookRepository follow target metadata', () => {
         create: vi.fn(async ({ data }: any) => ({
           id: 'playbook-1',
           agentId: data.agentId,
+          sourceId: data.sourceId,
           name: data.name,
           description: data.description,
           enabled: true,
@@ -316,8 +290,6 @@ describe('PlaybookRepository follow target metadata', () => {
           timezone: data.timezone,
           daysOfWeekJson: data.daysOfWeekJson,
           nextRunAt: new Date('2026-07-14T12:00:00.000Z'),
-          executionMode: data.executionMode,
-          maxSourcesPerRun: data.maxSourcesPerRun,
           maxItemsPerSource: data.maxItemsPerSource,
           recipientsJson: data.recipientsJson,
           followTargetType: data.followTargetType,
@@ -325,7 +297,6 @@ describe('PlaybookRepository follow target metadata', () => {
           followTargetTitle: data.followTargetTitle,
           createdAt: new Date('2026-07-14T10:00:00.000Z'),
           updatedAt: new Date('2026-07-14T10:00:00.000Z'),
-          sources: [{ sourceId: 'source-1', position: 0, enabled: true }],
           agent: { runs: [] }
         })),
         findMany: vi.fn(),
@@ -334,9 +305,8 @@ describe('PlaybookRepository follow target metadata', () => {
         delete: vi.fn(),
         findFirst: vi.fn()
       },
-      playbookSource: { deleteMany: vi.fn(), createMany: vi.fn() },
-      accessGrant: { create: vi.fn() },
-      marketplacePublication: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+      accessGrant: { create: vi.fn(), deleteMany: vi.fn() },
+      marketplacePublication: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
       agent: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
       source: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
       $transaction: vi.fn(async (callback: any) => callback(fakeDb))
@@ -346,7 +316,7 @@ describe('PlaybookRepository follow target metadata', () => {
     const created = await repository.createPlaybook('owner-1', {
       agentId: 'agent-1',
       name: 'Follow this',
-      sourceIds: ['source-1'],
+      sourceId: 'source-1',
       followTargetType: 'episode',
       followTargetKey: 'source-1:item-42',
       followTargetTitle: 'Episode 42'
@@ -377,7 +347,6 @@ describe('PlaybookRepository manual playbooks', () => {
           nextRunAt: data.nextRunAt,
           createdAt: new Date('2026-07-23T12:00:00.000Z'),
           updatedAt: new Date('2026-07-23T12:00:00.000Z'),
-          sources: data.sources.create,
           agent: { runs: [] }
         }))
       }
@@ -389,7 +358,7 @@ describe('PlaybookRepository manual playbooks', () => {
       agentId: 'agent-1',
       agentVersionId: 'version-2',
       name: 'Manual analysis',
-      sourceIds: ['source-1'],
+      sourceId: 'source-1',
       schedule: { mode: 'manual' }
     });
 

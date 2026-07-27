@@ -224,7 +224,6 @@ describe('AgentRepository', () => {
     const deletePromptVersions = vi.fn(async () => ({ count: 0 }));
     const deleteSources = vi.fn(async () => ({ count: 0 }));
     const deleteAccessGrants = vi.fn(async () => ({ count: 0 }));
-    const deletePlaybookSources = vi.fn(async () => ({ count: 0 }));
     const deleteMarketplacePublications = vi.fn(async () => ({ count: 0 }));
     const deletePlaybooks = vi.fn(async () => ({ count: 0 }));
     const deleteAgent = vi.fn(async () => ({}));
@@ -237,7 +236,6 @@ describe('AgentRepository', () => {
       agentPromptVersion: { deleteMany: deletePromptVersions },
       agentSource: { deleteMany: deleteSources },
       accessGrant: { deleteMany: deleteAccessGrants },
-      playbookSource: { deleteMany: deletePlaybookSources },
       marketplacePublication: { deleteMany: deleteMarketplacePublications },
       playbook: { findMany: findPlaybooks, deleteMany: deletePlaybooks },
       agent: { findUnique: findAgent, delete: deleteAgent }
@@ -258,7 +256,6 @@ describe('AgentRepository', () => {
     expect(deleteSources).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
     expect(deleteAccessGrants).toHaveBeenCalledWith({ where: { OR: [{ agentId: 'agent_1' }, { granteeAgentId: 'agent_1' }] } });
     expect(findPlaybooks).toHaveBeenCalledWith({ where: { agentId: 'agent_1' }, select: { id: true } });
-    expect(deletePlaybookSources).toHaveBeenCalledWith({ where: { playbookId: { in: ['playbook_1'] } } });
     expect(deleteAccessGrants).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ playbookId: { in: ['playbook_1'] } }) }));
     expect(deleteMarketplacePublications).toHaveBeenCalledWith({ where: { playbookId: { in: ['playbook_1'] } } });
     expect(deletePlaybooks).toHaveBeenCalledWith({ where: { agentId: 'agent_1' } });
@@ -374,7 +371,6 @@ describe('AgentRepository realtime event production', () => {
       agentRun: { deleteMany: vi.fn(async () => ({ count: 0 })) },
       agentPromptVersion: { deleteMany: vi.fn(async () => ({ count: 0 })) },
       agentSource: { deleteMany: vi.fn(async () => ({ count: 0 })) },
-      playbookSource: { deleteMany: vi.fn(async () => ({ count: 0 })) },
       playbook: { findMany: vi.fn(async () => []), deleteMany: vi.fn(async () => ({ count: 0 })) }
     };
     fakeDb.$transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(fakeDb));
