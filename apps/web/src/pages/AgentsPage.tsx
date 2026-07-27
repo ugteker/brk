@@ -102,6 +102,7 @@ import {
   createSource,
   deleteSource,
   listSourceReports,
+  listSourceRuns,
   probeSource,
   publishSource,
   shareSource,
@@ -285,7 +286,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [wizardAlreadyLinkedPlaybooks, setWizardAlreadyLinkedPlaybooks] = useState<{ agentId: string; playbookId: string }[]>([]);
   // The agent whose playbook settings are shown in the schedule step (edit mode via ✎ button)
   const [wizardFocusedAgentId, setWizardFocusedAgentId] = useState<string | null>(null);
-  const [playbookSourceIdsDraft, setPlaybookSourceIdsDraft] = useState<string[]>([]);
+  const [playbookSourceIdDraft, setPlaybookSourceIdDraft] = useState<string | null>(null);
   const [playbookScheduleModeDraft, setPlaybookScheduleModeDraft] = useState<'manual' | 'interval' | 'daily' | 'weekly'>('daily');
   const [playbookIntervalMinutesDraft, setPlaybookIntervalMinutesDraft] = useState(60);
   const [playbookDailyTimeDraft, setPlaybookDailyTimeDraft] = useState('07:30');
@@ -702,7 +703,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reports]);
 
-  // Load reports + runs for the selected source (merged from all agents analyzing it)
+  // Load reports + runs for the selected source (merged from all agents analyzing it), both via
+  // the source-scoped endpoints - only reports/runs whose generating run actually crawled this
+  // source, never another source an agent's playbook happens to also link to.
   useEffect(() => {
     if (!selectedSourceId) {
       setSourceDetailReports([]);
@@ -710,21 +713,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       return;
     }
     let alive = true;
-    const linked = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
+    const linked = playbooks.filter((p) => p.sourceId === selectedSourceId);
     if (linked.length === 0) {
       setSourceDetailReports([]);
       setSourceDetailRuns([]);
       return;
     }
     setSourceDetailLoading(true);
-    // Reports come from the source-scoped endpoint (only reports whose run actually crawled
-    // this source); runs are still per-agent since they have no source-level endpoint.
-    const runPromises = linked.map((pb) => listAgentRuns(pb.agentId));
-    Promise.all([listSourceReports<RunReportDto>(selectedSourceId), ...runPromises])
-      .then((results) => {
+    Promise.all([listSourceReports<RunReportDto>(selectedSourceId), listSourceRuns<RunDetailDto>(selectedSourceId)])
+      .then(([allReports, allRuns]) => {
         if (!alive) return;
-        const allReports = results[0] as RunReportDto[];
-        const allRuns = (results.slice(1) as RunDetailDto[][]).flat();
         allReports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         allRuns.sort((a, b) => new Date(b.scheduledFor).getTime() - new Date(a.scheduledFor).getTime());
         setSourceDetailReports(allReports);
@@ -905,7 +903,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setPlaybookAgentIdsDraft([]);
     setWizardAlreadyLinkedAgentIds([]);
     setWizardAlreadyLinkedPlaybooks([]);
-    setPlaybookSourceIdsDraft(sources[0] ? [sources[0].id] : []);
+    setPlaybookSourceIdDraft(sources[0]?.id ?? null);
     setPlaybookScheduleModeDraft('daily');
     setPlaybookIntervalMinutesDraft(60);
     setPlaybookDailyTimeDraft('07:30');
@@ -927,7 +925,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setEditingPlaybookId(null);
     setWizardFocusedAgentId(null);
     setPlaybookCreateStep(1);
-    setPlaybookSourceIdsDraft([source.id]);
+    setPlaybookSourceIdDraft(source.id);
     setPlaybookScheduleModeDraft('daily');
     setPlaybookIntervalMinutesDraft(60);
     setPlaybookDailyTimeDraft('07:30');
@@ -936,7 +934,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setPlaybookRecipientsDraft(user?.email ? [user.email] : []);
     // Pre-select agents that already watch this source; track their playbook IDs for the
     // save diff (delete removed, create added, skip unchanged).
-    const linkedPbs = playbooks.filter((p) => p.sourceIds.includes(source.id));
+    const linkedPbs = playbooks.filter((p) => p.sourceId === source.id);
     const alreadyLinkedAgentIds = linkedPbs.map((p) => p.agentId);
     setWizardAlreadyLinkedAgentIds(alreadyLinkedAgentIds);
     setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
@@ -956,7 +954,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   async function handleAgentSelectionConnected(playbook: PlaybookRecord) {
     await Promise.all([refreshAgents(), refreshPlaybooks(), refreshSources()]);
-    const sourceId = playbook.sourceIds[0];
+    const sourceId = playbook.sourceId;
     if (sourceId) {
       markSourceUpdated(sourceId);
       if (connectedAgentHighlightTimerRef.current) {
@@ -1004,7 +1002,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     if (!playbook) return;
 
     await Promise.all([refreshAgents(), refreshPlaybooks(), refreshSources()]);
-    const sourceId = playbook.sourceIds[0];
+    const sourceId = playbook.sourceId;
     if (!sourceId) return;
 
     if (agentAssignmentOrigin === 'library') {
@@ -1015,14 +1013,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
   }
 
-  async function onRemoveAgentFromSource(playbook: PlaybookRecord, sourceId: string) {
+  async function onRemoveAgentFromSource(playbook: PlaybookRecord) {
     try {
-      const remainingSourceIds = playbook.sourceIds.filter((id) => id !== sourceId);
-      if (remainingSourceIds.length === 0) {
-        await deletePlaybook(playbook.id);
-      } else {
-        await updatePlaybook(playbook.id, { sourceIds: remainingSourceIds });
-      }
+      await deletePlaybook(playbook.id);
       await refreshPlaybooks();
       message.success(t('library.agentRemovedFromSource'));
     } catch (error) {
@@ -1142,17 +1135,16 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
   }
 
-  function derivePlaybookName(agentId: string, sourceIds: string[]): string {
+  function derivePlaybookName(agentId: string, sourceId: string): string {
     const selectedAgent = agents.find((agent) => agent.id === agentId);
     const agentName = selectedAgent ? getAgentDisplayLabel(selectedAgent) : 'Agent';
-    const primarySourceId = sourceIds[0];
-    const primarySource = sources.find((source) => source.id === primarySourceId);
+    const primarySource = sources.find((source) => source.id === sourceId);
     const sourceTitle = primarySource?.metadata.title ?? primarySource?.value ?? 'Source';
     return `${agentName} · ${sourceTitle}`;
   }
 
   function onNextPlaybookCreateStep() {
-    if (playbookCreateStep === 0 && playbookSourceIdsDraft.length === 0) {
+    if (playbookCreateStep === 0 && !playbookSourceIdDraft) {
       message.warning('Pick a source first');
       return;
     }
@@ -1175,22 +1167,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     updatedHighlightTimerRef.current = setTimeout(() => setRecentlyUpdatedSourceId(null), 4000);
   }
 
-  // Deselecting an agent in the source-linking wizard means "stop running this agent on these
-  // sources" - NOT "delete whatever else this agent's playbook is configured for". A sibling
-  // playbook picked up by the wizard's "already linked" match may cover other sources too, so
-  // only drop the sources this wizard session is actually managing, and delete the playbook
-  // outright only once that leaves it with none.
-  async function unlinkPlaybookFromSources(playbookId: string, sourceIdsToUnlink: string[]) {
-    const pb = playbooks.find((p) => p.id === playbookId);
-    if (!pb) return;
-    const remainingSourceIds = pb.sourceIds.filter((id) => !sourceIdsToUnlink.includes(id));
-    if (remainingSourceIds.length === 0) {
-      await deletePlaybook(playbookId);
-    } else {
-      await updatePlaybook(playbookId, { sourceIds: remainingSourceIds });
-    }
-  }
-
   async function onCreatePlaybook() {
     // In follow mode, deselecting all agents is valid — it means "remove all" (diff will delete them).
     // Only block empty selection in admin-hub create mode where you must pick at least one agent.
@@ -1199,10 +1175,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       message.warning(t('playbook.pickAgentFirst'));
       return;
     }
-    if (playbookSourceIdsDraft.length === 0) {
+    if (!playbookSourceIdDraft) {
       message.warning(t('playbook.pickSourceFirst'));
       return;
     }
+    const sourceId = playbookSourceIdDraft;
     setIsPlaybookSaving(true);
     try {
       const lang = i18n.language.startsWith('de') ? 'de' : 'en';
@@ -1225,15 +1202,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       if (editingPlaybookId) {
         // Admin-hub edit mode: update the explicit playbook + diff agent selection
         const agentId = wizardFocusedAgentId ?? playbookAgentIdsDraft[0] ?? '';
-        await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(agentId, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule: explicitSchedule });
+        await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(agentId, sourceId), recipients: cleanedRecipients, schedule: explicitSchedule });
         // Diff: additions and removals relative to the originally linked set
         const toCreate = playbookAgentIdsDraft.filter((id) => !wizardAlreadyLinkedAgentIds.includes(id));
         const toDelete = wizardAlreadyLinkedAgentIds.filter((id) => !playbookAgentIdsDraft.includes(id) && id !== agentId);
         await Promise.all([
-          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: cleanedRecipients, schedule: explicitSchedule, executionMode: 'latest_only', language: lang })),
+          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, sourceId), sourceId, recipients: cleanedRecipients, schedule: explicitSchedule, language: lang })),
           ...toDelete.map((id) => {
             const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
-            return pb ? unlinkPlaybookFromSources(pb.playbookId, playbookSourceIdsDraft) : Promise.resolve();
+            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
           })
         ]);
       } else {
@@ -1241,15 +1218,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         const toCreate = playbookAgentIdsDraft.filter((id) => !wizardAlreadyLinkedAgentIds.includes(id));
         const toDelete = wizardAlreadyLinkedAgentIds.filter((id) => !playbookAgentIdsDraft.includes(id));
         await Promise.all([
-          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, playbookSourceIdsDraft), sourceIds: playbookSourceIdsDraft, recipients: recipientsForNew, schedule: scheduleForNew, executionMode: 'latest_only', language: lang })),
+          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, sourceId), sourceId, recipients: recipientsForNew, schedule: scheduleForNew, language: lang })),
           ...toDelete.map((id) => {
             const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
-            return pb ? unlinkPlaybookFromSources(pb.playbookId, playbookSourceIdsDraft) : Promise.resolve();
+            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
           })
         ]);
       }
       await refreshPlaybooks();
-      if (playbookSourceIdsDraft[0]) markSourceUpdated(playbookSourceIdsDraft[0]);
+      markSourceUpdated(sourceId);
       message.success(t('playbook.updatePlaybook'));
       setIsPlaybookCreateOpen(false);
       setPlaybookCreateStep(0);
@@ -1405,14 +1382,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     setEditingPlaybookId(playbook.id);
     setWizardFocusedAgentId(playbook.agentId);
     setPlaybookCreateStep(1);
-    setPlaybookSourceIdsDraft(playbook.sourceIds);
+    setPlaybookSourceIdDraft(playbook.sourceId);
     applyScheduleDraft(playbook.schedule);
     setPlaybookRecipientsDraft(playbook.recipients);
     // Pre-fill detail level from existing agent if available
     const existingAgent = agents.find((a) => a.id === playbook.agentId);
     setInlineAgentReportDetailLevel((existingAgent?.promptConfig as { report_detail_level?: 'brief' | 'standard' | 'detailed' } | undefined)?.report_detail_level ?? 'standard');
     // Pre-select ALL linked agents for this source; track their playbook IDs for the save diff
-    const linkedPbs = playbooks.filter((p) => p.sourceIds.some((sid) => playbook.sourceIds.includes(sid)));
+    const linkedPbs = playbooks.filter((p) => p.sourceId === playbook.sourceId);
     const alreadyLinkedAgentIds = linkedPbs.map((p) => p.agentId);
     setWizardAlreadyLinkedAgentIds(alreadyLinkedAgentIds);
     setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
@@ -1538,11 +1515,9 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         characterLabel: agent ? getAgentCharacterLabel(agent) : undefined,
         personalityLabel: agent ? getAgentPersonalityLabel(agent) : undefined
       };
-      for (const sourceId of playbook.sourceIds) {
-        const current = result[sourceId] ?? [];
-        if (!current.some((candidate) => candidate.agentId === linkedAgent.agentId)) {
-          result[sourceId] = [...current, linkedAgent];
-        }
+      const current = result[playbook.sourceId] ?? [];
+      if (!current.some((candidate) => candidate.agentId === linkedAgent.agentId)) {
+        result[playbook.sourceId] = [...current, linkedAgent];
       }
       return result;
     },
@@ -1558,7 +1533,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   });
   const filteredPlaybooks = playbooks.filter((playbook) => {
     if (!normalizedPlaybooksSearch) return true;
-    return `${playbook.name} ${playbook.description} ${playbook.sourceIds.join(' ')}`.toLowerCase().includes(normalizedPlaybooksSearch);
+    return `${playbook.name} ${playbook.description} ${playbook.sourceId}`.toLowerCase().includes(normalizedPlaybooksSearch);
   });
   const filteredMarketplaceSources = marketplaceSources.filter((item) => {
     if (!normalizedSourceSearch) return true;
@@ -1911,14 +1886,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       const currentSetup = guidedWizardSetupRef.current;
       if (!currentSetup.playbookId) {
         const matchingPlaybook = (await listPlaybooks()).find(
-          (playbook) => playbook.agentId === agent.id && playbook.sourceIds.includes(source.id)
+          (playbook) => playbook.agentId === agent.id && playbook.sourceId === source.id
         );
         const playbook =
           matchingPlaybook ??
           (await createPlaybook({
             name: `${getSourceDisplayTitle(source)} — ${agent.name}`,
             agentId: agent.id,
-            sourceIds: [source.id],
+            sourceId: source.id,
             recipients: user?.email ? [user.email] : [],
             schedule: { mode: 'daily', dailyTime: '08:00', timezone: 'UTC' },
             language: 'en'
@@ -2012,7 +1987,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   async function onRunSourceEpisode(episode?: { title: string; link: string; pubDate?: string | null }) {
     if (!selectedSourceId) return;
-    const linked = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
+    const linked = playbooks.filter((p) => p.sourceId === selectedSourceId);
     if (linked.length === 0) return;
 
     // When multiple agents watch this source, ask the user which one to run
@@ -2424,7 +2399,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                    ) : null}
                    {sourcesLoadState !== 'loading' && selectedSourceId ? (() => {
                      const selectedSource = sources.find((s) => s.id === selectedSourceId);
-                     const linkedPlaybooks = playbooks.filter((p) => p.sourceIds.includes(selectedSourceId));
+                     const linkedPlaybooks = playbooks.filter((p) => p.sourceId === selectedSourceId);
                      return selectedSource ? (
                        <Card
                          className="min-w-0"
@@ -2992,10 +2967,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                          setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports');
                        }}
                        onAddAgent={(source) => onFollowSource(source)}
-                       onRemoveAgent={(playbookId, sourceId) => {
+                       onRemoveAgent={(playbookId) => {
                          const playbook = playbooks.find((candidate) => candidate.id === playbookId);
                          if (playbook) {
-                           return onRemoveAgentFromSource(playbook, sourceId);
+                           return onRemoveAgentFromSource(playbook);
                          }
                        }}
                        linkedAgentsBySourceId={linkedAgentsBySourceId}
@@ -3542,7 +3517,10 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                         }
                       >
                         <p className="mb-3 text-xs text-gray-600">
-                          Sources: {selectedPlaybook.sourceIds.length} · Last run:{' '}
+                          Source: {(() => {
+                            const src = sources.find((s) => s.id === selectedPlaybook.sourceId);
+                            return src ? getSourceDisplayTitle(src) : selectedPlaybook.sourceId;
+                          })()} · Last run:{' '}
                           {selectedPlaybook.lastRunAt ? new Date(selectedPlaybook.lastRunAt).toLocaleString() : 'Never'} · Next run:{' '}
                           {new Date(selectedPlaybook.nextRunAt).toLocaleString()}
                         </p>
@@ -3690,7 +3668,6 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                 ) : (
                                   <Tag color="default">{t('playbook.paused')}</Tag>
                                 )}
-                                <Tag>Sources: {playbook.sourceIds.length}</Tag>
                                 <Tag>Recipients: {playbook.recipients.length}</Tag>
                                 <Tag icon={<ClockCircleOutlined />}>Schedule: {formatPlaybookSchedule(playbook.schedule)}</Tag>
                               </div>
@@ -3824,7 +3801,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       <Modal
         title={(() => {
           if (followWizardSourcePreselected) {
-            const src = sources.find((s) => s.id === playbookSourceIdsDraft[0]);
+            const src = sources.find((s) => s.id === playbookSourceIdDraft);
             const srcTitle = src ? getSourceDisplayTitle(src) : null;
             return editingPlaybookId
               ? t('listen.dialogTitleEdit', { title: srcTitle ?? t('listen.thisSource') })
@@ -3842,7 +3819,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       >
         {followWizardSourcePreselected && !showInlineAgentCreate ? (
           inlineAgentCurating ? (() => {
-            const inlineCurationSource = sources.find((s) => s.id === playbookSourceIdsDraft[0]);
+            const inlineCurationSource = sources.find((s) => s.id === playbookSourceIdDraft);
             return (
               <AgentCurator
                 mode="create"
@@ -3859,7 +3836,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
             );
           })() : (
             <AgentSelectionView
-              source={sources.find((s) => s.id === playbookSourceIdsDraft[0]) ?? null}
+              source={sources.find((s) => s.id === playbookSourceIdDraft) ?? null}
               ownedAgents={agents.filter((agent) => agent.ownerUserId === user?.id)}
               onAgentConnected={handleAgentSelectionConnected}
               onCurate={openInlineAgentCuration}
@@ -3915,14 +3892,14 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
           {playbookCreateStep === 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {sources.map((source) => {
-                const selected = playbookSourceIdsDraft[0] === source.id;
+                const selected = playbookSourceIdDraft === source.id;
 
                 return (
                   <WizardSelectableCard
                     key={source.id}
                     ariaLabel={`Select source ${getSourceDisplayTitle(source)}`}
                     selected={selected}
-                    onClick={() => setPlaybookSourceIdsDraft([source.id])}
+                    onClick={() => setPlaybookSourceIdDraft(source.id)}
                   >
                     <div className="grid grid-cols-[56px_1fr] gap-3">
                       {getSourceCoverImageUrl(source) ? (
@@ -4084,7 +4061,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
               </div>
               ) : null}
               {inlineAgentCurating ? (() => {
-                const inlineCurationSource = sources.find((s) => s.id === playbookSourceIdsDraft[0]);
+                const inlineCurationSource = sources.find((s) => s.id === playbookSourceIdDraft);
                 return (
                   <AgentCurator
                     mode="create"

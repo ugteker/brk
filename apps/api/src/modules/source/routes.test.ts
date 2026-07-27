@@ -321,9 +321,10 @@ describe('source routes', () => {
 
   it('adds source-scoped report counts to the library list', async () => {
     const sourceRepo = new InMemorySourceRepository();
-    const countReportsForSourceValues = vi.fn(async () => ({
-      'https://example.com/feed-a.xml': 2
-    }));
+    const countsBox: { sourceAId?: string } = {};
+    const countReportsForSourceValues = vi.fn(async (ids: string[]) =>
+      Object.fromEntries(ids.map((id) => [id, id === countsBox.sourceAId ? 2 : 0]))
+    );
     const app = await buildServer({
       agentRepository: createFakeAgentRepo(),
       agents: createFakePromptDeps(),
@@ -342,6 +343,7 @@ describe('source routes', () => {
       payload: { type: 'podcast_feeds', value: 'https://example.com/feed-a.xml' }
     });
     const sourceA = createA.json<SourceRecord>();
+    countsBox.sourceAId = sourceA.id;
     const createB = await app.inject({
       method: 'POST',
       url: '/api/sources',
@@ -357,7 +359,7 @@ describe('source routes', () => {
       expect.objectContaining({ id: sourceA.id, reportCount: 2 }),
       expect.objectContaining({ id: sourceB.id, reportCount: 0 })
     ]));
-    expect(countReportsForSourceValues).toHaveBeenCalledWith([sourceA.value, sourceB.value]);
+    expect(countReportsForSourceValues).toHaveBeenCalledWith([sourceA.id, sourceB.id]);
   });
 
   it('defaults every source report count to zero when no reportRepository is configured', async () => {
@@ -384,8 +386,9 @@ describe('source routes', () => {
 
   it('lists only reports whose runs actually reference the source (source-scoped, not agent-scoped)', async () => {
     const sourceRepo = new InMemorySourceRepository();
-    const listReportsForSource = vi.fn(async (sourceValue: string) =>
-      sourceValue === 'https://example.com/feed.xml'
+    const sourceIdBox: { id?: string } = {};
+    const listReportsForSource = vi.fn(async (sourceId: string) =>
+      sourceId === sourceIdBox.id
         ? [{ id: 'report-1', agentId: 'agent-1', summary: 'about this source' }]
         : []
     );
@@ -407,6 +410,7 @@ describe('source routes', () => {
       payload: { type: 'podcast_feeds', value: 'https://example.com/feed.xml' }
     });
     const source = createRes.json<SourceRecord>();
+    sourceIdBox.id = source.id;
 
     const res = await app.inject({
       method: 'GET',
@@ -415,7 +419,7 @@ describe('source routes', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(listReportsForSource).toHaveBeenCalledWith('https://example.com/feed.xml');
+    expect(listReportsForSource).toHaveBeenCalledWith(source.id);
     const body = res.json<Array<{ id: string }>>();
     expect(body).toHaveLength(1);
     expect(body[0]?.id).toBe('report-1');

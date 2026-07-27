@@ -8,164 +8,170 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String?
-  googleId     String?  @unique
-  displayName  String?
-  role                        String   @default("user")
-  emailVerified               Boolean   @default(false)
-  emailVerificationToken      String?   @unique
-  emailVerificationExpiresAt  DateTime?
-  locked                      Boolean   @default(false)
-  passwordResetToken          String?   @unique
-  passwordResetExpiresAt      DateTime?
+  id                         String    @id @default(cuid())
+  email                      String    @unique
+  passwordHash               String?
+  googleId                   String?   @unique
+  displayName                String?
+  role                       String    @default("user")
+  emailVerified              Boolean   @default(false)
+  emailVerificationToken     String?   @unique
+  emailVerificationExpiresAt DateTime?
+  locked                     Boolean   @default(false)
+  passwordResetToken         String?   @unique
+  passwordResetExpiresAt     DateTime?
   // Monthly Claude-spend budget in USD - null means unlimited. When month-to-date estimated cost
   // across the user's agents reaches this, new runs fail fast with budget_exceeded.
-  monthlyBudgetUsd            Float?
+  monthlyBudgetUsd           Float?
   // The user's current app language ("en"/"de"), kept in sync with the frontend's i18n
   // selection. New playbooks default to this, and agent reports/notifications are written in
   // it - see UserRepository.updateLanguage, which cascades a change to all owned playbooks.
-  language                    String    @default("en")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  language                   String    @default("en")
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 }
 
 model Agent {
-  id              String      @id @default(cuid())
-  ownerUserId     String
-  name            String
-  description     String      @default("")
-  characterType   String      @default("summarizer")
-  promptConfigJson String     @default("{}")
-  status          String      @default("active")
-  preferencesJson String      @default("{}")
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  sources     AgentSource[]
-  runs        AgentRun[]
-  promptVersions AgentPromptVersion[]
-  runReports  AgentRunReport[]
-  sourceCursors AgentSourceCursor[]
-  sourceCrawlConfigs AgentSourceCrawlConfig[]
-  playbooks   Playbook[]
-  accessGrants AccessGrant[] @relation("AccessGrantGranteeAgent")
-  resourceAccessGrants AccessGrant[] @relation("AccessGrantResourceAgent")
+  id                      String                   @id @default(cuid())
+  ownerUserId             String
+  name                    String
+  description             String                   @default("")
+  characterType           String                   @default("summarizer")
+  promptConfigJson        String                   @default("{}")
+  status                  String                   @default("active")
+  preferencesJson         String                   @default("{}")
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  sources                 AgentSource[]
+  runs                    AgentRun[]
+  promptVersions          AgentPromptVersion[]
+  runReports              AgentRunReport[]
+  sourceCursors           AgentSourceCursor[]
+  sourceCrawlConfigs      AgentSourceCrawlConfig[]
+  playbooks               Playbook[]
+  accessGrants            AccessGrant[]            @relation("AccessGrantGranteeAgent")
+  resourceAccessGrants    AccessGrant[]            @relation("AccessGrantResourceAgent")
   marketplacePublications MarketplacePublication[]
 }
 
 model AgentSource {
-  id      String  @id @default(cuid())
-  agentId   String
-  type    String
-  value   String
-  enabled Boolean @default(true)
-  frequencyMinutes Int @default(60)
-  maxItems Int @default(1)
-  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  id               String  @id @default(cuid())
+  agentId          String
+  type             String
+  value            String
+  enabled          Boolean @default(true)
+  frequencyMinutes Int     @default(60)
+  maxItems         Int     @default(1)
+  agent            Agent   @relation(fields: [agentId], references: [id], onDelete: Restrict)
 }
 
 model AgentRun {
-  id           String   @id @default(cuid())
+  id             String              @id @default(cuid())
   agentId        String
-  playbookId   String?
+  sourceId       String?
+  playbookId     String?
   agentVersionId String?
-  scheduledFor DateTime
-  status       String
-  phase        String?
-  workerId     String?
-  retryCount   Int      @default(0)
-  errorCode    String?
-  errorMessage String?
-  startedAt    DateTime?
-  finishedAt   DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  agent          Agent      @relation(fields: [agentId], references: [id], onDelete: Restrict)
-  playbook       Playbook?  @relation(fields: [playbookId], references: [id], onDelete: Restrict)
+  scheduledFor   DateTime
+  status         String
+  phase          String?
+  workerId       String?
+  retryCount     Int                 @default(0)
+  errorCode      String?
+  errorMessage   String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  agent          Agent               @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  source         Source?             @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  // SetNull (not Restrict): deleting a playbook must never be blocked by its run history -
+  // history stays attached to sourceId/agentId even after the playbook (schedule) is gone.
+  playbook       Playbook?           @relation(fields: [playbookId], references: [id], onDelete: SetNull)
   agentVersion   AgentPromptVersion? @relation(fields: [agentVersionId], references: [id], onDelete: Restrict)
-  artifacts    AgentRunArtifact[]
-  report       AgentRunReport?
+  artifacts      AgentRunArtifact[]
+  report         AgentRunReport?
 
   @@unique([agentId, scheduledFor])
 }
 
 model AgentPromptVersion {
-  id           String   @id @default(cuid())
-  agentId        String
-  version      Int
-  model        String
-  systemPrompt String
-  name         String   @default("")
-  description  String   @default("")
-  characterType String  @default("summarizer")
-  promptConfigJson String @default("{}")
-  iconAssetKey String?
+  id                    String                   @id @default(cuid())
+  agentId               String
+  version               Int
+  model                 String
+  systemPrompt          String
+  name                  String                   @default("")
+  description           String                   @default("")
+  characterType         String                   @default("summarizer")
+  promptConfigJson      String                   @default("{}")
+  iconAssetKey          String?
   basedOnAgentVersionId String?
-  enabled      Boolean  @default(true)
-  curationSessionId String? @unique
-  publishedAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  agent          Agent      @relation(fields: [agentId], references: [id], onDelete: Restrict)
-  basedOnAgentVersion AgentPromptVersion? @relation("AgentVersionDerivation", fields: [basedOnAgentVersionId], references: [id], onDelete: Restrict)
-  derivedVersions AgentPromptVersion[] @relation("AgentVersionDerivation")
-  basedCurationSessions AgentCurationSession[] @relation("CurationBaseVersion")
-  reports      AgentRunReport[]
-  runs         AgentRun[]
-  playbooks    Playbook[]
-  libraryMemberships UserLibraryAgent[]
-  catalogPublications MarketplacePublication[]
+  enabled               Boolean                  @default(true)
+  curationSessionId     String?                  @unique
+  publishedAt           DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  agent                 Agent                    @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  basedOnAgentVersion   AgentPromptVersion?      @relation("AgentVersionDerivation", fields: [basedOnAgentVersionId], references: [id], onDelete: Restrict)
+  derivedVersions       AgentPromptVersion[]     @relation("AgentVersionDerivation")
+  basedCurationSessions AgentCurationSession[]   @relation("CurationBaseVersion")
+  reports               AgentRunReport[]
+  runs                  AgentRun[]
+  playbooks             Playbook[]
+  libraryMemberships    UserLibraryAgent[]
+  catalogPublications   MarketplacePublication[]
 
   @@unique([agentId, version])
 }
 
 model AgentRunArtifact {
   id          String   @id @default(cuid())
-  agentId       String
-  agentRunId    String
+  agentId     String
+  agentRunId  String
   kind        String
   sourceRef   String
   payloadJson String
   fidelity    String
   createdAt   DateTime @default(now())
-  agentRun      AgentRun   @relation(fields: [agentRunId], references: [id], onDelete: Restrict)
+  agentRun    AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Restrict)
 }
 
 model AgentRunReport {
-  id                 String   @id @default(cuid())
-  agentId              String
-  agentRunId           String   @unique
-  promptVersionId    String
-  summary            String
-  reportJson         String?
-  sourceWarningsJson String
-  needsHumanReview   Boolean
-  model              String?
+  id                  String             @id @default(cuid())
+  agentId             String
+  sourceId            String?
+  agentRunId          String             @unique
+  promptVersionId     String
+  summary             String
+  reportJson          String?
+  sourceWarningsJson  String
+  needsHumanReview    Boolean
+  model               String?
   promptVersionNumber Int?
-  inputTokens        Int?
-  outputTokens       Int?
-  estimatedCostUsd   Float?
-  readAt             DateTime?
-  dismissedAt        DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  agent                Agent              @relation(fields: [agentId], references: [id], onDelete: Restrict)
-  agentRun             AgentRun           @relation(fields: [agentRunId], references: [id], onDelete: Restrict)
-  promptVersion      AgentPromptVersion @relation(fields: [promptVersionId], references: [id], onDelete: Restrict)
-  signals            AgentSignal[]
+  inputTokens         Int?
+  outputTokens        Int?
+  estimatedCostUsd    Float?
+  readAt              DateTime?
+  dismissedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  agent               Agent              @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  source              Source?            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  agentRun            AgentRun           @relation(fields: [agentRunId], references: [id], onDelete: Restrict)
+  promptVersion       AgentPromptVersion @relation(fields: [promptVersionId], references: [id], onDelete: Restrict)
+  signals             AgentSignal[]
 }
 
 model AgentSignal {
-  id            String   @id @default(cuid())
+  id               String         @id @default(cuid())
   agentRunReportId String
-  symbol        String
-  side          String
-  confidence    Int
-  rationale     String
-  citationsJson String
-  createdAt     DateTime @default(now())
-  report        AgentRunReport @relation(fields: [agentRunReportId], references: [id], onDelete: Restrict)
+  symbol           String
+  side             String
+  confidence       Int
+  rationale        String
+  citationsJson    String
+  createdAt        DateTime       @default(now())
+  report           AgentRunReport @relation(fields: [agentRunReportId], references: [id], onDelete: Restrict)
 }
 
 model ReportChatMessage {
@@ -221,58 +227,60 @@ model AgentSourceCrawlConfig {
 }
 
 model Source {
-  id         String   @id @default(cuid())
-  ownerUserId String
-  type       String
-  value      String
-  status     String   @default("active")
-  configJson String   @default("{}")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  playbooks  PlaybookSource[]
-  accessGrants AccessGrant[]
+  id                      String                   @id @default(cuid())
+  ownerUserId             String
+  type                    String
+  value                   String
+  status                  String                   @default("active")
+  configJson              String                   @default("{}")
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  playbooks               Playbook[]
+  runs                    AgentRun[]
+  runReports              AgentRunReport[]
+  accessGrants            AccessGrant[]
   marketplacePublications MarketplacePublication[]
-  items      SourceItem[]
-  ingestionState SourceIngestionState?
-  libraryMemberships UserLibrarySource[]
+  items                   SourceItem[]
+  ingestionState          SourceIngestionState?
+  libraryMemberships      UserLibrarySource[]
 
   @@unique([ownerUserId, type, value])
 }
 
 model Playbook {
-  id                String   @id @default(cuid())
-  agentId           String
-  agentVersionId    String?
-  name              String
-  description       String   @default("")
-  mode              String   @default("interval")
-  intervalMinutes   Int?
-  dailyTime         String?
-  timezone          String?
-  daysOfWeekJson    String?
-  nextRunAt         DateTime?
-  enabled           Boolean  @default(true)
-  notificationsEnabled Boolean @default(true)
-  digestFrequency   String   @default("immediate")
-  lastDigestSentAt  DateTime?
-  executionMode     String   @default("latest_only")
-  maxSourcesPerRun  Int      @default(3)
-  maxItemsPerSource Int      @default(1)
-  recipientsJson    String   @default("[]")
-  followTargetType  String?
-  followTargetKey   String?
-  followTargetTitle String?
-  language          String   @default("en")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Restrict)
-  agentVersion      AgentPromptVersion? @relation(fields: [agentVersionId], references: [id], onDelete: Restrict)
-  sources           PlaybookSource[]
-  consumedSourceItems PlaybookSourceItem[]
-  runs              AgentRun[]
-  accessGrants      AccessGrant[]
+  id                      String                   @id @default(cuid())
+  agentId                 String
+  sourceId                String
+  agentVersionId          String?
+  name                    String
+  description             String                   @default("")
+  mode                    String                   @default("interval")
+  intervalMinutes         Int?
+  dailyTime               String?
+  timezone                String?
+  daysOfWeekJson          String?
+  nextRunAt               DateTime?
+  enabled                 Boolean                  @default(true)
+  notificationsEnabled    Boolean                  @default(true)
+  digestFrequency         String                   @default("immediate")
+  lastDigestSentAt        DateTime?
+  maxItemsPerSource       Int                      @default(1)
+  recipientsJson          String                   @default("[]")
+  followTargetType        String?
+  followTargetKey         String?
+  followTargetTitle       String?
+  language                String                   @default("en")
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  agent                   Agent                    @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  source                  Source                   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  agentVersion            AgentPromptVersion?      @relation(fields: [agentVersionId], references: [id], onDelete: Restrict)
+  consumedSourceItems     PlaybookSourceItem[]
+  runs                    AgentRun[]
+  accessGrants            AccessGrant[]
   marketplacePublications MarketplacePublication[]
 
+  @@unique([agentId, sourceId])
   @@index([agentId, enabled])
 }
 
@@ -299,38 +307,24 @@ model UserLibraryAgent {
   @@index([userId, savedAt])
 }
 
-model PlaybookSource {
-  id         String   @id @default(cuid())
-  playbookId String
-  sourceId   String
-  enabled    Boolean  @default(true)
-  position   Int      @default(0)
-  createdAt  DateTime @default(now())
-  playbook   Playbook @relation(fields: [playbookId], references: [id], onDelete: Restrict)
-  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-
-  @@unique([playbookId, sourceId])
-  @@index([sourceId, enabled])
-}
-
 model AccessGrant {
-  id            String    @id @default(cuid())
+  id              String    @id @default(cuid())
   grantedByUserId String
-  granteeUserId String?
-  granteeAgentId String?
-  resourceType  String
-  resourceId    String
-  permission    String
-  agentId       String?
-  sourceId      String?
-  playbookId    String?
-  expiresAt     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  granteeAgent  Agent?    @relation("AccessGrantGranteeAgent", fields: [granteeAgentId], references: [id], onDelete: Restrict)
-  agent         Agent?    @relation("AccessGrantResourceAgent", fields: [agentId], references: [id], onDelete: Restrict)
-  source        Source?   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  playbook      Playbook? @relation(fields: [playbookId], references: [id], onDelete: Restrict)
+  granteeUserId   String?
+  granteeAgentId  String?
+  resourceType    String
+  resourceId      String
+  permission      String
+  agentId         String?
+  sourceId        String?
+  playbookId      String?
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  granteeAgent    Agent?    @relation("AccessGrantGranteeAgent", fields: [granteeAgentId], references: [id], onDelete: Restrict)
+  agent           Agent?    @relation("AccessGrantResourceAgent", fields: [agentId], references: [id], onDelete: Restrict)
+  source          Source?   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  playbook        Playbook? @relation(fields: [playbookId], references: [id], onDelete: Restrict)
 
   @@index([resourceType, resourceId])
   @@index([granteeUserId, resourceType, resourceId])
@@ -338,40 +332,40 @@ model AccessGrant {
 }
 
 model MarketplacePublication {
-  id             String    @id @default(cuid())
-  publisherUserId String
-  resourceType   String
-  resourceId     String
-  title          String
-  summary        String    @default("")
-  visibility     String    @default("private")
-  status         String    @default("draft")
-  publishedAt    DateTime?
-  retiredAt      DateTime?
-  slug           String?
-  catalogVersion Int       @default(1)
-  origin         String    @default("community")
-  locale         String    @default("en")
-  sourceTypesJson String   @default("[]")
-  topicsJson     String    @default("[]")
-  iconAssetKey   String?
-  editorialRank  Int       @default(0)
-  agentId        String?
-  agentVersionId String?
-  sourceId       String?
-  playbookId     String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  agent          Agent?    @relation(fields: [agentId], references: [id], onDelete: Restrict)
-  agentVersion   AgentPromptVersion? @relation(fields: [agentVersionId], references: [id], onDelete: Restrict)
-  source         Source?   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  playbook       Playbook? @relation(fields: [playbookId], references: [id], onDelete: Restrict)
-  sourceCatalogDemos CatalogDemo[] @relation("CatalogDemoSource")
-  agentCatalogDemos  CatalogDemo[] @relation("CatalogDemoAgent")
+  id                 String              @id @default(cuid())
+  publisherUserId    String
+  resourceType       String
+  resourceId         String
+  title              String
+  summary            String              @default("")
+  visibility         String              @default("private")
+  status             String              @default("draft")
+  publishedAt        DateTime?
+  retiredAt          DateTime?
+  slug               String?
+  catalogVersion     Int                 @default(1)
+  origin             String              @default("community")
+  locale             String              @default("en")
+  sourceTypesJson    String              @default("[]")
+  topicsJson         String              @default("[]")
+  iconAssetKey       String?
+  editorialRank      Int                 @default(0)
+  agentId            String?
+  agentVersionId     String?
+  sourceId           String?
+  playbookId         String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  agent              Agent?              @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  agentVersion       AgentPromptVersion? @relation(fields: [agentVersionId], references: [id], onDelete: Restrict)
+  source             Source?             @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  playbook           Playbook?           @relation(fields: [playbookId], references: [id], onDelete: Restrict)
+  sourceCatalogDemos CatalogDemo[]       @relation("CatalogDemoSource")
+  agentCatalogDemos  CatalogDemo[]       @relation("CatalogDemoAgent")
 
+  @@unique([origin, resourceType, slug, catalogVersion, locale])
   @@index([resourceType, resourceId])
   @@index([publisherUserId, status, visibility])
-  @@unique([origin, resourceType, slug, catalogVersion, locale])
 }
 
 model CatalogDemo {
@@ -393,29 +387,29 @@ model CatalogDemo {
 }
 
 model SourceItem {
-  id          String   @id @default(cuid())
-  sourceId    String
-  title       String
-  content     String
-  link        String
-  publishedAt DateTime
-  contentHash String   @default("")
-  metadataJson String   @default("{}")
-  createdAt   DateTime @default(now())
-  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  id                  String               @id @default(cuid())
+  sourceId            String
+  title               String
+  content             String
+  link                String
+  publishedAt         DateTime
+  contentHash         String               @default("")
+  metadataJson        String               @default("{}")
+  createdAt           DateTime             @default(now())
+  source              Source               @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   playbookSourceItems PlaybookSourceItem[]
 
   @@unique([sourceId, link])
 }
 
 model SourceIngestionState {
-  id            String   @id @default(cuid())
-  sourceId      String   @unique
-  cursorJson    String   @default("{}")
+  id            String    @id @default(cuid())
+  sourceId      String    @unique
+  cursorJson    String    @default("{}")
   lastAttemptAt DateTime?
   refreshedAt   DateTime?
   leaseUntil    DateTime?
-  source        Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  source        Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 }
 
 model PlaybookSourceItem {
@@ -430,91 +424,91 @@ model PlaybookSourceItem {
 }
 
 model Discussion {
-  id                String   @id @default(cuid())
+  id                String                  @id @default(cuid())
   ownerUserId       String
   name              String
-  description       String   @default("")
-  format            String   @default("free_form")
-  formatConfigJson  String   @default("{}")
+  description       String                  @default("")
+  format            String                  @default("free_form")
+  formatConfigJson  String                  @default("{}")
   scheduleJson      String?
   syntheticSourceId String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
   participants      DiscussionParticipant[]
   runs              DiscussionRun[]
 }
 
 model DiscussionParticipant {
-  id             String   @id @default(cuid())
-  discussionId   String
-  agentId        String
-  role           String   @default("speaker")
-  voiceId        String   @default("alloy")
-  speakerOrder   Int      @default(0)
-  reportIdsJson  String   @default("[]")
-  discussion     Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
-  turns          DiscussionTurn[]
+  id            String           @id @default(cuid())
+  discussionId  String
+  agentId       String
+  role          String           @default("speaker")
+  voiceId       String           @default("alloy")
+  speakerOrder  Int              @default(0)
+  reportIdsJson String           @default("[]")
+  discussion    Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  turns         DiscussionTurn[]
 }
 
 model DiscussionRun {
-  id                    String    @id @default(cuid())
+  id                    String           @id @default(cuid())
   discussionId          String
-  status                String    @default("pending")
-  triggeredBy           String    @default("manual")
+  status                String           @default("pending")
+  triggeredBy           String           @default("manual")
   errorMessage          String?
   startedAt             DateTime?
   completedAt           DateTime?
   syntheticSourceItemId String?
   audioUrl              String?
   evidenceSnapshotJson  String?
-  createdAt             DateTime  @default(now())
+  createdAt             DateTime         @default(now())
   discussion            Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
   turns                 DiscussionTurn[]
 }
 
 model DiscussionTurn {
-  id               String   @id @default(cuid())
-  discussionRunId  String
-  participantId    String
-  turnIndex        Int
-  segmentLabel     String?
-  content          String
-  audioUrl         String?
-  createdAt        DateTime @default(now())
-  run              DiscussionRun         @relation(fields: [discussionRunId], references: [id], onDelete: Cascade)
-  participant      DiscussionParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  id              String                @id @default(cuid())
+  discussionRunId String
+  participantId   String
+  turnIndex       Int
+  segmentLabel    String?
+  content         String
+  audioUrl        String?
+  createdAt       DateTime              @default(now())
+  run             DiscussionRun         @relation(fields: [discussionRunId], references: [id], onDelete: Cascade)
+  participant     DiscussionParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
 }
 
 model AgentCurationSession {
-  id                String                  @id @default(cuid())
-  ownerUserId       String
-  targetAgentId     String?
-  baseAgentVersionId String?
-  mode              String
-  status            String                  @default("active")
-  revision          Int                     @default(0)
+  id                  String                 @id @default(cuid())
+  ownerUserId         String
+  targetAgentId       String?
+  baseAgentVersionId  String?
+  mode                String
+  status              String                 @default("active")
+  revision            Int                    @default(0)
   finalizationAgentId String?
-  sourceContextJson String                  @default("{}")
-  draftJson         String
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
-  baseAgentVersion  AgentPromptVersion?     @relation("CurationBaseVersion", fields: [baseAgentVersionId], references: [id], onDelete: Restrict)
-  messages          AgentCurationMessage[]
+  sourceContextJson   String                 @default("{}")
+  draftJson           String
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  baseAgentVersion    AgentPromptVersion?    @relation("CurationBaseVersion", fields: [baseAgentVersionId], references: [id], onDelete: Restrict)
+  messages            AgentCurationMessage[]
 
   @@index([ownerUserId, status])
 }
 
 model AgentCurationMessage {
-  id        String                @id @default(cuid())
-  sessionId String
-  role      String
-  content   String
+  id              String               @id @default(cuid())
+  sessionId       String
+  role            String
+  content         String
   clientRequestId String?
-  replyJson String?
-  replyClaimedAt DateTime?
-  position  Int
-  createdAt DateTime              @default(now())
-  session   AgentCurationSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  replyJson       String?
+  replyClaimedAt  DateTime?
+  position        Int
+  createdAt       DateTime             @default(now())
+  session         AgentCurationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, position])
   @@unique([sessionId, clientRequestId])

@@ -4,7 +4,6 @@ export type PlaybookScheduleInput =
   | { mode: 'daily'; dailyTime: string; timezone: string }
   | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string };
 
-export type PlaybookExecutionMode = 'latest_only' | 'all_sources';
 // 'immediate' keeps the classic one-email-per-run behavior; 'daily'/'weekly' suppress per-run
 // emails and instead send a single rollup digest covering every report produced in the period.
 export type DigestFrequency = 'immediate' | 'daily' | 'weekly';
@@ -19,10 +18,8 @@ export interface CreatePlaybookInput {
   description?: string;
   enabled?: boolean;
   schedule?: PlaybookScheduleInput;
-  sourceIds: string[];
+  sourceId: string;
   recipients?: string[];
-  executionMode?: PlaybookExecutionMode;
-  maxSourcesPerRun?: number;
   maxItemsPerSource?: number;
   followTargetType?: FollowTargetType;
   followTargetKey?: string;
@@ -37,10 +34,7 @@ export interface UpdatePlaybookInput {
   notificationsEnabled?: boolean;
   digestFrequency?: DigestFrequency;
   schedule?: PlaybookScheduleInput;
-  sourceIds?: string[];
   recipients?: string[];
-  executionMode?: PlaybookExecutionMode;
-  maxSourcesPerRun?: number;
   maxItemsPerSource?: number;
   followTargetType?: FollowTargetType | null;
   followTargetKey?: string | null;
@@ -59,10 +53,8 @@ export interface Playbook {
   digestFrequency: DigestFrequency;
   lastDigestSentAt: Date | null;
   schedule: PlaybookScheduleInput;
-  sourceIds: string[];
+  sourceId: string;
   recipients: string[];
-  executionMode: PlaybookExecutionMode;
-  maxSourcesPerRun: number;
   maxItemsPerSource: number;
   followTargetType?: FollowTargetType | null;
   followTargetKey?: string | null;

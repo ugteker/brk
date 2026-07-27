@@ -4,7 +4,6 @@ export type PlaybookSchedule =
   | { mode: 'daily'; dailyTime: string; timezone: string }
   | { mode: 'weekly'; daysOfWeek: number[]; dailyTime: string; timezone: string };
 
-export type PlaybookExecutionMode = 'latest_only' | 'all_sources';
 export type PlaybookSharePermission = 'read' | 'edit' | 'delete' | 'execute';
 export type PublicationVisibility = 'public' | 'private';
 export type FollowTargetType = 'channel' | 'episode';
@@ -20,10 +19,8 @@ export interface PlaybookRecord {
   notificationsEnabled: boolean;
   digestFrequency: DigestFrequency;
   schedule: PlaybookSchedule;
-  sourceIds: string[];
+  sourceId: string;
   recipients: string[];
-  executionMode: PlaybookExecutionMode;
-  maxSourcesPerRun: number;
   maxItemsPerSource: number;
   followTargetType?: FollowTargetType | null;
   followTargetKey?: string | null;
@@ -40,10 +37,8 @@ export interface CreatePlaybookPayload {
   description?: string;
   enabled?: boolean;
   schedule?: PlaybookSchedule;
-  sourceIds: string[];
+  sourceId: string;
   recipients?: string[];
-  executionMode?: PlaybookExecutionMode;
-  maxSourcesPerRun?: number;
   maxItemsPerSource?: number;
   followTargetType?: FollowTargetType;
   followTargetKey?: string;
@@ -58,10 +53,7 @@ export interface UpdatePlaybookPayload {
   notificationsEnabled?: boolean;
   digestFrequency?: DigestFrequency;
   schedule?: PlaybookSchedule;
-  sourceIds?: string[];
   recipients?: string[];
-  executionMode?: PlaybookExecutionMode;
-  maxSourcesPerRun?: number;
   maxItemsPerSource?: number;
   followTargetType?: FollowTargetType | null;
   followTargetKey?: string | null;

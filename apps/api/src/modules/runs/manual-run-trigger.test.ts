@@ -23,14 +23,16 @@ describe('ManualRunTrigger', () => {
 
     await trigger.triggerRun('agent-1', {
       agentVersionId: 'version-2',
-      playbookId: 'playbook-1'
+      playbookId: 'playbook-1',
+      sourceId: 'source-1'
     });
 
     expect(queue.enqueueImmediateRun).toHaveBeenCalledWith(
       'agent-1',
       expect.any(Date),
       'playbook-1',
-      'version-2'
+      'version-2',
+      'source-1'
     );
     expect(runner.run).toHaveBeenCalledWith(
       'agent-1',

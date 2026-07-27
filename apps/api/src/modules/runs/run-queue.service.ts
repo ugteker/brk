@@ -11,6 +11,7 @@ export interface AgentScheduleRecord {
   nextRunAt: Date;
   enabled: boolean;
   playbookId?: string;
+  sourceId?: string;
 }
 
 export interface AgentRunRecord {
@@ -29,6 +30,7 @@ export interface AgentRunRecord {
   // Set when the run was triggered by a Playbook schedule, carrying the notification
   // context (recipients/language/notifications flag) so the worker can pass them to the agent runner.
   playbookId?: string;
+  sourceId?: string;
   playbookRecipients?: string[];
   playbookLanguage?: string;
   playbookNotificationsEnabled?: boolean;
@@ -38,7 +40,7 @@ export interface AgentRunRecord {
 
 export interface RunStore {
   getDueSchedules(now: Date): Promise<AgentScheduleRecord[]>;
-  upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string, agentVersionId?: string): Promise<void>;
+  upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string, agentVersionId?: string, sourceId?: string): Promise<void>;
   claimNextQueuedRun(workerId: string): Promise<AgentRunRecord | null>;
   setPhase(runId: string, phase: RunPhase): Promise<void>;
   completeRun(
@@ -63,7 +65,7 @@ export class InMemoryRunStore implements RunStore {
     return this.schedules.filter((s) => s.enabled && s.nextRunAt.getTime() <= now.getTime());
   }
 
-  async upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string, agentVersionId?: string): Promise<void> {
+  async upsertQueuedRun(agentId: string, scheduledFor: Date, playbookId?: string, agentVersionId?: string, sourceId?: string): Promise<void> {
     const exists = this.runs.some(
       (r) => r.agentId === agentId && r.scheduledFor.getTime() === scheduledFor.getTime()
     );
@@ -78,7 +80,8 @@ export class InMemoryRunStore implements RunStore {
       status: 'queued',
       phase: null,
       retryCount: 0,
-      playbookId
+      playbookId,
+      sourceId
     });
   }
 
@@ -126,7 +129,7 @@ export class RunQueueService {
   async enqueueDueRuns(now: Date): Promise<number> {
     const due = await this.store.getDueSchedules(now);
     for (const schedule of due) {
-      await this.store.upsertQueuedRun(schedule.agentId, schedule.nextRunAt, schedule.playbookId, schedule.agentVersionId);
+      await this.store.upsertQueuedRun(schedule.agentId, schedule.nextRunAt, schedule.playbookId, schedule.agentVersionId, schedule.sourceId);
     }
     return due.length;
   }
@@ -135,9 +138,10 @@ export class RunQueueService {
     agentId: string,
     now: Date = new Date(),
     playbookId?: string,
-    agentVersionId?: string
+    agentVersionId?: string,
+    sourceId?: string
   ): Promise<void> {
-    await this.store.upsertQueuedRun(agentId, now, playbookId, agentVersionId);
+    await this.store.upsertQueuedRun(agentId, now, playbookId, agentVersionId, sourceId);
   }
 
   async claimNextRun(workerId: string): Promise<AgentRunRecord | null> {

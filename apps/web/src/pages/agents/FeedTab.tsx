@@ -61,7 +61,7 @@ export function FeedTab({
         const normalizedFeedSearch = feedSearch.trim().toLowerCase();
         const searchFilteredReports = !normalizedFeedSearch ? feedReports : feedReports.filter((report) => {
           const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
-          const source = playbook?.sourceIds.length ? sources.find((candidate) => candidate.id === playbook.sourceIds[0]) : undefined;
+          const source = playbook ? sources.find((candidate) => candidate.id === playbook.sourceId) : undefined;
           const reportAgent = agents.find((agent) => agent.id === report.agentId);
           const sourceTitle = source ? getSourceDisplayTitle(source) : report.playbookName;
           const characterLabel = reportAgent ? getAgentCharacterLabel(reportAgent) : report.agentName;
@@ -99,7 +99,7 @@ export function FeedTab({
                     </div>
                     {group.reports.map((report) => {
                       const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
-                      const source = playbook?.sourceIds.length ? sources.find((candidate) => candidate.id === playbook.sourceIds[0]) : undefined;
+                      const source = playbook ? sources.find((candidate) => candidate.id === playbook.sourceId) : undefined;
                       const reportAgent = agents.find((agent) => agent.id === report.agentId);
                       return (
                         <FeedCard

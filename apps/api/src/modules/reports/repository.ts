@@ -15,6 +15,7 @@ type SignalRow = { symbol: string; side: string; confidence: number; rationale: 
 type ReportRow = {
   id: string;
   agentId: string;
+  sourceId: string | null;
   agentRunId: string;
   promptVersionId: string;
   summary: string;
@@ -55,6 +56,7 @@ export class ReportRepository {
       const created = await tx.agentRunReport.create({
         data: {
           agentId: input.agentId,
+          sourceId: input.sourceId ?? null,
           agentRunId: input.agentRunId,
           promptVersionId: input.promptVersionId,
           summary: input.summary,
@@ -133,20 +135,14 @@ export class ReportRepository {
   }
 
   /**
-   * Lists reports whose generating run actually crawled the given source, across all agents.
-   * Attribution goes through the run's saved evidence artifacts: every adapter serializes its
-   * EvidenceBlock (which carries `sourceId = source.value`) into `payloadJson`, so a substring
-   * match on that JSON key/value pair scopes reports to the concrete source - unlike the
-   * agent-scoped listing, which would surface an agent's unrelated reports on every source
-   * its playbook merely links to.
+   * Lists reports scoped to the given source via the real `AgentRunReport.sourceId` FK, across
+   * all agents - prevents an agent's unrelated reports from leaking onto every source its
+   * playbook happens to link to (Source is 1-M Playbook, and Playbook/Run/Report all carry a
+   * direct sourceId now).
    */
-  async listReportsForSource(sourceValue: string): Promise<RunReportRecord[]> {
+  async listReportsForSource(sourceId: string): Promise<RunReportRecord[]> {
     const rows = await this.db.agentRunReport.findMany({
-      where: {
-        agentRun: {
-          artifacts: { some: { payloadJson: { contains: `"sourceId":${JSON.stringify(sourceValue)}` } } }
-        }
-      },
+      where: { sourceId },
       orderBy: { createdAt: 'desc' },
       include: { signals: true, agent: { select: { characterType: true } }, agentRun: { select: { playbookId: true } } }
     });
@@ -156,47 +152,20 @@ export class ReportRepository {
 
   /**
    * Batched counterpart to `listReportsForSource`, used to annotate the Library list with a
-   * per-source report count without an N+1 query per card. A broad `contains: '"sourceId":'`
-   * pre-filter narrows the candidate rows at the DB level; each candidate's artifacts are then
-   * parsed in memory to extract the exact `sourceId` value (JSON-unescaped, not just a raw
-   * substring match) so counting stays correct even if one value is a substring of another.
-   * A report with multiple artifacts referencing the same source value still counts once for
-   * that value - the count is "reports referencing this source", not "artifacts referencing it".
+   * per-source report count without an N+1 query per card.
    */
-  async countReportsForSourceValues(sourceValues: string[]): Promise<Record<string, number>> {
-    const counts = Object.fromEntries(sourceValues.map((value) => [value, 0]));
-    if (sourceValues.length === 0) return counts;
+  async countReportsForSourceValues(sourceIds: string[]): Promise<Record<string, number>> {
+    const counts = Object.fromEntries(sourceIds.map((id) => [id, 0]));
+    if (sourceIds.length === 0) return counts;
 
-    const rows = await this.db.agentRunReport.findMany({
-      where: {
-        agentRun: {
-          artifacts: { some: { payloadJson: { contains: '"sourceId":' } } }
-        }
-      },
-      select: {
-        id: true,
-        agentRun: {
-          select: {
-            artifacts: { select: { payloadJson: true } }
-          }
-        }
-      }
+    const grouped = await this.db.agentRunReport.groupBy({
+      by: ['sourceId'],
+      where: { sourceId: { in: sourceIds } },
+      _count: { _all: true }
     });
 
-    const requested = new Set(sourceValues);
-    for (const report of rows) {
-      const reportSourceValues = new Set<string>();
-      for (const artifact of report.agentRun.artifacts) {
-        const match = artifact.payloadJson.match(/"sourceId"\s*:\s*"((?:\\.|[^"])*)"/);
-        if (!match) continue;
-        try {
-          const value = JSON.parse(`"${match[1]}"`) as unknown;
-          if (typeof value === 'string' && requested.has(value)) reportSourceValues.add(value);
-        } catch {
-          // Malformed legacy artifact JSON cannot identify a source and is ignored.
-        }
-      }
-      for (const value of reportSourceValues) counts[value] += 1;
+    for (const group of grouped) {
+      if (group.sourceId) counts[group.sourceId] = group._count._all;
     }
     return counts;
   }
@@ -266,6 +235,7 @@ export class ReportRepository {
     return {
       id: row.id,
       agentId: row.agentId,
+      sourceId: row.sourceId ?? null,
       agentRunId: row.agentRunId,
       playbookId: row.agentRun?.playbookId ?? null,
       promptVersionId: row.promptVersionId,

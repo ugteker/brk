@@ -16,10 +16,8 @@ describe('createPlaybookRunTrigger', () => {
       digestFrequency: 'immediate',
       lastDigestSentAt: null,
       schedule: { mode: 'manual' },
-      sourceIds: [],
+      sourceId: 'source-1',
       recipients: ['a@b.com'],
-      executionMode: 'latest_only',
-      maxSourcesPerRun: 1,
       maxItemsPerSource: 1,
       language: 'en',
       lastRunAt: null,
@@ -43,6 +41,7 @@ describe('createPlaybookRunTrigger', () => {
     expect(playbookRepository.getPlaybook).toHaveBeenCalledWith('playbook-1');
     expect(manualRunTrigger.triggerRun).toHaveBeenCalledWith('agent-1', expect.objectContaining({
       playbookId: 'playbook-1',
+      sourceId: 'source-1',
       agentVersionId: 'version-2',
       playbookRecipients: ['a@b.com'],
       playbookLanguage: 'en',

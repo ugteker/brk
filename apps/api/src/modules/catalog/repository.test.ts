@@ -607,6 +607,7 @@ describe('CatalogRepository', () => {
     const playbookCreate = vi.fn(async ({ data }: any) => ({
       id: 'playbook-1',
       agentId: data.agentId,
+      sourceId: data.sourceId,
       agentVersionId: data.agentVersionId,
       name: data.name,
       description: data.description,
@@ -621,8 +622,6 @@ describe('CatalogRepository', () => {
       daysOfWeekJson: data.daysOfWeekJson ?? null,
       nextRunAt: data.nextRunAt ?? null,
       recipientsJson: data.recipientsJson ?? '[]',
-      executionMode: data.executionMode,
-      maxSourcesPerRun: data.maxSourcesPerRun,
       maxItemsPerSource: data.maxItemsPerSource,
       followTargetType: data.followTargetType ?? null,
       followTargetKey: data.followTargetKey ?? null,
@@ -630,7 +629,6 @@ describe('CatalogRepository', () => {
       language: data.language,
       createdAt: savedAt,
       updatedAt: savedAt,
-      sources: [{ sourceId: 'source-1' }],
       agent: { runs: [] }
     }));
     const db: any = {
@@ -725,6 +723,7 @@ describe('CatalogRepository', () => {
         create: vi.fn(async () => ({
           id: 'playbook-1',
           agentId: 'agent-1',
+          sourceId: 'source-1',
           agentVersionId: 'version-3',
           name: 'Market analyst v3',
           description: '',
@@ -739,8 +738,6 @@ describe('CatalogRepository', () => {
           daysOfWeekJson: null,
           nextRunAt: null,
           recipientsJson: '["owner@example.com"]',
-          executionMode: 'latest_only',
-          maxSourcesPerRun: 3,
           maxItemsPerSource: 1,
           followTargetType: null,
           followTargetKey: null,
@@ -748,7 +745,6 @@ describe('CatalogRepository', () => {
           language: 'en',
           createdAt: new Date('2026-07-24T09:05:00.000Z'),
           updatedAt: new Date('2026-07-24T09:05:00.000Z'),
-          sources: [{ sourceId: 'source-1' }],
           agent: { runs: [] }
         }))
       },
