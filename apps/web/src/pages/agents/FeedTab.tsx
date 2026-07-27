@@ -25,7 +25,9 @@ export function FeedTab({
   onOpenFullReport,
   onOpenSource,
   onDiscuss,
-  onDismiss
+  onDismiss,
+  onResendEmail,
+  resendingReportId
 }: {
   t: (key: string, opts?: Record<string, unknown>) => string;
   language: string;
@@ -41,6 +43,8 @@ export function FeedTab({
   onOpenSource: (source: SourceRecord) => void;
   onDiscuss: (report: FeedReport) => void;
   onDismiss: (report: FeedReport) => void;
+  onResendEmail?: (report: FeedReport) => void;
+  resendingReportId?: string | null;
 }) {
   return (
     <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}><FileTextOutlined /> {t('nav.feed')}</Title>}>
@@ -114,6 +118,8 @@ export function FeedTab({
                           onOpenSource={source ? () => onOpenSource(source) : undefined}
                           onDiscuss={() => onDiscuss(report)}
                           onDismiss={() => onDismiss(report)}
+                          onResendEmail={onResendEmail ? () => onResendEmail(report) : undefined}
+                          isResendingEmail={resendingReportId === report.id}
                         />
                       );
                     })}

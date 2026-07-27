@@ -75,7 +75,7 @@ import {
   type ForcedEpisodeSelection,
   type RunDetailDto
 } from '../api/agents';
-import { dismissReport, getLatestAgentPrompt, listAgentReports, markReportRead, type PromptVersionDto, type RunReportDto } from '../api/agents';
+import { dismissReport, getLatestAgentPrompt, listAgentReports, markReportRead, resendReportNotification, type PromptVersionDto, type RunReportDto } from '../api/agents';
 import { grantAgentAccess, listAgentAccessGrants } from '../api/access';
 import { getDiscussionRun, type DiscussionPreselect } from '../api/discussions';
 import { getCharacterTypeColor, getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
@@ -189,6 +189,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [togglingPlaybookId, setTogglingPlaybookId] = useState<string | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
   const [runningAgentId, setRunningAgentId] = useState<string | null>(null);
+  const [resendingReportId, setResendingReportId] = useState<string | null>(null);
   const [episodePickerAgent, setEpisodePickerAgent] = useState<AgentSummary | null>(null);
   const [episodeOptions, setEpisodeOptions] = useState<EpisodeOptionDto[]>([]);
   const [loadingEpisodeOptions, setLoadingEpisodeOptions] = useState(false);
@@ -1323,6 +1324,26 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     dismissReport(report.agentId, report.id).catch(() => undefined);
   }
 
+  /** Re-sends the email notification for an already-analysed report to its owning playbook's
+   * recipients. Used by the Feed cards and the Episodes tab, which - unlike AgentReportsBrowser -
+   * aren't scoped to a single playbook, so the recipients are looked up per-report here. */
+  async function onResendReportEmail(report: Pick<RunReportDto, 'id' | 'agentId' | 'playbookId'>) {
+    const recipients = report.playbookId ? (playbooks.find((p) => p.id === report.playbookId)?.recipients ?? []) : [];
+    if (recipients.length === 0) {
+      message.warning(t('library.resendNoRecipients'));
+      return;
+    }
+    setResendingReportId(report.id);
+    try {
+      const result = await resendReportNotification(report.agentId, report.id, recipients);
+      message.success(t('library.resendSuccess', { count: result.recipientCount }));
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t('library.resendFailed'));
+    } finally {
+      setResendingReportId(null);
+    }
+  }
+
   async function onEditSource(source: SourceRecord) {
     setEditingSource(source);
     setSourceUrlDraft(source.value);
@@ -2159,6 +2180,8 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                     onOpenSource={openSourceInLibrary}
                     onDiscuss={openDiscussionFromReport}
                     onDismiss={dismissFeedReport}
+                    onResendEmail={(report) => void onResendReportEmail(report)}
+                    resendingReportId={resendingReportId}
                   />
                 )
               },
@@ -2736,6 +2759,18 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                                          aria-label={t('library.openReport')}
                                                          icon={<ReadOutlined />}
                                                          onClick={() => openReportDrawer(episodeReport)}
+                                                       />
+                                                     </TouchSafeTooltip>
+                                                   ) : null}
+                                                   {episodeReport ? (
+                                                     <TouchSafeTooltip title={t('library.resendEmail')}>
+                                                       <Button
+                                                         size="small"
+                                                         shape="circle"
+                                                         aria-label={t('library.resendEmail')}
+                                                         icon={<MailOutlined />}
+                                                         loading={resendingReportId === episodeReport.id}
+                                                         onClick={() => void onResendReportEmail(episodeReport)}
                                                        />
                                                      </TouchSafeTooltip>
                                                    ) : null}
@@ -3538,6 +3573,7 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                                   reports={selectedPlaybookReports}
                                   highlightedReportId={highlightedReportId}
                                   onSelectSymbol={setViewingSymbol}
+                                  recipients={selectedPlaybook.recipients}
                                 />
                               )
                             },
