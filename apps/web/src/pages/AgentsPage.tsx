@@ -116,267 +116,43 @@ import { InlineDeleteButton } from '../components/InlineDeleteButton';
 import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID, type PersonaId } from '../data/prompt-personas';
 import { getAgentDisplayLabel } from '../utils/agent-label';
 import { extractYoutubeVideoId, getYoutubeCoverImageFallback, getYoutubeThumbnailUrl } from '../utils/youtube';
+import {
+  type HubKey,
+  type ProbeKind,
+  type AgentEditor,
+  type LibraryTabRecord,
+  type AutoDetectedSource,
+  WEEKDAY_LABELS,
+  TIMEZONE_OPTIONS,
+  DEFAULT_LIBRARY_TAB_ID,
+  DEFAULT_LIBRARY_TAB_NAME,
+  LIBRARY_GUIDANCE_KEY
+} from './agents/types';
+import {
+  BrainIcon,
+  YouTubeLogo,
+  SourceTypeBadge,
+  EpisodeArtwork,
+  WizardSelectableCard,
+  detectSourceTypeCandidates,
+  probeRankScore,
+  formatPlaybookSchedule,
+  PersonaIcon,
+  getCharacterIcon,
+  humanizeCharacterType,
+  getAgentCharacterLabel,
+  getAgentPersonalityLabel,
+  PERSONA_ICON_MAP,
+  PERSONA_ICON_BG_MAP,
+  getAgentCardDisplay,
+  hasEpisodicSource,
+  getSourceDisplayTitle,
+  getSourceCoverImageUrl,
+  getReportEpisodeThumbnailUrl
+} from './agents/helpers';
+import { FeedTab } from './agents/FeedTab';
 
 const { Title, Text, Paragraph } = Typography;
-
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const TIMEZONE_OPTIONS = [
-  { value: 'UTC', label: 'UTC' },
-  { value: 'Europe/Berlin', label: 'Europe/Berlin' },
-  { value: 'Europe/London', label: 'Europe/London' },
-  { value: 'America/New_York', label: 'America/New_York' },
-  { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
-  { value: 'Asia/Tokyo', label: 'Asia/Tokyo' }
-];
-type HubKey = 'feed' | 'sources' | 'agents' | 'playbooks';
-type ProbeKind = 'feed' | 'listing_page' | 'single_page' | 'unknown';
-type AgentEditor =
-  | { mode: 'manual-create' }
-  | { mode: 'manual-edit'; detail: AgentDetail; prompt: PromptVersionDto | null }
-  | { mode: 'curation-create' }
-  | { mode: 'curation-update'; detail: AgentDetail; prompt: PromptVersionDto | null }
-  | null;
-interface LibraryTabRecord {
-  id: string;
-  name: string;
-}
-
-const BrainIcon = ({ style, className }: { style?: CSSProperties; className?: string }) => (
-  <span role="img" aria-label="brain" className={`anticon${className ? ` ${className}` : ''}`} style={{ fontSize: '1em', lineHeight: 1, ...style }}>
-    🧠
-  </span>
-);
-
-const YouTubeLogo = () => (
-  <span className="inline-flex items-center gap-1" style={{ verticalAlign: 'middle' }}>
-    <svg viewBox="0 0 18 15" width="18" height="15" aria-hidden="true">
-      <path d="M17.6 3.2A2.3 2.3 0 0 0 15.9 1.5C14.5 1 9 1 9 1S3.5 1 2.1 1.5A2.3 2.3 0 0 0 .4 3.2C0 4.6 0 7.5 0 7.5s0 2.9.4 4.3c.2.9.9 1.5 1.7 1.7C3.5 14 9 14 9 14s5.5 0 6.9-.5c.9-.2 1.5-.8 1.7-1.7C18 10.4 18 7.5 18 7.5s0-2.9-.4-4.3z" fill="#FF0000"/>
-      <path d="M7 10.5V4.5l5.5 3-5.5 3z" fill="white"/>
-    </svg>
-    <span style={{ fontWeight: 700, fontSize: '0.8em', letterSpacing: '-0.2px', lineHeight: 1 }} aria-label="YouTube">YouTube</span>
-  </span>
-);
-
-function SourceTypeBadge({ type }: { type: string }) {
-  if (type === 'youtube_videos') return <YouTubeLogo />;
-  if (type === 'podcast_feeds') return (
-    <Tag icon={<AudioOutlined />} color="purple" className="m-0">Podcast</Tag>
-  );
-  if (type === 'synthetic_discussion') return (
-    <Tag icon={<AudioOutlined />} color="geekblue" className="m-0">Discussion</Tag>
-  );
-  return <Tag icon={<GlobalOutlined />} className="m-0">Web</Tag>;
-}
-
-const DEFAULT_LIBRARY_TAB_ID = 'library-default';
-const DEFAULT_LIBRARY_TAB_NAME = 'My Collection';
-const LIBRARY_GUIDANCE_KEY = 'brk:library:add-source-guidance-seen';
-
-interface AutoDetectedSource {
-  type: SourceType;
-  url: string;
-  kind: ProbeKind;
-  title?: string;
-  coverImageUrl?: string;
-  itemCount?: number;
-  previewItems: Array<{ title: string; link: string | null; pubDate: string | null; imageUrl?: string | null }>;
-}
-
-function EpisodeArtwork({
-  episodeImageUrl,
-  coverImageUrl,
-  sourceType
-}: {
-  episodeImageUrl?: string | null;
-  coverImageUrl?: string | null;
-  sourceType: SourceRecord['type'];
-}) {
-  const candidates = useMemo(
-    () => Array.from(new Set([episodeImageUrl, coverImageUrl].filter((url): url is string => Boolean(url)))),
-    [coverImageUrl, episodeImageUrl]
-  );
-  const [candidateIndex, setCandidateIndex] = useState(0);
-
-  useEffect(() => {
-    setCandidateIndex(0);
-  }, [candidates.join('|')]);
-
-  const imageUrl = candidates[candidateIndex];
-  if (imageUrl) {
-    return (
-      <img
-        src={imageUrl}
-        alt=""
-        className="h-12 w-[72px] shrink-0 rounded object-cover bg-muted sm:h-11 sm:w-16"
-        onError={() => setCandidateIndex((index) => index + 1)}
-      />
-    );
-  }
-
-  return (
-    <div className="flex h-12 w-[72px] shrink-0 items-center justify-center rounded bg-muted text-sm sm:h-11 sm:w-16">
-      {sourceType === 'youtube_videos' ? '📺' : sourceType === 'podcast_feeds' ? '🎙️' : '🌐'}
-    </div>
-  );
-}
-
-function WizardSelectableCard({
-  ariaLabel,
-  selected,
-  onClick,
-  children
-}: {
-  ariaLabel: string;
-  selected: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={ariaLabel}
-      aria-pressed={selected}
-      onClick={onClick}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
-      className="relative block h-full w-full text-left cursor-pointer"
-    >
-      {selected && (
-        <span
-          aria-hidden
-          className="absolute -top-[11px] right-2.5 z-10 flex h-[26px] w-[26px]
-                     items-center justify-center rounded-full bg-sky-500 text-white text-[13px]
-                     shadow-md ring-2 ring-white dark:ring-slate-900"
-        >
-          ✓
-        </span>
-      )}
-      <Card
-        size="small"
-        hoverable={!selected}
-        className={`h-full min-h-[190px] transition-all ${
-          selected ? 'bg-sky-50 dark:bg-sky-950/40' : ''
-        }`}
-        style={{
-          cursor: 'pointer',
-          ...(selected ? { outline: '2px solid #38bdf8', outlineOffset: '-2px' } : {})
-        }}
-      >
-        {children}
-      </Card>
-    </div>
-  );
-}
-
-function detectSourceTypeCandidates(url: string): SourceType[] {
-  const lower = url.toLowerCase();
-  if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
-    return ['youtube_videos', 'podcast_feeds', 'web_urls'];
-  }
-  if (lower.endsWith('.xml') || lower.includes('/feed') || lower.includes('rss')) {
-    return ['podcast_feeds', 'web_urls', 'youtube_videos'];
-  }
-  return ['web_urls', 'podcast_feeds', 'youtube_videos'];
-}
-
-function probeRankScore(probe: { reachable: boolean; kind: ProbeKind; confidence?: number }, type: SourceType): number {
-  let score = probe.reachable ? 100 : 0;
-  if (probe.kind === 'feed') score += 30;
-  if (probe.kind === 'listing_page') score += 20;
-  if (probe.kind === 'single_page') score += 10;
-  if (typeof probe.confidence === 'number') score += Math.round(probe.confidence * 10);
-  if (type === 'podcast_feeds' && probe.kind === 'feed') score += 8;
-  if (type === 'youtube_videos' && probe.kind !== 'unknown') score += 5;
-  return score;
-}
-
-function formatPlaybookSchedule(schedule: PlaybookRecord['schedule']): string {
-  if (!schedule || typeof schedule !== 'object' || !('mode' in schedule)) {
-    return 'Schedule unavailable';
-  }
-  if (schedule.mode === 'manual') return 'Manual (run on demand)';
-  if (schedule.mode === 'interval') return `Every ${schedule.intervalMinutes} min`;
-  if (schedule.mode === 'daily') return `Daily ${schedule.dailyTime} (${schedule.timezone})`;
-  const weeklyDays = Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [];
-  const days = (weeklyDays.length > 0 ? weeklyDays : [1]).map((d) => WEEKDAY_LABELS[d] ?? d).join(', ');
-  return `Weekly ${schedule.dailyTime} on ${days} (${schedule.timezone})`;
-}
-
-const PersonaIcon = ({ personaId, style }: { personaId: string; style?: CSSProperties }) => {
-  const emoji = getCharacterTypeEmoji(personaId);
-  return (
-    <span role="img" aria-label={personaId} className="anticon" style={{ fontSize: '1em', lineHeight: 1, ...style }}>
-      {emoji}
-    </span>
-  );
-};
-
-function getCharacterIcon(characterType?: AgentSummary['characterType']) {
-  return <PersonaIcon personaId={characterType ?? 'summarizer'} />;
-}
-
-function humanizeCharacterType(characterType?: AgentSummary['characterType']): string {
-  if (!characterType) return 'Summarizer';
-  return characterType
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
-}
-
-function getAgentCharacterLabel(agent: AgentSummary): string {
-  return getPromptPersona(agent.characterType ?? 'summarizer')?.name ?? humanizeCharacterType(agent.characterType);
-}
-
-function getAgentPersonalityLabel(agent: AgentSummary): string {
-  const personaId = agent.characterType ?? 'summarizer';
-  const personalityId = agent.promptConfig?.personality_id;
-  if (personalityId) {
-    const mapped = getPromptCharacter(personaId, personalityId);
-    if (mapped) return mapped.name;
-  }
-  if (agent.promptConfig?.personality_label?.trim()) {
-    return agent.promptConfig.personality_label;
-  }
-  const defaultCharacter = getPromptCharactersForPersona(personaId)[0];
-  return defaultCharacter?.name ?? 'Default Personality';
-}
-
-const PERSONA_ICON_MAP: Record<string, ReactNode> = {
-  finance_expert: <PersonaIcon personaId="finance_expert" />,
-  teacher:        <PersonaIcon personaId="teacher" />,
-  influencer:     <PersonaIcon personaId="influencer" />,
-  trainer:        <PersonaIcon personaId="trainer" />,
-  philosopher:    <PersonaIcon personaId="philosopher" />,
-  summarizer:     <PersonaIcon personaId="summarizer" />,
-};
-
-const PERSONA_ICON_BG_MAP: Record<string, string> = {
-  finance_expert: 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-300',
-  teacher:        'bg-purple-50 text-purple-600 dark:bg-purple-950 dark:text-purple-300',
-  influencer:     'bg-orange-50 text-orange-600 dark:bg-orange-950 dark:text-orange-300',
-  trainer:        'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300',
-  philosopher:    'bg-cyan-50 text-cyan-600 dark:bg-cyan-950 dark:text-cyan-300',
-  summarizer:     'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
-};
-
-function getAgentCardDisplay(agent: AgentSummary, t: (key: string) => string): { intro: string; icon: ReactNode; characterLabel: string; personalityLabel: string; personaId: string } {
-  const characterId = agent.promptConfig?.personality_id ?? '';
-  const personaId = agent.characterType ?? 'summarizer';
-  const introKey = `personas.${personaId}.characters.${characterId}.intro`;
-  const intro = t(introKey) !== introKey
-    ? t(introKey)
-    : `I'm a ${getAgentPersonalityLabel(agent)} in the ${getAgentCharacterLabel(agent)} family. Give me a source and I'll get to work.`;
-  const icon = PERSONA_ICON_MAP[personaId] ?? <FileTextOutlined />;
-  const characterLabel = getAgentCharacterLabel(agent);
-  const personalityLabel = getAgentPersonalityLabel(agent);
-  return { intro, icon, characterLabel, personalityLabel, personaId };
-}
-
-/** Only podcast/YouTube sources have "episodes" to pick from - web_urls sources (single/listing
- * pages) keep the old "run now = crawl immediately" behavior with no picker. */
-function hasEpisodicSource(agent: AgentSummary): boolean {
-  return agent.sources.some((source) => source.type === 'podcast_feeds' || source.type === 'youtube_videos');
-}
 
 export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const { user, isAdmin, logout } = useAuth();
@@ -1809,44 +1585,11 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     return `${item.title} ${item.summary} ${item.playbook.name}`.toLowerCase().includes(normalizedMarketplacePlaybooksSearch);
   });
 
-  function getSourceDisplayTitle(source: SourceRecord): string {
-    if (source.metadata.title?.trim()) return source.metadata.title;
-    // Synthetic discussions store the name in config (for sources created before libraryCard.title was set)
-    if (source.type === 'synthetic_discussion' && typeof source.config.name === 'string' && source.config.name.trim()) {
-      return source.config.name.trim();
-    }
-    try {
-      const url = new URL(source.value);
-      return url.hostname;
-    } catch {
-      return source.value;
-    }
-  }
-
   function getSourceSpeakers(source: SourceRecord): string[] {
     if (source.type !== 'synthetic_discussion') return [];
     const p = source.config.participants;
     if (Array.isArray(p)) return p.filter((n): n is string => typeof n === 'string');
     return [];
-  }
-
-  function getSourceCoverImageUrl(source: SourceRecord): string | null {
-    if (source.metadata.coverImageUrl) return source.metadata.coverImageUrl;
-    if (source.type !== 'youtube_videos') return null;
-    const firstPreviewVideoId = extractYoutubeVideoId(source.metadata.previewItems[0]?.link);
-    if (firstPreviewVideoId) return getYoutubeThumbnailUrl(firstPreviewVideoId);
-    return getYoutubeCoverImageFallback(source.value);
-  }
-
-  // A report's own cited video URL is fresher and more accurate than the source's cached
-  // (creation-time-only, never refreshed by crawls) preview snapshot above — prefer it.
-  function getReportEpisodeThumbnailUrl(report: RunReportDto): string | null {
-    const references = report.report?.common?.source_references ?? [];
-    for (const reference of references) {
-      const videoId = extractYoutubeVideoId(reference.reference);
-      if (videoId) return getYoutubeThumbnailUrl(videoId);
-    }
-    return null;
   }
 
   function getSourceKindLabel(source: SourceRecord): string {
@@ -2426,90 +2169,22 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                 key: 'feed',
                 label: <span><FileTextOutlined /> {t('nav.feed')}</span>,
                 children: (
-                  <>
-                    <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}><FileTextOutlined /> {t('nav.feed')}</Title>}>
-                      {feedLoading ? (
-                        <div className="space-y-3">
-                          {[1,2,3].map(i => <Skeleton key={i} active paragraph={{ rows: 2 }} />)}
-                        </div>
-                      ) : feedReports.length === 0 ? (
-                        <div className="flex flex-col items-center gap-4 py-12 text-center">
-                          <span className="text-5xl">📰</span>
-                          <div>
-                            <p className="text-base font-semibold text-gray-800 dark:text-gray-100">{t('nav.feedEmpty')}</p>
-                            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{t('nav.feedEmptyDesc')}</p>
-                          </div>
-                          <Button type="primary" onClick={() => setActiveHub('sources')}>{t('nav.library')}</Button>
-                        </div>
-                      ) : (() => {
-                        const normalizedFeedSearch = feedSearch.trim().toLowerCase();
-                        const searchFilteredReports = !normalizedFeedSearch ? feedReports : feedReports.filter((report) => {
-                          const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
-                          const source = playbook?.sourceIds.length ? sources.find((candidate) => candidate.id === playbook.sourceIds[0]) : undefined;
-                          const reportAgent = agents.find((agent) => agent.id === report.agentId);
-                          const sourceTitle = source ? getSourceDisplayTitle(source) : report.playbookName;
-                          const characterLabel = reportAgent ? getAgentCharacterLabel(reportAgent) : report.agentName;
-                          const headline = report.report?.common?.headline ?? '';
-                          return `${headline} ${report.summary} ${report.agentName} ${sourceTitle} ${characterLabel}`.toLowerCase().includes(normalizedFeedSearch);
-                        });
-                        return (
-                          <>
-                            <div className="mb-4">
-                              <Input
-                                aria-label={t('feed.searchAriaLabel')}
-                                value={feedSearch}
-                                onChange={(event) => setFeedSearch(event.currentTarget.value)}
-                                placeholder={t('feed.searchPlaceholder')}
-                                prefix={<SearchOutlined />}
-                                allowClear
-                                style={{ maxWidth: 420 }}
-                              />
-                            </div>
-                            {searchFilteredReports.length === 0 ? (
-                              <Empty description={t('feed.searchNoResults')} />
-                            ) : (
-                              <div className="space-y-6">
-                                {groupReportsByDay(searchFilteredReports.slice(0, 30)).map((group) => (
-                                  <div key={group.key} className="space-y-3">
-                                    <div className="mb-1 flex items-center gap-3">
-                                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                        {group.kind === 'today'
-                                          ? t('feed.groupToday')
-                                          : group.kind === 'yesterday'
-                                            ? t('feed.groupYesterday')
-                                            : new Date(group.dateISO).toLocaleDateString(i18n.language, { year: 'numeric', month: 'short', day: 'numeric' })}
-                                      </span>
-                                      <span className="h-px flex-1 bg-border" />
-                                    </div>
-                                    {group.reports.map((report) => {
-                                      const playbook = report.playbookId ? playbooks.find((candidate) => candidate.id === report.playbookId) : undefined;
-                                      const source = playbook?.sourceIds.length ? sources.find((candidate) => candidate.id === playbook.sourceIds[0]) : undefined;
-                                      const reportAgent = agents.find((agent) => agent.id === report.agentId);
-                                      return (
-                                        <FeedCard
-                                          key={report.id}
-                                          report={report}
-                                          characterType={reportAgent?.characterType}
-                                          agentName={reportAgent ? getAgentDisplayLabel(reportAgent) : report.agentName}
-                                          sourceTitle={source ? getSourceDisplayTitle(source) : report.playbookName}
-                                          sourceCoverImageUrl={(source ? getSourceCoverImageUrl(source) : null) ?? getReportEpisodeThumbnailUrl(report)}
-                                          isSyntheticSource={source?.type === 'synthetic_discussion'}
-                                          onOpenFullReport={() => openReportDrawer(report)}
-                                          onOpenSource={source ? () => openSourceInLibrary(source) : undefined}
-                                          onDiscuss={() => openDiscussionFromReport(report)}
-                                          onDismiss={() => dismissFeedReport(report)}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </Card>
-                  </>
+                  <FeedTab
+                    t={t}
+                    language={i18n.language}
+                    feedLoading={feedLoading}
+                    feedReports={feedReports}
+                    feedSearch={feedSearch}
+                    onFeedSearchChange={setFeedSearch}
+                    agents={agents}
+                    sources={sources}
+                    playbooks={playbooks}
+                    onGoToLibrary={() => setActiveHub('sources')}
+                    onOpenFullReport={openReportDrawer}
+                    onOpenSource={openSourceInLibrary}
+                    onDiscuss={openDiscussionFromReport}
+                    onDismiss={dismissFeedReport}
+                  />
                 )
               },
               {

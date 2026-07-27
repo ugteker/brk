@@ -42,6 +42,8 @@ playwright-report/
 blob-report/
 apps/web/e2e/**/screenshots/
 apps/web/e2e/**/videos/
+/api-tests.txt
+/web-tests.txt
 
 # Vite / bundler caches
 .vite/
