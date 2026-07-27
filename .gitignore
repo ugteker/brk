@@ -45,6 +45,9 @@ apps/web/e2e/**/videos/
 /api-tests.txt
 /web-tests.txt
 
+# Generated discussion-run audio (regenerated per run, not source)
+apps/api/data/audio/*.mp3
+
 # Vite / bundler caches
 .vite/
 .vite-inline/
