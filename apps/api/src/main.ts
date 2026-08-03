@@ -22,7 +22,7 @@ import { defaultHttpPostJson, youtubeHttpGet } from './modules/analysis/source-a
 import { SiteInspectorClient } from './modules/analysis/site-inspector-client';
 import { SourceCursorRepository } from './modules/crawler/source-cursor-repository';
 import { SourceCrawlConfigRepository } from './modules/crawler/crawl-config-repository';
-import { AgentRunner } from './modules/analysis/agent-runner';
+import { AgentRunner, type AgentRunOptions, type ForcedEpisodeSelection } from './modules/analysis/agent-runner';
 import { probeSource } from './modules/analysis/source-adapters/smart-crawler';
 import { probeYouTubeSource } from './modules/analysis/source-adapters/youtube-adapter';
 import { UserRepository } from './modules/auth/repository';
@@ -37,7 +37,6 @@ import { SourceIngestionRepository } from './modules/source/ingestion-repository
 import { SourceIngestionService } from './modules/source/ingestion-service';
 import { createSourceSearch } from './modules/source/search';
 import { PlaybookRepository } from './modules/playbook/repository';
-import { createPlaybookRunTrigger } from './modules/playbook/run-trigger-factory';
 import { PrismaDigestStore, startDigestLoop } from './modules/playbook/digest';
 import { ReportChatRepository, ReportChatService } from './modules/reports/chat';
 import { WatchlistRepository } from './modules/watchlist/repository';
@@ -206,7 +205,25 @@ async function start(role: Role) {
       playbookRepository,
       accessResolver,
       userRepository,
-      runTrigger: createPlaybookRunTrigger(manualRunTrigger, playbookRepository)
+      runTrigger: {
+        triggerRun: async (playbookId: string, options?: { forcedEpisode?: ForcedEpisodeSelection }) => {
+          const playbook = await playbookRepository.getPlaybook(playbookId);
+          if (!playbook) {
+            return { status: 'failed', errorCode: 'not_found' };
+          }
+          const runOptions: AgentRunOptions = {
+            playbookId: playbook.id,
+            sourceId: playbook.sourceId,
+            agentVersionId: playbook.agentVersionId ?? undefined,
+            playbookRecipients: playbook.recipients,
+            playbookLanguage: playbook.language,
+            playbookNotificationsEnabled: playbook.notificationsEnabled,
+            playbookDigestFrequency: playbook.digestFrequency,
+            forcedEpisode: options?.forcedEpisode
+          };
+          return manualRunTrigger.triggerRun(playbook.agentId, runOptions);
+        }
+      }
     },
 
     sourceProbe: {

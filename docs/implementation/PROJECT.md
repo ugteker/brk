@@ -4,7 +4,7 @@
 > It supersedes `scope-and-decisions.md` and `status.md` (kept for history only).
 > Updated automatically after every completed task or new requirement.
 
-Last updated: 2026-07-19 (Reframed product direction: general-purpose platform, not trading-only)
+Last updated: 2026-08-03 (Removed unused UI primitives, dependencies, and single-use playbook trigger factory)
 
 > ⚠️ **Domain reframing (2026-07-19):** ChatTrader is a **general-purpose
 > content-analysis-and-notification platform**, not a trading app. The project *began*
@@ -306,3 +306,9 @@ original spec.
 - Explicit immutable update flow is live:
   - match payload includes `updateAvailable` and `latestAgentVersionId`,
   - update endpoint `POST /api/catalog/agent-versions/:agentVersionId/update` updates saved membership only after explicit confirmation, with optional manual-playbook repinning.
+
+## 2026-08-03 Ponytail cleanup
+
+- Removed six unused shadcn-style UI primitives and their direct dependencies (`@radix-ui/react-slot`, `@radix-ui/react-switch`, `class-variance-authority`).
+- Removed unused `github-copilot-resources` API dependency.
+- Inlined the single-use playbook run trigger into `main.ts`; removed factory and its wrapper-only test.
