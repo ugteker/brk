@@ -5,24 +5,16 @@ import type { DiscussionRepositoryLike } from './repository';
 import type { CreateDiscussionInput, UpdateDiscussionInput, DiscussionTrigger } from './types';
 import { resolveParticipantReports, type ReportResolutionRepo } from './report-resolution';
 import { sanitizeAudioFileName } from './tts-storage';
+import {
+  renderDiscussionTurnAudio,
+  resolveDiscussionTtsClient,
+  type DiscussionTtsClients,
+  type DiscussionTtsLike,
+  type DiscussionTtsStorageLike
+} from './audio-renderer';
 
 export interface DiscussionRunTriggerLike {
   triggerDiscussionRun(discussionId: string, runId: string): Promise<void>;
-}
-
-export interface DiscussionTtsLike {
-  renderTurn(text: string, voice: string, language?: 'en' | 'de'): Promise<Buffer>;
-}
-
-/** Named TTS backends the server has credentials for. A discussion picks one via
- * formatConfig.ttsProvider ('auto' keeps the server preference: google, then openai). */
-export interface DiscussionTtsClients {
-  google?: DiscussionTtsLike;
-  openai?: DiscussionTtsLike;
-}
-
-export interface DiscussionTtsStorageLike {
-  save(key: string, buffer: Buffer): Promise<string>;
 }
 
 export interface DiscussionRoutesDeps {
@@ -72,16 +64,14 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
   /** Resolves the TTS backend for a discussion's provider choice; null when the requested
    * provider (or any provider, for 'auto') isn't configured on this server. */
   const resolveTtsClient = (provider?: 'auto' | 'google' | 'openai'): DiscussionTtsLike | null => {
-    if (provider === 'google' || provider === 'openai') {
-      return deps.ttsClients?.[provider] ?? null;
-    }
-    // 'auto' / undefined: server preference (OpenAI first), falling back to legacy single client.
-    return deps.ttsClients?.openai ?? deps.ttsClients?.google ?? deps.ttsClient ?? null;
+    return resolveDiscussionTtsClient(deps.ttsClients, deps.ttsClient, provider);
   };
 
   // Tracks in-flight/failed audio renders per run so the UI can poll for progress -
   // the actual render runs detached from the triggering request.
   const audioRenderState = new Map<string, 'rendering' | 'error' | 'done'>();
+  const hasCompleteTurnAudio = (run: { audioUrl: string | null; turns: Array<{ audioUrl: string | null }> }): boolean =>
+    Boolean(run.audioUrl) || (run.turns.length > 0 && run.turns.every((turn) => turn.audioUrl));
 
   // Serves rendered discussion audio. Registered before /api/discussions/:id so the
   // static "audio" segment wins route matching. File names embed the run ID, which is
@@ -291,22 +281,32 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
       return reply.status(501).send({ code: 'tts_not_configured', message: 'TTS not configured' });
     }
 
+    if (audioRenderState.get(runId) === 'rendering') {
+      return reply.status(202).send({ message: 'Audio rendering already started' });
+    }
+    if (audioRenderState.get(runId) === 'done' || hasCompleteTurnAudio(run)) {
+      audioRenderState.set(runId, 'done');
+      return reply.status(200).send({ message: 'Audio already available' });
+    }
+
     const ttsStorage = deps.ttsStorage;
     audioRenderState.set(runId, 'rendering');
     const language = discussion.formatConfig.language ?? 'en';
     (async () => {
-      const allAudio: Buffer[] = [];
       for (const turn of run.turns) {
+        if (turn.audioUrl) continue;
         const participant = discussion.participants.find((p) => p.id === turn.participantId);
         const voice = participant?.voiceId ?? 'alloy';
-        const buffer = await ttsClient.renderTurn(turn.content, voice, language);
-        const turnUrl = await ttsStorage.save(`${runId}-turn-${turn.turnIndex}`, buffer);
-        await deps.discussionRepository.updateTurnAudioUrl(turn.id, turnUrl);
-        allAudio.push(buffer);
+        await renderDiscussionTurnAudio({
+          runId,
+          turn,
+          voice,
+          language,
+          ttsClient,
+          ttsStorage,
+          repository: deps.discussionRepository
+        });
       }
-      const stitched = Buffer.concat(allAudio);
-      const stitchedUrl = await ttsStorage.save(`${runId}-full`, stitched);
-      await deps.discussionRepository.updateRun(runId, { audioUrl: stitchedUrl });
       audioRenderState.set(runId, 'done');
     })().catch((error) => {
       audioRenderState.set(runId, 'error');
@@ -328,7 +328,7 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     if (!run) {
       return reply.status(404).send({ code: 'not_found', message: 'Run not found' });
     }
-    const state = audioRenderState.get(runId) ?? (run.audioUrl ? 'done' : 'idle');
+    const state = audioRenderState.get(runId) ?? (hasCompleteTurnAudio(run) ? 'done' : 'idle');
     return reply.send({ state, audioUrl: run.audioUrl ?? null });
   });
 }

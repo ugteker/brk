@@ -102,7 +102,9 @@ function makeOrchestrator(overrides: { claude?: any; reportRepo?: any; repo?: an
     reportRepository: overrides.reportRepo ?? makeMockReportRepo(),
     artifactRepository: (overrides.artifactRepo ?? makeMockArtifactRepo()) as any,
     claudeClient: overrides.claude ?? mockClaude as any,
-    syntheticSource: mockSyntheticSource as any
+    syntheticSource: mockSyntheticSource as any,
+    ...(overrides as any).ttsClients ? { ttsClients: (overrides as any).ttsClients } : {},
+    ...(overrides as any).ttsStorage ? { ttsStorage: (overrides as any).ttsStorage } : {}
   });
 }
 
@@ -115,6 +117,21 @@ describe('DiscussionOrchestrator', () => {
     expect(repo.createTurn).toHaveBeenCalled();
     const lastCall = repo.updateRun.mock.calls.at(-1)!;
     expect(lastCall[1]).toMatchObject({ status: 'done' });
+  });
+
+  it('starts per-turn audio rendering without delaying discussion completion', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    const ttsClients = {
+      openai: { renderTurn: vi.fn().mockImplementation(() => new Promise<Buffer>(() => {})) }
+    };
+    const ttsStorage = { save: vi.fn() };
+    const orchestrator = makeOrchestrator({ repo, ttsClients, ttsStorage } as any);
+
+    await orchestrator.run('d1', 'r1');
+
+    expect(ttsClients.openai.renderTurn).toHaveBeenCalledTimes(4);
+    expect(repo.updateRun.mock.calls.at(-1)![1]).toMatchObject({ status: 'done' });
   });
 
   it('marks run as error if Claude throws', async () => {

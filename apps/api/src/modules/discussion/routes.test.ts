@@ -35,7 +35,7 @@ function mockRepo(overrides: Partial<DiscussionRepositoryLike> = {}): Discussion
 
 async function buildApp(
   repoOverrides: Partial<DiscussionRepositoryLike> = {},
-  extraDeps: { reportRepository?: any; latestReportLimit?: number; artifactRepository?: any } = {}
+  extraDeps: Record<string, any> = {}
 ) {
   const app = Fastify();
   await app.register(cookie);
@@ -110,6 +110,34 @@ describe('Discussion routes', () => {
     });
     const res = await app.inject({ method: 'POST', url: '/api/discussions/d1/runs/r1/audio' });
     expect(res.statusCode).toBe(501);
+  });
+
+  it('renders only missing turn audio for a completed run and makes a repeat request idempotent', async () => {
+    const ttsClient = { renderTurn: vi.fn().mockResolvedValue(Buffer.from('audio')) };
+    const ttsStorage = { save: vi.fn().mockResolvedValue('/api/discussions/audio/r1-turn-1.mp3') };
+    const repository = mockRepo({
+      getRunWithTurns: vi.fn().mockResolvedValue({
+        ...runRow,
+        status: 'done',
+        turns: [
+          { id: 't0', participantId: 'p1', turnIndex: 0, content: 'Already rendered', audioUrl: '/api/discussions/audio/r1-turn-0.mp3' },
+          { id: 't1', participantId: 'p1', turnIndex: 1, content: 'Needs rendering', audioUrl: null }
+        ]
+      })
+    });
+    const app = Fastify();
+    await app.register(cookie);
+    app.addHook('onRequest', async (req) => { req.userId = 'u1'; req.userRole = 'user'; });
+    await registerDiscussionRoutes(app, { discussionRepository: repository, ttsClient, ttsStorage });
+
+    const first = await app.inject({ method: 'POST', url: '/api/discussions/d1/runs/r1/audio' });
+    expect(first.statusCode).toBe(202);
+    await vi.waitFor(() => expect(repository.updateTurnAudioUrl).toHaveBeenCalledWith('t1', '/api/discussions/audio/r1-turn-1.mp3'));
+    expect(ttsClient.renderTurn).toHaveBeenCalledTimes(1);
+
+    const second = await app.inject({ method: 'POST', url: '/api/discussions/d1/runs/r1/audio' });
+    expect(second.statusCode).toBe(200);
+    expect(ttsClient.renderTurn).toHaveBeenCalledTimes(1);
   });
 
   it('GET /api/discussions/capabilities reports tts=false without a TTS client', async () => {

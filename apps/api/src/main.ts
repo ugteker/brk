@@ -133,6 +133,22 @@ async function start(role: Role) {
 
   const discussionRepository = new DiscussionRepository(prisma, realtimeEventRepository);
   const syntheticSourceService = new SyntheticSourceService(prisma);
+  const discussionTtsClients = isTtsConfigured()
+    ? {
+        ...(isGoogleTtsConfigured()
+          ? {
+              google: new GoogleTtsClient({
+                apiKey: config.tts.googleApiKey || undefined,
+                serviceAccount: config.tts.googleCredentials || undefined
+              })
+            }
+          : {}),
+        ...(config.tts.openaiApiKey
+          ? { openai: new OpenAITtsClient(new OpenAI({ apiKey: config.tts.openaiApiKey })) }
+          : {})
+      }
+    : undefined;
+  const discussionTtsStorage = isTtsConfigured() ? new FileTtsStorage(config.tts.audioDir) : undefined;
   const discussionOrchestrator = new DiscussionOrchestrator({
     discussionRepository,
     agentRepository,
@@ -141,7 +157,9 @@ async function start(role: Role) {
     artifactRepository,
     claudeClient,
     syntheticSource: syntheticSourceService,
-    latestReportLimit: config.discussion.latestReportLimit
+    latestReportLimit: config.discussion.latestReportLimit,
+    ttsClients: discussionTtsClients,
+    ttsStorage: discussionTtsStorage
   });
 
   if (plan.startSchedulers) {
@@ -249,22 +267,10 @@ async function start(role: Role) {
       // answers 501 and the UI tells the user that audio rendering isn't configured.
       // Every configured backend is wired so each discussion can pick its provider;
       // 'auto' prefers Google (works where corporate policy blocks OpenAI).
-      ...(isTtsConfigured()
+      ...(discussionTtsStorage
         ? {
-            ttsClients: {
-              ...(isGoogleTtsConfigured()
-                ? {
-                    google: new GoogleTtsClient({
-                      apiKey: config.tts.googleApiKey || undefined,
-                      serviceAccount: config.tts.googleCredentials || undefined
-                    })
-                  }
-                : {}),
-              ...(config.tts.openaiApiKey
-                ? { openai: new OpenAITtsClient(new OpenAI({ apiKey: config.tts.openaiApiKey })) }
-                : {})
-            },
-            ttsStorage: new FileTtsStorage(config.tts.audioDir)
+            ttsClients: discussionTtsClients,
+            ttsStorage: discussionTtsStorage
           }
         : {})
     },

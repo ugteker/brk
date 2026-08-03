@@ -119,11 +119,84 @@ function TurnBubble({ turn, participant }: { turn: DiscussionTurnDto; participan
           )}
         </div>
         <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{displayContent}</Paragraph>
-        {turn.audioUrl && (
-          <audio src={turn.audioUrl} controls style={{ width: '100%', marginTop: 8, height: 28 }} />
-        )}
       </Card>
     </div>
+  );
+}
+
+/** Plays completed turn clips in order. Browsers may reject programmatic playback, in which
+ * case the explicit listener-start button keeps the live queue usable. */
+function OnAirQueue({
+  runId,
+  turns,
+  fallbackUrl,
+  isLive,
+  waitingMessage
+}: {
+  runId: string | null;
+  turns: DiscussionTurnDto[];
+  fallbackUrl: string | null | undefined;
+  isLive: boolean;
+  waitingMessage: string;
+}) {
+  const { t } = useTranslation();
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const urls: string[] = [];
+  for (const turn of [...turns].sort((a, b) => a.turnIndex - b.turnIndex)) {
+    if (!turn.audioUrl) break;
+    urls.push(turn.audioUrl);
+  }
+  const [queueIndex, setQueueIndex] = useState(0);
+  const [needsStart, setNeedsStart] = useState(false);
+  const currentUrl = urls[queueIndex] ?? (urls.length === 0 ? fallbackUrl ?? null : null);
+
+  useEffect(() => {
+    setQueueIndex(0);
+    setNeedsStart(false);
+  }, [runId]);
+
+  useEffect(() => {
+    if (!currentUrl || !audioRef.current) return;
+    audioRef.current.play()
+      .then(() => setNeedsStart(false))
+      .catch(() => setNeedsStart(true));
+  }, [currentUrl]);
+
+  if (!currentUrl) {
+    return (
+      <Space>
+        {isLive && <Spin size="small" />}
+        <Text type="secondary">{isLive ? waitingMessage : t('studio.audioUnavailable')}</Text>
+      </Space>
+    );
+  }
+
+  const startListening = () => {
+    audioRef.current?.play()
+      .then(() => setNeedsStart(false))
+      .catch(() => setNeedsStart(true));
+  };
+
+  return (
+    <Space direction="vertical" style={{ width: '100%' }}>
+      <Text strong>{t('studio.onAir')}</Text>
+      <audio
+        ref={audioRef}
+        src={currentUrl}
+        controls
+        style={{ width: '100%' }}
+        onEnded={() => setQueueIndex((index) => index + 1)}
+      />
+      {urls.length > 1 && (
+        <Text type="secondary">{t('studio.audioQueueProgress', { current: Math.min(queueIndex + 1, urls.length), total: urls.length })}</Text>
+      )}
+      {needsStart && (
+        <Space direction="vertical">
+          <Text type="secondary">{t('studio.audioAutoplayBlocked')}</Text>
+          <Button type="primary" onClick={startListening}>{t('studio.startListening')}</Button>
+        </Space>
+      )}
+    </Space>
   );
 }
 
@@ -553,6 +626,8 @@ export function DiscussionDetail() {
   const displayTurns: DiscussionTurnDto[] =
     liveRun && liveRun === selectedRunId ? liveTurns : selectedRun?.turns ?? [];
   const isLive = liveStatus === 'running' && liveRun === selectedRunId;
+  const hasCompleteTurnAudio = displayTurns.length > 0 && displayTurns.every((turn) => turn.audioUrl);
+  const hasAudio = Boolean(selectedRun?.audioUrl) || displayTurns.some((turn) => turn.audioUrl);
   const turnTarget = discussion.formatConfig.totalTurnTarget ?? 12;
   // Participants in speaking order for the studio panel and round-robin prediction of the
   // next speaker (mirrors the orchestrator's contexts[turn % contexts.length]).
@@ -600,7 +675,7 @@ export function DiscussionDetail() {
           >
             {runs.length === 0 ? t('studio.runNow') : t('studio.runAgain')}
           </Button>
-          {ttsAvailable && selectedRunId && (
+          {ttsAvailable && selectedRunId && !hasCompleteTurnAudio && (
             <Tooltip title={selectedRun?.status !== 'done' ? t('studio.renderAudioNeedsRun') : undefined}>
               <Button
                 className="flex-1 sm:flex-none"
@@ -671,6 +746,34 @@ export function DiscussionDetail() {
         <Tabs
           items={[
             {
+              key: 'audio',
+              label: t('studio.onAir'),
+              children: (
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <OnAirQueue
+                    runId={selectedRunId}
+                    turns={displayTurns}
+                    fallbackUrl={selectedRun?.audioUrl}
+                    isLive={isLive}
+                    waitingMessage={t(`studio.warmup${warmupIndex}`)}
+                  />
+                  {ttsAvailable && selectedRun?.status === 'done' && !hasCompleteTurnAudio && (
+                    <Button
+                      size="small"
+                      loading={renderingAudio}
+                      onClick={handleRenderAudio}
+                      icon={<AudioOutlined />}
+                    >
+                      {t('studio.renderAudio')}
+                    </Button>
+                  )}
+                  {!ttsAvailable && !hasAudio && (
+                    <Text type="secondary">{t('studio.audioNotConfigured')}</Text>
+                  )}
+                </Space>
+              )
+            },
+            {
               key: 'transcript',
               label: t('studio.transcript'),
               children: (
@@ -738,7 +841,7 @@ export function DiscussionDetail() {
                           <Text type="secondary" style={{ fontSize: 13 }}>
                             🏁 {t('studio.discussionFinished')}
                           </Text>
-                          {ttsAvailable && !selectedRun.audioUrl && (
+                          {ttsAvailable && !selectedRun.audioUrl && !hasCompleteTurnAudio && (
                             <div style={{ marginTop: 8 }}>
                               <Button
                                 size="small"
@@ -756,17 +859,6 @@ export function DiscussionDetail() {
                     </>
                   )}
                 </div>
-              )
-            },
-            {
-              key: 'audio',
-              label: t('studio.audioPlayer'),
-              children: selectedRun?.audioUrl ? (
-                <audio src={selectedRun.audioUrl} controls style={{ width: '100%' }} />
-              ) : ttsAvailable ? (
-                <Text type="secondary">No audio yet. Click &quot;{t('studio.renderAudio')}&quot; to generate a podcast.</Text>
-              ) : (
-                <Text type="secondary">{t('studio.audioNotConfigured')}</Text>
               )
             },
             {

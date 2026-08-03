@@ -4,6 +4,12 @@ import type { Discussion, DiscussionParticipant, DiscussionFormat, ParticipantEv
 import { resolveParticipantReports, type ReportResolutionRepo } from './report-resolution';
 import { buildTranscriptEvidence, buildSharedTranscriptEvidence, type EvidenceArtifactRepo, type SharedTranscriptArtifactRepo } from './evidence';
 import { sanitizeDiscussionTurnText } from './sanitize-turn-text';
+import {
+  renderDiscussionTurnAudio,
+  resolveDiscussionTtsClient,
+  type DiscussionTtsClients,
+  type DiscussionTtsStorageLike
+} from './audio-renderer';
 import { logger } from '../../lib/logger';
 
 export interface OrchestratorAgentRepo {
@@ -41,6 +47,10 @@ export interface DiscussionOrchestratorDeps {
   /** Number of an agent's most recent reports to fall back to when a participant has no
    * explicit report selection. Defaults to 3 (mirrors config.discussion.latestReportLimit). */
   latestReportLimit?: number;
+  /** Optional TTS dependencies. When configured, each generated turn starts rendering in the
+   * background immediately; audio failures never fail the discussion itself. */
+  ttsClients?: DiscussionTtsClients;
+  ttsStorage?: DiscussionTtsStorageLike;
 }
 
 interface ParticipantContext {
@@ -119,6 +129,9 @@ export class DiscussionOrchestrator {
     try {
       const discussion = await discussionRepository.getDiscussion(discussionId);
       if (!discussion) throw new Error(`Discussion ${discussionId} not found`);
+      const ttsClient = this.deps.ttsStorage
+        ? resolveDiscussionTtsClient(this.deps.ttsClients, undefined, discussion.formatConfig.ttsProvider)
+        : null;
 
       const orderedParticipants = discussion.participants.sort((a, b) => a.speakerOrder - b.speakerOrder);
       const groundingMode = discussion.formatConfig.grounding?.mode ?? 'reports';
@@ -359,7 +372,20 @@ export class DiscussionOrchestrator {
 
         const rawText = response.content.find((c) => c.type === 'text')?.text ?? '';
         const text = sanitizeDiscussionTurnText(rawText);
-        await discussionRepository.createTurn(runId, ctx.participant.id, turnIndex, text, segment);
+        const createdTurn = await discussionRepository.createTurn(runId, ctx.participant.id, turnIndex, text, segment);
+        if (ttsClient && this.deps.ttsStorage) {
+          void renderDiscussionTurnAudio({
+            runId,
+            turn: createdTurn,
+            voice: ctx.participant.voiceId,
+            language: discussion.formatConfig.language ?? 'en',
+            ttsClient,
+            ttsStorage: this.deps.ttsStorage,
+            repository: discussionRepository
+          }).catch((error) => {
+            logger.warn(`[DiscussionOrchestrator] audio render for turn ${createdTurn.id} failed: ${String(error)}`);
+          });
+        }
 
         conversationHistory.push({ role: 'user', content: userPrompt });
         conversationHistory.push({ role: 'assistant', content: text });
