@@ -99,8 +99,18 @@ function sanitizeTurnContent(raw: string): string {
 function TurnBubble({ turn, participant }: { turn: DiscussionTurnDto; participant: ParticipantInfo }) {
   const color = SPEAKER_COLORS[participant.index % SPEAKER_COLORS.length];
   const displayContent = sanitizeTurnContent(turn.content);
+  const fromRight = participant.index % 2 === 1;
   return (
-    <div className="turn-fade-in" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
+    <div
+      className={fromRight ? 'turn-in-right' : 'turn-in-left'}
+      style={{
+        display: 'flex',
+        gap: 10,
+        alignItems: 'flex-start',
+        marginBottom: 16,
+        flexDirection: fromRight ? 'row-reverse' : 'row'
+      }}
+    >
       <div
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${getCharacterTypeIconBg(participant.characterType)}`}
       >
@@ -108,7 +118,8 @@ function TurnBubble({ turn, participant }: { turn: DiscussionTurnDto; participan
       </div>
       <Card
         size="small"
-        style={{ maxWidth: '80%', background: `${color}0d`, border: 'none' }}
+        className="turn-bubble"
+        style={{ maxWidth: '80%', background: `${color}0d`, border: 'none', ['--speaker-color' as never]: color }}
         bodyStyle={{ padding: '8px 12px' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -213,7 +224,7 @@ function TypingIndicator({ participant, label }: { participant: ParticipantInfo;
       >
         {getCharacterTypeEmoji(participant.characterType)}
       </div>
-      <Card size="small" style={{ background: `${color}0d`, border: 'none' }} bodyStyle={{ padding: '8px 12px' }}>
+      <Card size="small" className="turn-bubble" style={{ background: `${color}0d`, border: 'none', ['--speaker-color' as never]: color }} bodyStyle={{ padding: '8px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <strong style={{ fontSize: 12, color }}>{participant.name}</strong>
           <Text type="secondary" style={{ fontSize: 12 }}>{label}</Text>
@@ -254,7 +265,7 @@ function StudioPanel({
         return (
           <div key={id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 64 }}>
             <div
-              className={`flex h-12 w-12 items-center justify-center rounded-full text-xl ${getCharacterTypeIconBg(info.characterType)} ${active ? 'speaker-active' : ''}`}
+              className={`flex h-12 w-12 items-center justify-center rounded-full text-xl ${getCharacterTypeIconBg(info.characterType)} ${active ? 'speaker-active on-air-ring' : ''}`}
               style={active ? ({ '--speaker-color': color } as React.CSSProperties) : { opacity: 0.75 }}
             >
               {getCharacterTypeEmoji(info.characterType)}

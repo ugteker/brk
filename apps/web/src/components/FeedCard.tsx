@@ -182,7 +182,7 @@ export function FeedCard({
     <Card
       size="small"
       hoverable
-      className="relative cursor-pointer overflow-hidden border border-violet-100 bg-white shadow-sm transition-[transform,box-shadow,border-color] hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-lg dark:border-violet-950 dark:bg-gray-900 dark:hover:border-violet-800"
+      className="aurora-lift relative cursor-pointer overflow-hidden border border-violet-100 bg-white shadow-sm dark:border-violet-950 dark:bg-gray-900"
       styles={{ body: { padding: 0 } }}
       onClick={onOpenFullReport}
     >
@@ -192,7 +192,7 @@ export function FeedCard({
       <div className="p-4">
         {/* Meta row: square cover thumbnail (ID-card style) + agent labels + result badge */}
         <div className="flex items-center gap-3">
-          <div className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700">
+          <div className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl shadow-sm ring-1 ring-violet-300/60 dark:ring-violet-500/40">
             {isSyntheticSource ? (
               <div
                 data-testid="feed-card-synthetic-thumb"

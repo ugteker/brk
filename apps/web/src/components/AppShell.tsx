@@ -51,7 +51,10 @@ function headerStyle(theme: 'light' | 'dark', isScrolled: boolean): CSSPropertie
     position: 'sticky',
     top: 0,
     zIndex: 20,
-    background: theme === 'dark' ? 'rgba(18,18,24,0.68)' : 'rgba(255,255,255,0.72)',
+    // Faint aurora bleed across the whole header, matching the D1 nav rail.
+    background: theme === 'dark'
+      ? 'radial-gradient(90% 160% at 12% 0%, rgba(167,139,250,0.12), transparent 55%), radial-gradient(90% 160% at 88% 100%, rgba(59,130,246,0.08), transparent 55%), rgba(18,18,24,0.68)'
+      : 'radial-gradient(90% 160% at 12% 0%, rgba(196,181,253,0.22), transparent 55%), radial-gradient(90% 160% at 88% 100%, rgba(147,197,253,0.16), transparent 55%), rgba(255,255,255,0.72)',
     backdropFilter: 'blur(18px) saturate(160%)',
     WebkitBackdropFilter: 'blur(18px) saturate(160%)',
     borderBottom: theme === 'dark' ? '1px solid rgba(179,127,235,0.35)' : '1px solid rgba(114,46,209,0.28)',
@@ -391,8 +394,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <nav
         aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-violet-200 bg-white/95 px-2 pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.1)] backdrop-blur-lg dark:border-violet-900 dark:bg-slate-950/95 sm:hidden"
-        style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
+        className="aurora-glass fixed inset-x-0 bottom-0 z-30 flex px-2 pt-2 sm:hidden"
+        style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))', borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderBottom: 'none' }}
       >
         {COMMON_NAV_ITEMS.map((item) => {
           const isActive = current === item.key;
@@ -404,10 +407,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               aria-current={isActive ? 'page' : undefined}
               onClick={() => navigate(item.path)}
               className={`h-auto flex-1 !rounded-lg !px-1 !py-1.5 text-xs ${
-                isActive
-                  ? '!bg-violet-100 !text-violet-700 dark:!bg-violet-950/70 dark:!text-violet-200'
-                  : 'text-muted-foreground'
+                isActive ? '!text-violet-700 dark:!text-white' : 'text-muted-foreground'
               }`}
+              style={isActive ? {
+                background: theme === 'dark'
+                  ? 'radial-gradient(140% 200% at 50% -30%, rgba(255,255,255,0.4), transparent 60%), linear-gradient(135deg, rgba(139,92,246,0.5), rgba(99,102,241,0.4))'
+                  : 'radial-gradient(140% 200% at 50% -30%, #fff, transparent 60%), linear-gradient(135deg, rgba(196,181,253,0.75), rgba(165,180,252,0.6))',
+                boxShadow: theme === 'dark' ? '0 0 16px rgba(139,92,246,0.55)' : '0 0 16px rgba(139,92,246,0.35)'
+              } : undefined}
             >
               <span className="mt-0.5 block text-[11px]">{t(item.labelKey)}</span>
             </Button>

@@ -84,13 +84,65 @@
 .ct-animate-enter:nth-child(9)    { animation-delay: 360ms; }
 .ct-animate-enter:nth-child(n+10) { animation-delay: 400ms; }
 
-/* Card hover lift — purple-tinted shadow on hover */
-.ct-card-lift {
+/* Card hover lift — aurora violet glow on hover (app-wide makeover language) */
+.aurora-lift {
   transition: transform 0.18s ease-out, box-shadow 0.18s ease-out;
 }
-.ct-card-lift:hover {
+.aurora-lift:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 28px rgba(114, 46, 209, 0.14);
+  box-shadow: 0 0 22px rgba(139, 92, 246, 0.35), 0 8px 28px rgba(114, 46, 209, 0.14);
+}
+
+/* Aurora glass pane — floating surfaces only (popovers, drawers, mobile nav).
+   Mirrors the approved D1 navbar rail. */
+.aurora-glass {
+  background:
+    radial-gradient(120% 180% at 15% 0%, rgba(196, 181, 253, 0.5), transparent 55%),
+    radial-gradient(120% 180% at 85% 100%, rgba(147, 197, 253, 0.4), transparent 55%),
+    rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1), 0 0 0 1px rgba(124, 58, 237, 0.1), 0 12px 36px rgba(91, 33, 182, 0.18);
+}
+.dark .aurora-glass {
+  background:
+    radial-gradient(120% 180% at 15% 0%, rgba(167, 139, 250, 0.28), transparent 55%),
+    radial-gradient(120% 180% at 85% 100%, rgba(59, 130, 246, 0.18), transparent 55%),
+    rgba(18, 18, 24, 0.72);
+  border-color: rgba(196, 181, 253, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 0 1px rgba(124, 58, 237, 0.15), 0 12px 36px rgba(91, 33, 182, 0.35);
+}
+
+/* Roll the aurora glass onto Ant Design's floating surfaces app-wide
+   (popovers, dropdown menus, drawers). Content cards stay solid by design. */
+.ant-popover .ant-popover-inner,
+.ant-dropdown .ant-dropdown-menu,
+.ant-drawer .ant-drawer-content {
+  background:
+    radial-gradient(120% 180% at 15% 0%, rgba(196, 181, 253, 0.35), transparent 55%),
+    radial-gradient(120% 180% at 85% 100%, rgba(147, 197, 253, 0.25), transparent 55%),
+    rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 12px 36px rgba(91, 33, 182, 0.18);
+}
+.dark .ant-popover .ant-popover-inner,
+.dark .ant-dropdown .ant-dropdown-menu,
+.dark .ant-drawer .ant-drawer-content {
+  background:
+    radial-gradient(120% 180% at 15% 0%, rgba(167, 139, 250, 0.22), transparent 55%),
+    radial-gradient(120% 180% at 85% 100%, rgba(59, 130, 246, 0.14), transparent 55%),
+    rgba(18, 18, 24, 0.85);
+  border-color: rgba(196, 181, 253, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 12px 36px rgba(91, 33, 182, 0.35);
+}
+.ant-drawer .ant-drawer-content {
+  border-radius: 0;
+  border-top: none;
+  border-bottom: none;
+  border-right: none;
 }
 
 /* Page-level route transition — replayed on every navigation via key change */
@@ -106,8 +158,8 @@
     opacity: 1;
     transform: none;
   }
-  .ct-card-lift,
-  .ct-card-lift:hover {
+  .aurora-lift,
+  .aurora-lift:hover {
     transition: none;
     transform: none;
     box-shadow: none;
@@ -318,6 +370,50 @@
 }
 .turn-fade-in {
   animation: turn-fade-in 0.35s ease-out;
+}
+
+/* Conversation feel: bubbles enter from the speaker's side */
+@keyframes turn-in-left {
+  from { opacity: 0; transform: translateX(-18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes turn-in-right {
+  from { opacity: 0; transform: translateX(18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.turn-in-left  { animation: turn-in-left 0.32s ease-out; }
+.turn-in-right { animation: turn-in-right 0.32s ease-out; }
+
+/* Chat bubble around a turn's content, tinted by the speaker color */
+.turn-bubble {
+  border-radius: 14px;
+  border: 1px solid transparent;
+  padding: 8px 12px;
+  background: rgba(139, 92, 246, 0.06);
+  border-left: 3px solid var(--speaker-color, #722ed1);
+}
+.dark .turn-bubble {
+  background: rgba(139, 92, 246, 0.1);
+}
+
+/* Aurora "on air" ring around the active speaker */
+@keyframes on-air-ring {
+  0%, 100% { box-shadow: 0 0 0 3px var(--speaker-color, #722ed1), 0 0 18px rgba(139, 92, 246, 0.55); }
+  50%      { box-shadow: 0 0 0 6px transparent, 0 0 26px rgba(139, 92, 246, 0.75); }
+}
+.on-air-ring {
+  animation: on-air-ring 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-in-left,
+  .turn-in-right,
+  .on-air-ring {
+    animation: none;
+  }
+  .on-air-ring {
+    box-shadow: 0 0 0 3px var(--speaker-color, #722ed1);
+  }
 }
 
 /* Studio live discussion: "X is thinking" animated dots */

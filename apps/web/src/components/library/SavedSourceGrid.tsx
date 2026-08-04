@@ -1,6 +1,6 @@
 import { AudioOutlined, CheckCircleOutlined, CloseOutlined, GlobalOutlined, PlusOutlined } from '@ant-design/icons';
 import { Button, Card, Empty, Popconfirm, Tag, Typography } from 'antd';
-import { Fragment, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRecord } from '../../api/sources';
 import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../../data/character-types';
@@ -16,7 +16,6 @@ interface SavedSourceGridProps {
   onAddAgent?: (source: SourceRecord) => void | Promise<void>;
   onRemoveAgent?: (playbookId: string, sourceId: string) => void | Promise<void>;
   hasAnySources?: boolean;
-  leadingCard?: ReactNode;
   renderSourceActions?: (source: SourceRecord) => ReactNode;
   linkedAgentsBySourceId?: Record<string, Array<{
     playbookId: string;
@@ -81,7 +80,6 @@ export function SavedSourceGrid({
   onAddAgent,
   onRemoveAgent,
   hasAnySources = sources.length > 0,
-  leadingCard,
   renderSourceActions,
   linkedAgentsBySourceId = {},
   highlightedAgentIdBySourceId = {}
@@ -102,7 +100,6 @@ export function SavedSourceGrid({
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      {leadingCard ? <Fragment key="library-leading-card">{leadingCard}</Fragment> : null}
       {sources.map((source) => {
         const coverImageUrl = getSourceCoverImageUrl(source);
         const previewItems = source.metadata.previewItems.slice(0, 2);

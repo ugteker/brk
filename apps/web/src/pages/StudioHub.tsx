@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Empty, Popconfirm, Spin, Tag, Tooltip, Typography, message } from 'antd';
-import { AudioOutlined, EditOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
+import { AudioOutlined, DeleteOutlined, EditOutlined, PlayCircleOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { deleteDiscussion, listDiscussions, triggerDiscussionRun, type DiscussionDto } from '../api/discussions';
@@ -98,92 +98,107 @@ export function StudioHub() {
           </StudioPrimaryButton>
         </Empty>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border">
-          {discussions.map((d, i) => (
-            <div
-              key={d.id}
-              className="ct-animate-enter flex flex-col gap-3 border-b border-border bg-card px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-4 sm:px-5 sm:py-4"
-              style={{ animationDelay: `${i * 50}ms` }}
-              onClick={() => navigate(`/studio/${d.id}`)}
-            >
-              <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
-                {/* Format dot indicator — replaces the old card grid */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {discussions.map((d, i) => {
+            const hex = FORMAT_HEX[d.format] ?? '#722ed1';
+            const active = d.participants.filter((p) => p.active);
+            return (
+              <div
+                key={d.id}
+                className="ct-animate-enter aurora-lift cursor-pointer overflow-hidden rounded-xl border border-border bg-card"
+                style={{ animationDelay: `${i * 50}ms` }}
+                onClick={() => navigate(`/studio/${d.id}`)}
+              >
+                {/* Format-colored aurora banner */}
                 <div
+                  className="relative flex h-24 items-end px-4 pb-2"
                   style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: '50%',
-                    background: FORMAT_HEX[d.format] ?? '#888',
-                    flexShrink: 0
+                    background: `radial-gradient(120% 180% at 15% 0%, ${hex}55, transparent 60%), radial-gradient(120% 180% at 85% 100%, ${hex}33, transparent 60%), linear-gradient(135deg, ${hex}22, transparent)`
                   }}
-                />
-
-                {/* Body */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="break-words font-semibold">{d.name}</span>
-                    <Tag color={FORMAT_COLORS[d.format] ?? 'default'} style={{ fontSize: 11, margin: 0 }}>
-                      {t(`studio.format_${d.format}`)}
-                    </Tag>
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    {d.participants.filter((p) => p.active).map((p) => (
+                >
+                  <div className="flex items-center" style={{ marginLeft: 4 }}>
+                    {active.map((p, idx) => (
                       <Tooltip key={p.id} title={`Speaker ${p.speakerOrder + 1}`}>
                         <span
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            width: 20,
-                            height: 20,
+                            width: 32,
+                            height: 32,
                             borderRadius: '50%',
                             background: SPEAKER_HEX[p.speakerOrder % SPEAKER_HEX.length],
                             color: '#fff',
-                            fontSize: 10,
+                            fontSize: 13,
                             fontWeight: 600,
-                            flexShrink: 0
+                            border: '2px solid var(--card, #fff)',
+                            marginLeft: idx === 0 ? 0 : -10,
+                            zIndex: active.length - idx
                           }}
                         >
                           {p.speakerOrder + 1}
                         </span>
                       </Tooltip>
                     ))}
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="space-y-2 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-0 break-words font-semibold">{d.name}</span>
+                    <Tag color={FORMAT_COLORS[d.format] ?? 'default'} style={{ fontSize: 11, margin: 0 }}>
+                      {t(`studio.format_${d.format}`)}
+                    </Tag>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-muted-foreground">
-                      {d.participants.filter((p) => p.active).length} {t('studio.participants')}
+                      {active.length} {t('studio.participants')}
                     </span>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <Tooltip title={t('studio.runNow')}>
+                        <Button
+                          type="text"
+                          shape="circle"
+                          aria-label={t('studio.runNow')}
+                          loading={runningId === d.id}
+                          icon={<PlayCircleOutlined />}
+                          style={{
+                            color: '#fff',
+                            background: `radial-gradient(140% 200% at 50% -30%, rgba(255,255,255,0.4), transparent 60%), linear-gradient(135deg, ${hex}cc, ${hex}99)`,
+                            boxShadow: `0 0 14px ${hex}66`
+                          }}
+                          onClick={(e) => handleRunNow(d, e)}
+                        />
+                      </Tooltip>
+                      <Tooltip title={t('studio.editDiscussion')}>
+                        <Button
+                          type="text"
+                          shape="circle"
+                          aria-label={t('studio.editDiscussion')}
+                          icon={<EditOutlined />}
+                          onClick={() => navigate(`/studio/${d.id}/edit`)}
+                        />
+                      </Tooltip>
+                      <Popconfirm
+                        title={t('common.confirmDelete', { label: 'discussion' })}
+                        onConfirm={(e) => { e?.stopPropagation(); handleDelete(d.id); }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button
+                          type="text"
+                          shape="circle"
+                          danger
+                          aria-label={t('common.delete')}
+                          icon={<DeleteOutlined />}
+                        />
+                      </Popconfirm>
+                    </div>
                   </div>
                 </div>
               </div>
-
-              {/* Actions */}
-              <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto" onClick={(e) => e.stopPropagation()}>
-                <Tooltip title={t('studio.editDiscussion')}>
-                  <Button
-                    size="small"
-                    aria-label={t('studio.editDiscussion')}
-                    icon={<EditOutlined />}
-                    onClick={() => navigate(`/studio/${d.id}/edit`)}
-                  />
-                </Tooltip>
-                <Button
-                  size="small"
-                  loading={runningId === d.id}
-                  onClick={(e) => handleRunNow(d, e)}
-                >
-                  {t('studio.runNow')}
-                </Button>
-                <Popconfirm
-                  title={t('common.confirmDelete', { label: 'discussion' })}
-                  onConfirm={(e) => { e?.stopPropagation(); handleDelete(d.id); }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Button size="small" danger>
-                    {t('common.delete')}
-                  </Button>
-                </Popconfirm>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

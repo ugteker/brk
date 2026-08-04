@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Skeleton, Typography } from 'antd';
-import { DatabaseOutlined } from '@ant-design/icons';
+import { DatabaseOutlined, PlusOutlined } from '@ant-design/icons';
 import { type ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogSource } from '../../api/catalog';
@@ -100,16 +100,6 @@ export function LibraryOverview({
         />
       ) : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {!hasOwnedSavedSources ? (
-          <GhostCreateCard
-            attention={showAddSourceAttention}
-            ariaLabel={t('library.addSource')}
-            onClick={onAddSource}
-            icon={<DatabaseOutlined />}
-            title={t('library.addSource')}
-            sub={showAddSourceAttention ? t('library.nextActionHint') : undefined}
-          />
-        ) : null}
         {isCatalogLoading ? [1, 2, 3].map((item) => (
           <Card key={item} size="small" className="min-h-[170px]">
             <div className="flex items-start gap-3">
@@ -124,6 +114,16 @@ export function LibraryOverview({
         )) : starterSources.slice(0, 5).map((source) => (
           <StarterSourceCard key={source.sourceId} source={source} onSave={onSaveStarter} />
         ))}
+        {!hasOwnedSavedSources && !isCatalogLoading ? (
+          <GhostCreateCard
+            attention={showAddSourceAttention}
+            ariaLabel={t('library.addSource')}
+            onClick={onAddSource}
+            icon={<DatabaseOutlined />}
+            title={t('library.addSource')}
+            sub={showAddSourceAttention ? t('library.nextActionHint') : undefined}
+          />
+        ) : null}
       </div>
     </section>
   );
@@ -144,7 +144,17 @@ export function LibraryOverview({
 
   const yourLibrarySection = hasOwnedSavedSources ? (
     <section aria-labelledby="library-yours" className="space-y-4">
-      <Title id="library-yours" level={3} style={{ margin: 0 }}>{t('library.yourLibrary')}</Title>
+      <div className="flex items-center justify-between gap-3">
+        <Title id="library-yours" level={3} style={{ margin: 0 }}>{t('library.yourLibrary')}</Title>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          className={showAddSourceAttention ? 'library-next-action' : undefined}
+          onClick={onAddSource}
+        >
+          {t('library.addSource')}
+        </Button>
+      </div>
       <SavedSourceGrid
         sources={savedSources}
         currentUserId={currentUserId}
@@ -152,15 +162,6 @@ export function LibraryOverview({
         onAddAgent={onAddAgent}
         onRemoveAgent={onRemoveAgent}
         hasAnySources={hasAnySavedSources}
-        leadingCard={(
-          <GhostCreateCard
-            attention={showAddSourceAttention}
-            ariaLabel={t('library.addSource')}
-            onClick={onAddSource}
-            icon={<DatabaseOutlined />}
-            title={t('library.addSource')}
-          />
-        )}
         renderSourceActions={renderSavedSourceActions}
         linkedAgentsBySourceId={linkedAgentsBySourceId}
         highlightedAgentIdBySourceId={highlightedAgentIdBySourceId}
