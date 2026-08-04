@@ -145,6 +145,28 @@
   border-right: none;
 }
 
+/* Aurora primary buttons — the D1 capsule as the app-wide primary CTA style.
+   Danger and disabled buttons keep antd defaults. */
+.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled) {
+  background:
+    radial-gradient(140% 200% at 50% -30%, rgba(255, 255, 255, 0.18), transparent 60%),
+    linear-gradient(135deg, #6d28d9, #4f46e5);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 0 6px rgba(109, 40, 217, 0.3);
+}
+.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):hover {
+  background:
+    radial-gradient(140% 200% at 50% -30%, rgba(255, 255, 255, 0.25), transparent 60%),
+    linear-gradient(135deg, #7c3aed, #5b57ea);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 10px rgba(124, 58, 237, 0.4);
+}
+.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):active {
+  background:
+    radial-gradient(140% 200% at 50% -30%, rgba(255, 255, 255, 0.12), transparent 60%),
+    linear-gradient(135deg, #5b21b6, #4338ca);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 4px rgba(91, 33, 182, 0.3);
+}
+
 /* Page-level route transition — replayed on every navigation via key change */
 .ct-page-enter {
   animation: ct-slide-in-up 0.22s ease-out both;

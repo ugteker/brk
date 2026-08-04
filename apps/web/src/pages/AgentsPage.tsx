@@ -2297,19 +2297,20 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                      />
                      <div className="flex shrink-0 items-center justify-end gap-2">
                        {!showSourcesMarketplace ? (
-                         <Button
-                           type="primary"
-                           icon={<PlusOutlined />}
-                           aria-label={t('library.addSource')}
-                           onClick={() => {
-                             setEditingSource(null);
-                             setIsSourceCreateOpen(true);
-                             setSourceUrlDraft('');
-                             setAutoDetectedSource(null);
-                           }}
-                         >
-                           <span className="hidden sm:inline">{t('library.addSource')}</span>
-                         </Button>
+                         <TouchSafeTooltip title={t('library.addSource')}>
+                           <Button
+                             type="primary"
+                             shape="circle"
+                             icon={<PlusOutlined />}
+                             aria-label={t('library.addSource')}
+                             onClick={() => {
+                               setEditingSource(null);
+                               setIsSourceCreateOpen(true);
+                               setSourceUrlDraft('');
+                               setAutoDetectedSource(null);
+                             }}
+                           />
+                         </TouchSafeTooltip>
                        ) : null}
                      </div>
                    </div>
@@ -3333,9 +3334,15 @@ export function AgentsPage({ hub: initialHub }: { hub?: HubKey } = {}) {
                             style={{ maxWidth: 420 }}
                           />
                           <div className="flex flex-wrap items-center justify-end gap-2">
-                            <Button type="primary" icon={<BrainIcon />} onClick={openCurationCreate}>
-                              Curate with AI
-                            </Button>
+                            <TouchSafeTooltip title={t('agentSelection.curateWithAi')}>
+                              <Button
+                                type="primary"
+                                shape="circle"
+                                icon={<BrainIcon />}
+                                aria-label={t('agentSelection.curateWithAi')}
+                                onClick={openCurationCreate}
+                              />
+                            </TouchSafeTooltip>
                             <Badge count={marketplaceAgentCount} size="small">
                               <Button
                                 aria-label="Browse marketplace agents"

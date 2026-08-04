@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Skeleton, Typography } from 'antd';
-import { DatabaseOutlined, PlusOutlined } from '@ant-design/icons';
+import { DatabaseOutlined } from '@ant-design/icons';
 import { type ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogSource } from '../../api/catalog';
@@ -144,17 +144,7 @@ export function LibraryOverview({
 
   const yourLibrarySection = hasOwnedSavedSources ? (
     <section aria-labelledby="library-yours" className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <Title id="library-yours" level={3} style={{ margin: 0 }}>{t('library.yourLibrary')}</Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          className={showAddSourceAttention ? 'library-next-action' : undefined}
-          onClick={onAddSource}
-        >
-          {t('library.addSource')}
-        </Button>
-      </div>
+      <Title id="library-yours" level={3} style={{ margin: 0 }}>{t('library.yourLibrary')}</Title>
       <SavedSourceGrid
         sources={savedSources}
         currentUserId={currentUserId}

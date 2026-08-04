@@ -261,6 +261,7 @@
     "useAgent": "Agent verwenden",
     "viewDetails": "Details ansehen",
     "curateYourOwn": "Eigenen Agent bauen",
+    "curateWithAi": "Mit KI kuratieren",
     "retry": "Erneut versuchen",
     "empty": "Noch keine passenden Agenten. Kuratiere deinen eigenen, um zu starten.",
     "connectionSuccess": "Agent wurde mit dieser Quelle verbunden.",

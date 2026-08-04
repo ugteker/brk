@@ -31,6 +31,7 @@ export class SyntheticSourceService implements OrchestratorSyntheticSource {
             configJson: JSON.stringify({
               discussionId: discussion.id,
               name: discussion.name,
+              format: discussion.format,
               participants: participantNames,
               libraryCard: { title: discussion.name }
             })
@@ -67,13 +68,13 @@ export class SyntheticSourceService implements OrchestratorSyntheticSource {
     // lives in configJson.libraryCard (see source/repository.ts). Failures here
     // must never fail the discussion run itself.
     try {
-      await this.refreshLibraryCard(sourceId!, discussion.name);
+      await this.refreshLibraryCard(sourceId!, discussion.name, discussion.format);
     } catch {
       // best-effort only
     }
   }
 
-  private async refreshLibraryCard(sourceId: string, title: string): Promise<void> {
+  private async refreshLibraryCard(sourceId: string, title: string, format?: string): Promise<void> {
     const source = await (this.db as any).source.findUnique({ where: { id: sourceId } });
     if (!source) return;
     let config: Record<string, unknown> = {};
@@ -83,6 +84,8 @@ export class SyntheticSourceService implements OrchestratorSyntheticSource {
     } catch {
       // keep empty config
     }
+    // Self-heal sources created before format was stored (used to seed the cover art).
+    if (format && config.format !== format) config.format = format;
     const [items, itemCount, runs] = await Promise.all([
       (this.db as any).sourceItem.findMany({
         where: { sourceId },

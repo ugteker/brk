@@ -6,6 +6,7 @@ import type { SourceRecord } from '../../api/sources';
 import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../../data/character-types';
 import { extractYoutubeVideoId, getYoutubeCoverImageFallback, getYoutubeThumbnailUrl } from '../../utils/youtube';
 import { TouchSafeTooltip } from '../TouchSafeTooltip';
+import { DiscussionCover } from '../DiscussionCover';
 
 const { Text } = Typography;
 
@@ -132,6 +133,12 @@ export function SavedSourceGrid({
                     className="relative h-full w-full object-contain"
                   />
                 </>
+              ) : source.type === 'synthetic_discussion' ? (
+                <DiscussionCover
+                  id={typeof source.config.discussionId === 'string' ? source.config.discussionId : source.id}
+                  format={typeof source.config.format === 'string' ? source.config.format : 'structured'}
+                  className="absolute inset-0 h-full w-full"
+                />
               ) : (
                 source.type === 'youtube_videos' ? (
                   <div className="flex h-full items-center justify-center bg-slate-900/80 text-slate-100">

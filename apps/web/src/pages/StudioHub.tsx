@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { deleteDiscussion, listDiscussions, triggerDiscussionRun, type DiscussionDto } from '../api/discussions';
 import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
+import { DiscussionCover } from '../components/DiscussionCover';
 
 const { Title } = Typography;
 
@@ -76,9 +77,14 @@ export function StudioHub() {
           {t('studio.title')}
         </Title>
         {discussions.length > 0 && (
-          <StudioPrimaryButton icon={<PlusOutlined />} onClick={() => navigate('/studio/new')}>
-            {t('studio.newDiscussion')}
-          </StudioPrimaryButton>
+          <Tooltip title={t('studio.newDiscussion')}>
+            <StudioPrimaryButton
+              shape="circle"
+              icon={<PlusOutlined />}
+              aria-label={t('studio.newDiscussion')}
+              onClick={() => navigate('/studio/new')}
+            />
+          </Tooltip>
         )}
       </div>
 
@@ -109,14 +115,10 @@ export function StudioHub() {
                 style={{ animationDelay: `${i * 50}ms` }}
                 onClick={() => navigate(`/studio/${d.id}`)}
               >
-                {/* Format-colored aurora banner */}
-                <div
-                  className="relative flex h-24 items-end px-4 pb-2"
-                  style={{
-                    background: `radial-gradient(120% 180% at 15% 0%, ${hex}55, transparent 60%), radial-gradient(120% 180% at 85% 100%, ${hex}33, transparent 60%), linear-gradient(135deg, ${hex}22, transparent)`
-                  }}
-                >
-                  <div className="flex items-center" style={{ marginLeft: 4 }}>
+                {/* Procedural cover, seeded per discussion */}
+                <div className="relative flex h-24 items-end px-4 pb-2">
+                  <DiscussionCover id={d.id} format={d.format} className="absolute inset-0 h-full w-full" />
+                  <div className="relative flex items-center" style={{ marginLeft: 4 }}>
                     {active.map((p, idx) => (
                       <Tooltip key={p.id} title={`Speaker ${p.speakerOrder + 1}`}>
                         <span

@@ -262,6 +262,7 @@
     "useAgent": "Use agent",
     "viewDetails": "View details",
     "curateYourOwn": "Curate your own",
+    "curateWithAi": "Curate with AI",
     "retry": "Try again",
     "empty": "No matching agents yet. Curate your own to get started.",
     "connectionSuccess": "Agent connected to this source.",
