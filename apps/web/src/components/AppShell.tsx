@@ -75,31 +75,40 @@ const navRailStyle = (theme: 'light' | 'dark'): CSSProperties => ({
   alignItems: 'center',
   padding: 6,
   borderRadius: 999,
-  background: theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.035)'
+  // Aurora glass: violet/blue light bleeding through a translucent pane.
+  background: theme === 'dark'
+    ? 'radial-gradient(120% 180% at 15% 0%, rgba(167,139,250,0.28), transparent 55%), radial-gradient(120% 180% at 85% 100%, rgba(59,130,246,0.18), transparent 55%), rgba(255,255,255,0.06)'
+    : 'radial-gradient(120% 180% at 15% 0%, rgba(196,181,253,0.5), transparent 55%), radial-gradient(120% 180% at 85% 100%, rgba(147,197,253,0.4), transparent 55%), rgba(255,255,255,0.45)',
+  backdropFilter: 'blur(20px) saturate(170%)',
+  WebkitBackdropFilter: 'blur(20px) saturate(170%)',
+  border: theme === 'dark' ? '1px solid rgba(196,181,253,0.4)' : '1px solid rgba(139,92,246,0.35)',
+  boxShadow: theme === 'dark'
+    ? 'inset 0 1px 0 rgba(255,255,255,0.3), 0 0 0 1px rgba(124,58,237,0.15), 0 12px 36px rgba(91,33,182,0.35)'
+    : 'inset 0 1px 0 rgba(255,255,255,1), 0 0 0 1px rgba(124,58,237,0.1), 0 12px 36px rgba(91,33,182,0.18)'
 });
 
-function navButtonStyle(isActive: boolean, isStudio: boolean, theme: 'light' | 'dark'): CSSProperties {
-  const studioActiveShadow = '0 2px 8px rgba(114,46,209,0.4), 0 0 0 1px rgba(114,46,209,0.2)';
-  const defaultActiveShadow =
-    theme === 'dark'
-      ? '0 2px 8px rgba(24,144,255,0.45), 0 0 0 1px rgba(24,144,255,0.25)'
-      : '0 2px 8px rgba(24,144,255,0.35), 0 0 0 1px rgba(24,144,255,0.15)';
-
-  return {
+function navButtonStyle(isActive: boolean, theme: 'light' | 'dark'): CSSProperties {
+  const style: CSSProperties = {
     fontWeight: isActive ? 600 : 400,
     borderRadius: 999,
-    paddingLeft: 16,
-    paddingRight: 16,
-    boxShadow: isActive ? (isStudio ? studioActiveShadow : defaultActiveShadow) : 'none',
-    transition: 'background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease',
-    ...(isStudio
-      ? isActive
-        ? { background: '#722ed1', borderColor: '#722ed1' }
-        : theme === 'dark'
-          ? { color: '#b37feb', background: 'rgba(114,46,209,0.16)' }
-          : { color: '#722ed1', background: '#f9f0ff' }
-      : {})
+    height: 40,
+    paddingLeft: 20,
+    paddingRight: 20,
+    border: '1px solid transparent',
+    color: isActive ? (theme === 'dark' ? '#fff' : '#4c1d95') : theme === 'dark' ? '#e9e5f5' : '#4c4560',
+    transition: 'background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease'
   };
+  if (isActive) {
+    // Glowing aurora capsule for the active tab (matches the approved D1 mockup).
+    style.background = theme === 'dark'
+      ? 'radial-gradient(140% 200% at 50% -30%, rgba(255,255,255,0.4), transparent 60%), linear-gradient(135deg, rgba(139,92,246,0.5), rgba(99,102,241,0.4))'
+      : 'radial-gradient(140% 200% at 50% -30%, #fff, transparent 60%), linear-gradient(135deg, rgba(196,181,253,0.75), rgba(165,180,252,0.6))';
+    style.borderColor = theme === 'dark' ? 'rgba(221,214,254,0.7)' : 'rgba(114,46,209,0.4)';
+    style.boxShadow = theme === 'dark'
+      ? 'inset 0 1px 0 rgba(255,255,255,0.45), 0 0 22px rgba(139,92,246,0.6)'
+      : 'inset 0 1px 0 rgba(255,255,255,1), 0 0 22px rgba(139,92,246,0.4)';
+  }
+  return style;
 }
 
 const actionClusterStyle: CSSProperties = {
@@ -272,15 +281,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             <nav style={navRailStyle(theme)}>
               {navItems.map((item) => {
                 const isActive = current === item.key;
-                const isStudio = item.key === 'studio';
                 return (
                   <Button
                     key={item.key}
-                    type={isActive ? 'primary' : 'text'}
+                    type="text"
                     icon={item.icon}
                     onClick={() => navigate(item.path)}
                     size="middle"
-                    style={navButtonStyle(isActive, isStudio, theme)}
+                    style={navButtonStyle(isActive, theme)}
                   >
                     {t(item.labelKey)}
                   </Button>
