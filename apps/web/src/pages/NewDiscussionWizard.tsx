@@ -9,22 +9,23 @@ import {
   Input,
   Progress,
   Select,
-  Space,
   Steps,
   Tag,
   message
 } from 'antd';
 import { ArrowLeftOutlined, ArrowRightOutlined, AudioOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { useAuth } from '../auth/AuthContext';
 import { listAgents, listAgentReports, type AgentSummary, type RunReportDto } from '../api/agents';
 import {
   createDiscussion,
+  getDiscussion,
   getDiscussionCapabilities,
   listTranscriptOptions,
   triggerDiscussionRun,
+  updateDiscussion,
   type DiscussionCapabilities,
   type DiscussionGroundingMode,
   type DiscussionPreselect,
@@ -33,6 +34,7 @@ import {
 } from '../api/discussions';
 import { cloneMarketplaceAgent, listMarketplaceAgents, type MarketplaceAgentListItem } from '../api/marketplace';
 import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
+import { AgentCurator, type CuratedAgent } from '../components/AgentCurator';
 import { getAgentDisplayLabel } from '../utils/agent-label';
 
 const PUBLIC_AGENTS_PAGE_SIZE = 4;
@@ -84,8 +86,7 @@ interface ParticipantConfig {
   reportIds: string[];
 }
 
-/** Logical wizard steps; the shared 'material' picker step only exists in material mode. */
-type StepKey = 'topic' | 'material' | 'experts' | 'setup' | 'start';
+type StepKey = 'story' | 'guests' | 'goLive';
 
 const GROUNDING_MODES: Array<{ mode: DiscussionGroundingMode; emoji: string }> = [
   { mode: 'material', emoji: '📚' },
@@ -96,10 +97,13 @@ export function NewDiscussionWizard() {
   const { t, i18n } = useTranslation();
   const navigate = useSafeNavigate();
   const location = useLocation();
+  const { discussionId } = useParams<{ discussionId: string }>();
   const { user } = useAuth();
+  const isEditing = Boolean(discussionId);
 
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
+  const [loadingDiscussion, setLoadingDiscussion] = useState(isEditing);
   const [submitting, setSubmitting] = useState(false);
 
   // Topic step: what grounds the discussion.
@@ -122,6 +126,7 @@ export function NewDiscussionWizard() {
   // back to setup doesn't re-clone (and doesn't lose track of) the same public agent.
   const [clonedAgentIdByPublication, setClonedAgentIdByPublication] = useState<Record<string, string>>({});
   const [cloningAgents, setCloningAgents] = useState(false);
+  const [showAgentCurator, setShowAgentCurator] = useState(false);
 
   // Pre-fill support for entry points that jump in from a report or Library source
   // (rather than the default blank topic-first flow). The preselected reports land in
@@ -166,17 +171,10 @@ export function NewDiscussionWizard() {
   const [loadingReports, setLoadingReports] = useState(false);
   const [reportsLoaded, setReportsLoaded] = useState(false);
 
-  // Start step
   const [runNow, setRunNow] = useState(true);
 
-  const stepKeys = useMemo<StepKey[]>(
-    () =>
-      groundingMode === 'material'
-        ? ['topic', 'material', 'experts', 'setup', 'start']
-        : ['topic', 'experts', 'setup', 'start'],
-    [groundingMode]
-  );
-  const [currentKey, setCurrentKey] = useState<StepKey>('topic');
+  const stepKeys = useMemo<StepKey[]>(() => ['story', 'guests', 'goLive'], []);
+  const [currentKey, setCurrentKey] = useState<StepKey>('story');
   const currentIndex = stepKeys.indexOf(currentKey);
   const stepProgress = ((currentIndex + 1) / stepKeys.length) * 100;
 
@@ -192,22 +190,68 @@ export function NewDiscussionWizard() {
   }, []);
 
   useEffect(() => {
+    if (!discussionId) return;
+    getDiscussion(discussionId)
+      .then((discussion) => {
+        const grounding = discussion.formatConfig.grounding;
+        setGroundingMode(grounding?.mode === 'free' ? 'free' : 'material');
+        setSelectedReportIds(grounding?.reportIds ?? []);
+        setSelectedTranscriptIds(grounding?.artifactIds ?? []);
+        setAgenda(discussion.description);
+        setDiscussionName(discussion.name);
+        setFormat(discussion.format);
+        setParticipants(
+          discussion.participants
+            .filter((participant) => participant.active)
+            .slice()
+            .sort((a, b) => a.speakerOrder - b.speakerOrder)
+            .map((participant) => ({
+              agentId: participant.agentId,
+              role: participant.role,
+              voiceId: participant.voiceId as Voice,
+              speakerOrder: participant.speakerOrder,
+              reportIds: participant.reportIds
+            }))
+        );
+        setSelectedAgentIds(
+          discussion.participants
+            .filter((participant) => participant.active)
+            .slice()
+            .sort((a, b) => a.speakerOrder - b.speakerOrder)
+            .map((participant) => participant.agentId)
+        );
+        setTotalTurnTarget(discussion.formatConfig.totalTurnTarget ?? 12);
+        setLanguage(discussion.formatConfig.language ?? 'en');
+        setTurnLength(discussion.formatConfig.turnLength ?? 'medium');
+        setTtsProvider(discussion.formatConfig.ttsProvider ?? 'auto');
+        setRunNow(false);
+        setCurrentKey('guests');
+      })
+      .catch(() => {
+        message.error(t('studio.failedToLoadDiscussion'));
+        navigate('/studio');
+      })
+      .finally(() => setLoadingDiscussion(false));
+  }, [discussionId, navigate, t]);
+
+  useEffect(() => {
+    if (isEditing) return;
     const preselect = (location.state as { preselect?: DiscussionPreselect } | null)?.preselect;
     if (preselect && preselect.entries.length > 0) {
       setGroundingMode('material');
       setSelectedAgentIds(preselect.entries.map((e) => e.agentId));
       setSelectedReportIds([...new Set(preselect.entries.flatMap((e) => e.reportIds))]);
       setPreselectContextLabel(preselect.contextLabel ?? null);
-      setCurrentKey('material');
+      setCurrentKey('story');
     }
     // Only ever applied once, from whatever state the wizard was opened with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isEditing]);
 
-  // Lazy-load the material pool options (all reports across all agents + transcripts) the
-  // first time the material step is shown.
+  // Lazy-load the material pool options when the material section of Story is shown.
   useEffect(() => {
-    if (currentKey !== 'material') return;
+    if (currentKey !== 'story' || groundingMode !== 'material') return;
+    if (isEditing) return;
     if (!reportsLoaded && !loadingReports && !loadingAgents) {
       setLoadingReports(true);
       Promise.all(
@@ -237,7 +281,7 @@ export function NewDiscussionWizard() {
         .catch(() => setTranscriptsLoaded(true))
         .finally(() => setLoadingTranscripts(false));
     }
-  }, [currentKey, reportsLoaded, loadingReports, loadingAgents, agents, transcriptsLoaded, loadingTranscripts]);
+  }, [currentKey, isEditing, reportsLoaded, loadingReports, loadingAgents, agents, transcriptsLoaded, loadingTranscripts]);
 
   function clearPreselect() {
     setSelectedAgentIds([]);
@@ -245,10 +289,27 @@ export function NewDiscussionWizard() {
     setPreselectContextLabel(null);
   }
 
-  function handleAgentToggle(agentId: string, checked: boolean) {
-    setSelectedAgentIds((prev) =>
-      checked ? [...prev, agentId] : prev.filter((id) => id !== agentId)
+  function syncParticipants(agentIds: string[]) {
+    setParticipants((current) =>
+      agentIds.map((agentId, index) => {
+        const existing = current.find((participant) => participant.agentId === agentId);
+        return existing
+          ? { ...existing, speakerOrder: index }
+          : {
+              agentId,
+              role: (format === 'hosted' && index === 0 ? 'host' : 'speaker') as 'host' | 'speaker',
+              voiceId: VOICES[index % VOICES.length],
+              speakerOrder: index,
+              reportIds: []
+            };
+      })
     );
+  }
+
+  function handleAgentToggle(agentId: string, checked: boolean) {
+    const next = checked ? [...selectedAgentIds, agentId] : selectedAgentIds.filter((id) => id !== agentId);
+    setSelectedAgentIds(next);
+    syncParticipants(next);
   }
 
   function handlePublicAgentToggle(publicationId: string, checked: boolean) {
@@ -345,41 +406,52 @@ export function NewDiscussionWizard() {
     return selectedReportIds.length + selectedTranscriptIds.length > 0;
   }
 
-  function goToTopicNext() {
-    if (!topicStepValid()) {
+  function goToGuests() {
+    if (!isEditing && !topicStepValid()) {
       message.warning(t('studio.freeQuestionRequired'));
       return;
     }
-    setCurrentKey(groundingMode === 'material' ? 'material' : 'experts');
-  }
-
-  function goToMaterialNext() {
-    if (!materialStepValid()) {
+    if (!isEditing && groundingMode === 'material' && !materialStepValid()) {
       message.warning(t('studio.materialRequired'));
       return;
     }
-    setCurrentKey('experts');
+    setCurrentKey('guests');
   }
 
-  async function goToSetup() {
+  async function goToGoLive() {
     if (totalSelectedExperts < 2) {
       message.warning(t('studio.minParticipants'));
       return;
     }
-    let agentIds: string[];
+    const hasSelectedMarketplaceAgents = selectedPublicationIds.length > 0;
+    let agentIds = selectedAgentIds;
     try {
       agentIds = await resolveSelectedAgentIds();
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to add selected public agents');
       return;
     }
-    setParticipants(buildInitialParticipants(agentIds));
-    setDiscussionName(suggestName(agentIds));
-    setCurrentKey('setup');
+    syncParticipants(agentIds);
+    if (hasSelectedMarketplaceAgents) {
+      setSelectedAgentIds(agentIds);
+      setSelectedPublicationIds([]);
+      return;
+    }
+    if (!isEditing) setDiscussionName(suggestName(agentIds));
+    setCurrentKey('goLive');
   }
 
-  function goAfterSetup() {
-    setCurrentKey('start');
+  async function completeAgentCuration(agent: CuratedAgent) {
+    try {
+      const refreshedAgents = await listAgents();
+      setAgents(refreshedAgents);
+      const next = selectedAgentIds.includes(agent.id) ? selectedAgentIds : [...selectedAgentIds, agent.id];
+      setSelectedAgentIds(next);
+      syncParticipants(next);
+      setShowAgentCurator(false);
+    } catch {
+      message.error(t('studio.failedToRefreshAgents'));
+    }
   }
 
   function updateParticipant(index: number, field: keyof ParticipantConfig, value: unknown) {
@@ -397,15 +469,33 @@ export function NewDiscussionWizard() {
     }
     setSubmitting(true);
     try {
+      const formatConfig = {
+        totalTurnTarget,
+        language,
+        turnLength,
+        ...(ttsProvider !== 'auto' ? { ttsProvider } : {})
+      };
+      if (isEditing && discussionId) {
+        await updateDiscussion(discussionId, {
+          name: discussionName.trim(),
+          format,
+          formatConfig,
+          participants: participants.map(({ agentId, role, voiceId, speakerOrder }) => ({
+            agentId,
+            role,
+            voiceId,
+            speakerOrder
+          }))
+        });
+        navigate(`/studio/${discussionId}`);
+        return;
+      }
       const disc = await createDiscussion({
         name: discussionName.trim(),
         description: agenda.trim() || undefined,
         format,
         formatConfig: {
-          totalTurnTarget,
-          language,
-          turnLength,
-          ...(ttsProvider !== 'auto' ? { ttsProvider } : {}),
+          ...formatConfig,
           grounding: {
             mode: groundingMode,
             ...(groundingMode === 'material'
@@ -423,26 +513,40 @@ export function NewDiscussionWizard() {
         navigate(`/studio/${disc.id}`);
       }
     } catch {
-      message.error('Failed to create discussion');
+      message.error(t(isEditing ? 'studio.failedToUpdateDiscussion' : 'studio.failedToCreateDiscussion'));
     } finally {
       setSubmitting(false);
     }
   }
 
   const stepTitles: Record<StepKey, string> = {
-    topic: t('studio.wizardStepTopic'),
-    experts: t('studio.wizardStep1'),
-    setup: t('studio.wizardStep2'),
-    material: t('studio.wizardStepMaterial'),
-    start: t('studio.wizardStep3')
+    story: t('studio.wizardStepStory'),
+    guests: t('studio.wizardStepGuests'),
+    goLive: t('studio.wizardStepGoLive')
   };
+
+  if (loadingDiscussion) {
+    return null;
+  }
+
+  if (showAgentCurator) {
+    return (
+      <div style={{ maxWidth: 700, margin: '0 auto', padding: '0 clamp(8px, 4vw, 16px)' }}>
+        <AgentCurator
+          mode="create"
+          onCancel={() => setShowAgentCurator(false)}
+          onComplete={(agent) => void completeAgentCuration(agent)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto', padding: '0 clamp(8px, 4vw, 16px)' }}>
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>
           <AudioOutlined style={{ marginRight: 8 }} />
-          {t('studio.newDiscussion')}
+          {isEditing ? t('studio.editDiscussion') : t('studio.newDiscussion')}
         </h2>
         <Button type="text" onClick={() => navigate('/studio')}>
           {t('common.cancel')}
@@ -464,64 +568,158 @@ export function NewDiscussionWizard() {
         className="sm:hidden"
       />
 
-      {/* Topic: what should the experts talk about? */}
-      {currentKey === 'topic' && (
+      {/* Story: what the discussion is about and the material that grounds it. */}
+      {currentKey === 'story' && (
         <Card>
+          {!isEditing && preselectContextLabel && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={t('studio.preselectBanner', { context: preselectContextLabel })}
+              action={
+                <Button size="small" type="text" onClick={clearPreselect}>
+                  {t('studio.startFromScratch')}
+                </Button>
+              }
+            />
+          )}
           <p style={{ color: '#888', marginTop: 0 }}>{t('studio.topicStepIntro')}</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
-            {GROUNDING_MODES.map(({ mode, emoji }) => {
-              const selected = groundingMode === mode;
-              return (
-                <Card
-                  key={mode}
-                  size="small"
-                  hoverable
-                  style={{
-                    cursor: 'pointer',
-                    borderColor: selected ? '#722ed1' : undefined,
-                    background: selected ? 'rgba(114,46,209,0.08)' : undefined
-                  }}
-                  onClick={() => setGroundingMode(mode)}
-                >
-                  <div style={{ fontSize: 22, marginBottom: 4 }}>{emoji}</div>
-                  <div style={{ fontWeight: 600 }}>{t(`studio.grounding_${mode}_title`)}</div>
-                  <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>
-                    {t(`studio.grounding_${mode}_desc`)}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+          {isEditing ? (
+            <Alert type="info" showIcon message={t('studio.materialLocked')} style={{ marginBottom: 20 }} />
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
+              {GROUNDING_MODES.map(({ mode, emoji }) => {
+                const selected = groundingMode === mode;
+                return (
+                  <Card
+                    key={mode}
+                    size="small"
+                    hoverable
+                    style={{
+                      cursor: 'pointer',
+                      borderColor: selected ? '#722ed1' : undefined,
+                      background: selected ? 'rgba(114,46,209,0.08)' : undefined
+                    }}
+                    onClick={() => setGroundingMode(mode)}
+                  >
+                    <div style={{ fontSize: 22, marginBottom: 4 }}>{emoji}</div>
+                    <div style={{ fontWeight: 600 }}>{t(`studio.grounding_${mode}_title`)}</div>
+                    <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>
+                      {t(`studio.grounding_${mode}_desc`)}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
 
           {groundingMode === 'free' && (
             <Form layout="vertical">
-              <Form.Item label={t('studio.freeQuestionLabel')} required>
+              <Form.Item label={t('studio.freeQuestionLabel')} required={!isEditing}>
                 <Input.TextArea
                   value={agenda}
-                  onChange={(e) => setAgenda(e.target.value)}
+                  onChange={isEditing ? undefined : (e) => setAgenda(e.target.value)}
                   placeholder={t('studio.freeQuestionPlaceholder')}
                   rows={3}
+                  readOnly={isEditing}
                 />
               </Form.Item>
             </Form>
           )}
 
           {groundingMode === 'material' && (
-            <p style={{ color: '#888', fontSize: 13 }}>{t('studio.grounding_material_hint')}</p>
+            <Form layout="vertical">
+              {isEditing ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  message={t('studio.materialLocked')}
+                  description={t('studio.materialSummary', {
+                    reports: selectedReportIds.length,
+                    transcripts: selectedTranscriptIds.length
+                  })}
+                  style={{ marginBottom: 16 }}
+                />
+              ) : (
+                <>
+                  <Form.Item label={t('studio.materialReportsLabel')}>
+                    <Select
+                      mode="multiple"
+                      allowClear
+                      value={selectedReportIds}
+                      onChange={setSelectedReportIds}
+                      loading={loadingReports}
+                      placeholder={t('studio.reportPickerPlaceholder')}
+                      notFoundContent={loadingReports ? t('studio.reportPickerLoading') : t('studio.reportPickerEmpty')}
+                      optionFilterProp="label"
+                      options={allReports.map((report) => ({
+                        value: report.id,
+                        label: `${report.agentName} · ${new Date(report.createdAt).toLocaleDateString()} — ${report.summary.slice(0, 80)}`
+                      }))}
+                    />
+                  </Form.Item>
+                  <Form.Item label={t('studio.materialTranscriptsLabel')}>
+                    <Select
+                      mode="multiple"
+                      allowClear
+                      value={selectedTranscriptIds}
+                      onChange={setSelectedTranscriptIds}
+                      loading={loadingTranscripts}
+                      placeholder={t('studio.transcriptPickerPlaceholder')}
+                      notFoundContent={loadingTranscripts ? t('studio.transcriptPickerLoading') : t('studio.transcriptPickerEmpty')}
+                      optionLabelProp="label"
+                      options={transcriptOptions.map((option) => ({
+                        value: option.artifactId,
+                        label: option.title,
+                        desc: option.preview
+                      }))}
+                      optionRender={(option) => (
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{option.data.label}</div>
+                          <div style={{ color: '#888', fontSize: 12, whiteSpace: 'normal' }}>{option.data.desc}</div>
+                        </div>
+                      )}
+                    />
+                  </Form.Item>
+                </>
+              )}
+              <Form.Item label={t('studio.agendaLabel')}>
+                <Input.TextArea
+                  value={agenda}
+                  onChange={isEditing ? undefined : (event) => setAgenda(event.target.value)}
+                  placeholder={t('studio.agendaPlaceholder')}
+                  rows={3}
+                  readOnly={isEditing}
+                />
+              </Form.Item>
+            </Form>
           )}
 
           <div style={{ textAlign: 'right' }}>
-            <Button type="primary" onClick={goToTopicNext} disabled={!topicStepValid()}>
+            <Button
+              type="primary"
+              onClick={goToGuests}
+              disabled={!isEditing && (!topicStepValid() || (groundingMode === 'material' && !materialStepValid()))}
+            >
               {t('common.next')}
             </Button>
           </div>
         </Card>
       )}
 
-      {/* Experts: pick agents */}
-      {currentKey === 'experts' && (
+      {/* Guests: select experts and give each one a role and voice. */}
+      {currentKey === 'guests' && (
         <Card>
-          {preselectContextLabel && (
+          {isEditing && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={t('studio.expertChangesFutureRuns')}
+            />
+          )}
+          {!isEditing && preselectContextLabel && (
             <Alert
               type="info"
               showIcon
@@ -619,19 +817,62 @@ export function NewDiscussionWizard() {
             </div>
           </div>
 
+          <Button className="mt-4" onClick={() => setShowAgentCurator(true)}>
+            {t('studio.buildAgent')}
+          </Button>
+
+          {participants.length > 0 && (
+            <Form layout="vertical" className="mt-6">
+              <Form.Item label={t('studio.participants')}>
+                {participants.map((participant, index) => {
+                  const agent = agents.find((candidate) => candidate.id === participant.agentId);
+                  return (
+                    <div key={participant.agentId} style={{ marginBottom: 8 }}>
+                      <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>
+                        {agent ? getAgentDisplayLabel(agent) : participant.agentId}
+                      </strong>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        <Select
+                          value={participant.role}
+                          onChange={(value) => updateParticipant(index, 'role', value)}
+                          style={{ width: 110 }}
+                          options={[
+                            { value: 'speaker', label: t('studio.roleSpeaker') },
+                            { value: 'host', label: t('studio.roleHost') }
+                          ]}
+                        />
+                        <Select
+                          value={participant.voiceId}
+                          onChange={(value) => updateParticipant(index, 'voiceId', value)}
+                          style={{ flex: '1 1 160px', minWidth: 160, maxWidth: 230 }}
+                          options={VOICES.map((voice) => ({
+                            value: voice,
+                            label: effectiveTtsProvider === 'google'
+                              ? `${VOICE_LABELS[voice]} · ${GOOGLE_VOICE_NAMES[language][voice]}`
+                              : VOICE_LABELS[voice]
+                          }))}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </Form.Item>
+            </Form>
+          )}
+
           <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-            <Button onClick={() => setCurrentKey(groundingMode === 'material' ? 'material' : 'topic')}>
+            <Button onClick={() => setCurrentKey('story')}>
               {t('common.back')}
             </Button>
-            <Button type="primary" loading={cloningAgents} onClick={goToSetup} disabled={totalSelectedExperts < 2}>
+            <Button type="primary" loading={cloningAgents} onClick={goToGoLive} disabled={totalSelectedExperts < 2}>
               {cloningAgents ? t('studio.cloningAgents') : t('common.next')}
             </Button>
           </div>
         </Card>
       )}
 
-      {/* Setup: name, format, turns, language, participants */}
-      {currentKey === 'setup' && (
+      {/* Go Live: settings, review, and optional immediate run. */}
+      {currentKey === 'goLive' && (
         <Card>
           <Form layout="vertical">
             <Form.Item label={t('studio.discussionNameLabel')} required>
@@ -705,160 +946,32 @@ export function NewDiscussionWizard() {
                           />
                         </Form.Item>
                       )}
-                      <Form.Item label={t('studio.participants')}>
-                        {participants.map((p, i) => {
-                          const agent = agents.find((a) => a.id === p.agentId);
-                          return (
-                            <div key={p.agentId} style={{ marginBottom: 8 }}>
-                              <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>
-                                {agent ? getAgentDisplayLabel(agent) : p.agentId}
-                              </strong>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                <Select
-                                  value={p.role}
-                                  onChange={(v) => updateParticipant(i, 'role', v)}
-                                  style={{ width: 110 }}
-                                  options={[
-                                    { value: 'speaker', label: t('studio.roleSpeaker') },
-                                    { value: 'host', label: t('studio.roleHost') }
-                                  ]}
-                                />
-                                <Select
-                                  value={p.voiceId}
-                                  onChange={(v) => updateParticipant(i, 'voiceId', v)}
-                                  style={{ flex: '1 1 160px', minWidth: 160, maxWidth: 230 }}
-                                  options={VOICES.map((v) => ({
-                                    value: v,
-                                    // When Google renders the audio, show the actual Google voice each
-                                    // character maps to so the picker matches the underlying API.
-                                    label:
-                                      effectiveTtsProvider === 'google'
-                                        ? `${VOICE_LABELS[v]} · ${GOOGLE_VOICE_NAMES[language][v]}`
-                                        : VOICE_LABELS[v]
-                                  }))}
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </Form.Item>
                     </>
                   )
                 }
               ]}
             />
-          </Form>
-          <Space>
-            <Button onClick={() => setCurrentKey('experts')}>{t('common.back')}</Button>
-            <Button type="primary" onClick={goAfterSetup}>
-              {t('common.next')}
-            </Button>
-          </Space>
-        </Card>
-      )}
-
-      {/* Material: shared, agent-independent pool of reports + transcripts + optional agenda */}
-      {currentKey === 'material' && (
-        <Card>
-          {preselectContextLabel && (
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-              message={t('studio.preselectBanner', { context: preselectContextLabel })}
-              action={
-                <Button size="small" type="text" onClick={clearPreselect}>
-                  {t('studio.startFromScratch')}
-                </Button>
-              }
-            />
-          )}
-          <Form layout="vertical">
-            <p style={{ color: '#888', marginTop: 0 }}>{t('studio.materialStepIntro')}</p>
-            <Form.Item label={t('studio.materialReportsLabel')}>
-              <Select
-                mode="multiple"
-                allowClear
-                value={selectedReportIds}
-                onChange={setSelectedReportIds}
-                loading={loadingReports}
-                placeholder={t('studio.reportPickerPlaceholder')}
-                notFoundContent={loadingReports ? t('studio.reportPickerLoading') : t('studio.reportPickerEmpty')}
-                optionFilterProp="label"
-                options={allReports.map((r) => ({
-                  value: r.id,
-                  label: `${r.agentName} · ${new Date(r.createdAt).toLocaleDateString()} — ${r.summary.slice(0, 80)}`
-                }))}
-              />
-            </Form.Item>
-            <Form.Item label={t('studio.materialTranscriptsLabel')}>
-              <Select
-                mode="multiple"
-                allowClear
-                value={selectedTranscriptIds}
-                onChange={setSelectedTranscriptIds}
-                loading={loadingTranscripts}
-                placeholder={t('studio.transcriptPickerPlaceholder')}
-                notFoundContent={
-                  loadingTranscripts ? t('studio.transcriptPickerLoading') : t('studio.transcriptPickerEmpty')
-                }
-                optionLabelProp="label"
-                options={transcriptOptions.map((o) => ({
-                  value: o.artifactId,
-                  label: o.title,
-                  // Rendered inside the dropdown row for extra context.
-                  desc: o.preview
-                }))}
-                optionRender={(option) => (
-                  <div>
-                    <div style={{ fontWeight: 500 }}>{option.data.label}</div>
-                    <div style={{ color: '#888', fontSize: 12, whiteSpace: 'normal' }}>{option.data.desc}</div>
-                  </div>
-                )}
-              />
-            </Form.Item>
-            <Form.Item label={t('studio.agendaLabel')}>
-              <Input.TextArea
-                value={agenda}
-                onChange={(e) => setAgenda(e.target.value)}
-                placeholder={t('studio.agendaPlaceholder')}
-                rows={3}
-              />
-            </Form.Item>
-          </Form>
-          <Space>
-            <Button onClick={() => setCurrentKey('topic')}>{t('common.back')}</Button>
-            <Button type="primary" onClick={goToMaterialNext} disabled={!materialStepValid()}>
-              {t('common.next')}
-            </Button>
-          </Space>
-        </Card>
-      )}
-
-      {/* Start: run now toggle */}
-      {currentKey === 'start' && (
-        <Card>
-          <Form layout="vertical">
-            <Form.Item>
+            {!isEditing && <Form.Item>
               <Checkbox
                 checked={runNow}
                 onChange={(e) => setRunNow(e.target.checked)}
                 className="flex items-start leading-5 [&_.ant-checkbox]:mt-0.5"
               >
-                {t('studio.runNow')} (run the discussion immediately after creating)
+                {t('studio.runNow')}
               </Checkbox>
-            </Form.Item>
+            </Form.Item>}
           </Form>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <Button className="w-full sm:w-auto" onClick={() => setCurrentKey('setup')}>
+            <Button className="w-full sm:w-auto" onClick={() => setCurrentKey('guests')}>
               {t('common.back')}
             </Button>
             <StudioPrimaryButton className="w-full sm:w-auto" loading={submitting} onClick={handleSubmit}>
-              {t('studio.newDiscussion')}
+              {isEditing ? t('studio.saveDiscussion') : t('studio.newDiscussion')}
             </StudioPrimaryButton>
           </div>
         </Card>
       )}
+
     </div>
   );
 }

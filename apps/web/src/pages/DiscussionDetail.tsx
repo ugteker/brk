@@ -15,6 +15,7 @@ import {
 import {
   ArrowLeftOutlined,
   AudioOutlined,
+  EditOutlined,
   PlayCircleOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -631,7 +632,8 @@ export function DiscussionDetail() {
   const turnTarget = discussion.formatConfig.totalTurnTarget ?? 12;
   // Participants in speaking order for the studio panel and round-robin prediction of the
   // next speaker (mirrors the orchestrator's contexts[turn % contexts.length]).
-  const orderedParticipants = discussion.participants
+  const activeParticipants = discussion.participants.filter((participant) => participant.active);
+  const orderedParticipants = activeParticipants
     .slice()
     .sort((a, b) => a.speakerOrder - b.speakerOrder)
     .map((p) => ({ id: p.id, info: participantInfoMap[p.id] ?? { name: 'Agent', characterType: null, index: 0 } }));
@@ -660,12 +662,19 @@ export function DiscussionDetail() {
           </h2>
           <Space style={{ marginTop: 4 }} size={4}>
             <Text type="secondary" style={{ fontSize: 13 }}>
-              {t(`studio.format_${discussion.format}`)} · {discussion.participants.length}{' '}
+              {t(`studio.format_${discussion.format}`)} · {activeParticipants.length}{' '}
               {t('studio.participants')}
             </Text>
           </Space>
         </div>
         <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
+          <Tooltip title={t('studio.editDiscussion')}>
+            <Button
+              aria-label={t('studio.editDiscussion')}
+              icon={<EditOutlined />}
+              onClick={() => navigate(`/studio/${discussion.id}/edit`)}
+            />
+          </Tooltip>
           <Button
             className="flex-1 sm:flex-none"
             icon={<PlayCircleOutlined />}
@@ -727,7 +736,7 @@ export function DiscussionDetail() {
         </div>
         <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           <Text type="secondary" style={{ fontSize: 13 }}>{t('studio.detailsSpeakers')}: </Text>
-          {discussion.participants.map((p) => {
+          {activeParticipants.map((p) => {
             const info = participantInfoMap[p.id];
             return (
               <Tag key={p.id} style={{ margin: 0 }}>

@@ -7,7 +7,10 @@ import type { DiscussionRepositoryLike } from './repository';
 const discRow = {
   id: 'd1', ownerUserId: 'u1', name: 'Test', description: '', format: 'free_form' as const,
   formatConfig: {}, scheduleJson: null, syntheticSourceId: null,
-  createdAt: new Date(), updatedAt: new Date(), participants: []
+  createdAt: new Date(), updatedAt: new Date(), participants: [
+    { id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, active: true, reportIds: [] },
+    { id: 'p2', discussionId: 'd1', agentId: 'a2', role: 'speaker' as const, voiceId: 'echo' as const, speakerOrder: 1, active: true, reportIds: [] }
+  ]
 };
 const runRow = {
   id: 'r1', discussionId: 'd1', status: 'pending' as const, triggeredBy: 'manual' as const,
@@ -83,6 +86,78 @@ describe('Discussion routes', () => {
   it('GET /api/discussions/:id returns 404 for non-owner', async () => {
     const app = await buildApp({ getDiscussion: vi.fn().mockResolvedValue({ ...discRow, ownerUserId: 'other' }) });
     const res = await app.inject({ method: 'GET', url: '/api/discussions/d1' });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('PATCH /api/discussions/:id updates valid setup for owner', async () => {
+    const updateDiscussion = vi.fn().mockResolvedValue(discRow);
+    const app = await buildApp({ updateDiscussion });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/discussions/d1',
+      payload: {
+        name: ' Updated ',
+        formatConfig: { language: 'de', turnLength: 'long' },
+        participants: [
+          { agentId: 'a1', role: 'host', voiceId: 'nova', speakerOrder: 0 },
+          { agentId: 'a2', role: 'speaker', voiceId: 'echo', speakerOrder: 1 }
+        ]
+      }
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(updateDiscussion).toHaveBeenCalledWith('d1', expect.objectContaining({ name: 'Updated' }));
+  });
+
+  it('PATCH /api/discussions/:id rejects invalid participants, topic changes, and material changes', async () => {
+    const app = await buildApp();
+    const invalidParticipants = await app.inject({
+      method: 'PATCH',
+      url: '/api/discussions/d1',
+      payload: { participants: [{ agentId: 'a1', role: 'speaker', voiceId: 'alloy', speakerOrder: 0 }] }
+    });
+    const changedMaterial = await app.inject({
+      method: 'PATCH',
+      url: '/api/discussions/d1',
+      payload: { formatConfig: { grounding: { mode: 'free' } } }
+    });
+    const changedTopic = await app.inject({
+      method: 'PATCH',
+      url: '/api/discussions/d1',
+      payload: { description: 'New topic' }
+    });
+
+    expect(invalidParticipants.statusCode).toBe(400);
+    expect(changedMaterial.statusCode).toBe(400);
+    expect(changedTopic.statusCode).toBe(400);
+  });
+
+  it('PATCH /api/discussions/:id accepts participant membership changes for future runs', async () => {
+    const updateDiscussion = vi.fn().mockResolvedValue(discRow);
+    const app = await buildApp({ updateDiscussion });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/discussions/d1',
+      payload: {
+        participants: [
+          { agentId: 'a1', role: 'speaker', voiceId: 'alloy', speakerOrder: 0 },
+          { agentId: 'a3', role: 'speaker', voiceId: 'echo', speakerOrder: 1 }
+        ]
+      }
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(updateDiscussion).toHaveBeenCalled();
+  });
+
+  it('PATCH /api/discussions/:id returns 404 for non-owner', async () => {
+    const app = await buildApp({ getDiscussion: vi.fn().mockResolvedValue({ ...discRow, ownerUserId: 'other' }) });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/discussions/d1',
+      payload: { name: 'Updated' }
+    });
+
     expect(res.statusCode).toBe(404);
   });
 
@@ -165,7 +240,7 @@ describe('Discussion routes', () => {
   it('POST /api/discussions/:id/runs returns 422 when a participant resolves no reports', async () => {
     const discWithParticipant = {
       ...discRow,
-      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, reportIds: [] }]
+      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, active: true, reportIds: [] }]
     };
     const reportRepository = {
       listReportsForAgent: vi.fn().mockResolvedValue([]),
@@ -181,7 +256,7 @@ describe('Discussion routes', () => {
   it('POST /api/discussions/:id/runs returns 202 when every participant resolves at least one report', async () => {
     const discWithParticipant = {
       ...discRow,
-      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, reportIds: [] }]
+      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, active: true, reportIds: [] }]
     };
     const reportRepository = {
       listReportsForAgent: vi.fn().mockResolvedValue([{ id: 'r1', agentId: 'a1', agentRunId: 'run1', createdAt: new Date() }]),
@@ -196,7 +271,7 @@ describe('Discussion routes', () => {
     const freeDisc = {
       ...discRow,
       formatConfig: { grounding: { mode: 'free' } },
-      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, reportIds: [] }]
+      participants: [{ id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0, active: true, reportIds: [] }]
     };
     const reportRepository = {
       listReportsForAgent: vi.fn().mockResolvedValue([]),

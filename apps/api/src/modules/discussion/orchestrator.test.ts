@@ -3,11 +3,11 @@ import { DiscussionOrchestrator } from './orchestrator';
 
 const participant1 = {
   id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker' as const, voiceId: 'alloy' as const, speakerOrder: 0,
-  reportIds: [] as string[]
+  active: true, reportIds: [] as string[]
 };
 const participant2 = {
   id: 'p2', discussionId: 'd1', agentId: 'a2', role: 'speaker' as const, voiceId: 'echo' as const, speakerOrder: 1,
-  reportIds: [] as string[]
+  active: true, reportIds: [] as string[]
 };
 
 const mockDiscussion = {
@@ -117,6 +117,21 @@ describe('DiscussionOrchestrator', () => {
     expect(repo.createTurn).toHaveBeenCalled();
     const lastCall = repo.updateRun.mock.calls.at(-1)!;
     expect(lastCall[1]).toMatchObject({ status: 'done' });
+  });
+
+  it('skips inactive participants when starting a future run', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion.mockResolvedValue({
+      ...mockDiscussion,
+      participants: [participant1, { ...participant2, active: false }]
+    });
+    const orchestrator = makeOrchestrator({ repo });
+
+    await orchestrator.run('d1', 'r1');
+
+    expect(repo.createTurn).toHaveBeenCalledTimes(4);
+    expect(repo.createTurn.mock.calls.every((call: unknown[]) => call[1] === 'p1')).toBe(true);
   });
 
   it('starts per-turn audio rendering without delaying discussion completion', async () => {

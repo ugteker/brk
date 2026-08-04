@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DiscussionRepository } from './repository';
 
-const participantRow = { id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker', voiceId: 'alloy', speakerOrder: 0, reportIdsJson: '[]' };
+const participantRow = { id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker', voiceId: 'alloy', speakerOrder: 0, reportIdsJson: '[]', active: true };
 const discRow = { id: 'd1', ownerUserId: 'u1', name: 'Test', description: '', format: 'free_form', formatConfigJson: '{}', scheduleJson: null, syntheticSourceId: null, createdAt: new Date(), updatedAt: new Date(), participants: [participantRow] };
 const turnRow = { id: 't1', discussionRunId: 'r1', participantId: 'p1', turnIndex: 0, segmentLabel: null, content: 'Hello', audioUrl: null, createdAt: new Date() };
 const runRow = { id: 'r1', discussionId: 'd1', status: 'pending', triggeredBy: 'manual', errorMessage: null, startedAt: null, completedAt: null, syntheticSourceItemId: null, audioUrl: null, createdAt: new Date(), evidenceSnapshotJson: null, turns: [] };
@@ -17,7 +17,12 @@ function makeDb(overrides: any = {}) {
       delete: vi.fn().mockResolvedValue(undefined),
       ...overrides.discussion
     },
-    discussionParticipant: { create: vi.fn().mockResolvedValue(participantRow), ...overrides.discussionParticipant },
+    discussionParticipant: {
+      create: vi.fn().mockResolvedValue(participantRow),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      update: vi.fn().mockResolvedValue(participantRow),
+      ...overrides.discussionParticipant
+    },
     discussionRun: {
       create: vi.fn().mockResolvedValue(runRow),
       findUnique: vi.fn().mockResolvedValue({ ...runRow, turns: [turnRow] }),
@@ -114,9 +119,66 @@ describe('DiscussionRepository', () => {
         })
       }
     });
+
     const repo = new DiscussionRepository(db as any);
     const result = await repo.getDiscussion('d1');
     expect(result!.participants[0].reportIds).toEqual(['r5']);
+  });
+
+  it('replaces active participants without breaking historic turn links or grounding', async () => {
+    const db = makeDb({
+      discussion: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          ...discRow,
+          formatConfigJson: JSON.stringify({ grounding: { mode: 'material', reportIds: ['r1'] }, language: 'en' }),
+          participants: [
+            { ...participantRow, reportIdsJson: JSON.stringify(['r2']) },
+            { ...participantRow, id: 'p2', agentId: 'a2', active: true },
+            { ...participantRow, id: 'p3', agentId: 'a3', active: false }
+          ]
+        })
+      }
+    });
+    const repo = new DiscussionRepository(db as any);
+
+    await repo.updateDiscussion('d1', {
+      name: 'Updated',
+      formatConfig: { language: 'de' },
+      participants: [
+        { agentId: 'a1', role: 'host', voiceId: 'nova', speakerOrder: 0 },
+        { agentId: 'a3', role: 'speaker', voiceId: 'echo', speakerOrder: 1 },
+        { agentId: 'a4', role: 'speaker', voiceId: 'fable', speakerOrder: 2 }
+      ]
+    });
+
+    expect(db.discussionParticipant.deleteMany).not.toHaveBeenCalled();
+    expect(db.discussionParticipant.update).toHaveBeenCalledWith({
+      where: { id: 'p1' },
+      data: { active: true, role: 'host', voiceId: 'nova', speakerOrder: 0 }
+    });
+    expect(db.discussionParticipant.update).toHaveBeenCalledWith({
+      where: { id: 'p2' },
+      data: { active: false }
+    });
+    expect(db.discussionParticipant.update).toHaveBeenCalledWith({
+      where: { id: 'p3' },
+      data: { active: true, role: 'speaker', voiceId: 'echo', speakerOrder: 1 }
+    });
+    expect(db.discussionParticipant.create).toHaveBeenCalledWith({
+      data: {
+        discussionId: 'd1',
+        agentId: 'a4',
+        role: 'speaker',
+        voiceId: 'fable',
+        speakerOrder: 2,
+        reportIdsJson: '[]',
+        active: true
+      }
+    });
+    expect(JSON.parse(db.discussion.update.mock.calls[0][0].data.formatConfigJson)).toEqual({
+      grounding: { mode: 'material', reportIds: ['r1'] },
+      language: 'de'
+    });
   });
 
   it('getRunWithTurns returns null evidenceSnapshot for legacy runs without a snapshot', async () => {

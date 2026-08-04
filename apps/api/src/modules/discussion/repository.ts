@@ -28,6 +28,7 @@ function mapParticipant(row: any): DiscussionParticipant {
     role: row.role as any,
     voiceId: row.voiceId as any,
     speakerOrder: row.speakerOrder,
+    active: row.active ?? true,
     reportIds: row.reportIdsJson ? JSON.parse(row.reportIdsJson) : []
   };
 }
@@ -139,13 +140,66 @@ export class DiscussionRepository {
   }
 
   async updateDiscussion(discussionId: string, input: UpdateDiscussionInput): Promise<Discussion> {
-    const data: any = {};
-    if (input.name !== undefined) data.name = input.name;
-    if (input.description !== undefined) data.description = input.description;
-    if (input.format !== undefined) data.format = input.format;
-    if (input.formatConfig !== undefined) data.formatConfigJson = JSON.stringify(input.formatConfig);
-    if ('scheduleJson' in input) data.scheduleJson = input.scheduleJson;
-    await (this.db as any).discussion.update({ where: { id: discussionId }, data });
+    await (this.db as any).$transaction(async (tx: any) => {
+      const existing = await tx.discussion.findUniqueOrThrow({
+        where: { id: discussionId },
+        include: { participants: true }
+      });
+      const data: any = {};
+      if (input.name !== undefined) data.name = input.name;
+      if (input.format !== undefined) data.format = input.format;
+      if (input.formatConfig !== undefined) {
+        const { grounding: _grounding, ...editableFormatConfig } = input.formatConfig as Discussion['formatConfig'];
+        const currentFormatConfig = existing.formatConfigJson ? JSON.parse(existing.formatConfigJson) : {};
+        data.formatConfigJson = JSON.stringify({ ...currentFormatConfig, ...editableFormatConfig });
+      }
+      if ('scheduleJson' in input) data.scheduleJson = input.scheduleJson;
+      if (Object.keys(data).length > 0) {
+        await tx.discussion.update({ where: { id: discussionId }, data });
+      }
+
+      if (input.participants) {
+        const existingByAgentId = new Map<string, any>(
+          existing.participants.map((participant: any) => [participant.agentId, participant])
+        );
+        const selectedAgentIds = new Set(input.participants.map((participant) => participant.agentId));
+        for (const participant of existing.participants) {
+          if (participant.active && !selectedAgentIds.has(participant.agentId)) {
+            await tx.discussionParticipant.update({
+              where: { id: participant.id },
+              data: { active: false }
+            });
+          }
+        }
+        for (const participant of input.participants) {
+          const existingParticipant = existingByAgentId.get(participant.agentId);
+          if (existingParticipant) {
+            await tx.discussionParticipant.update({
+              where: { id: existingParticipant.id },
+              data: {
+                active: true,
+                role: participant.role,
+                voiceId: participant.voiceId,
+                speakerOrder: participant.speakerOrder
+              }
+            });
+          } else {
+            await tx.discussionParticipant.create({
+              data: {
+                discussionId,
+                agentId: participant.agentId,
+                role: participant.role,
+                voiceId: participant.voiceId,
+                speakerOrder: participant.speakerOrder,
+                reportIdsJson: '[]',
+                active: true
+              }
+            });
+          }
+        }
+      }
+      await this.realtime.append(tx, { userId: existing.ownerUserId, topic: 'discussion.changed', entityId: discussionId });
+    });
     return this.getDiscussion(discussionId) as Promise<Discussion>;
   }
 

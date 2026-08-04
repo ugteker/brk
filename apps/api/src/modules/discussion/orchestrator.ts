@@ -133,7 +133,7 @@ export class DiscussionOrchestrator {
         ? resolveDiscussionTtsClient(this.deps.ttsClients, undefined, discussion.formatConfig.ttsProvider)
         : null;
 
-      const orderedParticipants = discussion.participants.sort((a, b) => a.speakerOrder - b.speakerOrder);
+      const orderedParticipants = discussion.participants.filter((participant) => participant.active).sort((a, b) => a.speakerOrder - b.speakerOrder);
       const groundingMode = discussion.formatConfig.grounding?.mode ?? 'reports';
 
       let resolution: Awaited<ReturnType<typeof resolveParticipantReports>> = { resolved: [], errors: [] };

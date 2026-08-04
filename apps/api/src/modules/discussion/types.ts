@@ -58,6 +58,7 @@ export interface DiscussionParticipant {
   role: ParticipantRole;
   voiceId: OpenAIVoice;
   speakerOrder: number;
+  active: boolean;
   /** Explicit report IDs the user picked for this participant when creating/editing the
    * discussion. Empty means "resolve this participant's latest reports at run time" (see
    * config.discussion.latestReportLimit and report-resolution.ts). */
@@ -158,8 +159,13 @@ export interface CreateDiscussionInput {
 
 export interface UpdateDiscussionInput {
   name?: string;
-  description?: string;
   format?: DiscussionFormat;
-  formatConfig?: DiscussionFormatConfig;
+  formatConfig?: Partial<Omit<DiscussionFormatConfig, 'grounding'>>;
   scheduleJson?: string | null;
+  participants?: Array<{
+    agentId: string;
+    role: ParticipantRole;
+    voiceId: OpenAIVoice;
+    speakerOrder: number;
+  }>;
 }

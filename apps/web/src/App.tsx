@@ -105,6 +105,7 @@ function AnimatedRoutes() {
         <Route path="/admin/users" element={<RequireAdmin><AdminUsersRoute /></RequireAdmin>} />
         <Route path="/studio" element={<StudioHub />} />
         <Route path="/studio/new" element={<NewDiscussionWizard />} />
+        <Route path="/studio/:discussionId/edit" element={<NewDiscussionWizard />} />
         <Route path="/studio/:discussionId" element={<DiscussionDetail />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -149,4 +150,3 @@ export function App() {
     </BrowserRouter>
   );
 }
-

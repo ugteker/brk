@@ -13,6 +13,53 @@ import {
   type DiscussionTtsStorageLike
 } from './audio-renderer';
 
+const discussionFormats = new Set(['free_form', 'structured', 'hosted', 'hybrid']);
+const participantRoles = new Set(['speaker', 'host']);
+const discussionVoices = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
+const editableFormatConfigKeys = new Set(['segments', 'maxTurnsPerSegment', 'totalTurnTarget', 'hostInstructions', 'language', 'turnLength', 'ttsProvider']);
+
+function isValidDiscussionUpdate(input: unknown): input is UpdateDiscussionInput {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+  const update = input as Record<string, unknown>;
+  const allowedKeys = new Set(['name', 'format', 'formatConfig', 'scheduleJson', 'participants']);
+  if (Object.keys(update).length === 0 || Object.keys(update).some((key) => !allowedKeys.has(key))) return false;
+  if (update.name !== undefined && (typeof update.name !== 'string' || update.name.trim().length === 0)) return false;
+  if (update.format !== undefined && (typeof update.format !== 'string' || !discussionFormats.has(update.format))) return false;
+  if (update.scheduleJson !== undefined && update.scheduleJson !== null && typeof update.scheduleJson !== 'string') return false;
+  if (update.formatConfig !== undefined) {
+    if (!update.formatConfig || typeof update.formatConfig !== 'object' || Array.isArray(update.formatConfig)) return false;
+    const formatConfig = update.formatConfig as Record<string, unknown>;
+    if (Object.keys(formatConfig).some((key) => !editableFormatConfigKeys.has(key))) return false;
+    if (formatConfig.segments !== undefined && (!Array.isArray(formatConfig.segments) || !formatConfig.segments.every((segment) => typeof segment === 'string'))) return false;
+    if (formatConfig.maxTurnsPerSegment !== undefined && (!Number.isInteger(formatConfig.maxTurnsPerSegment) || (formatConfig.maxTurnsPerSegment as number) < 1)) return false;
+    if (formatConfig.totalTurnTarget !== undefined && (!Number.isInteger(formatConfig.totalTurnTarget) || (formatConfig.totalTurnTarget as number) < 1)) return false;
+    if (formatConfig.hostInstructions !== undefined && typeof formatConfig.hostInstructions !== 'string') return false;
+    if (formatConfig.language !== undefined && formatConfig.language !== 'en' && formatConfig.language !== 'de') return false;
+    if (formatConfig.turnLength !== undefined && !['short', 'medium', 'long'].includes(formatConfig.turnLength as string)) return false;
+    if (formatConfig.ttsProvider !== undefined && !['auto', 'google', 'openai'].includes(formatConfig.ttsProvider as string)) return false;
+  }
+  if (update.participants !== undefined) {
+    if (!Array.isArray(update.participants) || update.participants.length < 2) return false;
+    const agentIds = new Set<string>();
+    return update.participants.every((participant, index) => {
+      if (!participant || typeof participant !== 'object' || Array.isArray(participant)) return false;
+      const value = participant as Record<string, unknown>;
+      if (
+        typeof value.agentId !== 'string' ||
+        !participantRoles.has(value.role as string) ||
+        !discussionVoices.has(value.voiceId as string) ||
+        value.speakerOrder !== index ||
+        agentIds.has(value.agentId)
+      ) {
+        return false;
+      }
+      agentIds.add(value.agentId);
+      return true;
+    });
+  }
+  return true;
+}
+
 export interface DiscussionRunTriggerLike {
   triggerDiscussionRun(discussionId: string, runId: string): Promise<void>;
 }
@@ -178,7 +225,14 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     if (!discussion || discussion.ownerUserId !== req.userId) {
       return reply.status(404).send({ code: 'not_found', message: 'Discussion not found' });
     }
-    const updated = await deps.discussionRepository.updateDiscussion(id, req.body as UpdateDiscussionInput);
+    if (!isValidDiscussionUpdate(req.body)) {
+      return reply.status(400).send({ code: 'invalid_input', message: 'Invalid discussion update' });
+    }
+    const input = req.body as UpdateDiscussionInput;
+    const updated = await deps.discussionRepository.updateDiscussion(id, {
+      ...input,
+      ...(input.name !== undefined ? { name: input.name.trim() } : {})
+    });
     return reply.status(200).send(updated);
   });
 
@@ -224,7 +278,7 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     }
     if (deps.reportRepository && groundingMode === 'reports') {
       const resolution = await resolveParticipantReports(
-        discussion.participants.map((p) => ({ id: p.id, agentId: p.agentId, reportIds: p.reportIds })),
+        discussion.participants.filter((p) => p.active).map((p) => ({ id: p.id, agentId: p.agentId, reportIds: p.reportIds })),
         deps.reportRepository,
         deps.latestReportLimit ?? 3
       );

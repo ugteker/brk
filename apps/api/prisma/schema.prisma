@@ -446,6 +446,7 @@ model DiscussionParticipant {
   voiceId       String           @default("alloy")
   speakerOrder  Int              @default(0)
   reportIdsJson String           @default("[]")
+  active        Boolean          @default(true)
   discussion    Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
   turns         DiscussionTurn[]
 }

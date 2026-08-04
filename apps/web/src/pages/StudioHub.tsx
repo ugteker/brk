@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Empty, Popconfirm, Spin, Tag, Tooltip, Typography, message } from 'antd';
-import { AudioOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
+import { AudioOutlined, EditOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeNavigate } from '../utils/useSafeNavigate';
 import { deleteDiscussion, listDiscussions, triggerDiscussionRun, type DiscussionDto } from '../api/discussions';
@@ -127,7 +127,7 @@ export function StudioHub() {
                     </Tag>
                   </div>
                   <div className="mt-1.5 flex items-center gap-2">
-                    {d.participants.map((p) => (
+                    {d.participants.filter((p) => p.active).map((p) => (
                       <Tooltip key={p.id} title={`Speaker ${p.speakerOrder + 1}`}>
                         <span
                           style={{
@@ -149,7 +149,7 @@ export function StudioHub() {
                       </Tooltip>
                     ))}
                     <span className="text-xs text-muted-foreground">
-                      {d.participants.length} {t('studio.participants')}
+                      {d.participants.filter((p) => p.active).length} {t('studio.participants')}
                     </span>
                   </div>
                 </div>
@@ -157,6 +157,14 @@ export function StudioHub() {
 
               {/* Actions */}
               <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto" onClick={(e) => e.stopPropagation()}>
+                <Tooltip title={t('studio.editDiscussion')}>
+                  <Button
+                    size="small"
+                    aria-label={t('studio.editDiscussion')}
+                    icon={<EditOutlined />}
+                    onClick={() => navigate(`/studio/${d.id}/edit`)}
+                  />
+                </Tooltip>
                 <Button
                   size="small"
                   loading={runningId === d.id}
