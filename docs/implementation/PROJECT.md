@@ -4,7 +4,7 @@
 > It supersedes `scope-and-decisions.md` and `status.md` (kept for history only).
 > Updated automatically after every completed task or new requirement.
 
-Last updated: 2026-08-04 (Aurora glassmorphism rolled out app-wide: shell, library, studio, discussion, feed)
+Last updated: 2026-08-05 (PRODUCT.md refreshed; Aurora Studyglass design system documented)
 
 > ⚠️ **Domain reframing (2026-07-19):** ChatTrader is a **general-purpose
 > content-analysis-and-notification platform**, not a trading app. The project *began*
@@ -21,7 +21,12 @@ Last updated: 2026-08-04 (Aurora glassmorphism rolled out app-wide: shell, libra
 ## 1. Requirements (cumulative, append-only unless explicitly superseded)
 
 ### Product Direction
-- ChatTrader agents are **AI analysts with a user-defined character/personality**: they
+- **Product context refreshed (2026-08-05):** Maydoz serves people who want to gain
+  context from long-form captioned material, especially younger learners. Launch focus is
+  education: users connect their own sources to custom agents for individualized analysis,
+  and synthetic discussions provide contrasting perspectives. Finance remains an optional
+  specialist character, not the product's default audience or language.
+- Maydoz agents are **AI analysts with a user-defined character/personality**: they
   crawl configured sources, feed the crawled evidence + a character system prompt into the
   **Anthropic Claude API (Sonnet model)**, and produce a **structured report shaped by
   that character**, delivered to the user as a notification.
@@ -51,6 +56,14 @@ Last updated: 2026-08-04 (Aurora glassmorphism rolled out app-wide: shell, libra
 - The dashboard must load persisted agents/reports (not stay local-only).
 
 ### Frontend
+- **Polish pass (2026-08-05):** removed dead/banned 3px speaker side-tab border from
+  `.turn-bubble` (speaker identity stays via tinted bubble bg + avatar ring); moved
+  AppShell hardcoded strings (theme toggle, language toggle, "Run failed", "Menu")
+  into `en.json`/`de.json`. Detector clean; web build green.
+- **Design system documented (2026-08-05):** Root `DESIGN.md` and
+  `.impeccable/design.json` now capture the incumbent **Aurora Studyglass** system:
+  dark-first slate research surfaces, restrained violet-indigo glass utilities, solid
+  content cards, capsule navigation, and reduced-motion-safe interaction.
 - Primary UI library: **Ant Design** (chosen as "most popular" per user request for
   something "fancy"), replacing the shadcn-style component set for the redesigned
   screens.

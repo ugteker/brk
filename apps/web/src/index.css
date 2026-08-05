@@ -409,10 +409,8 @@
 /* Chat bubble around a turn's content, tinted by the speaker color */
 .turn-bubble {
   border-radius: 14px;
-  border: 1px solid transparent;
   padding: 8px 12px;
   background: rgba(139, 92, 246, 0.06);
-  border-left: 3px solid var(--speaker-color, #722ed1);
 }
 .dark .turn-bubble {
   background: rgba(139, 92, 246, 0.1);

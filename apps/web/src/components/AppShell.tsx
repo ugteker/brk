@@ -169,7 +169,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const current = activeKey(pathname);
   type BellNotice = { id: string; kind: 'run_failed' | 'new_report' | 'show_started' | 'show_finished' | 'audio_ready'; agentName: string; message: string; timestamp: string };
   const combinedNotices: BellNotice[] = [
-    ...failedRunNotices.map((n) => ({ id: n.runId, kind: 'run_failed' as const, agentName: n.agentName, message: n.errorMessage ?? 'Run failed', timestamp: n.timestamp })),
+    ...failedRunNotices.map((n) => ({ id: n.runId, kind: 'run_failed' as const, agentName: n.agentName, message: n.errorMessage ?? t('nav.bellRunFailed'), timestamp: n.timestamp })),
     ...newReportNotices.map((n) => ({ id: n.reportId, kind: 'new_report' as const, agentName: n.agentName, message: n.summary, timestamp: n.timestamp })),
     ...discussionNotices.map((n) => ({
       id: n.id,
@@ -189,13 +189,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     ...(isAdmin ? [{ key: 'admin-open-area', label: t('nav.adminArea'), icon: <TeamOutlined />, onClick: () => setAdminMode(true) }] : []),
     {
       key: 'theme-toggle',
-      label: theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
+      label: theme === 'dark' ? t('nav.themeToLight') : t('nav.themeToDark'),
       icon: theme === 'dark' ? <SunOutlined /> : <MoonOutlined />,
       onClick: () => toggleTheme()
     },
     {
       key: 'language-toggle',
-      label: i18n.language.startsWith('de') ? 'Switch to English' : 'Auf Deutsch wechseln',
+      label: t('language.switchTo'),
       icon: <GlobalOutlined />,
       onClick: () => i18n.changeLanguage(i18n.language.startsWith('de') ? 'en' : 'de')
     },
@@ -378,7 +378,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Button
                 shape="circle"
                 icon={<MenuOutlined />}
-                aria-label={t('nav.mobileMenu') || 'Menu'}
+                aria-label={t('nav.mobileMenu')}
                 style={circleActionStyle}
                 onClick={() => setMobileMenuOpen(true)}
               />
@@ -427,7 +427,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
         placement="right"
-        title={t('nav.mobileMenu') || 'Menu'}
+        title={t('nav.mobileMenu')}
         width={280}
         styles={{ body: { padding: '8px 0' } }}
       >

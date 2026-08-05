@@ -41,6 +41,10 @@
     "bellClearAll": "Alle löschen",
     "bellEmpty": "Nichts Neues 🎉",
     "bellNewReport": "Neuer Bericht",
+    "bellRunFailed": "Lauf fehlgeschlagen",
+    "mobileMenu": "Menü",
+    "themeToLight": "Zum hellen Modus wechseln",
+    "themeToDark": "Zum dunklen Modus wechseln",
     "bell_show_started": "Deine Show hat gerade begonnen",
     "bell_show_finished": "Deine Show ist fertig zum Lesen",
     "bell_audio_ready": "Audio ist bereit zum Anhören"
