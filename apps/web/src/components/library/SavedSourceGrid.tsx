@@ -201,7 +201,7 @@ export function SavedSourceGrid({
                   onClick={() => onOpenSource(source)}
                 >
                   <span className="flex items-center gap-2">
-                    <CheckCircleOutlined className={hasReports ? 'text-emerald-500 dark:text-emerald-400' : 'text-muted-foreground'} />
+                    <CheckCircleOutlined className={hasReports ? 'text-leaf-500 dark:text-leaf-400' : 'text-muted-foreground'} />
                     <span className="min-w-0 flex-1">
                       <span className="block text-xs font-semibold text-foreground">
                         {hasReports ? t('library.reportsAvailable', { count: reportCount }) : t('library.noReportsYet')}
@@ -287,7 +287,7 @@ export function SavedSourceGrid({
                           size="large"
                           aria-label={t('library.addAgent')}
                           icon={<PlusOutlined />}
-                          className="border-2 border-dashed border-sky-400 bg-sky-50 text-sky-700 shadow-sm transition-colors hover:border-sky-500 hover:bg-sky-100 hover:text-sky-800 dark:border-sky-500 dark:bg-sky-950/50 dark:text-sky-300"
+                          className="border-2 border-dashed border-violet-400 bg-violet-50 text-violet-700 shadow-sm transition-colors hover:border-violet-500 hover:bg-violet-100 hover:text-violet-800 dark:border-violet-500 dark:bg-violet-950/50 dark:text-violet-300"
                           onClick={(event) => {
                             event.stopPropagation();
                             void onAddAgent(source);

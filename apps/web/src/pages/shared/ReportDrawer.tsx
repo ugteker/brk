@@ -31,7 +31,7 @@ export function ReportDrawer({ report, onClose }: { report: FullReportView | nul
           };
           const stats = [
             { key: 'relevance', label: t('report.relevanceLabel'), value: toPercent(drawerCommon?.relevance), fill: 'bg-violet-500' },
-            { key: 'confidence', label: t('report.confidenceLabel'), value: toPercent(drawerCommon?.confidence), fill: 'bg-emerald-500' }
+            { key: 'confidence', label: t('report.confidenceLabel'), value: toPercent(drawerCommon?.confidence), fill: 'bg-leaf-500' }
           ].filter((stat) => stat.value !== null);
           if (stats.length === 0) return null;
           return (

@@ -159,7 +159,7 @@ export function FeedCard({
       label: t(`feedCard.confidence.${confidenceLevel}`),
       className:
         confidenceLevel === 'high'
-          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200'
+          ? 'bg-leaf-100 text-leaf-700 dark:bg-leaf-950/70 dark:text-leaf-200'
           : 'bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-200'
     });
   }

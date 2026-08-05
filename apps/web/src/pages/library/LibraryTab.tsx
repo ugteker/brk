@@ -149,11 +149,11 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                    {showSourcesMarketplace ? (
                      <div>
                        {/* Marketplace mode indicator banner */}
-                       <div className="mb-4 flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-800 dark:bg-sky-950">
-                         <CompassOutlined className="text-sky-500 text-lg shrink-0" />
+                       <div className="mb-4 flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-800 dark:bg-violet-950">
+                         <CompassOutlined className="text-violet-500 text-lg shrink-0" />
                          <div className="min-w-0">
-                           <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{t('marketplace.sourcesHeading')}</p>
-                           <p className="text-xs text-sky-600 dark:text-sky-400">{t('marketplace.sourcesDesc')}</p>
+                           <p className="text-sm font-semibold text-violet-800 dark:text-violet-200">{t('marketplace.sourcesHeading')}</p>
+                           <p className="text-xs text-violet-600 dark:text-violet-400">{t('marketplace.sourcesDesc')}</p>
                          </div>
                        </div>
                        {filteredMarketplaceSources.length === 0 ? (
@@ -410,7 +410,7 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                                          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                                            <div className="flex items-center gap-1.5 min-w-0">
                                              <span
-                                               className={`h-1.5 w-1.5 shrink-0 rounded-full ${pb.enabled ? 'bg-emerald-500' : 'bg-gray-400'}`}
+                                               className={`h-1.5 w-1.5 shrink-0 rounded-full ${pb.enabled ? 'bg-leaf-500' : 'bg-gray-400'}`}
                                                title={pb.enabled ? t('playbook.active') : t('playbook.paused')}
                                              />
                                              <span className="font-semibold text-foreground truncate">{pb.name}</span>
@@ -570,7 +570,7 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
                                                      <span className="truncate text-sm font-medium">{ep.title}</span>
                                                      {episodeReport ? (
-                                                       <Tag className="m-0 shrink-0 border-0 bg-emerald-100 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200 w-fit">
+                                                       <Tag className="m-0 shrink-0 border-0 bg-leaf-100 text-[10px] font-semibold text-leaf-700 dark:bg-leaf-950/70 dark:text-leaf-200 w-fit">
                                                          ✓ {t('library.analyzedBadge')}
                                                        </Tag>
                                                      ) : null}
@@ -927,7 +927,7 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                          }}
                          suffix={
                            isSourceDetecting
-                             ? <LoadingOutlined spin className="text-sky-500" />
+                             ? <LoadingOutlined spin className="text-violet-500" />
                              : autoDetectedSource
                                ? <CheckCircleOutlined className="text-green-500" />
                                : null

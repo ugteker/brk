@@ -100,7 +100,7 @@ export function WizardSelectableCard({
         <span
           aria-hidden
           className="absolute -top-[11px] right-2.5 z-10 flex h-[26px] w-[26px]
-                     items-center justify-center rounded-full bg-sky-500 text-white text-[13px]
+                     items-center justify-center rounded-full bg-violet-500 text-white text-[13px]
                      shadow-md ring-2 ring-white dark:ring-slate-900"
         >
           ✓
@@ -110,11 +110,11 @@ export function WizardSelectableCard({
         size="small"
         hoverable={!selected}
         className={`h-full min-h-[190px] transition-all ${
-          selected ? 'bg-sky-50 dark:bg-sky-950/40' : ''
+          selected ? 'bg-violet-50 dark:bg-violet-950/40' : ''
         }`}
         style={{
           cursor: 'pointer',
-          ...(selected ? { outline: '2px solid #38bdf8', outlineOffset: '-2px' } : {})
+          ...(selected ? { outline: '2px solid #8b5cf6', outlineOffset: '-2px' } : {})
         }}
       >
         {children}

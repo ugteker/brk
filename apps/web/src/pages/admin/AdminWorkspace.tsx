@@ -295,7 +295,7 @@ export function AdminWorkspace({ ctx, tab }: { ctx: any; tab: 'agents' | 'playbo
                           />
                         </div>
                         <Modal
-                          title={<span className="flex items-center gap-2"><CompassOutlined className="text-sky-500" />{t('marketplace.heading')} — {t('nav.agents')}</span>}
+                          title={<span className="flex items-center gap-2"><CompassOutlined className="text-violet-500" />{t('marketplace.heading')} — {t('nav.agents')}</span>}
                           open={showAgentsMarketplace}
                           onCancel={() => { setShowAgentsMarketplace(false); setMarketplaceAgentsSearch(''); }}
                           footer={null}
@@ -477,15 +477,15 @@ export function AdminWorkspace({ ctx, tab }: { ctx: any; tab: 'agents' | 'playbo
                         ) : null}
                         {/* Marketplace quick-start strip — shown when empty and marketplace has items */}
                         {playbooksLoadState !== 'loading' && filteredPlaybooks.length === 0 && marketplacePlaybooks.length > 0 ? (
-                          <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950 px-5 py-4">
+                          <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-950 px-5 py-4">
                             <div className="flex items-center gap-2 mb-3">
-                              <CompassOutlined className="text-sky-500" />
-                              <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{t('marketplace.quickStartHeading')}</p>
+                              <CompassOutlined className="text-violet-500" />
+                              <p className="text-sm font-semibold text-violet-800 dark:text-violet-200">{t('marketplace.quickStartHeading')}</p>
                             </div>
-                            <p className="text-xs text-sky-600 dark:text-sky-400 mb-3">{t('marketplace.quickStartDesc')}</p>
+                            <p className="text-xs text-violet-600 dark:text-violet-400 mb-3">{t('marketplace.quickStartDesc')}</p>
                             <div className="space-y-2">
                               {marketplacePlaybooks.slice(0, 3).map((item: any) => (
-                                <div key={item.publicationId} className="flex items-center justify-between gap-3 rounded-lg bg-white dark:bg-sky-900 px-3 py-2">
+                                <div key={item.publicationId} className="flex items-center justify-between gap-3 rounded-lg bg-white dark:bg-violet-900 px-3 py-2">
                                   <div className="min-w-0">
                                     <p className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">{item.title}</p>
                                     <p className="text-xs text-gray-500 truncate">{item.summary || item.playbook.name}</p>
@@ -578,7 +578,7 @@ export function AdminWorkspace({ ctx, tab }: { ctx: any; tab: 'agents' | 'playbo
                       </>
                     )}
                     <Modal
-                      title={<span className="flex items-center gap-2"><CompassOutlined className="text-sky-500" />{t('marketplace.heading')} — {t('nav.playbooks')}</span>}
+                      title={<span className="flex items-center gap-2"><CompassOutlined className="text-violet-500" />{t('marketplace.heading')} — {t('nav.playbooks')}</span>}
                       open={showPlaybooksMarketplace}
                       onCancel={() => { setShowPlaybooksMarketplace(false); setMarketplacePlaybooksSearch(''); }}
                       footer={null}
