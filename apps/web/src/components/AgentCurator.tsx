@@ -405,7 +405,6 @@ export function AgentCurator({
               className="mobile-wizard-button"
               type="primary"
               shape="round"
-              size="large"
               icon={<CheckCircleOutlined />}
               onClick={() => void finalize()}
               loading={finalizing}
@@ -510,7 +509,6 @@ export function AgentCurator({
               className="mobile-wizard-button"
               type="primary"
               shape="round"
-              size="large"
               icon={<ArrowRightOutlined />}
               onClick={() => setReviewOpen(true)}
               disabled={isBusy}
@@ -525,7 +523,6 @@ export function AgentCurator({
               className="mobile-wizard-button"
               type="primary"
               shape="round"
-              size="large"
               icon={<ArrowRightOutlined />}
               onClick={sendFreeformMessage}
               loading={sending}

@@ -83,7 +83,7 @@
     "nextActionHint": "Füge zuerst eine Quelle hinzu",
     "howItWorks": "So funktioniert es",
     "howStep1": "Quelle hinzufügen",
-    "howStep2": "Analysten erstellen",
+    "howStep2": "Agenten erstellen",
     "howStep3": "Berichte erhalten",
     "browseMarketplace": "Marketplace durchsuchen",
     "backToLibrary": "Zurück zur Bibliothek",
@@ -225,12 +225,12 @@
     "advancedSettings": "Erweiterte Einstellungen (Zeitplan & Empfänger)"
   },
   "agent": {
-    "createNew": "Neuen Analysten erstellen",
+    "createNew": "Neuen Agenten erstellen",
     "createNewSub": "Charakter + KI-Persona",
-    "emptyHeadline": "Noch keine Analysten",
-    "emptyDesc": "Analysten sind KI-Personas mit einem System-Prompt. Jeder erkundet deine Quellen mit einem eigenen Charakter und Blickwinkel.",
-    "emptyCta": "Ersten Analysten erstellen",
-    "emptySourceHint": "Tipp: Füge zuerst eine Quelle in der Bibliothek hinzu, damit dein Analyst etwas zu lesen hat.",
+    "emptyHeadline": "Noch keine Agenten",
+    "emptyDesc": "Agenten sind KI-Personas mit einem System-Prompt. Jeder erkundet deine Quellen mit einem eigenen Charakter und Blickwinkel.",
+    "emptyCta": "Ersten Agenten erstellen",
+    "emptySourceHint": "Tipp: Füge zuerst eine Quelle in der Bibliothek hinzu, damit dein Agent etwas zu lesen hat.",
     "selectAgent": "Agent {{name}} auswählen",
     "deleteAgent": "Agent {{name}} löschen",
     "deleteConfirmTitle": "Diesen Agenten löschen?",
@@ -341,12 +341,12 @@
     "createPlaybook": "Abo erstellen",
     "updatePlaybook": "Abo aktualisieren",
     "createNew": "Abo einrichten",
-    "createNewSub": "Quelle + Analyst + Zeitplan",
+    "createNewSub": "Quelle + Agent + Zeitplan",
     "noPlaybooks": "Noch keine Abos.",
     "emptyHeadline": "Noch keine Abos",
-    "emptyDesc": "Abos verbinden eine Quelle mit einem Analysten nach einem Zeitplan und senden dir automatisch Berichte per E-Mail.",
+    "emptyDesc": "Abos verbinden eine Quelle mit einem Agenten nach einem Zeitplan und senden dir automatisch Berichte per E-Mail.",
     "emptyCtaNoSources": "Zuerst eine Quelle in der Bibliothek hinzufügen",
-    "emptyCtaNoAgents": "Zuerst einen Analysten im Agenten-Hub erstellen",
+    "emptyCtaNoAgents": "Zuerst einen Agenten im Agenten-Hub erstellen",
     "emptyCtaReady": "Erste Quelle folgen",
     "notificationsOn": "E-Mail-Benachrichtigungen aktiv",
     "notificationsOff": "E-Mail-Benachrichtigungen stumm",
@@ -409,10 +409,10 @@
     "gettingStartedDesc": "Schließe diese Schritte ab, um deinen ersten automatischen Bericht einzurichten.",
     "step1": "Quelle hinzufügen",
     "step1Desc": "Füge einen Videokanal, Podcast oder eine Website zu deiner Bibliothek hinzu.",
-    "step2": "Analysten erstellen",
-    "step2Desc": "Richte einen KI-Analysten mit eigener Persona und System-Prompt ein.",
+    "step2": "Agenten erstellen",
+    "step2Desc": "Richte einen KI-Agenten mit eigener Persona und System-Prompt ein.",
     "step3": "Quelle folgen",
-    "step3Desc": "Verbinde eine Quelle mit einem Analysten und einem Zeitplan für Berichte.",
+    "step3Desc": "Verbinde eine Quelle mit einem Agenten und einem Zeitplan für Berichte.",
     "step4": "Ersten Bericht erhalten",
     "step4Desc": "Starte einen manuellen Lauf oder warte auf den Zeitplan — dein erster Signal-Bericht erscheint hier.",
     "allDone": "🎉 Alles eingerichtet! Berichte kommen planmäßig.",
@@ -511,11 +511,11 @@
     "removeFailed": "Symbol konnte nicht entfernt werden"
   },
   "reportChat": {
-    "title": "Analyst fragen",
-    "empty": "Stelle eine Rückfrage zu diesem Report — der Analyst antwortet auf Basis des Reports und seiner Quellen.",
+    "title": "Agent fragen",
+    "empty": "Stelle eine Rückfrage zu diesem Report — der Agent antwortet auf Basis des Reports und seiner Quellen.",
     "placeholder": "z. B. Warum ist die Konfidenz für AAPL so hoch?",
     "send": "Senden",
-    "thinking": "Der Analyst denkt nach…",
+    "thinking": "Der Agent denkt nach…",
     "loadFailed": "Chat-Verlauf konnte nicht geladen werden",
     "askFailed": "Antwort konnte nicht abgerufen werden",
     "disclaimer": "Antworten basieren auf diesem Report und seinen Quellen. Nur informative Analyse — keine Finanzberatung."
@@ -563,14 +563,14 @@
     "errorFallback": "Etwas ist schiefgelaufen",
     "resetFailFallback": "Passwort zurücksetzen fehlgeschlagen",
     "valueProp1": "📚 Quellen hinzufügen — YouTube-Kanäle, Podcasts, Websites",
-    "valueProp2": "🤖 Analysten erstellen — KI-Personas mit Handelsphilosophie",
+    "valueProp2": "🤖 Agenten erstellen — KI-Personas mit eigenem Blickwinkel",
     "valueProp3": "📬 Berichte erhalten — Automatische Signalberichte per E-Mail"
   },
   "curator": {
     "retry": "Erneut versuchen",
-    "back": "← Zurück",
-    "continue": "Weiter →",
-    "reviewAgent": "Agent ansehen →",
+    "back": "Zurück",
+    "continue": "Weiter",
+    "reviewAgent": "Agent ansehen",
     "createAgent": "Agent erstellen",
     "saveChanges": "Änderungen speichern",
     "readyTitle": "Dein Agent ist bereit 🎉",
@@ -607,11 +607,11 @@
     "step2": "Persona wählen",
     "step3": "Starten",
     "step1Desc": "Suche einen Podcast oder YouTube-Kanal per Name — oder füge eine URL ein, die du verfolgen möchtest.",
-    "step2Desc": "Wähle eine Analysten-Persona — jede hat einen anderen Fokus und Stil.",
-    "step3Desc": "Wir erstellen deine Quelle, deinen Analysten und dein Abo und starten die erste Analyse jetzt.",
+    "step2Desc": "Wähle eine Agenten-Persona — jede hat einen anderen Fokus und Stil.",
+    "step3Desc": "Wir erstellen deine Quelle, deinen Agenten und dein Abo und starten die erste Analyse jetzt.",
     "detectSource": "Quelle erkennen",
     "summarySource": "Quelle",
-    "summaryPersona": "Analyst",
+    "summaryPersona": "Persona",
     "runNow": "Erstellen & jetzt ausführen",
     "success": "Dein erster Bericht läuft! Schau gleich in den Feed.",
     "error": "Etwas ist schiefgelaufen. Versuche es erneut oder richte es manuell ein.",
@@ -930,5 +930,115 @@
     "discussThisSource": "Diese Quelle diskutieren",
     "preselectBanner": "Diskussion wird gestartet über: {{context}}",
     "startFromScratch": "Von vorne beginnen"
+  },
+  "adminAgents": {
+    "title": "Agenten-Übersicht",
+    "subtitle": "Laufzeit und Konfiguration aller Agenten über alle Nutzer",
+    "empty": "Noch keine Agenten",
+    "searchPlaceholder": "Agent oder Besitzer suchen",
+    "kpi": {
+      "agents": "Aktive / alle Agenten",
+      "runs30d": "Läufe (30 T.)",
+      "successRate": "Erfolgsquote (30 T.)",
+      "failed24h": "Fehlschläge (24 h)",
+      "reports30d": "Berichte (30 T.)",
+      "tokens30d": "Tokens (30 T.)",
+      "cost30d": "Kosten (30 T.)",
+      "avgDuration": "Ø Laufdauer (30 T.)"
+    },
+    "col": {
+      "agent": "Agent",
+      "subscriptions": "Abos",
+      "sources": "Quellen",
+      "runs30d": "Läufe 30 T.",
+      "lastRun": "Letzter Lauf",
+      "reports": "Berichte",
+      "tokens30d": "Tokens 30 T.",
+      "cost30d": "Kosten 30 T.",
+      "review": "Review",
+      "discussions": "Diskussionen"
+    },
+    "status": {
+      "active": "Aktiv",
+      "paused": "Pausiert"
+    },
+    "runFailed": "fehlgeschlagen",
+    "reports30dTooltip": "{{count}} in den letzten 30 Tagen",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "delete": "Löschen",
+    "deleteConfirm": "Agent löschen?",
+    "deleteConfirmDescription": "Entfernt den Agenten mit allen Läufen, Berichten und Abos. Kann nicht rückgängig gemacht werden.",
+    "paused": "Agent pausiert",
+    "resumed": "Agent fortgesetzt",
+    "deleted": "Agent gelöscht",
+    "actionFailed": "Aktion fehlgeschlagen"
+  },
+  "adminDashboard": {
+    "refresh": "Aktualisieren",
+    "retry": "Erneut versuchen",
+    "loadError": "Übersicht konnte nicht geladen werden"
+  },
+  "adminFeed": {
+    "title": "Berichts-Übersicht",
+    "subtitle": "Berichts-Pipeline über alle Nutzer",
+    "latestReports": "Neueste Berichte",
+    "review": "Review",
+    "unread": "Ungelesen",
+    "kpi": {
+      "reports30d": "Berichte (30 T.)",
+      "unreadRate": "Ungelesen-Quote (30 T.)",
+      "reviewQueue": "Review-Warteschlange",
+      "tokens30d": "Tokens (30 T.)",
+      "cost30d": "Kosten (30 T.)",
+      "avgTokens": "Ø Tokens / Bericht"
+    },
+    "col": {
+      "report": "Bericht",
+      "model": "Modell",
+      "tokens": "Tokens",
+      "cost": "Kosten",
+      "status": "Status",
+      "created": "Erstellt"
+    }
+  },
+  "adminLibrary": {
+    "title": "Quellen-Übersicht",
+    "subtitle": "Quellen- und Crawl-Zustand über alle Nutzer",
+    "stale": "Stale",
+    "unfollowed": "Keine Agenten",
+    "kpi": {
+      "sources": "Aktive / alle Quellen",
+      "items30d": "Neue Items (30 T.)",
+      "stale": "Stale Quellen",
+      "unfollowed": "Quellen ohne Agenten"
+    },
+    "col": {
+      "source": "Quelle",
+      "agents": "Agenten",
+      "items30d": "Items 30 T.",
+      "lastItem": "Letztes Item",
+      "status": "Status"
+    }
+  },
+  "adminStudio": {
+    "title": "Diskussions-Übersicht",
+    "subtitle": "Studio-Diskussionen über alle Nutzer",
+    "runFailed": "fehlgeschlagen",
+    "kpi": {
+      "discussions": "Diskussionen",
+      "runs30d": "Läufe (30 T.)",
+      "failed30d": "Fehlschläge (30 T.)",
+      "turns30d": "Turns (30 T.)",
+      "audio30d": "Audio-Läufe (30 T.)"
+    },
+    "col": {
+      "discussion": "Diskussion",
+      "participants": "Teilnehmer",
+      "runs": "Läufe",
+      "turns": "Turns",
+      "audio": "Audio",
+      "lastRun": "Letzter Lauf"
+    }
   }
 }

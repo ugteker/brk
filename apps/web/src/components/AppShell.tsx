@@ -3,7 +3,6 @@ import {
   AudioOutlined,
   BellOutlined,
   DatabaseOutlined,
-  DashboardOutlined,
   DollarOutlined,
   FileTextOutlined,
   GlobalOutlined,
@@ -41,9 +40,8 @@ const COMMON_NAV_ITEMS = [
 
 // Only shown to admins with admin mode switched on (via the account menu toggle).
 const ADMIN_NAV_ITEMS = [
-  { path: '/admin/users', key: 'admin-users', icon: <TeamOutlined />, labelKey: 'nav.userManagement' },
   { path: '/agents', key: 'agents', icon: <RobotOutlined />, labelKey: 'nav.agents' },
-  { path: '/playbooks', key: 'playbooks', icon: <DashboardOutlined />, labelKey: 'nav.playbooks' }
+  { path: '/admin/users', key: 'admin-users', icon: <TeamOutlined />, labelKey: 'nav.userManagement' }
 ];
 
 function headerStyle(theme: 'light' | 'dark', isScrolled: boolean): CSSProperties {
@@ -130,7 +128,6 @@ function activeKey(pathname: string): string {
   if (pathname.startsWith('/studio')) return 'studio';
   if (pathname === '/library') return 'library';
   if (pathname === '/agents') return 'agents';
-  if (pathname === '/playbooks') return 'playbooks';
   if (pathname.startsWith('/admin/users')) return 'admin-users';
   return 'feed';
 }
@@ -185,8 +182,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const userMenuItems = [
     ...(user ? [{ key: 'user-label', label: <span className="font-medium">{user.displayName ?? user.email}</span>, disabled: true }] : []),
     ...(user ? [{ type: 'divider' as const }] : []),
-    // Quick access to open the admin Agents & Playbooks area for admins
-    ...(isAdmin ? [{ key: 'admin-open-area', label: t('nav.adminArea'), icon: <TeamOutlined />, onClick: () => setAdminMode(true) }] : []),
     {
       key: 'theme-toggle',
       label: theme === 'dark' ? t('nav.themeToLight') : t('nav.themeToDark'),

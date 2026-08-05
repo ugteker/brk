@@ -31,7 +31,6 @@
     "library": "Library",
     "agents": "Agents",
     "playbooks": "Subscriptions",
-    "adminArea": "Agents & Subscriptions",
     "accountMenu": "Account menu",
     "userManagement": "User Management",
     "logOut": "Log out",
@@ -84,7 +83,7 @@
     "nextActionHint": "Start by adding a source",
     "howItWorks": "How it works",
     "howStep1": "Add a source",
-    "howStep2": "Create analysts",
+    "howStep2": "Create agents",
     "howStep3": "Get reports",
     "browseMarketplace": "Browse marketplace",
     "backToLibrary": "Back to library",
@@ -226,12 +225,12 @@
     "advancedSettings": "Advanced settings (schedule & recipients)"
   },
   "agent": {
-    "createNew": "Create new analyst",
+    "createNew": "Create new agent",
     "createNewSub": "Character + AI persona",
-    "emptyHeadline": "No analysts yet",
-    "emptyDesc": "Analysts are AI personas with a system prompt. Each one explores your sources with its own character and point of view.",
-    "emptyCta": "Create your first analyst",
-    "emptySourceHint": "Tip: add a source in the Library first so your analyst has something to read.",
+    "emptyHeadline": "No agents yet",
+    "emptyDesc": "Agents are AI personas with a system prompt. Each one explores your sources with its own character and point of view.",
+    "emptyCta": "Create your first agent",
+    "emptySourceHint": "Tip: add a source in the Library first so your agent has something to read.",
     "selectAgent": "Select agent {{name}}",
     "deleteAgent": "Delete agent {{name}}",
     "deleteConfirmTitle": "Delete this agent?",
@@ -342,12 +341,12 @@
     "createPlaybook": "Create subscription",
     "updatePlaybook": "Update subscription",
     "createNew": "Set up a subscription",
-    "createNewSub": "Source + analyst + schedule",
+    "createNewSub": "Source + agent + schedule",
     "noPlaybooks": "No subscriptions yet.",
     "emptyHeadline": "No subscriptions yet",
-    "emptyDesc": "Subscriptions connect a source to an analyst on a schedule and email you reports automatically.",
+    "emptyDesc": "Subscriptions connect a source to an agent on a schedule and email you reports automatically.",
     "emptyCtaNoSources": "Add a source in the Library first",
-    "emptyCtaNoAgents": "Create an analyst in the Agents hub first",
+    "emptyCtaNoAgents": "Create an agent in the Agents hub first",
     "emptyCtaReady": "Follow your first source",
     "notificationsOn": "Email notifications on",
     "notificationsOff": "Email notifications off (muted)",
@@ -410,10 +409,10 @@
     "gettingStartedDesc": "Complete these steps to set up your first automated report.",
     "step1": "Add a source",
     "step1Desc": "Add a video channel, podcast, or website to your library.",
-    "step2": "Create an analyst",
-    "step2Desc": "Set up an AI analyst with a distinct persona and system prompt.",
+    "step2": "Create an agent",
+    "step2Desc": "Set up an AI agent with a distinct persona and system prompt.",
     "step3": "Follow a source",
-    "step3Desc": "Connect a source to an analyst on a schedule to get reports.",
+    "step3Desc": "Connect a source to an agent on a schedule to get reports.",
     "step4": "Receive your first report",
     "step4Desc": "Trigger a manual run or wait for the schedule — your first signal report will appear here.",
     "allDone": "🎉 You're all set! Reports will arrive on schedule.",
@@ -512,11 +511,11 @@
     "removeFailed": "Failed to remove symbol"
   },
   "reportChat": {
-    "title": "Ask the analyst",
-    "empty": "Ask a follow-up question about this report — the analyst answers grounded in the report and its sources.",
+    "title": "Ask the agent",
+    "empty": "Ask a follow-up question about this report — the agent answers grounded in the report and its sources.",
     "placeholder": "e.g. Why is the confidence for AAPL so high?",
     "send": "Send",
-    "thinking": "The analyst is thinking…",
+    "thinking": "The agent is thinking…",
     "loadFailed": "Failed to load chat history",
     "askFailed": "Failed to get an answer",
     "disclaimer": "Answers are grounded in this report and its sources. Informational analysis only — not financial advice."
@@ -564,14 +563,14 @@
     "errorFallback": "Something went wrong",
     "resetFailFallback": "Failed to reset password",
     "valueProp1": "📚 Add sources — YouTube channels, podcasts, websites",
-    "valueProp2": "🤖 Create analysts — AI personas with a trading philosophy",
+    "valueProp2": "🤖 Create agents — AI personas with their own point of view",
     "valueProp3": "📬 Get reports — Automated signal reports in your inbox"
   },
   "curator": {
     "retry": "Try again",
-    "back": "← Back",
-    "continue": "Continue →",
-    "reviewAgent": "Review agent →",
+    "back": "Back",
+    "continue": "Continue",
+    "reviewAgent": "Review agent",
     "createAgent": "Create agent",
     "saveChanges": "Save changes",
     "readyTitle": "Your agent is ready 🎉",
@@ -608,11 +607,11 @@
     "step2": "Choose a persona",
     "step3": "Run",
     "step1Desc": "Search for a podcast or YouTube channel by name — or paste a URL you want to track.",
-    "step2Desc": "Pick an analyst persona — each has a different focus and style.",
-    "step3Desc": "We'll create your source, analyst, and subscription, then run the first analysis now.",
+    "step2Desc": "Pick an agent persona — each has a different focus and style.",
+    "step3Desc": "We'll create your source, agent, and subscription, then run the first analysis now.",
     "detectSource": "Detect source",
     "summarySource": "Source",
-    "summaryPersona": "Analyst",
+    "summaryPersona": "Persona",
     "runNow": "Create & run now",
     "success": "Your first report is running! Check the Feed in a moment.",
     "error": "Something went wrong. Try again or set up manually.",
@@ -931,5 +930,115 @@
     "discussThisSource": "Discuss this source",
     "preselectBanner": "Starting a discussion about: {{context}}",
     "startFromScratch": "Start from scratch"
+  },
+  "adminAgents": {
+    "title": "Agents overview",
+    "subtitle": "Runtime and configuration for all agents across users",
+    "empty": "No agents yet",
+    "searchPlaceholder": "Search agent or owner",
+    "kpi": {
+      "agents": "Active / total agents",
+      "runs30d": "Runs (30d)",
+      "successRate": "Success rate (30d)",
+      "failed24h": "Failures (24h)",
+      "reports30d": "Reports (30d)",
+      "tokens30d": "Tokens (30d)",
+      "cost30d": "Cost (30d)",
+      "avgDuration": "Avg. run time (30d)"
+    },
+    "col": {
+      "agent": "Agent",
+      "subscriptions": "Subscriptions",
+      "sources": "Sources",
+      "runs30d": "Runs 30d",
+      "lastRun": "Last run",
+      "reports": "Reports",
+      "tokens30d": "Tokens 30d",
+      "cost30d": "Cost 30d",
+      "review": "Review",
+      "discussions": "Discussions"
+    },
+    "status": {
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "runFailed": "failed",
+    "reports30dTooltip": "{{count}} in the last 30 days",
+    "pause": "Pause",
+    "resume": "Resume",
+    "delete": "Delete",
+    "deleteConfirm": "Delete agent?",
+    "deleteConfirmDescription": "Removes the agent with all runs, reports and subscriptions. Cannot be undone.",
+    "paused": "Agent paused",
+    "resumed": "Agent resumed",
+    "deleted": "Agent deleted",
+    "actionFailed": "Action failed"
+  },
+  "adminDashboard": {
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "loadError": "Could not load the overview"
+  },
+  "adminFeed": {
+    "title": "Reports overview",
+    "subtitle": "Report pipeline across all users",
+    "latestReports": "Latest reports",
+    "review": "Review",
+    "unread": "Unread",
+    "kpi": {
+      "reports30d": "Reports (30d)",
+      "unreadRate": "Unread rate (30d)",
+      "reviewQueue": "Review queue",
+      "tokens30d": "Tokens (30d)",
+      "cost30d": "Cost (30d)",
+      "avgTokens": "Avg. tokens / report"
+    },
+    "col": {
+      "report": "Report",
+      "model": "Model",
+      "tokens": "Tokens",
+      "cost": "Cost",
+      "status": "Status",
+      "created": "Created"
+    }
+  },
+  "adminLibrary": {
+    "title": "Sources overview",
+    "subtitle": "Source and crawl health across all users",
+    "stale": "Stale",
+    "unfollowed": "No agents",
+    "kpi": {
+      "sources": "Active / total sources",
+      "items30d": "New items (30d)",
+      "stale": "Stale sources",
+      "unfollowed": "Sources without agents"
+    },
+    "col": {
+      "source": "Source",
+      "agents": "Agents",
+      "items30d": "Items 30d",
+      "lastItem": "Last item",
+      "status": "Status"
+    }
+  },
+  "adminStudio": {
+    "title": "Discussions overview",
+    "subtitle": "Studio discussions across all users",
+    "runFailed": "failed",
+    "kpi": {
+      "discussions": "Discussions",
+      "runs30d": "Runs (30d)",
+      "failed30d": "Failures (30d)",
+      "turns30d": "Turns (30d)",
+      "audio30d": "Audio runs (30d)"
+    },
+    "col": {
+      "discussion": "Discussion",
+      "participants": "Participants",
+      "runs": "Runs",
+      "turns": "Turns",
+      "audio": "Audio",
+      "lastRun": "Last run"
+    }
   }
 }

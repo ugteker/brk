@@ -4,7 +4,10 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { useSafeNavigate } from './utils/useSafeNavigate';
 import { FeedPage } from './pages/feed/FeedPage';
 import { LibraryPage } from './pages/library/LibraryPage';
-import { AdminPage } from './pages/admin/AdminPage';
+import { AdminAgentsPage } from './pages/admin/AdminAgentsPage';
+import { AdminFeedDashboard } from './pages/admin/AdminFeedDashboard';
+import { AdminLibraryDashboard } from './pages/admin/AdminLibraryDashboard';
+import { AdminStudioDashboard } from './pages/admin/AdminStudioDashboard';
 import { AuthPage } from './pages/AuthPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
@@ -28,6 +31,13 @@ function RequireAdmin({ children }: { children: ReactNode }) {
 function AdminUsersRoute() {
   const navigate = useSafeNavigate();
   return <AdminUsersPage onBack={() => navigate('/')} />;
+}
+
+// In admin mode the hub pages show admin dashboards instead of repeating the user-mode content.
+function AdminSwitch({ admin, children }: { admin: ReactNode; children: ReactNode }) {
+  const { isAdmin } = useAuth();
+  const { adminMode } = useAppData();
+  return isAdmin && adminMode ? <>{admin}</> : <>{children}</>;
 }
 
 // Subscribes global app data to the topics this task scopes for cross-tab/cross-device
@@ -100,12 +110,11 @@ function AnimatedRoutes() {
   return (
     <div key={location.pathname} className="ct-page-enter">
       <Routes>
-        <Route path="/" element={<FeedPage />} />
-        <Route path="/library" element={<LibraryPage />} />
-        <Route path="/agents" element={<RequireAdmin><AdminPage tab="agents" /></RequireAdmin>} />
-        <Route path="/playbooks" element={<RequireAdmin><AdminPage tab="playbooks" /></RequireAdmin>} />
+        <Route path="/" element={<AdminSwitch admin={<AdminFeedDashboard />}><FeedPage /></AdminSwitch>} />
+        <Route path="/library" element={<AdminSwitch admin={<AdminLibraryDashboard />}><LibraryPage /></AdminSwitch>} />
+        <Route path="/agents" element={<RequireAdmin><AdminAgentsPage /></RequireAdmin>} />
         <Route path="/admin/users" element={<RequireAdmin><AdminUsersRoute /></RequireAdmin>} />
-        <Route path="/studio" element={<StudioHub />} />
+        <Route path="/studio" element={<AdminSwitch admin={<AdminStudioDashboard />}><StudioHub /></AdminSwitch>} />
         <Route path="/studio/new" element={<NewDiscussionWizard />} />
         <Route path="/studio/:discussionId/edit" element={<NewDiscussionWizard />} />
         <Route path="/studio/:discussionId" element={<DiscussionDetail />} />

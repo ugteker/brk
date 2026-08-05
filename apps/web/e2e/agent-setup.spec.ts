@@ -34,7 +34,6 @@ test('@smoke mobile modal content owns touch scrolling', async () => {
 test('@smoke long mobile workflows use full-screen dialogs', async () => {
   const styles = await readFile(resolve(process.cwd(), 'src/index.css'), 'utf8');
   const followWizard = await readFile(resolve(process.cwd(), 'src/pages/shared/FollowWizardModal.tsx'), 'utf8');
-  const adminWorkspace = await readFile(resolve(process.cwd(), 'src/pages/admin/AdminWorkspace.tsx'), 'utf8');
   const curator = await readFile(resolve(process.cwd(), 'src/components/AgentCurator.tsx'), 'utf8');
   const sourcePicker = await readFile(resolve(process.cwd(), 'src/components/SourceSearchPicker.tsx'), 'utf8');
 
@@ -47,7 +46,6 @@ test('@smoke long mobile workflows use full-screen dialogs', async () => {
   expect(sourcePicker).toContain('className="source-picker-results');
   expect(followWizard).toContain('className="mobile-workflow-actions');
   expect(followWizard).toContain('className="follow-source-modal mobile-fullscreen-modal"');
-  expect(adminWorkspace).toContain('className="agent-curator-modal mobile-fullscreen-modal"');
 });
 
 test('@smoke mobile wizard actions float without affecting desktop flow', async () => {

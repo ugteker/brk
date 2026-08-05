@@ -127,6 +127,10 @@ export async function buildServer(deps: ServerDeps) {
   }
   // Admin user-management routes reuse the same userRepository as auth - there's no separate
   // "admin service", just extra ADMIN_EMAIL-gated endpoints on top of the existing user store.
-  await registerAdminRoutes(app, { userRepository: deps.auth.userRepository, db: deps.db });
+  await registerAdminRoutes(app, {
+    userRepository: deps.auth.userRepository,
+    db: deps.db,
+    agentRepository: deps.agentRepository
+  });
   return app;
 }

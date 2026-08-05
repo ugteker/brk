@@ -496,18 +496,6 @@ export function LibraryPage() {
     }
   }
 
-  function openPlaybookCreate() {
-    setEditingPlaybookId(null);
-    setWizardFocusedAgentId(null);
-    setPlaybookCreateStep(0);
-    setPlaybookAgentIdsDraft([]);
-    setWizardAlreadyLinkedAgentIds([]);
-    setWizardAlreadyLinkedPlaybooks([]);
-    setPlaybookSourceIdDraft(sources[0]?.id ?? null);
-    scheduleDraft.reset(user?.email ? [user.email] : []);
-    setIsPlaybookCreateOpen(true);
-  }
-
   function onFollowSource(source: SourceRecord, event?: React.MouseEvent) {
     event?.stopPropagation();
     setAgentAssignmentOrigin(selectedSourceId === source.id ? 'detail' : 'library');
@@ -905,27 +893,6 @@ export function LibraryPage() {
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to remove source');
     }
-  }
-
-  function onOpenPlaybookWizard(playbook: PlaybookRecord) {
-    setFollowWizardSourcePreselected(true);
-    setShowInlineAgentCreate(false);
-    setEditingPlaybookId(playbook.id);
-    setWizardFocusedAgentId(playbook.agentId);
-    setPlaybookCreateStep(1);
-    setPlaybookSourceIdDraft(playbook.sourceId);
-    scheduleDraft.apply(playbook.schedule);
-    scheduleDraft.setRecipients(playbook.recipients);
-    // Pre-fill detail level from existing agent if available
-    const existingAgent = agents.find((a) => a.id === playbook.agentId);
-    setInlineAgentReportDetailLevel((existingAgent?.promptConfig as { report_detail_level?: 'brief' | 'standard' | 'detailed' } | undefined)?.report_detail_level ?? 'standard');
-    // Pre-select ALL linked agents for this source; track their playbook IDs for the save diff
-    const linkedPbs = playbooks.filter((p) => p.sourceId === playbook.sourceId);
-    const alreadyLinkedAgentIds = linkedPbs.map((p) => p.agentId);
-    setWizardAlreadyLinkedAgentIds(alreadyLinkedAgentIds);
-    setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
-    setPlaybookAgentIdsDraft(alreadyLinkedAgentIds);
-    setIsPlaybookCreateOpen(true);
   }
 
   /** Opens the schedule-only edit modal for a specific playbook (from ✎ on expert cards). */
@@ -1371,8 +1338,6 @@ export function LibraryPage() {
 
   void openDiscussionFromReport;
   void onRunNow;
-  void openPlaybookCreate;
-  void onOpenPlaybookWizard;
 
   return (
     <>
