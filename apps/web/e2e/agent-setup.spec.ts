@@ -44,7 +44,7 @@ test('@smoke long mobile workflows use full-screen dialogs', async () => {
   expect(styles).toContain('.mobile-fullscreen-modal .source-picker-results');
   expect(curator).toContain('className="curator-actions');
   expect(sourcePicker).toContain('className="source-picker-results');
-  expect(followWizard).toContain('className="mobile-workflow-actions');
+  // The follow wizard has no own action bar anymore — AgentCurator/AgentSelectionView own the actions.
   expect(followWizard).toContain('className="follow-source-modal mobile-fullscreen-modal"');
 });
 
@@ -59,7 +59,6 @@ test('@smoke mobile wizard actions float without affecting desktop flow', async 
   expect(styles).toContain('width: 48px !important');
   expect(followWizard).not.toContain('mobile-action-scrim');
   expect(followWizard).not.toContain('sticky bottom-0');
-  expect(followWizard).toContain('ml-auto');
   expect(curator).not.toContain('mobile-action-scrim');
   expect(agentForm).not.toContain('sticky bottom-0');
   expect(agentForm).toContain('mobile-agent-form-actions');

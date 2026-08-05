@@ -11,10 +11,8 @@ import { SymbolPerformancePage } from '../SymbolPerformancePage';
 import { useAppData } from '../../context/AppDataContext';
 import { useRealtimeSubscription } from '../../context/RealtimeContext';
 import {
-  createAgent,
   listAgentEpisodeOptions,
   runAgentNow,
-  saveAgentPrompt,
   type AgentSummary,
   type EpisodeOptionDto,
   type ForcedEpisodeSelection,
@@ -24,7 +22,6 @@ import {
 import { getDiscussionRun, type DiscussionPreselect } from '../../api/discussions';
 import { cloneMarketplaceSource } from '../../api/marketplace';
 import {
-  createPlaybook,
   deletePlaybook,
   runPlaybookNow,
   updatePlaybook,
@@ -43,13 +40,6 @@ import {
   type SourceRecord
 } from '../../api/sources';
 import { useAuth } from '../../auth/AuthContext';
-import {
-  DEFAULT_PROMPT_CHARACTER_ID,
-  DEFAULT_PROMPT_PERSONA_ID,
-  getPromptCharacter,
-  getPromptCharactersForPersona,
-  getPromptPersona
-} from '../../data/prompt-personas';
 import { getAgentDisplayLabel } from '../../utils/agent-label';
 import { useSymbolView } from '../../hooks/useSymbolView';
 import {
@@ -83,7 +73,7 @@ export function LibraryPage() {
   const { message } = App.useApp();
   const navigate = useSafeNavigate();
   const {
-    agents, setAgents,
+    agents,
     sources,
     catalog,
     playbooks,
@@ -113,8 +103,6 @@ export function LibraryPage() {
   const [autoDetectedSource, setAutoDetectedSource] = useState<AutoDetectedSource | null>(null);
   const detectNonceRef = useRef(0);
   const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [recentlyUpdatedSourceId, setRecentlyUpdatedSourceId] = useState<string | null>(null);
-  const updatedHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [agentAssignmentOrigin, setAgentAssignmentOrigin] = useState<'library' | 'detail'>('library');
   const [recentlyConnectedAgent, setRecentlyConnectedAgent] = useState<{ sourceId: string; agentId: string } | null>(null);
   const connectedAgentHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,20 +118,6 @@ export function LibraryPage() {
   const [openMaterialAudioItemKey, setOpenMaterialAudioItemKey] = useState<string | null>(null);
   const [materialAudioLoadingItemKey, setMaterialAudioLoadingItemKey] = useState<string | null>(null);
   const [isPlaybookCreateOpen, setIsPlaybookCreateOpen] = useState(false);
-  // When true the wizard was opened via "Follow this source" on a specific card;
-  // step 0 (Pick source) is skipped because the source is already known.
-  const [followWizardSourcePreselected, setFollowWizardSourcePreselected] = useState(false);
-  const [playbookCreateStep, setPlaybookCreateStep] = useState(0);
-  const [isPlaybookSaving, setIsPlaybookSaving] = useState(false);
-  const [confirmingUnfollow, setConfirmingUnfollow] = useState(false);
-  const [editingPlaybookId, setEditingPlaybookId] = useState<string | null>(null);
-  const [playbookAgentIdsDraft, setPlaybookAgentIdsDraft] = useState<string[]>([]);
-  // Tracks which agents already watch the source when the wizard opens — used for save diff
-  // (create new playbooks for additions, delete playbooks for removals, skip unchanged).
-  const [wizardAlreadyLinkedAgentIds, setWizardAlreadyLinkedAgentIds] = useState<string[]>([]);
-  const [wizardAlreadyLinkedPlaybooks, setWizardAlreadyLinkedPlaybooks] = useState<{ agentId: string; playbookId: string }[]>([]);
-  // The agent whose playbook settings are shown in the schedule step (edit mode via ✎ button)
-  const [wizardFocusedAgentId, setWizardFocusedAgentId] = useState<string | null>(null);
   const [playbookSourceIdDraft, setPlaybookSourceIdDraft] = useState<string | null>(null);
   const scheduleDraft = useScheduleDraft();
   // Agent picker for manual runs when multiple agents are linked to the same source
@@ -156,21 +130,7 @@ export function LibraryPage() {
   const [isScheduleEditSaving, setIsScheduleEditSaving] = useState(false);
   const [connectedAgentPlaybook, setConnectedAgentPlaybook] = useState<PlaybookRecord | null>(null);
   const [runningConnectedAgentPlaybook, setRunningConnectedAgentPlaybook] = useState(false);
-  // Inline agent creation inside the follow wizard (step: pick agent) — full 4-step sub-wizard
-  const [showInlineAgentCreate, setShowInlineAgentCreate] = useState(false);
-  const [isInlineAgentSaving, setIsInlineAgentSaving] = useState(false);
-  const [inlineAgentStep, setInlineAgentStep] = useState(0); // 0=character+personality, 1=model+prompt, 2=schedule+recipients
-  const [inlineAgentDescription] = useState('');
-  const [inlineAgentPersonaId, setInlineAgentPersonaId] = useState(DEFAULT_PROMPT_PERSONA_ID);
-  const [inlineAgentCharacterId, setInlineAgentCharacterId] = useState(DEFAULT_PROMPT_CHARACTER_ID);
-  const [inlineAgentModel, setInlineAgentModel] = useState('claude-sonnet-4-5');
-  const [inlineAgentSystemPrompt, setInlineAgentSystemPrompt] = useState(
-    () => getPromptCharacter(DEFAULT_PROMPT_PERSONA_ID, DEFAULT_PROMPT_CHARACTER_ID)?.systemPrompt ?? ''
-  );
-  const [inlineAgentRiskLevel, setInlineAgentRiskLevel] = useState<'low' | 'medium' | 'high'>('medium');
-  const [inlineAgentReportDetailLevel, setInlineAgentReportDetailLevel] = useState<'brief' | 'standard' | 'detailed'>('standard');
-  const [inlineAgentValidationError, setInlineAgentValidationError] = useState<string | null>(null);
-  // AI curation inside the follow wizard's "pick agent" step (alternative to the manual sub-wizard)
+  // AI curation inside the follow wizard (alternative to picking an existing agent)
   const [inlineAgentCurating, setInlineAgentCurating] = useState(false);
   const [inlineCurationBaseAgentVersionId, setInlineCurationBaseAgentVersionId] = useState<string | null>(null);
   const [showSourcesMarketplace, setShowSourcesMarketplace] = useState(false);
@@ -179,7 +139,6 @@ export function LibraryPage() {
     localStorage.getItem(LIBRARY_GUIDANCE_KEY) === '1'
   );
   const [postSourceChoiceSource, setPostSourceChoiceSource] = useState<SourceRecord | null>(null);
-  const [wizardShowAdvanced, setWizardShowAdvanced] = useState(false);
   const [viewingFullReport, setViewingFullReport] = useState<RunReportDto & { agentName: string; playbookName: string } | null>(null);
   const [runningAgentId, setRunningAgentId] = useState<string | null>(null);
   const [episodePickerAgent, setEpisodePickerAgent] = useState<AgentSummary | null>(null);
@@ -500,23 +459,7 @@ export function LibraryPage() {
     event?.stopPropagation();
     setAgentAssignmentOrigin(selectedSourceId === source.id ? 'detail' : 'library');
     clearPostSourceAgentGuidance(source.id);
-    // Opening the follow wizard must never expose the admin-only Agents/Playbooks
-    // tabs to non-admin users. The wizard is a standalone Modal reachable regardless
-    // of tab state. Source is already known so we skip step 0 (Pick source).
-    setFollowWizardSourcePreselected(true);
-    setShowInlineAgentCreate(false);
-    setEditingPlaybookId(null);
-    setWizardFocusedAgentId(null);
-    setPlaybookCreateStep(1);
     setPlaybookSourceIdDraft(source.id);
-    scheduleDraft.reset(user?.email ? [user.email] : []);
-    // Pre-select agents that already watch this source; track their playbook IDs for the
-    // save diff (delete removed, create added, skip unchanged).
-    const linkedPbs = playbooks.filter((p) => p.sourceId === source.id);
-    const alreadyLinkedAgentIds = linkedPbs.map((p) => p.agentId);
-    setWizardAlreadyLinkedAgentIds(alreadyLinkedAgentIds);
-    setWizardAlreadyLinkedPlaybooks(linkedPbs.map((p) => ({ agentId: p.agentId, playbookId: p.id })));
-    setPlaybookAgentIdsDraft(alreadyLinkedAgentIds);
     setIsPlaybookCreateOpen(true);
   }
 
@@ -534,7 +477,6 @@ export function LibraryPage() {
     await Promise.all([refreshAgents(), refreshPlaybooks(), refreshSources()]);
     const sourceId = playbook.sourceId;
     if (sourceId) {
-      markSourceUpdated(sourceId);
       if (connectedAgentHighlightTimerRef.current) {
         clearTimeout(connectedAgentHighlightTimerRef.current);
       }
@@ -544,9 +486,7 @@ export function LibraryPage() {
     message.success(t('agentSelection.connectionSuccess'));
     setPostSourceChoiceSource(null);
     setIsPlaybookCreateOpen(false);
-    setFollowWizardSourcePreselected(false);
     setInlineAgentCurating(false);
-    setPlaybookCreateStep(0);
     setConnectedAgentPlaybook(playbook);
   }
 
@@ -602,217 +542,19 @@ export function LibraryPage() {
 
   function onCancelPlaybookCreate() {
     setIsPlaybookCreateOpen(false);
-    setPlaybookCreateStep(0);
-    setEditingPlaybookId(null);
-    setWizardFocusedAgentId(null);
-    setWizardAlreadyLinkedPlaybooks([]);
-    setFollowWizardSourcePreselected(false);
-    setShowInlineAgentCreate(false);
     setInlineAgentCurating(false);
-    setInlineAgentStep(0);
-    setInlineAgentValidationError(null);
-    setConfirmingUnfollow(false);
-    setWizardShowAdvanced(false);
     setInlineCurationBaseAgentVersionId(null);
   }
 
-  function closeInlineAgentCreate() {
-    setShowInlineAgentCreate(false);
-    setInlineAgentValidationError(null);
-  }
-
   function openInlineAgentCuration(baseAgentVersionId?: string) {
-    setShowInlineAgentCreate(false);
-    setInlineAgentValidationError(null);
-    setPlaybookAgentIdsDraft([]);
     setInlineCurationBaseAgentVersionId(baseAgentVersionId ?? null);
     setInlineAgentCurating(true);
   }
 
   async function onInlineAgentCurated(agent: CuratedAgent) {
     await refreshAgents();
-    // Auto-select the curated agent in the wizard draft and return to the agent grid
-    setPlaybookAgentIdsDraft((prev) => (prev.includes(agent.id) ? prev : [...prev, agent.id]));
+    void agent;
     setInlineAgentCurating(false);
-  }
-
-  function onInlineAgentPersonaChange(nextPersonaId: string) {
-    const chars = getPromptCharactersForPersona(nextPersonaId);
-    const first = chars[0];
-    setInlineAgentPersonaId(nextPersonaId as typeof inlineAgentPersonaId);
-    if (first) {
-      setInlineAgentCharacterId(first.id);
-      setInlineAgentSystemPrompt(first.systemPrompt);
-      if (nextPersonaId === 'finance_expert') setInlineAgentRiskLevel(first.riskLevel);
-    }
-  }
-
-  function onInlineAgentCharacterChange(nextCharId: string) {
-    setInlineAgentCharacterId(nextCharId);
-    const char = getPromptCharacter(inlineAgentPersonaId, nextCharId);
-    if (!char) return;
-    setInlineAgentSystemPrompt(char.systemPrompt);
-    if (inlineAgentPersonaId === 'finance_expert') setInlineAgentRiskLevel(char.riskLevel);
-  }
-
-  function validateInlineAgentStep(step: number): boolean {
-    if (step === 1) {
-      if (inlineAgentPersonaId === 'finance_expert' && !inlineAgentRiskLevel) {
-        setInlineAgentValidationError('Risk level is required for Finance Expert.');
-        return false;
-      }
-    }
-    setInlineAgentValidationError(null);
-    return true;
-  }
-
-  function onInlineAgentNext() {
-    if (!validateInlineAgentStep(inlineAgentStep)) return;
-    setInlineAgentStep((prev) => Math.min(2, prev + 1));
-  }
-
-  function onInlineAgentBack() {
-    setInlineAgentValidationError(null);
-    if (inlineAgentStep === 0) {
-      closeInlineAgentCreate();
-      return;
-    }
-    setInlineAgentStep((prev) => prev - 1);
-  }
-
-  async function onSaveInlineAgent() {
-    setIsInlineAgentSaving(true);
-    try {
-      const inlinePersona = getPromptPersona(inlineAgentPersonaId);
-      const inlineChar = getPromptCharacter(inlineAgentPersonaId, inlineAgentCharacterId);
-      const payload = {
-        description: inlineAgentDescription,
-        active: true,
-        characterType: inlineAgentPersonaId,
-        promptConfig: {
-          personality_id: inlineAgentCharacterId,
-          personality_label: inlineChar?.name ?? inlineAgentCharacterId,
-          report_detail_level: inlineAgentReportDetailLevel,
-          ...(inlineAgentPersonaId === 'finance_expert' ? { risk_level: inlineAgentRiskLevel } : {})
-        },
-        preferences: inlineAgentPersonaId === 'finance_expert' ? { risk_level: [inlineAgentRiskLevel] } : {}
-      };
-      const newAgent = await createAgent(payload as any) as AgentSummary;
-      await saveAgentPrompt(newAgent.id, { model: inlineAgentModel, systemPrompt: inlineAgentSystemPrompt, enabled: true });
-      setAgents((prev) => [...prev, newAgent]);
-      // Auto-select the new agent in the wizard draft and return to the agent grid
-      setPlaybookAgentIdsDraft((prev) => [...prev, newAgent.id]);
-      void inlinePersona;
-      setShowInlineAgentCreate(false);
-      // Stay on step 1 so the user sees the newly selected agent and can confirm / pick more
-    } catch {
-      message.error('Failed to create agent');
-    } finally {
-      setIsInlineAgentSaving(false);
-    }
-  }
-
-  function derivePlaybookName(agentId: string, sourceId: string): string {
-    const selectedAgent = agents.find((agent) => agent.id === agentId);
-    const agentName = selectedAgent ? getAgentDisplayLabel(selectedAgent) : 'Agent';
-    const primarySource = sources.find((source) => source.id === sourceId);
-    const sourceTitle = primarySource?.metadata.title ?? primarySource?.value ?? 'Source';
-    return `${agentName} · ${sourceTitle}`;
-  }
-
-  function onNextPlaybookCreateStep() {
-    if (playbookCreateStep === 0 && !playbookSourceIdDraft) {
-      message.warning('Pick a source first');
-      return;
-    }
-    if (playbookCreateStep === 1 && playbookAgentIdsDraft.length === 0 && !editingPlaybookId) {
-      message.warning('Pick an agent first');
-      return;
-    }
-    setPlaybookCreateStep((current) => Math.min(current + 1, 2));
-  }
-
-  function onBackPlaybookCreateStep() {
-    // When source was pre-selected, never go below step 1
-    const minStep = followWizardSourcePreselected ? 1 : 0;
-    setPlaybookCreateStep((current) => Math.max(current - 1, minStep));
-  }
-
-  function markSourceUpdated(sourceId: string) {
-    if (updatedHighlightTimerRef.current) clearTimeout(updatedHighlightTimerRef.current);
-    setRecentlyUpdatedSourceId(sourceId);
-    updatedHighlightTimerRef.current = setTimeout(() => setRecentlyUpdatedSourceId(null), 4000);
-  }
-
-  async function onCreatePlaybook() {
-    // In follow mode, deselecting all agents is valid — it means "remove all" (diff will delete them).
-    // Only block empty selection in admin-hub create mode where you must pick at least one agent.
-    const isRemoveAll = followWizardSourcePreselected && wizardAlreadyLinkedAgentIds.length > 0 && playbookAgentIdsDraft.length === 0;
-    if (!editingPlaybookId && playbookAgentIdsDraft.length === 0 && !isRemoveAll) {
-      message.warning(t('playbook.pickAgentFirst'));
-      return;
-    }
-    if (!playbookSourceIdDraft) {
-      message.warning(t('playbook.pickSourceFirst'));
-      return;
-    }
-    const sourceId = playbookSourceIdDraft;
-    setIsPlaybookSaving(true);
-    try {
-      const lang = i18n.language.startsWith('de') ? 'de' : 'en';
-      // Default schedule used when the follow-source wizard does not show a schedule step
-      const defaultSchedule = { mode: 'daily' as const, dailyTime: '07:30', timezone: 'UTC' };
-      // Admin-hub create wizard does pass through the schedule step; follow wizard does not
-      const explicitSchedule =
-        scheduleDraft.mode === 'manual'
-          ? { mode: 'manual' as const }
-          : scheduleDraft.mode === 'interval'
-            ? { mode: 'interval' as const, intervalMinutes: scheduleDraft.intervalMinutes }
-            : scheduleDraft.mode === 'weekly'
-              ? { mode: 'weekly' as const, daysOfWeek: scheduleDraft.daysOfWeek, dailyTime: scheduleDraft.dailyTime, timezone: scheduleDraft.timezone }
-              : { mode: 'daily' as const, dailyTime: scheduleDraft.dailyTime, timezone: scheduleDraft.timezone };
-      // In follow mode use advanced draft values if expanded, otherwise defaults.
-      const scheduleForNew = followWizardSourcePreselected && !wizardShowAdvanced ? defaultSchedule : explicitSchedule;
-      const cleanedRecipients = scheduleDraft.recipients.map((v) => v.trim()).filter(Boolean);
-      // Recipients for new playbooks: advanced-mode uses draft; streamlined follow mode defaults to current user email.
-      const recipientsForNew = (followWizardSourcePreselected && !wizardShowAdvanced) ? (user?.email ? [user.email] : []) : cleanedRecipients;
-      if (editingPlaybookId) {
-        // Admin-hub edit mode: update the explicit playbook + diff agent selection
-        const agentId = wizardFocusedAgentId ?? playbookAgentIdsDraft[0] ?? '';
-        await updatePlaybook(editingPlaybookId, { name: derivePlaybookName(agentId, sourceId), recipients: cleanedRecipients, schedule: explicitSchedule });
-        // Diff: additions and removals relative to the originally linked set
-        const toCreate = playbookAgentIdsDraft.filter((id) => !wizardAlreadyLinkedAgentIds.includes(id));
-        const toDelete = wizardAlreadyLinkedAgentIds.filter((id) => !playbookAgentIdsDraft.includes(id) && id !== agentId);
-        await Promise.all([
-          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, sourceId), sourceId, recipients: cleanedRecipients, schedule: explicitSchedule, language: lang })),
-          ...toDelete.map((id) => {
-            const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
-            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
-          })
-        ]);
-      } else {
-        // Create mode (follow-source or admin-hub): diff against already-linked
-        const toCreate = playbookAgentIdsDraft.filter((id) => !wizardAlreadyLinkedAgentIds.includes(id));
-        const toDelete = wizardAlreadyLinkedAgentIds.filter((id) => !playbookAgentIdsDraft.includes(id));
-        await Promise.all([
-          ...toCreate.map((id) => createPlaybook({ agentId: id, name: derivePlaybookName(id, sourceId), sourceId, recipients: recipientsForNew, schedule: scheduleForNew, language: lang })),
-          ...toDelete.map((id) => {
-            const pb = wizardAlreadyLinkedPlaybooks.find((p) => p.agentId === id);
-            return pb ? deletePlaybook(pb.playbookId) : Promise.resolve();
-          })
-        ]);
-      }
-      await refreshPlaybooks();
-      markSourceUpdated(sourceId);
-      message.success(t('playbook.updatePlaybook'));
-      setIsPlaybookCreateOpen(false);
-      setPlaybookCreateStep(0);
-      setEditingPlaybookId(null);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to create playbook');
-    } finally {
-      setIsPlaybookSaving(false);
-    }
   }
 
   async function onCloneMarketplaceSource(publicationId: string) {
@@ -949,18 +691,6 @@ export function LibraryPage() {
       message.success('Subscription removed');
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to remove subscription');
-    }
-  }
-
-  async function onUnfollowFromWizard() {
-    if (!editingPlaybookId) return;
-    try {
-      await deletePlaybook(editingPlaybookId);
-      await refreshPlaybooks();
-      message.success('Unfollowed');
-      onCancelPlaybookCreate();
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to unfollow');
     }
   }
 
@@ -1321,7 +1051,7 @@ export function LibraryPage() {
     refreshMarketplaceCounts, refreshPlaybooks, removeCatalogSource, resendingReportId, runningAgentId,
     normalizedSourceSearch, selectedSourceId, setSourcesSearch, sourcesSearch, togglingPlaybookId,
     setActiveLibraryTabId, setActiveSourceTab, setAutoDetectedSource, setEditingLibraryTabName, setEditingSource,
-    setIsSourceCreateOpen, setRecentlyUpdatedSourceId, setSelectedSourceId, setShowSourcesMarketplace, setSourceUrlDraft,
+    setIsSourceCreateOpen, setSelectedSourceId, setShowSourcesMarketplace, setSourceUrlDraft,
     shareSource, showSourcesMarketplace, sourceDetailLoading, sourceDetailReports, sourceDetailRuns, sources, sourcesLoadState,
     sourceUrlDraft, starterSources, startEditingLibraryTab, t, updatePlaybook, user
   };
@@ -1349,59 +1079,15 @@ export function LibraryPage() {
         open={isPlaybookCreateOpen}
         sources={sources}
         agents={agents}
-        playbooks={playbooks}
         user={user}
-        scheduleDraft={scheduleDraft}
-        followWizardSourcePreselected={followWizardSourcePreselected}
         playbookSourceIdDraft={playbookSourceIdDraft}
-        setPlaybookSourceIdDraft={setPlaybookSourceIdDraft}
-        editingPlaybookId={editingPlaybookId}
-        playbookCreateStep={playbookCreateStep}
-        playbookAgentIdsDraft={playbookAgentIdsDraft}
-        setPlaybookAgentIdsDraft={setPlaybookAgentIdsDraft}
-        wizardFocusedAgentId={wizardFocusedAgentId}
-        wizardAlreadyLinkedPlaybooks={wizardAlreadyLinkedPlaybooks}
-        setWizardAlreadyLinkedAgentIds={setWizardAlreadyLinkedAgentIds}
-        setWizardAlreadyLinkedPlaybooks={setWizardAlreadyLinkedPlaybooks}
-        wizardShowAdvanced={wizardShowAdvanced}
-        setWizardShowAdvanced={setWizardShowAdvanced}
-        showInlineAgentCreate={showInlineAgentCreate}
-        setShowInlineAgentCreate={setShowInlineAgentCreate}
         inlineAgentCurating={inlineAgentCurating}
         setInlineAgentCurating={setInlineAgentCurating}
         inlineCurationBaseAgentVersionId={inlineCurationBaseAgentVersionId}
-        inlineAgentStep={inlineAgentStep}
-        inlineAgentPersonaId={inlineAgentPersonaId}
-        inlineAgentCharacterId={inlineAgentCharacterId}
-        inlineAgentModel={inlineAgentModel}
-        setInlineAgentModel={setInlineAgentModel}
-        inlineAgentSystemPrompt={inlineAgentSystemPrompt}
-        setInlineAgentSystemPrompt={setInlineAgentSystemPrompt}
-        inlineAgentRiskLevel={inlineAgentRiskLevel}
-        setInlineAgentRiskLevel={setInlineAgentRiskLevel}
-        inlineAgentReportDetailLevel={inlineAgentReportDetailLevel}
-        setInlineAgentReportDetailLevel={setInlineAgentReportDetailLevel}
-        inlineAgentValidationError={inlineAgentValidationError}
-        isInlineAgentSaving={isInlineAgentSaving}
-        isPlaybookSaving={isPlaybookSaving}
-        confirmingUnfollow={confirmingUnfollow}
-        setConfirmingUnfollow={setConfirmingUnfollow}
-        setAgents={setAgents}
         onCancelPlaybookCreate={onCancelPlaybookCreate}
         handleAgentSelectionConnected={handleAgentSelectionConnected}
         openInlineAgentCuration={openInlineAgentCuration}
         onInlineAgentCurated={onInlineAgentCurated}
-        onInlineAgentPersonaChange={onInlineAgentPersonaChange}
-        onInlineAgentCharacterChange={onInlineAgentCharacterChange}
-        onInlineAgentBack={onInlineAgentBack}
-        onInlineAgentNext={onInlineAgentNext}
-        onSaveInlineAgent={onSaveInlineAgent}
-        onNextPlaybookCreateStep={onNextPlaybookCreateStep}
-        onBackPlaybookCreateStep={onBackPlaybookCreateStep}
-        onCreatePlaybook={onCreatePlaybook}
-        onUnfollowFromWizard={onUnfollowFromWizard}
-        getSourceKindLabel={getSourceKindLabel}
-        getSourceEpisodeCount={getSourceEpisodeCount}
       />
       <EpisodePickerModal
         open={Boolean(episodePickerAgent)}

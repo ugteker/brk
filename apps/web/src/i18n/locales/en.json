@@ -209,20 +209,9 @@
     "listening": "Summarizing",
     "listenAriaLabel": "Summarize this source",
     "listeningAriaLabel": "Summarizing this source",
-    "stopListening": "Stop summarizing",
-    "stopListeningConfirm": "Stop summarizing?",
-    "stopListeningYes": "Yes, stop",
     "dialogTitleNew": "Which agents should follow {{title}}?",
-    "dialogTitleEdit": "Which agents should follow {{title}}?",
-    "dialogTitleGenericNew": "Set up summarizer",
-    "dialogTitleGenericEdit": "Update summarizer",
     "thisSource": "this source",
-    "stepSubtitle": "Choose an AI agent to summarize this source and generate reports for you. No agents yet? Create one below.",
-    "stepPickSource": "Pick source",
-    "runPickerTitle": "Which agent should run?",
-    "stepChooseAgent": "Choose agent",
-    "stepSetSchedule": "Set schedule",
-    "advancedSettings": "Advanced settings (schedule & recipients)"
+    "runPickerTitle": "Which agent should run?"
   },
   "agent": {
     "createNew": "Create new agent",
@@ -369,8 +358,7 @@
     "createPlaybooks": "{{count}} subscriptions created",
     "schedule": "Schedule & Recipients",
     "recipients": "Email recipients",
-    "addRecipient": "Add recipient",
-    "scheduleHint": "typical:"
+    "addRecipient": "Add recipient"
   },
   "source": {
     "noSources": "No sources available.",

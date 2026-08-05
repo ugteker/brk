@@ -209,20 +209,9 @@
     "listening": "Wird zusammengefasst",
     "listenAriaLabel": "Diese Quelle zusammenfassen",
     "listeningAriaLabel": "Fasst diese Quelle zusammen",
-    "stopListening": "Nicht mehr zusammenfassen",
-    "stopListeningConfirm": "Zusammenfassen beenden?",
-    "stopListeningYes": "Ja, beenden",
     "dialogTitleNew": "Welche Agenten sollen {{title}} folgen?",
-    "dialogTitleEdit": "Welche Agenten sollen {{title}} folgen?",
-    "dialogTitleGenericNew": "Zusammenfassung einrichten",
-    "dialogTitleGenericEdit": "Zusammenfassung aktualisieren",
     "thisSource": "diese Quelle",
-    "stepSubtitle": "Wähle einen KI-Agenten, der diese Quelle zusammenfasst und Berichte erstellt. Noch kein Agent? Erstelle einen unten.",
-    "stepPickSource": "Quelle wählen",
-    "runPickerTitle": "Welcher Agent soll starten?",
-    "stepChooseAgent": "Agent wählen",
-    "stepSetSchedule": "Zeitplan festlegen",
-    "advancedSettings": "Erweiterte Einstellungen (Zeitplan & Empfänger)"
+    "runPickerTitle": "Welcher Agent soll starten?"
   },
   "agent": {
     "createNew": "Neuen Agenten erstellen",
@@ -369,8 +358,7 @@
     "createPlaybooks": "{{count}} Abos erstellt",
     "schedule": "Zeitplan & Empfänger",
     "recipients": "E-Mail-Empfänger",
-    "addRecipient": "Empfänger hinzufügen",
-    "scheduleHint": "typisch:"
+    "addRecipient": "Empfänger hinzufügen"
   },
   "source": {
     "noSources": "Keine Quellen verfügbar.",
