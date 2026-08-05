@@ -116,7 +116,7 @@ export async function updatePlaybook(playbookId: string, payload: UpdatePlaybook
     body: JSON.stringify(payload)
   });
   if (!response.ok) {
-    throw new Error(await parseErrorMessage(response, 'Failed to update playbook'));
+    throw new Error(await parseErrorMessage(response, 'Failed to update subscription'));
   }
   return response.json();
 }
@@ -124,7 +124,7 @@ export async function updatePlaybook(playbookId: string, payload: UpdatePlaybook
 export async function deletePlaybook(playbookId: string): Promise<void> {
   const response = await fetch(`/api/playbooks/${playbookId}`, { method: 'DELETE' });
   if (!response.ok) {
-    throw new Error(await parseErrorMessage(response, 'Failed to remove playbook'));
+    throw new Error(await parseErrorMessage(response, 'Failed to remove subscription'));
   }
 }
 

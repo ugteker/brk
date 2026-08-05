@@ -969,7 +969,7 @@ export function LibraryPage() {
       await updatePlaybook(playbook.id, { enabled: !playbook.enabled });
       await refreshPlaybooks();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to update playbook');
+      message.error(err instanceof Error ? err.message : 'Failed to update subscription');
     } finally {
       setTogglingPlaybookId(null);
     }
@@ -979,9 +979,9 @@ export function LibraryPage() {
     try {
       await deletePlaybook(playbook.id);
       await refreshPlaybooks();
-      message.success('Playbook removed');
+      message.success('Subscription removed');
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to remove playbook');
+      message.error(err instanceof Error ? err.message : 'Failed to remove subscription');
     }
   }
 

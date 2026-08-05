@@ -369,7 +369,7 @@ export async function resendReportNotification(
   if (!response.ok) {
     if (response.status === 400) {
       const body = await response.json().catch(() => null);
-      throw new Error(body?.message ?? 'Playbook recipients are required to send report notification');
+      throw new Error(body?.message ?? 'Subscription recipients are required to send report notification');
     }
     throw new Error('Failed to send report notification');
   }

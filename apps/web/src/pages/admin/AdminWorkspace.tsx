@@ -343,7 +343,7 @@ export function AdminWorkspace({ ctx, tab }: { ctx: any; tab: 'agents' | 'playbo
 
   return (
                   <div className="grid min-w-0 gap-4 lg:grid-cols-[2fr_1fr]">
-                  <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}>Playbooks</Title>}>
+                  <Card className="min-w-0" title={<Title level={4} style={{ margin: 0 }}>Subscriptions</Title>}>
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                       <Input
                         aria-label="Search playbooks"

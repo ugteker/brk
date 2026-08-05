@@ -587,7 +587,7 @@ export function AdminPage({ tab }: { tab: 'agents' | 'playbooks' }) {
     try {
       await cloneMarketplacePlaybook(publicationId);
       await refreshPlaybooks();
-      message.success('Playbook cloned');
+      message.success('Subscription cloned');
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to clone playbook');
     } finally {
@@ -615,7 +615,7 @@ export function AdminPage({ tab }: { tab: 'agents' | 'playbooks' }) {
       await updatePlaybook(playbook.id, { enabled: !playbook.enabled });
       await refreshPlaybooks();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to update playbook');
+      message.error(err instanceof Error ? err.message : 'Failed to update subscription');
     } finally {
       setTogglingPlaybookId(null);
     }
@@ -629,9 +629,9 @@ export function AdminPage({ tab }: { tab: 'agents' | 'playbooks' }) {
     try {
       await updatePlaybook(playbook.id, { name: trimmed });
       await refreshPlaybooks();
-      message.success('Playbook updated');
+      message.success('Subscription updated');
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to update playbook');
+      message.error(err instanceof Error ? err.message : 'Failed to update subscription');
     }
   }
 
@@ -642,9 +642,9 @@ export function AdminPage({ tab }: { tab: 'agents' | 'playbooks' }) {
         setSelectedPlaybookId(null);
       }
       await refreshPlaybooks();
-      message.success('Playbook removed');
+      message.success('Subscription removed');
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to remove playbook');
+      message.error(err instanceof Error ? err.message : 'Failed to remove subscription');
     }
   }
 
