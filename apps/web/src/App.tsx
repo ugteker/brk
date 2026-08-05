@@ -2,16 +2,18 @@ import { Spin } from 'antd';
 import { useRef, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useSafeNavigate } from './utils/useSafeNavigate';
-import { HubPage } from './pages/hub/HubPage';
+import { FeedPage } from './pages/feed/FeedPage';
+import { LibraryPage } from './pages/library/LibraryPage';
+import { AdminPage } from './pages/admin/AdminPage';
 import { AuthPage } from './pages/AuthPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { AppDataProvider, useAppData, type DiscussionEventNotice } from './context/AppDataContext';
 import { RealtimeProvider, useRealtimeSubscription } from './context/RealtimeContext';
 import { AppShell } from './components/AppShell';
-import { StudioHub } from './pages/StudioHub';
-import { DiscussionDetail } from './pages/DiscussionDetail';
-import { NewDiscussionWizard } from './pages/NewDiscussionWizard';
+import { StudioHub } from './pages/studio/StudioHub';
+import { DiscussionDetail } from './pages/studio/DiscussionDetail';
+import { NewDiscussionWizard } from './pages/studio/NewDiscussionWizard';
 import { getDiscussion, listDiscussionRuns } from './api/discussions';
 
 // Route guard for admin-only pages (Agents, Playbooks, User Management). Non-admins are
@@ -98,10 +100,10 @@ function AnimatedRoutes() {
   return (
     <div key={location.pathname} className="ct-page-enter">
       <Routes>
-        <Route path="/" element={<HubPage hub="feed" />} />
-        <Route path="/library" element={<HubPage hub="sources" />} />
-        <Route path="/agents" element={<RequireAdmin><HubPage hub="agents" /></RequireAdmin>} />
-        <Route path="/playbooks" element={<RequireAdmin><HubPage hub="playbooks" /></RequireAdmin>} />
+        <Route path="/" element={<FeedPage />} />
+        <Route path="/library" element={<LibraryPage />} />
+        <Route path="/agents" element={<RequireAdmin><AdminPage tab="agents" /></RequireAdmin>} />
+        <Route path="/playbooks" element={<RequireAdmin><AdminPage tab="playbooks" /></RequireAdmin>} />
         <Route path="/admin/users" element={<RequireAdmin><AdminUsersRoute /></RequireAdmin>} />
         <Route path="/studio" element={<StudioHub />} />
         <Route path="/studio/new" element={<NewDiscussionWizard />} />

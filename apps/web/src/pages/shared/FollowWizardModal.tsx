@@ -13,16 +13,16 @@ import {
   RobotOutlined,
   ToolOutlined
 } from '@ant-design/icons';
-import type { AgentSummary } from '../../../api/agents';
-import type { PlaybookRecord } from '../../../api/playbooks';
-import type { SourceRecord } from '../../../api/sources';
-import { AgentCurator, type CuratedAgent } from '../../../components/AgentCurator';
-import { AgentSelectionView } from '../../../components/agent-selection/AgentSelectionView';
-import { GhostCreateCard } from '../../../components/library/GhostCreateCard';
-import { InlineDeleteButton } from '../../../components/InlineDeleteButton';
-import { getCharacterTypeColor } from '../../../data/character-types';
-import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS } from '../../../data/prompt-personas';
-import { getAgentDisplayLabel } from '../../../utils/agent-label';
+import type { AgentSummary } from '../../api/agents';
+import type { PlaybookRecord } from '../../api/playbooks';
+import type { SourceRecord } from '../../api/sources';
+import { AgentCurator, type CuratedAgent } from '../../components/AgentCurator';
+import { AgentSelectionView } from '../../components/agent-selection/AgentSelectionView';
+import { GhostCreateCard } from '../../components/library/GhostCreateCard';
+import { InlineDeleteButton } from '../../components/InlineDeleteButton';
+import { getCharacterTypeColor } from '../../data/character-types';
+import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS } from '../../data/prompt-personas';
+import { getAgentDisplayLabel } from '../../utils/agent-label';
 import {
   SourceTypeBadge,
   WizardSelectableCard,
@@ -31,8 +31,8 @@ import {
   getSourceCoverImageUrl,
   getSourceDisplayTitle,
   PERSONA_ICON_BG_MAP
-} from '../helpers';
-import { TIMEZONE_OPTIONS } from '../types';
+} from './helpers';
+import { TIMEZONE_OPTIONS } from './types';
 import type { ScheduleDraft } from './ScheduleEditModal';
 
 const { Text } = Typography;

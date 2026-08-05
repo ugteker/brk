@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Button, Empty, Popconfirm, Spin, Tag, Tooltip, Typography, message } from 'antd';
 import { AudioOutlined, DeleteOutlined, EditOutlined, PlayCircleOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useSafeNavigate } from '../utils/useSafeNavigate';
-import { deleteDiscussion, listDiscussions, triggerDiscussionRun, type DiscussionDto } from '../api/discussions';
-import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
-import { DiscussionCover } from '../components/DiscussionCover';
+import { useSafeNavigate } from '../../utils/useSafeNavigate';
+import { deleteDiscussion, listDiscussions, triggerDiscussionRun, type DiscussionDto } from '../../api/discussions';
+import { StudioPrimaryButton } from '../../components/StudioPrimaryButton';
+import { DiscussionCover } from '../../components/DiscussionCover';
 
 const { Title } = Typography;
 

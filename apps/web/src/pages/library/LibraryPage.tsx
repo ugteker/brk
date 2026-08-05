@@ -1,57 +1,33 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
-import { useSafeNavigate } from '../../utils/useSafeNavigate';
+import { useEffect, useRef, useState } from 'react';
+import { App } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { App, Tabs } from 'antd';
-import {
-  DatabaseOutlined,
-  FileTextOutlined,
-} from '@ant-design/icons';
+import { useSafeNavigate } from '../../utils/useSafeNavigate';
 import { type CuratedAgent } from '../../components/AgentCurator';
 import { type SourcePickerSelection } from '../../components/SourceSearchPicker';
 import { EpisodePickerModal } from '../../components/EpisodePickerModal';
 import { PostSourceChoiceModal } from '../../components/library/PostSourceChoiceModal';
 import { AgentConnectedModal } from '../../components/agent-selection/AgentConnectedModal';
 import { SymbolPerformancePage } from '../SymbolPerformancePage';
-import { seedDemoData } from '../../api/admin';
 import { useAppData } from '../../context/AppDataContext';
 import { useRealtimeSubscription } from '../../context/RealtimeContext';
 import {
   createAgent,
-  deleteAgent,
-  disableAgent,
-  enableAgent,
-  getAgent,
-  listAgents,
   listAgentEpisodeOptions,
-  publishAgent,
   runAgentNow,
   saveAgentPrompt,
-  type AgentDetail,
   type AgentSummary,
   type EpisodeOptionDto,
   type ForcedEpisodeSelection,
-  type RunDetailDto
+  type RunDetailDto,
+  type RunReportDto
 } from '../../api/agents';
-import { getLatestAgentPrompt, type PromptVersionDto, type RunReportDto } from '../../api/agents';
-import { grantAgentAccess, listAgentAccessGrants } from '../../api/access';
 import { getDiscussionRun, type DiscussionPreselect } from '../../api/discussions';
-import {
-  cloneMarketplaceAgent,
-  cloneMarketplacePlaybook,
-  cloneMarketplaceSource,
-  type MarketplaceAgentListItem,
-  type MarketplacePlaybookListItem,
-  type MarketplaceSourceListItem
-} from '../../api/marketplace';
+import { cloneMarketplaceSource } from '../../api/marketplace';
 import {
   createPlaybook,
   deletePlaybook,
-  listPlaybooks,
-  publishPlaybook,
   runPlaybookNow,
-  sharePlaybook,
   updatePlaybook,
-  type DigestFrequency,
   type PlaybookRecord
 } from '../../api/playbooks';
 import {
@@ -64,43 +40,45 @@ import {
   shareSource,
   saveSource,
   updateSource,
-  type SourceRecord,
-  type SourceType
+  type SourceRecord
 } from '../../api/sources';
 import { useAuth } from '../../auth/AuthContext';
-import { getPromptCharacter, getPromptCharactersForPersona, getPromptPersona, PROMPT_PERSONAS, DEFAULT_PROMPT_CHARACTER_ID, DEFAULT_PROMPT_PERSONA_ID } from '../../data/prompt-personas';
-import { getAgentDisplayLabel } from '../../utils/agent-label';
 import {
-  type HubKey,
+  DEFAULT_PROMPT_CHARACTER_ID,
+  DEFAULT_PROMPT_PERSONA_ID,
+  getPromptCharacter,
+  getPromptCharactersForPersona,
+  getPromptPersona
+} from '../../data/prompt-personas';
+import { getAgentDisplayLabel } from '../../utils/agent-label';
+import { useSymbolView } from '../../hooks/useSymbolView';
+import {
   type ProbeKind,
-  type AgentEditor,
   type LibraryTabRecord,
   type AutoDetectedSource,
   DEFAULT_LIBRARY_TAB_ID,
   DEFAULT_LIBRARY_TAB_NAME,
   LIBRARY_GUIDANCE_KEY
-} from './types';
+} from '../shared/types';
 import {
   detectSourceTypeCandidates,
   probeRankScore,
   getAgentCharacterLabel,
   getAgentPersonalityLabel,
   hasEpisodicSource,
-  getSourceDisplayTitle,
-} from './helpers';
-import { FeedTab } from './FeedTab';
-import { AgentPickerModal } from './components/AgentPickerModal';
-import { ScheduleEditModal } from './components/ScheduleEditModal';
-import { FollowWizardModal } from './components/FollowWizardModal';
-import { useScheduleDraft } from './hooks/useScheduleDraft';
-import { ReportDrawer } from './components/ReportDrawer';
-import { AdminWorkspace } from './components/AdminWorkspace';
-import { LibraryTab } from './components/LibraryTab';
-import { useHubNavigation } from './hooks/useHubNavigation';
-import { useReportsFeed } from './hooks/useReportsFeed';
+  getSourceDisplayTitle
+} from '../shared/helpers';
+import { LibraryTab } from './LibraryTab';
+import { FollowWizardModal } from '../shared/FollowWizardModal';
+import { ReportDrawer } from '../shared/ReportDrawer';
+import { AgentPickerModal } from './AgentPickerModal';
+import { ScheduleEditModal } from '../shared/ScheduleEditModal';
+import { useScheduleDraft } from '../shared/useScheduleDraft';
+import { useReportsFeed } from '../shared/useReportsFeed';
+import { useLibrarySourceNavigation } from './useLibrarySourceNavigation';
 
-export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
-  const { user, isAdmin, logout } = useAuth();
+export function LibraryPage() {
+  const { user } = useAuth();
   const { t, i18n } = useTranslation();
   const { message } = App.useApp();
   const navigate = useSafeNavigate();
@@ -109,38 +87,17 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     sources,
     catalog,
     playbooks,
-    agentsLoadState: loadState,
     sourcesLoadState,
-    playbooksLoadState,
     catalogLoadState,
-    marketplaceAgents, setMarketplaceAgents: _setMarketplaceAgents,
-    marketplaceSources, setMarketplaceSources: _setMarketplaceSources,
-    marketplacePlaybooks, setMarketplacePlaybooks: _setMarketplacePlaybooks,
-    marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
-    refreshAgents: _refreshAgents, refreshSources: _refreshSources, refreshPlaybooks: _refreshPlaybooks, refreshCatalog,
-    removeCatalogSource,
-    failedRunNotices, setFailedRunNotices,
-    newReportNotices, setNewReportNotices,
-    bellDismissedIds,
+    marketplaceSources,
+    marketplaceSourceCount,
+    refreshAgents: _refreshAgents,
+    refreshSources: _refreshSources,
+    refreshPlaybooks: _refreshPlaybooks,
+    refreshCatalog,
+    removeCatalogSource
   } = useAppData();
-  const [viewingSymbol, setViewingSymbol] = useState<string | null>(null);
-  const [agentEditor, setAgentEditor] = useState<AgentEditor>(null);
-  const [isLoadingEditTarget, setIsLoadingEditTarget] = useState(false);
-  const [agentsSearch, setAgentsSearch] = useState('');
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState<PromptVersionDto | null>(null);
-  const [togglingAgentId, setTogglingAgentId] = useState<string | null>(null);
-  const [togglingPlaybookId, setTogglingPlaybookId] = useState<string | null>(null);
-  const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
-  const [runningAgentId, setRunningAgentId] = useState<string | null>(null);
-  const [episodePickerAgent, setEpisodePickerAgent] = useState<AgentSummary | null>(null);
-  const [episodeOptions, setEpisodeOptions] = useState<EpisodeOptionDto[]>([]);
-  const [loadingEpisodeOptions, setLoadingEpisodeOptions] = useState(false);
-  const [activePlaybookTab, setActivePlaybookTab] = useState('reports');
-  const [highlightedReportId, setHighlightedReportId] = useState<string | null>(null);
-  const [viewingFullReport, setViewingFullReport] = useState<RunReportDto & { agentName: string; playbookName: string } | null>(null);
-  const nav = useHubNavigation({ initialHub, navigate, agents, setSelectedAgentId, setViewingSymbol });
-  const { activeHub, setActiveHub, showAdminWorkspace } = nav;
+  const { symbolView, setSymbolView } = useSymbolView(agents);
   const [sourcesSearch, setSourcesSearch] = useState('');
   const [libraryTabs, setLibraryTabs] = useState<LibraryTabRecord[]>([{ id: DEFAULT_LIBRARY_TAB_ID, name: DEFAULT_LIBRARY_TAB_NAME }]);
   const [activeLibraryTabId, setActiveLibraryTabId] = useState(DEFAULT_LIBRARY_TAB_ID);
@@ -148,7 +105,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [editingLibraryTabId, setEditingLibraryTabId] = useState<string | null>(null);
   const [editingLibraryTabName, setEditingLibraryTabName] = useState('');
   const [lastLibraryTabClick, setLastLibraryTabClick] = useState<{ tabId: string; at: number } | null>(null);
-  const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
   const [isSourceCreateOpen, setIsSourceCreateOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<SourceRecord | null>(null);
   const [sourceUrlDraft, setSourceUrlDraft] = useState('');
@@ -162,9 +118,9 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [agentAssignmentOrigin, setAgentAssignmentOrigin] = useState<'library' | 'detail'>('library');
   const [recentlyConnectedAgent, setRecentlyConnectedAgent] = useState<{ sourceId: string; agentId: string } | null>(null);
   const connectedAgentHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [playbooksSearch, setPlaybooksSearch] = useState('');
-  const [selectedPlaybookId, setSelectedPlaybookId] = useState<string | null>(null);
-  const { selectedSourceId, setSelectedSourceId } = nav;
+  const { selectedSourceId, setSelectedSourceId } = useLibrarySourceNavigation();
+  const initialDeepLinkedSourceIdRef = useRef(selectedSourceId);
+  const appliedInitialSourceTabRef = useRef(false);
   const [activeSourceTab, setActiveSourceTab] = useState<string>('reports');
   const [sourceDetailReports, setSourceDetailReports] = useState<RunReportDto[]>([]);
   const [sourceDetailRuns, setSourceDetailRuns] = useState<RunDetailDto[]>([]);
@@ -204,7 +160,7 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [showInlineAgentCreate, setShowInlineAgentCreate] = useState(false);
   const [isInlineAgentSaving, setIsInlineAgentSaving] = useState(false);
   const [inlineAgentStep, setInlineAgentStep] = useState(0); // 0=character+personality, 1=model+prompt, 2=schedule+recipients
-  const [inlineAgentDescription, setInlineAgentDescription] = useState('');
+  const [inlineAgentDescription] = useState('');
   const [inlineAgentPersonaId, setInlineAgentPersonaId] = useState(DEFAULT_PROMPT_PERSONA_ID);
   const [inlineAgentCharacterId, setInlineAgentCharacterId] = useState(DEFAULT_PROMPT_CHARACTER_ID);
   const [inlineAgentModel, setInlineAgentModel] = useState('claude-sonnet-4-5');
@@ -218,42 +174,24 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const [inlineAgentCurating, setInlineAgentCurating] = useState(false);
   const [inlineCurationBaseAgentVersionId, setInlineCurationBaseAgentVersionId] = useState<string | null>(null);
   const [showSourcesMarketplace, setShowSourcesMarketplace] = useState(false);
-  const [showPlaybooksMarketplace, setShowPlaybooksMarketplace] = useState(false);
-  const [showAgentsMarketplace, setShowAgentsMarketplace] = useState(false);
   const [cloningPublicationId, setCloningPublicationId] = useState<string | null>(null);
-  const [marketplaceAgentsSearch, setMarketplaceAgentsSearch] = useState('');
-  const [marketplacePlaybooksSearch, setMarketplacePlaybooksSearch] = useState('');
-  const [accessGrantCount, setAccessGrantCount] = useState(0);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(() =>
-    localStorage.getItem('chattrader:onboarding:dismissed') === '1'
-  );
   const [libraryGuidanceSeen, setLibraryGuidanceSeen] = useState(() =>
     localStorage.getItem(LIBRARY_GUIDANCE_KEY) === '1'
   );
   const [postSourceChoiceSource, setPostSourceChoiceSource] = useState<SourceRecord | null>(null);
   const [wizardShowAdvanced, setWizardShowAdvanced] = useState(false);
-  const selectedPlaybook = playbooks.find((playbook) => playbook.id === selectedPlaybookId) ?? null;
-  const executionAgentId = selectedPlaybook?.agentId ?? null;
-  const feed = useReportsFeed({ agents, playbooks, selectedPlaybook, executionAgentId, message, t });
+  const [viewingFullReport, setViewingFullReport] = useState<RunReportDto & { agentName: string; playbookName: string } | null>(null);
+  const [runningAgentId, setRunningAgentId] = useState<string | null>(null);
+  const [episodePickerAgent, setEpisodePickerAgent] = useState<AgentSummary | null>(null);
+  const [episodeOptions, setEpisodeOptions] = useState<EpisodeOptionDto[]>([]);
+  const [loadingEpisodeOptions, setLoadingEpisodeOptions] = useState(false);
+  const [togglingPlaybookId, setTogglingPlaybookId] = useState<string | null>(null);
+
   const {
-    feedReports,
-    feedLoading,
-    feedSearch,
-    setFeedSearch,
-    runs,
-    reports,
-    selectedPlaybookReports,
-    reloadExecutionAgentData,
     markFeedReportRead,
-    dismissFeedReport,
     onResendReportEmail,
     resendingReportId
-  } = feed;
-
-  /** Onboarding step completion */
-  const onboardingHasFirstReport = agents.some((a) => (a.reportCount ?? 0) > 0);
-  const onboardingAllDone = sources.length > 0 && agents.length > 0 && playbooks.length > 0 && onboardingHasFirstReport;
-  const onboardingDataLoaded = sourcesLoadState !== 'loading' && loadState !== 'loading' && playbooksLoadState !== 'loading';
+  } = useReportsFeed({ agents, playbooks, selectedPlaybook: null, executionAgentId: null, message, t });
 
   function libraryTabsStorageKey(): string {
     return `chattrader:library-tabs:${user?.id ?? 'anonymous'}`;
@@ -341,24 +279,9 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     return _refreshAgents();
   }
 
-  function openCurationCreate() {
-    setAgentEditor({ mode: 'curation-create' });
-    setSelectedAgentId(null);
-  }
-
-  async function completeAgentCuration(agent: CuratedAgent) {
-    setAgentEditor(null);
-    try {
-      await refreshAgents();
-    } finally {
-      setSelectedAgentId(agent.id);
-    }
-  }
-
   async function refreshMarketplaceCounts() {
     // Marketplace counts now come from AppDataContext — no-op here
   }
-
 
   // Library guidance replaces the old forced onboarding flows.
 
@@ -397,6 +320,15 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
   }, [libraryTabs, sourceLibraryBySourceId, user?.id]);
 
+  useEffect(() => {
+    if (appliedInitialSourceTabRef.current) return;
+    if (!initialDeepLinkedSourceIdRef.current) return;
+    const deepLinkedSource = sources.find((source) => source.id === initialDeepLinkedSourceIdRef.current);
+    if (!deepLinkedSource) return;
+    setActiveSourceTab(deepLinkedSource.type === 'youtube_videos' || deepLinkedSource.type === 'podcast_feeds' ? 'episodes' : 'reports');
+    appliedInitialSourceTabRef.current = true;
+  }, [sources]);
+
   // Start a Studio discussion seeded with this report + its agent. The wizard still needs a
   // second participant (discussions require >= 2), so this lands the user in /studio/new with
   // the agent pre-checked rather than creating a discussion outright.
@@ -411,7 +343,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
   // Jump from a feed card straight to its source's detail view in the Library hub.
   function openSourceInLibrary(source: SourceRecord) {
-    setActiveHub('sources');
     setSelectedSourceId(source.id);
     setActiveSourceTab(source.type === 'youtube_videos' || source.type === 'podcast_feeds' ? 'episodes' : 'reports');
   }
@@ -443,55 +374,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       setMaterialAudioLoadingItemKey(null);
     }
   }
-
-  useEffect(() => {
-    if (!selectedAgentId) return;
-    let alive = true;
-
-    async function loadAgentDetail() {
-      const agentPrompt = await getLatestAgentPrompt(selectedAgentId as string);
-      if (!alive) return;
-      setPrompt(agentPrompt);
-    }
-
-    loadAgentDetail();
-    return () => {
-      alive = false;
-    };
-  }, [selectedAgentId]);
-
-  // Accumulate failed runs into the bell notification centre (driven by realtime updates)
-  useEffect(() => {
-    const failedRuns = runs.filter((r) => r.status === 'failed');
-    if (failedRuns.length === 0) return;
-    const executionAgent = agents.find((agent) => agent.id === executionAgentId);
-    const agentName = executionAgent ? getAgentDisplayLabel(executionAgent) : executionAgentId ?? '';
-    setFailedRunNotices((prev) => {
-      const existingIds = new Set(prev.map((n) => n.runId));
-      const newNotices = failedRuns
-        .filter((r) => !existingIds.has(r.id))
-        .map((r) => ({ runId: r.id, agentId: executionAgentId!, agentName, errorMessage: r.errorMessage ?? null, timestamp: r.finishedAt ?? r.startedAt ?? '' }));
-      return newNotices.length > 0 ? [...prev, ...newNotices] : prev;
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runs]);
-
-  // Accumulate newly-created reports into the bell notification centre too (driven by the
-  // same realtime-refreshed data), so users don't have to keep an agent selected/open to
-  // notice new output.
-  useEffect(() => {
-    if (reports.length === 0) return;
-    const executionAgent = agents.find((agent) => agent.id === executionAgentId);
-    const agentName = executionAgent ? getAgentDisplayLabel(executionAgent) : executionAgentId ?? '';
-    setNewReportNotices((prev) => {
-      const existingIds = new Set(prev.map((n) => n.reportId));
-      const newNotices = reports
-        .filter((r) => !existingIds.has(r.id))
-        .map((r) => ({ reportId: r.id, agentId: executionAgentId!, agentName, summary: r.summary, timestamp: r.createdAt }));
-      return newNotices.length > 0 ? [...prev, ...newNotices] : prev;
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reports]);
 
   // Load reports + runs for the selected source (merged from all agents analyzing it), both via
   // the source-scoped endpoints - only reports/runs whose generating run actually crawled this
@@ -533,48 +415,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
   });
 
-  useEffect(() => {
-    if (!selectedAgentId) {
-      setAccessGrantCount(0);
-      return;
-    }
-    let alive = true;
-    async function loadAccessGrants() {
-      try {
-        const grants = await listAgentAccessGrants(selectedAgentId);
-        if (!alive) return;
-        setAccessGrantCount(grants.length);
-      } catch {
-        if (!alive) return;
-        setAccessGrantCount(0);
-      }
-    }
-    loadAccessGrants();
-    return () => {
-      alive = false;
-    };
-  }, [selectedAgentId]);
-
-  function onViewReport(reportId: string) {
-    setHighlightedReportId(reportId);
-    setActivePlaybookTab('reports');
-  }
-
-  async function onTogglePause(agent: AgentSummary, event: React.MouseEvent) {
-    event.stopPropagation();
-    setTogglingAgentId(agent.id);
-    try {
-      if (agent.status === 'disabled') {
-        await enableAgent(agent.id);
-      } else {
-        await disableAgent(agent.id);
-      }
-      await refreshAgents();
-    } finally {
-      setTogglingAgentId(null);
-    }
-  }
-
   async function executeRun(agent: AgentSummary, forcedEpisode?: ForcedEpisodeSelection) {
     setRunningAgentId(agent.id);
     // Realtime `run.changed`/`report.changed` events drive live updates elsewhere on the
@@ -590,9 +430,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       } else {
         message.success('Agent run completed');
         setSourceDetailRefreshKey((k) => k + 1);
-      }
-      if (result.status !== 'no_run_claimed' && agent.id === executionAgentId) {
-        await reloadExecutionAgentData();
       }
       await refreshAgents();
     } catch (err) {
@@ -638,51 +475,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     closeEpisodePicker();
     if (agent) {
       await executeRun(agent, { sourceType: episode.sourceType, sourceValue: episode.sourceValue, itemLink: episode.link });
-    }
-  }
-
-  async function onDeleteAgent(agent: AgentSummary, event?: React.MouseEvent) {
-    event?.stopPropagation();
-    setDeletingAgentId(agent.id);
-    try {
-      await deleteAgent(agent.id);
-      if (selectedAgentId === agent.id) {
-        setSelectedAgentId(null);
-      }
-      await refreshAgents();
-    } catch (error) {
-      if (error instanceof Error && error.message === 'Agent not found') {
-        if (selectedAgentId === agent.id) {
-          setSelectedAgentId(null);
-        }
-        await refreshAgents();
-        return;
-      }
-      message.error(error instanceof Error ? error.message : 'Failed to delete agent');
-    } finally {
-      setDeletingAgentId(null);
-    }
-  }
-
-  async function onEditAgent(agent: AgentSummary, event?: React.MouseEvent) {
-    event?.stopPropagation();
-    setIsLoadingEditTarget(true);
-    try {
-      const [detail, latestPrompt] = await Promise.all([getAgent(agent.id), getLatestAgentPrompt(agent.id)]);
-      setAgentEditor({ mode: 'manual-edit', detail, prompt: latestPrompt });
-    } finally {
-      setIsLoadingEditTarget(false);
-    }
-  }
-
-  async function onImproveAgentWithAI(agent: AgentSummary, event?: React.MouseEvent) {
-    event?.stopPropagation();
-    setIsLoadingEditTarget(true);
-    try {
-      const [detail, latestPrompt] = await Promise.all([getAgent(agent.id), getLatestAgentPrompt(agent.id)]);
-      setAgentEditor({ mode: 'curation-update', detail, prompt: latestPrompt });
-    } finally {
-      setIsLoadingEditTarget(false);
     }
   }
 
@@ -787,7 +579,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
 
     if (agentAssignmentOrigin === 'library') {
       setSelectedSourceId(null);
-      setActiveHub('sources');
     } else if (selectedSourceId !== sourceId) {
       setSelectedSourceId(sourceId);
     }
@@ -900,7 +691,7 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
         },
         preferences: inlineAgentPersonaId === 'finance_expert' ? { risk_level: [inlineAgentRiskLevel] } : {}
       };
-      const newAgent = await createAgent(payload) as AgentSummary;
+      const newAgent = await createAgent(payload as any) as AgentSummary;
       await saveAgentPrompt(newAgent.id, { model: inlineAgentModel, systemPrompt: inlineAgentSystemPrompt, enabled: true });
       setAgents((prev) => [...prev, newAgent]);
       // Auto-select the new agent in the wizard draft and return to the agent grid
@@ -1026,32 +817,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       message.success('Source cloned to your library');
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to clone source');
-    } finally {
-      setCloningPublicationId(null);
-    }
-  }
-
-  async function onCloneMarketplacePlaybook(publicationId: string) {
-    setCloningPublicationId(publicationId);
-    try {
-      await cloneMarketplacePlaybook(publicationId);
-      await refreshPlaybooks();
-      message.success('Playbook cloned');
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to clone playbook');
-    } finally {
-      setCloningPublicationId(null);
-    }
-  }
-
-  async function onCloneMarketplaceAgent(publicationId: string) {
-    setCloningPublicationId(publicationId);
-    try {
-      await cloneMarketplaceAgent(publicationId);
-      await refreshAgents();
-      message.success('Agent cloned');
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to clone agent');
     } finally {
       setCloningPublicationId(null);
     }
@@ -1192,26 +957,9 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
   }
 
-  async function onEditPlaybook(playbook: PlaybookRecord) {
-    const updatedName = window.prompt('Edit playbook name', playbook.name);
-    if (updatedName === null) return;
-    const trimmed = updatedName.trim();
-    if (!trimmed || trimmed === playbook.name) return;
-    try {
-      await updatePlaybook(playbook.id, { name: trimmed });
-      await refreshPlaybooks();
-      message.success('Playbook updated');
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to update playbook');
-    }
-  }
-
   async function onDeletePlaybook(playbook: PlaybookRecord) {
     try {
       await deletePlaybook(playbook.id);
-      if (selectedPlaybookId === playbook.id) {
-        setSelectedPlaybookId(null);
-      }
       await refreshPlaybooks();
       message.success('Playbook removed');
     } catch (err) {
@@ -1231,11 +979,7 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
   }
 
-  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? null;
-  const executionAgent = executionAgentId ? agents.find((agent) => agent.id === executionAgentId) ?? null : null;
   const normalizedSourceSearch = sourcesSearch.trim().toLowerCase();
-  const normalizedAgentsSearch = agentsSearch.trim().toLowerCase();
-  const normalizedPlaybooksSearch = playbooksSearch.trim().toLowerCase();
   const filteredSources = sources.filter((source) => {
     if ((sourceLibraryBySourceId[source.id] ?? DEFAULT_LIBRARY_TAB_ID) !== activeLibraryTabId) {
       return false;
@@ -1274,15 +1018,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   const highlightedAgentIdBySourceId = recentlyConnectedAgent
     ? { [recentlyConnectedAgent.sourceId]: recentlyConnectedAgent.agentId }
     : {};
-  const filteredAgents = agents.filter((agent) => {
-    if (!normalizedAgentsSearch) return true;
-    const sourceValues = agent.sources.map((source) => source.value).join(' ');
-    return `${getAgentDisplayLabel(agent)} ${sourceValues}`.toLowerCase().includes(normalizedAgentsSearch);
-  });
-  const filteredPlaybooks = playbooks.filter((playbook) => {
-    if (!normalizedPlaybooksSearch) return true;
-    return `${playbook.name} ${playbook.description} ${playbook.sourceId}`.toLowerCase().includes(normalizedPlaybooksSearch);
-  });
   const filteredMarketplaceSources = marketplaceSources.filter((item) => {
     if (!normalizedSourceSearch) return true;
     return `${item.title} ${item.value} ${item.summary}`.toLowerCase().includes(normalizedSourceSearch);
@@ -1294,26 +1029,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
       return `${source.title} ${source.summary} ${source.value}`.toLowerCase().includes(normalizedSourceSearch);
     })
     .sort((left, right) => left.editorialRank - right.editorialRank);
-  const hasSavedSourcesInActiveTab = sources.some(
-    (source) => (sourceLibraryBySourceId[source.id] ?? DEFAULT_LIBRARY_TAB_ID) === activeLibraryTabId
-  );
-  const normalizedMarketplaceAgentsSearch = marketplaceAgentsSearch.trim().toLowerCase();
-  const normalizedMarketplacePlaybooksSearch = marketplacePlaybooksSearch.trim().toLowerCase();
-  const filteredMarketplaceAgents = marketplaceAgents.filter((item) => {
-    if (!normalizedMarketplaceAgentsSearch) return true;
-    return `${item.title} ${item.summary} ${getAgentDisplayLabel(item.agent)}`.toLowerCase().includes(normalizedMarketplaceAgentsSearch);
-  });
-  const filteredMarketplacePlaybooks = marketplacePlaybooks.filter((item) => {
-    if (!normalizedMarketplacePlaybooksSearch) return true;
-    return `${item.title} ${item.summary} ${item.playbook.name}`.toLowerCase().includes(normalizedMarketplacePlaybooksSearch);
-  });
-
-  function getSourceSpeakers(source: SourceRecord): string[] {
-    if (source.type !== 'synthetic_discussion') return [];
-    const p = source.config.participants;
-    if (Array.isArray(p)) return p.filter((n): n is string => typeof n === 'string');
-    return [];
-  }
 
   function getSourceKindLabel(source: SourceRecord): string {
     if (source.type === 'youtube_videos' || source.type === 'podcast_feeds') return 'Playlist';
@@ -1526,6 +1241,7 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
   // Called when user picks a specific agent from the multi-agent run picker modal
   async function onRunPickerSelect(playbook: PlaybookRecord, agent: AgentSummary | undefined) {
     setRunPickerOpen(false);
+    void agent;
     const episode = runPickerEpisode;
     setRunPickerEpisode(undefined);
     setActiveSourceTab('runs');
@@ -1606,17 +1322,6 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     }
   }
 
-  // Resets every overlay/detail view back to the plain agent-list dashboard - used by the
-  // clickable app-name header so it works as a "home" link from anywhere (agent detail, wizard,
-  // symbol performance page).
-  function goToDashboard() {
-    setSelectedAgentId(null);
-    setViewingSymbol(null);
-    setAgentEditor(null);
-    setActiveHub('feed');
-    setSelectedPlaybookId(null);
-  }
-
   const libraryTabCtx = {
     activeLibraryTabId, activeSourceTab, agents, autoDetectedSource, catalogLoadState, cloneMarketplaceSource, cloningPublicationId,
     closeSourceDialog, commitEditingLibraryTab, createLibraryTab, deletePlaybook, detectTimerRef, editingLibraryTabId,
@@ -1636,76 +1341,26 @@ export function HubPage({ hub: initialHub }: { hub?: HubKey } = {}) {
     sourceUrlDraft, starterSources, startEditingLibraryTab, t, updatePlaybook, user
   };
 
-  const adminWorkspaceCtx = {
-    accessGrantCount, activePlaybookTab, agentEditor, agents, agentsSearch, cloningPublicationId, completeAgentCuration,
-    executionAgent, filteredAgents, filteredMarketplaceAgents, filteredMarketplacePlaybooks, filteredPlaybooks, grantAgentAccess,
-    highlightedReportId, isLoadingEditTarget, loadState, marketplaceAgentCount, marketplaceAgents, marketplaceAgentsSearch,
-    marketplacePlaybookCount, marketplacePlaybooks, marketplacePlaybooksSearch, onCloneMarketplaceAgent, onCloneMarketplacePlaybook,
-    onDeleteAgent, onDeletePlaybook, onEditAgent, onEditPlaybook, onImproveAgentWithAI, onRunNow, onTogglePause,
-    onTogglePlaybookEnabled, onViewReport, openCurationCreate, openPlaybookCreate, playbooksLoadState, playbooksSearch, prompt,
-    publishAgent, publishPlaybook, refreshAgents, refreshMarketplaceCounts, runningAgentId, runs, selectedAgent, selectedPlaybook,
-    selectedPlaybookReports, setActiveHub, setActivePlaybookTab, setAgentEditor, setAgentsSearch, setMarketplaceAgentsSearch,
-    setMarketplacePlaybooksSearch, setPlaybooksSearch, setSelectedAgentId, setSelectedPlaybookId, setShowAgentsMarketplace,
-    setShowPlaybooksMarketplace, setViewingSymbol, sharePlaybook, showAgentsMarketplace, showPlaybooksMarketplace, sources, t,
-    togglingAgentId, togglingPlaybookId, user
-  };
+  if (symbolView) {
+    return (
+      <SymbolPerformancePage
+        agentId={symbolView.agentId}
+        symbol={symbolView.symbol}
+        onBack={() => setSymbolView(null)}
+      />
+    );
+  }
+
+  void openDiscussionFromReport;
+  void onRunNow;
+  void openPlaybookCreate;
+  void onOpenPlaybookWizard;
 
   return (
     <>
-      {viewingSymbol && (selectedAgent || executionAgentId) ? (
-        <SymbolPerformancePage
-          agentId={selectedAgent?.id ?? executionAgentId!}
-          symbol={viewingSymbol}
-          onBack={() => setViewingSymbol(null)}
-        />
-      ) : (
       <div className="mx-auto max-w-6xl space-y-4">
-          <Tabs
-            activeKey={activeHub}
-            onChange={(key) => setActiveHub(key as HubKey)}
-            renderTabBar={() => <></>}
-            items={[
-              {
-                key: 'feed',
-                label: <span><FileTextOutlined /> {t('nav.feed')}</span>,
-                children: (
-                  <FeedTab
-                    t={t}
-                    language={i18n.language}
-                    feedLoading={feedLoading}
-                    feedReports={feedReports}
-                    feedSearch={feedSearch}
-                    onFeedSearchChange={setFeedSearch}
-                    agents={agents}
-                    sources={sources}
-                    playbooks={playbooks}
-                    onGoToLibrary={() => setActiveHub('sources')}
-                    onOpenFullReport={openReportDrawer}
-                    onOpenSource={openSourceInLibrary}
-                    onDiscuss={openDiscussionFromReport}
-                    onDismiss={dismissFeedReport}
-                    onResendEmail={(report) => void onResendReportEmail(report)}
-                    resendingReportId={resendingReportId}
-                  />
-                )
-              },
-              {
-                key: 'sources',
-                label: <span><DatabaseOutlined /> {t('nav.library')}</span>,
-                children: (
-                  <LibraryTab ctx={libraryTabCtx} />
-                )
-              },
-              ...(showAdminWorkspace
-                ? [
-                    { key: 'agents', label: t('nav.agents'), children: <AdminWorkspace ctx={adminWorkspaceCtx} tab="agents" /> },
-                    { key: 'playbooks', label: 'Playbooks', children: <AdminWorkspace ctx={adminWorkspaceCtx} tab="playbooks" /> }
-                  ]
-                : [])
-            ]}
-          />
-        </div>
-        )}
+        <LibraryTab ctx={libraryTabCtx} />
+      </div>
       <ReportDrawer report={viewingFullReport} onClose={() => setViewingFullReport(null)} />
       <FollowWizardModal
         open={isPlaybookCreateOpen}

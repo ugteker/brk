@@ -1,10 +1,10 @@
 import { Button, Input, Modal, Select } from 'antd';
 import type { SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentSummary } from '../../../api/agents';
-import type { PlaybookRecord } from '../../../api/playbooks';
-import { getAgentDisplayLabel } from '../../../utils/agent-label';
-import { TIMEZONE_OPTIONS } from '../types';
+import type { AgentSummary } from '../../api/agents';
+import type { PlaybookRecord } from '../../api/playbooks';
+import { getAgentDisplayLabel } from '../../utils/agent-label';
+import { TIMEZONE_OPTIONS } from './types';
 
 export type ScheduleMode = 'manual' | 'interval' | 'daily' | 'weekly';
 

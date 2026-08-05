@@ -1,17 +1,17 @@
 import { Badge, Button, Card, Input, Modal, Skeleton, Tabs, Tag, Typography } from 'antd';
 import { ArrowLeftOutlined, CaretRightOutlined, ClockCircleOutlined, CompassOutlined, EditOutlined, FileTextOutlined, LoadingOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusCircleOutlined, RocketOutlined, SearchOutlined } from '@ant-design/icons';
-import { AgentCurator } from '../../../components/AgentCurator';
-import { AgentForm } from '../../../components/AgentForm';
-import { AgentPromptEditor } from '../../../components/AgentPromptEditor';
-import { AgentReportsBrowser } from '../../../components/AgentReportsBrowser';
-import { AgentRunsBrowser } from '../../../components/AgentRunsBrowser';
-import { AgentStatusCard } from '../../../components/AgentStatusCard';
-import { EntityActions } from '../../../components/EntityActions';
-import { InlineDeleteButton } from '../../../components/InlineDeleteButton';
-import { GhostCreateCard } from '../../../components/library/GhostCreateCard';
-import { TouchSafeTooltip } from '../../../components/TouchSafeTooltip';
-import { getAgentDisplayLabel } from '../../../utils/agent-label';
-import { BrainIcon, formatPlaybookSchedule, getAgentCharacterLabel, getAgentPersonalityLabel, getCharacterIcon, getSourceDisplayTitle } from '../helpers';
+import { AgentCurator } from '../../components/AgentCurator';
+import { AgentForm } from '../../components/AgentForm';
+import { AgentPromptEditor } from '../../components/AgentPromptEditor';
+import { AgentReportsBrowser } from '../../components/AgentReportsBrowser';
+import { AgentRunsBrowser } from '../../components/AgentRunsBrowser';
+import { AgentStatusCard } from '../../components/AgentStatusCard';
+import { EntityActions } from '../../components/EntityActions';
+import { InlineDeleteButton } from '../../components/InlineDeleteButton';
+import { GhostCreateCard } from '../../components/library/GhostCreateCard';
+import { TouchSafeTooltip } from '../../components/TouchSafeTooltip';
+import { getAgentDisplayLabel } from '../../utils/agent-label';
+import { BrainIcon, formatPlaybookSchedule, getAgentCharacterLabel, getAgentPersonalityLabel, getCharacterIcon, getSourceDisplayTitle } from '../shared/helpers';
 
 const { Title } = Typography;
 

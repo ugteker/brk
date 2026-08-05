@@ -1,8 +1,8 @@
 import { Drawer, Empty } from 'antd';
 import { useTranslation } from 'react-i18next';
-import type { RunReportDto } from '../../../api/agents';
-import { CharacterReportRenderer } from '../../../components/CharacterReportRenderer';
-import { ReportChatPanel } from '../../../components/ReportChatPanel';
+import type { RunReportDto } from '../../api/agents';
+import { CharacterReportRenderer } from '../../components/CharacterReportRenderer';
+import { ReportChatPanel } from '../../components/ReportChatPanel';
 
 export type FullReportView = RunReportDto & { agentName: string; playbookName: string };
 

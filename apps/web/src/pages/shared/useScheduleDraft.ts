@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import type { PlaybookRecord } from '../../../api/playbooks';
-import type { ScheduleDraft, ScheduleMode } from '../components/ScheduleEditModal';
+import type { PlaybookRecord } from '../../api/playbooks';
+import type { ScheduleDraft, ScheduleMode } from './ScheduleEditModal';
 
 export interface ScheduleDraftState extends ScheduleDraft {
   apply: (schedule: PlaybookRecord['schedule']) => void;

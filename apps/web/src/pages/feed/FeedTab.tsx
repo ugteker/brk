@@ -5,7 +5,7 @@ import type { PlaybookRecord } from '../../api/playbooks';
 import type { SourceRecord } from '../../api/sources';
 import { FeedCard, groupReportsByDay } from '../../components/FeedCard';
 import { getAgentDisplayLabel } from '../../utils/agent-label';
-import { getAgentCharacterLabel, getReportEpisodeThumbnailUrl, getSourceCoverImageUrl, getSourceDisplayTitle } from './helpers';
+import { getAgentCharacterLabel, getReportEpisodeThumbnailUrl, getSourceCoverImageUrl, getSourceDisplayTitle } from '../shared/helpers';
 
 const { Title } = Typography;
 

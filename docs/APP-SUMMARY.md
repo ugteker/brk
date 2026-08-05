@@ -155,8 +155,8 @@ agent, playbook, or run. Advanced runtime configuration is outside the guided se
   via antd `ConfigProvider` algorithm (not just Tailwind `.dark`).
 - **Testing**: TDD convention; in-memory fake repositories for API tests;
   `createTestAuthDeps()`/`authCookieHeader()` for protected-route tests.
-- **`apps/web/src/pages/hub/HubPage.tsx`** renders all four hubs (formerly the
-  `AgentsPage.tsx` monolith, since decomposed into `pages/hub/` components + hooks).
+- **Web pages are organized by area** (`apps/web/src/pages/feed|library|admin|studio|shared`),
+  one independent route page per area (formerly the `AgentsPage.tsx`/`HubPage.tsx` monolith).
 - Windows dev: stop dev servers before `prisma generate`/`db push` (DLL file lock).
   Web preview serves a static build — rebuild + restart after web changes.
 - **Known limitation**: YouTube auto-generated (ASR) captions are IP-blocked from

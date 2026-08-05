@@ -19,11 +19,11 @@ import {
   PlayCircleOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { getAgentDisplayLabel } from '../utils/agent-label';
-import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../data/character-types';
-import { listAgentReports, type RunReportDto } from '../api/agents';
+import { getAgentDisplayLabel } from '../../utils/agent-label';
+import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../../data/character-types';
+import { listAgentReports, type RunReportDto } from '../../api/agents';
 import { useParams, useLocation } from 'react-router-dom';
-import { useSafeNavigate } from '../utils/useSafeNavigate';
+import { useSafeNavigate } from '../../utils/useSafeNavigate';
 import {
   getAudioRenderStatus,
   getDiscussion,
@@ -37,9 +37,9 @@ import {
   type DiscussionRunDto,
   type DiscussionRunEvidenceSnapshotDto,
   type DiscussionTurnDto
-} from '../api/discussions';
-import { useAppData } from '../context/AppDataContext';
-import { useRealtimeSubscription } from '../context/RealtimeContext';
+} from '../../api/discussions';
+import { useAppData } from '../../context/AppDataContext';
+import { useRealtimeSubscription } from '../../context/RealtimeContext';
 
 const { Text, Paragraph } = Typography;
 

@@ -33,8 +33,8 @@ test('@smoke mobile modal content owns touch scrolling', async () => {
 
 test('@smoke long mobile workflows use full-screen dialogs', async () => {
   const styles = await readFile(resolve(process.cwd(), 'src/index.css'), 'utf8');
-  const followWizard = await readFile(resolve(process.cwd(), 'src/pages/hub/components/FollowWizardModal.tsx'), 'utf8');
-  const adminWorkspace = await readFile(resolve(process.cwd(), 'src/pages/hub/components/AdminWorkspace.tsx'), 'utf8');
+  const followWizard = await readFile(resolve(process.cwd(), 'src/pages/shared/FollowWizardModal.tsx'), 'utf8');
+  const adminWorkspace = await readFile(resolve(process.cwd(), 'src/pages/admin/AdminWorkspace.tsx'), 'utf8');
   const curator = await readFile(resolve(process.cwd(), 'src/components/AgentCurator.tsx'), 'utf8');
   const sourcePicker = await readFile(resolve(process.cwd(), 'src/components/SourceSearchPicker.tsx'), 'utf8');
 
@@ -52,7 +52,7 @@ test('@smoke long mobile workflows use full-screen dialogs', async () => {
 
 test('@smoke mobile wizard actions float without affecting desktop flow', async () => {
   const styles = await readFile(resolve(process.cwd(), 'src/index.css'), 'utf8');
-  const followWizard = await readFile(resolve(process.cwd(), 'src/pages/hub/components/FollowWizardModal.tsx'), 'utf8');
+  const followWizard = await readFile(resolve(process.cwd(), 'src/pages/shared/FollowWizardModal.tsx'), 'utf8');
   const curator = await readFile(resolve(process.cwd(), 'src/components/AgentCurator.tsx'), 'utf8');
   const agentForm = await readFile(resolve(process.cwd(), 'src/components/AgentForm.tsx'), 'utf8');
 
@@ -80,7 +80,7 @@ test('@smoke notification bell uses a direct popover trigger on touch devices', 
 });
 
 test('@smoke mobile library episodes use compact thumbnails and stacked actions', async () => {
-  const libraryTab = await readFile(resolve(process.cwd(), 'src/pages/hub/components/LibraryTab.tsx'), 'utf8');
+  const libraryTab = await readFile(resolve(process.cwd(), 'src/pages/library/LibraryTab.tsx'), 'utf8');
   const episodeListStart = libraryTab.indexOf('<ul className="divide-y divide-border">');
   const episodeList = libraryTab.slice(
     episodeListStart,
@@ -130,11 +130,11 @@ test('@smoke catalog demos are labeled and read only', async () => {
 });
 
 test('@smoke library guidance replaces forced onboarding and wizard preview', async () => {
-  const hubPage = await readFile(resolve(process.cwd(), 'src/pages/hub/HubPage.tsx'), 'utf8');
+  const libraryPage = await readFile(resolve(process.cwd(), 'src/pages/library/LibraryPage.tsx'), 'utf8');
   const appShell = await readFile(resolve(process.cwd(), 'src/components/AppShell.tsx'), 'utf8');
 
-  expect(hubPage).not.toContain('forceShowOnboarding');
-  expect(hubPage).not.toContain('forceShowGuidedWizard');
+  expect(libraryPage).not.toContain('forceShowOnboarding');
+  expect(libraryPage).not.toContain('forceShowGuidedWizard');
   expect(appShell).not.toContain('admin-preview-onboarding');
   expect(appShell).not.toContain('admin-start-guided-wizard');
 });
@@ -173,13 +173,13 @@ test('@smoke agent selection keeps compact source-aware matches paged and dedupe
 });
 
 test('@smoke agent selection rewires compact source-aware entry points', async () => {
-  const hubPage = await readFile(resolve(process.cwd(), 'src/pages/hub/HubPage.tsx'), 'utf8');
-  const followWizard = await readFile(resolve(process.cwd(), 'src/pages/hub/components/FollowWizardModal.tsx'), 'utf8');
-  const libraryTab = await readFile(resolve(process.cwd(), 'src/pages/hub/components/LibraryTab.tsx'), 'utf8');
+  const libraryPage = await readFile(resolve(process.cwd(), 'src/pages/library/LibraryPage.tsx'), 'utf8');
+  const followWizard = await readFile(resolve(process.cwd(), 'src/pages/shared/FollowWizardModal.tsx'), 'utf8');
+  const libraryTab = await readFile(resolve(process.cwd(), 'src/pages/library/LibraryTab.tsx'), 'utf8');
 
   expect(followWizard).toContain('AgentSelectionView');
   expect(libraryTab).toContain('onAddAgent={(source) => onFollowSource(source)}');
-  expect(hubPage).toContain("message.success(t('agentSelection.connectionSuccess'))");
+  expect(libraryPage).toContain("message.success(t('agentSelection.connectionSuccess'))");
   expect(followWizard).toContain('onAgentConnected={handleAgentSelectionConnected}');
   expect(followWizard).toContain('onCurate={openInlineAgentCuration}');
 });
@@ -193,12 +193,12 @@ test('@smoke connected agent offers run before schedule', async () => {
 });
 
 test('@smoke agent creation entry points stay AI curated', async () => {
-  const hubPage = await readFile(resolve(process.cwd(), 'src/pages/hub/HubPage.tsx'), 'utf8');
-  const followWizard = await readFile(resolve(process.cwd(), 'src/pages/hub/components/FollowWizardModal.tsx'), 'utf8');
+  const libraryPage = await readFile(resolve(process.cwd(), 'src/pages/library/LibraryPage.tsx'), 'utf8');
+  const followWizard = await readFile(resolve(process.cwd(), 'src/pages/shared/FollowWizardModal.tsx'), 'utf8');
 
-  expect(hubPage).toContain('openInlineAgentCuration');
-  expect(hubPage).not.toContain('openInlineAgentCreate');
-  expect(hubPage).not.toContain('Configure manually');
+  expect(libraryPage).toContain('openInlineAgentCuration');
+  expect(libraryPage).not.toContain('openInlineAgentCreate');
+  expect(libraryPage).not.toContain('Configure manually');
   expect(followWizard).not.toContain('openInlineAgentCreate');
   expect(followWizard).not.toContain('Configure manually');
 });

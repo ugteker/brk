@@ -16,9 +16,9 @@ import {
 import { ArrowLeftOutlined, ArrowRightOutlined, AudioOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useParams } from 'react-router-dom';
-import { useSafeNavigate } from '../utils/useSafeNavigate';
-import { useAuth } from '../auth/AuthContext';
-import { listAgents, listAgentReports, type AgentSummary, type RunReportDto } from '../api/agents';
+import { useSafeNavigate } from '../../utils/useSafeNavigate';
+import { useAuth } from '../../auth/AuthContext';
+import { listAgents, listAgentReports, type AgentSummary, type RunReportDto } from '../../api/agents';
 import {
   createDiscussion,
   getDiscussion,
@@ -31,11 +31,11 @@ import {
   type DiscussionPreselect,
   type TranscriptOptionDto,
   type TtsProviderDto
-} from '../api/discussions';
-import { cloneMarketplaceAgent, listMarketplaceAgents, type MarketplaceAgentListItem } from '../api/marketplace';
-import { StudioPrimaryButton } from '../components/StudioPrimaryButton';
-import { AgentCurator, type CuratedAgent } from '../components/AgentCurator';
-import { getAgentDisplayLabel } from '../utils/agent-label';
+} from '../../api/discussions';
+import { cloneMarketplaceAgent, listMarketplaceAgents, type MarketplaceAgentListItem } from '../../api/marketplace';
+import { StudioPrimaryButton } from '../../components/StudioPrimaryButton';
+import { AgentCurator, type CuratedAgent } from '../../components/AgentCurator';
+import { getAgentDisplayLabel } from '../../utils/agent-label';
 
 const PUBLIC_AGENTS_PAGE_SIZE = 4;
 

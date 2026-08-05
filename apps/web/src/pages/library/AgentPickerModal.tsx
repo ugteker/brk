@@ -1,10 +1,10 @@
 import { Button, Modal, Tag } from 'antd';
 import { useTranslation } from 'react-i18next';
-import type { AgentSummary } from '../../../api/agents';
-import type { PlaybookRecord } from '../../../api/playbooks';
-import { getCharacterTypeColor, getCharacterTypeEmoji } from '../../../data/character-types';
-import { getAgentDisplayLabel } from '../../../utils/agent-label';
-import { humanizeCharacterType } from '../helpers';
+import type { AgentSummary } from '../../api/agents';
+import type { PlaybookRecord } from '../../api/playbooks';
+import { getCharacterTypeColor, getCharacterTypeEmoji } from '../../data/character-types';
+import { getAgentDisplayLabel } from '../../utils/agent-label';
+import { humanizeCharacterType } from '../shared/helpers';
 
 export type RunPickerEntry = { playbook: PlaybookRecord; agent: AgentSummary | undefined };
 

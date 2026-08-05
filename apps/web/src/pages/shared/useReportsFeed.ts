@@ -8,10 +8,10 @@ import {
   type AgentSummary,
   type RunDetailDto,
   type RunReportDto
-} from '../../../api/agents';
-import type { PlaybookRecord } from '../../../api/playbooks';
-import { useRealtimeSubscription } from '../../../context/RealtimeContext';
-import { getAgentDisplayLabel } from '../../../utils/agent-label';
+} from '../../api/agents';
+import type { PlaybookRecord } from '../../api/playbooks';
+import { useRealtimeSubscription } from '../../context/RealtimeContext';
+import { getAgentDisplayLabel } from '../../utils/agent-label';
 
 type FeedReport = RunReportDto & { agentName: string; playbookName: string };
 

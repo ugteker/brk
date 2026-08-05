@@ -127,15 +127,25 @@ one dedicated scheduler process for background jobs), sharing one SQLite DB in W
   react-router-dom v7, wraps the tree in `AppDataProvider` (inside `AuthGate`).
 - **`context/`** — `AppDataContext` supplies agents/sources/playbooks/marketplace data +
   refresh functions to all pages, so pages don't each own duplicate load/refresh logic.
-- **`pages/hub/`** — the four hub tabs (Feed `/`, Library `/library`, Agents `/agents`,
-  Playbooks `/playbooks`), all rendered by **`HubPage.tsx`** (~1700-line orchestrator:
-  state, effects, handlers, composition; formerly the ~4800-line `AgentsPage.tsx`
-  monolith). Extracted pieces live alongside it: `FeedTab.tsx`, `types.ts`,
-  `helpers.tsx`, `components/` (LibraryTab, AdminWorkspace, FollowWizardModal,
-  ReportDrawer, AgentPickerModal, ScheduleEditModal) and `hooks/` (useHubNavigation,
-  useReportsFeed, useScheduleDraft). React Router keeps ONE HubPage instance mounted
-  across all four routes; the active hub is derived from the URL. When changing hub
-  behavior, prefer editing/extending the extracted component over growing HubPage.
+- **`pages/`** — organized by the app's main areas, each an independent route page:
+  - **`feed/`** — `FeedPage` (`/`, default landing): latest reports across playbooks,
+    full-report drawer, jump-offs to Library/Studio. Plus `FeedTab.tsx`.
+  - **`library/`** — `LibraryPage` (`/library`): source library, source detail
+    (`?source=` deep link), follow wizard + companion modals. Plus `LibraryTab.tsx`,
+    `AgentPickerModal.tsx`.
+  - **`admin/`** — `AdminPage` (`/agents`, `/playbooks`, admin-only): agent/playbook
+    management, curation, marketplace. Plus `AdminWorkspace.tsx`.
+  - **`studio/`** — `StudioHub`, `DiscussionDetail`, `NewDiscussionWizard`
+    (`/studio/*`): synthetic multi-agent discussions.
+  - **`shared/`** — pieces genuinely used by multiple pages: `ReportDrawer`,
+    `FollowWizardModal`, `ScheduleEditModal`, `useReportsFeed`, `useScheduleDraft`,
+    `types.ts`, `helpers.tsx`. Keep this folder small — a component used by one page
+    belongs in that page's folder.
+  Each page owns its own state/handlers; cross-page jumps go through the URL
+  (`navigate('/library?source=…')`), and the `?agentId=&symbol=` email deep link is
+  handled on every page via `hooks/useSymbolView`. This structure replaced the former
+  `AgentsPage.tsx`/`HubPage.tsx` monolith — don't reintroduce a page that renders
+  multiple areas.
 - **`realtime/`** — `useAgentStream` hook wrapping native `EventSource` (auto-reconnect)
   for the SSE run/report updates.
 - UI is Ant Design (v6) + a few legacy shadcn primitives + Tailwind; dark theme must work

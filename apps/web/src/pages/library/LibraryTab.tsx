@@ -1,17 +1,17 @@
 import { Badge, Button, Card, Dropdown, Empty, Input, Modal, Skeleton, Tabs, Tag, Typography } from 'antd';
 import { ArrowLeftOutlined, AudioOutlined, CaretRightOutlined, CheckCircleOutlined, CompassOutlined, DatabaseOutlined, DeleteOutlined, EditOutlined, FieldTimeOutlined, LinkOutlined, LoadingOutlined, MailOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReadOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
-import { AgentRunsBrowser } from '../../../components/AgentRunsBrowser';
-import { EntityActions } from '../../../components/EntityActions';
-import { InlineDeleteButton } from '../../../components/InlineDeleteButton';
-import { ListenIdleButton } from '../../../components/ListenButtons';
-import { LibraryOverview } from '../../../components/library/LibraryOverview';
-import { SourceSearchPicker } from '../../../components/SourceSearchPicker';
-import { TouchSafeTooltip } from '../../../components/TouchSafeTooltip';
-import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../../../data/character-types';
-import { getAgentDisplayLabel } from '../../../utils/agent-label';
-import { extractYoutubeVideoId, getYoutubeThumbnailUrl } from '../../../utils/youtube';
-import { EpisodeArtwork, SourceTypeBadge, formatPlaybookSchedule, getSourceCoverImageUrl, getSourceDisplayTitle, humanizeCharacterType } from '../helpers';
-import type { DigestFrequency } from '../../../api/playbooks';
+import { AgentRunsBrowser } from '../../components/AgentRunsBrowser';
+import { EntityActions } from '../../components/EntityActions';
+import { InlineDeleteButton } from '../../components/InlineDeleteButton';
+import { ListenIdleButton } from '../../components/ListenButtons';
+import { LibraryOverview } from '../../components/library/LibraryOverview';
+import { SourceSearchPicker } from '../../components/SourceSearchPicker';
+import { TouchSafeTooltip } from '../../components/TouchSafeTooltip';
+import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../../data/character-types';
+import { getAgentDisplayLabel } from '../../utils/agent-label';
+import { extractYoutubeVideoId, getYoutubeThumbnailUrl } from '../../utils/youtube';
+import { EpisodeArtwork, SourceTypeBadge, formatPlaybookSchedule, getSourceCoverImageUrl, getSourceDisplayTitle, humanizeCharacterType } from '../shared/helpers';
+import type { DigestFrequency } from '../../api/playbooks';
 
 const { Title, Text } = Typography;
 
@@ -165,7 +165,7 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                        ) : null}
                        <div className="grid gap-3 sm:grid-cols-2">
                          {filteredMarketplaceSources.map((item: any) => {
-                           const src = item as unknown as import('../../../api/sources').SourceRecord;
+                           const src = item as unknown as import('../../api/sources').SourceRecord;
                            return (
                              <Card
                                key={item.publicationId}
