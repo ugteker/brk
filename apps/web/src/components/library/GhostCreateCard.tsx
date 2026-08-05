@@ -12,8 +12,8 @@ interface GhostCreateCardProps {
 }
 
 const baseClasses = `group relative flex min-h-[170px] flex-col items-center justify-center
-                   rounded-lg p-4 text-center text-sky-700 transition-all
-                   hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200`;
+                   rounded-lg p-4 text-center text-violet-700 transition-all
+                   hover:text-violet-600 dark:text-violet-300 dark:hover:text-violet-200`;
 
 export function GhostCreateCard({
   ariaLabel,

@@ -369,7 +369,7 @@ export async function resendReportNotification(
   if (!response.ok) {
     if (response.status === 400) {
       const body = await response.json().catch(() => null);
-      throw new Error(body?.message ?? 'Playbook recipients are required to send report notification');
+      throw new Error(body?.message ?? 'Subscription recipients are required to send report notification');
     }
     throw new Error('Failed to send report notification');
   }
@@ -397,7 +397,7 @@ export async function listReportChatMessages(agentId: string, reportId: string):
 }
 
 // Asks the agent a follow-up question about a specific report. Returns the two new messages
-// (the persisted question and the analyst's grounded answer).
+// (the persisted question and the agent's grounded answer).
 export async function askReportQuestion(agentId: string, reportId: string, question: string): Promise<ReportChatMessageDto[]> {
   const response = await fetch(`/api/agents/${agentId}/reports/${reportId}/chat`, {
     method: 'POST',

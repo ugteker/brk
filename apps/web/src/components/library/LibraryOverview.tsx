@@ -100,16 +100,6 @@ export function LibraryOverview({
         />
       ) : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {!hasOwnedSavedSources ? (
-          <GhostCreateCard
-            attention={showAddSourceAttention}
-            ariaLabel={t('library.addSource')}
-            onClick={onAddSource}
-            icon={<DatabaseOutlined />}
-            title={t('library.addSource')}
-            sub={showAddSourceAttention ? t('library.nextActionHint') : undefined}
-          />
-        ) : null}
         {isCatalogLoading ? [1, 2, 3].map((item) => (
           <Card key={item} size="small" className="min-h-[170px]">
             <div className="flex items-start gap-3">
@@ -124,6 +114,16 @@ export function LibraryOverview({
         )) : starterSources.slice(0, 5).map((source) => (
           <StarterSourceCard key={source.sourceId} source={source} onSave={onSaveStarter} />
         ))}
+        {!hasOwnedSavedSources && !isCatalogLoading ? (
+          <GhostCreateCard
+            attention={showAddSourceAttention}
+            ariaLabel={t('library.addSource')}
+            onClick={onAddSource}
+            icon={<DatabaseOutlined />}
+            title={t('library.addSource')}
+            sub={showAddSourceAttention ? t('library.nextActionHint') : undefined}
+          />
+        ) : null}
       </div>
     </section>
   );
@@ -152,15 +152,6 @@ export function LibraryOverview({
         onAddAgent={onAddAgent}
         onRemoveAgent={onRemoveAgent}
         hasAnySources={hasAnySavedSources}
-        leadingCard={(
-          <GhostCreateCard
-            attention={showAddSourceAttention}
-            ariaLabel={t('library.addSource')}
-            onClick={onAddSource}
-            icon={<DatabaseOutlined />}
-            title={t('library.addSource')}
-          />
-        )}
         renderSourceActions={renderSavedSourceActions}
         linkedAgentsBySourceId={linkedAgentsBySourceId}
         highlightedAgentIdBySourceId={highlightedAgentIdBySourceId}

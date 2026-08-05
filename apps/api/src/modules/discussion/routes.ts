@@ -5,24 +5,63 @@ import type { DiscussionRepositoryLike } from './repository';
 import type { CreateDiscussionInput, UpdateDiscussionInput, DiscussionTrigger } from './types';
 import { resolveParticipantReports, type ReportResolutionRepo } from './report-resolution';
 import { sanitizeAudioFileName } from './tts-storage';
+import {
+  renderDiscussionTurnAudio,
+  resolveDiscussionTtsClient,
+  type DiscussionTtsClients,
+  type DiscussionTtsLike,
+  type DiscussionTtsStorageLike
+} from './audio-renderer';
+
+const discussionFormats = new Set(['free_form', 'structured', 'hosted', 'hybrid']);
+const participantRoles = new Set(['speaker', 'host']);
+const discussionVoices = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
+const editableFormatConfigKeys = new Set(['segments', 'maxTurnsPerSegment', 'totalTurnTarget', 'hostInstructions', 'language', 'turnLength', 'ttsProvider']);
+
+function isValidDiscussionUpdate(input: unknown): input is UpdateDiscussionInput {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+  const update = input as Record<string, unknown>;
+  const allowedKeys = new Set(['name', 'format', 'formatConfig', 'scheduleJson', 'participants']);
+  if (Object.keys(update).length === 0 || Object.keys(update).some((key) => !allowedKeys.has(key))) return false;
+  if (update.name !== undefined && (typeof update.name !== 'string' || update.name.trim().length === 0)) return false;
+  if (update.format !== undefined && (typeof update.format !== 'string' || !discussionFormats.has(update.format))) return false;
+  if (update.scheduleJson !== undefined && update.scheduleJson !== null && typeof update.scheduleJson !== 'string') return false;
+  if (update.formatConfig !== undefined) {
+    if (!update.formatConfig || typeof update.formatConfig !== 'object' || Array.isArray(update.formatConfig)) return false;
+    const formatConfig = update.formatConfig as Record<string, unknown>;
+    if (Object.keys(formatConfig).some((key) => !editableFormatConfigKeys.has(key))) return false;
+    if (formatConfig.segments !== undefined && (!Array.isArray(formatConfig.segments) || !formatConfig.segments.every((segment) => typeof segment === 'string'))) return false;
+    if (formatConfig.maxTurnsPerSegment !== undefined && (!Number.isInteger(formatConfig.maxTurnsPerSegment) || (formatConfig.maxTurnsPerSegment as number) < 1)) return false;
+    if (formatConfig.totalTurnTarget !== undefined && (!Number.isInteger(formatConfig.totalTurnTarget) || (formatConfig.totalTurnTarget as number) < 1)) return false;
+    if (formatConfig.hostInstructions !== undefined && typeof formatConfig.hostInstructions !== 'string') return false;
+    if (formatConfig.language !== undefined && formatConfig.language !== 'en' && formatConfig.language !== 'de') return false;
+    if (formatConfig.turnLength !== undefined && !['short', 'medium', 'long'].includes(formatConfig.turnLength as string)) return false;
+    if (formatConfig.ttsProvider !== undefined && !['auto', 'google', 'openai'].includes(formatConfig.ttsProvider as string)) return false;
+  }
+  if (update.participants !== undefined) {
+    if (!Array.isArray(update.participants) || update.participants.length < 2) return false;
+    const agentIds = new Set<string>();
+    return update.participants.every((participant, index) => {
+      if (!participant || typeof participant !== 'object' || Array.isArray(participant)) return false;
+      const value = participant as Record<string, unknown>;
+      if (
+        typeof value.agentId !== 'string' ||
+        !participantRoles.has(value.role as string) ||
+        !discussionVoices.has(value.voiceId as string) ||
+        value.speakerOrder !== index ||
+        agentIds.has(value.agentId)
+      ) {
+        return false;
+      }
+      agentIds.add(value.agentId);
+      return true;
+    });
+  }
+  return true;
+}
 
 export interface DiscussionRunTriggerLike {
   triggerDiscussionRun(discussionId: string, runId: string): Promise<void>;
-}
-
-export interface DiscussionTtsLike {
-  renderTurn(text: string, voice: string, language?: 'en' | 'de'): Promise<Buffer>;
-}
-
-/** Named TTS backends the server has credentials for. A discussion picks one via
- * formatConfig.ttsProvider ('auto' keeps the server preference: google, then openai). */
-export interface DiscussionTtsClients {
-  google?: DiscussionTtsLike;
-  openai?: DiscussionTtsLike;
-}
-
-export interface DiscussionTtsStorageLike {
-  save(key: string, buffer: Buffer): Promise<string>;
 }
 
 export interface DiscussionRoutesDeps {
@@ -72,16 +111,14 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
   /** Resolves the TTS backend for a discussion's provider choice; null when the requested
    * provider (or any provider, for 'auto') isn't configured on this server. */
   const resolveTtsClient = (provider?: 'auto' | 'google' | 'openai'): DiscussionTtsLike | null => {
-    if (provider === 'google' || provider === 'openai') {
-      return deps.ttsClients?.[provider] ?? null;
-    }
-    // 'auto' / undefined: server preference (OpenAI first), falling back to legacy single client.
-    return deps.ttsClients?.openai ?? deps.ttsClients?.google ?? deps.ttsClient ?? null;
+    return resolveDiscussionTtsClient(deps.ttsClients, deps.ttsClient, provider);
   };
 
   // Tracks in-flight/failed audio renders per run so the UI can poll for progress -
   // the actual render runs detached from the triggering request.
   const audioRenderState = new Map<string, 'rendering' | 'error' | 'done'>();
+  const hasCompleteTurnAudio = (run: { audioUrl: string | null; turns: Array<{ audioUrl: string | null }> }): boolean =>
+    Boolean(run.audioUrl) || (run.turns.length > 0 && run.turns.every((turn) => turn.audioUrl));
 
   // Serves rendered discussion audio. Registered before /api/discussions/:id so the
   // static "audio" segment wins route matching. File names embed the run ID, which is
@@ -188,7 +225,14 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     if (!discussion || discussion.ownerUserId !== req.userId) {
       return reply.status(404).send({ code: 'not_found', message: 'Discussion not found' });
     }
-    const updated = await deps.discussionRepository.updateDiscussion(id, req.body as UpdateDiscussionInput);
+    if (!isValidDiscussionUpdate(req.body)) {
+      return reply.status(400).send({ code: 'invalid_input', message: 'Invalid discussion update' });
+    }
+    const input = req.body as UpdateDiscussionInput;
+    const updated = await deps.discussionRepository.updateDiscussion(id, {
+      ...input,
+      ...(input.name !== undefined ? { name: input.name.trim() } : {})
+    });
     return reply.status(200).send(updated);
   });
 
@@ -234,7 +278,7 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     }
     if (deps.reportRepository && groundingMode === 'reports') {
       const resolution = await resolveParticipantReports(
-        discussion.participants.map((p) => ({ id: p.id, agentId: p.agentId, reportIds: p.reportIds })),
+        discussion.participants.filter((p) => p.active).map((p) => ({ id: p.id, agentId: p.agentId, reportIds: p.reportIds })),
         deps.reportRepository,
         deps.latestReportLimit ?? 3
       );
@@ -291,22 +335,32 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
       return reply.status(501).send({ code: 'tts_not_configured', message: 'TTS not configured' });
     }
 
+    if (audioRenderState.get(runId) === 'rendering') {
+      return reply.status(202).send({ message: 'Audio rendering already started' });
+    }
+    if (audioRenderState.get(runId) === 'done' || hasCompleteTurnAudio(run)) {
+      audioRenderState.set(runId, 'done');
+      return reply.status(200).send({ message: 'Audio already available' });
+    }
+
     const ttsStorage = deps.ttsStorage;
     audioRenderState.set(runId, 'rendering');
     const language = discussion.formatConfig.language ?? 'en';
     (async () => {
-      const allAudio: Buffer[] = [];
       for (const turn of run.turns) {
+        if (turn.audioUrl) continue;
         const participant = discussion.participants.find((p) => p.id === turn.participantId);
         const voice = participant?.voiceId ?? 'alloy';
-        const buffer = await ttsClient.renderTurn(turn.content, voice, language);
-        const turnUrl = await ttsStorage.save(`${runId}-turn-${turn.turnIndex}`, buffer);
-        await deps.discussionRepository.updateTurnAudioUrl(turn.id, turnUrl);
-        allAudio.push(buffer);
+        await renderDiscussionTurnAudio({
+          runId,
+          turn,
+          voice,
+          language,
+          ttsClient,
+          ttsStorage,
+          repository: deps.discussionRepository
+        });
       }
-      const stitched = Buffer.concat(allAudio);
-      const stitchedUrl = await ttsStorage.save(`${runId}-full`, stitched);
-      await deps.discussionRepository.updateRun(runId, { audioUrl: stitchedUrl });
       audioRenderState.set(runId, 'done');
     })().catch((error) => {
       audioRenderState.set(runId, 'error');
@@ -328,7 +382,7 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     if (!run) {
       return reply.status(404).send({ code: 'not_found', message: 'Run not found' });
     }
-    const state = audioRenderState.get(runId) ?? (run.audioUrl ? 'done' : 'idle');
+    const state = audioRenderState.get(runId) ?? (hasCompleteTurnAudio(run) ? 'done' : 'idle');
     return reply.send({ state, audioUrl: run.audioUrl ?? null });
   });
 }

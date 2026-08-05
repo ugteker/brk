@@ -13,7 +13,7 @@ interface ReportChatPanelProps {
 }
 
 /**
- * Inline "Ask the analyst" chat under a report card. Questions are answered by the agent's
+ * Inline "Ask the agent" chat under a report card. Questions are answered by the agent's
  * persona grounded in this specific report and the evidence it was based on. History is
  * per-user-per-report and persists across sessions.
  */

@@ -7,6 +7,7 @@
     "delete": "Delete",
     "remove": "Remove",
     "edit": "Edit",
+    "moreActions": "More actions",
     "create": "Create",
     "update": "Update",
     "close": "Close",
@@ -26,25 +27,28 @@
     "dashboard": "Dashboard",
     "feed": "Feed",
     "feedEmpty": "No reports yet",
-    "feedEmptyDesc": "Once your playbooks run their first analysis, reports will appear here.",
+    "feedEmptyDesc": "Once your subscriptions run their first analysis, reports will appear here.",
     "library": "Library",
     "agents": "Agents",
-    "playbooks": "Playbooks",
-  "adminArea": "Agents & Playbooks",
-  "accountMenu": "Account menu",
-  "userManagement": "User Management",
-  "logOut": "Log out",
-  "modeAdmin": "Admin",
-  "adminModeEnable": "Switch to admin mode",
-  "adminModeDisable": "Switch to dashboard mode",
-  "bellLabel": "Notifications",
-  "bellTitle": "Notifications",
-  "bellClearAll": "Clear all",
-  "bellEmpty": "Nothing new 🎉",
-  "bellNewReport": "New report",
-  "bell_show_started": "Your show just started recording",
-  "bell_show_finished": "Your show is ready to read",
-  "bell_audio_ready": "Audio is ready to listen"
+    "playbooks": "Subscriptions",
+    "accountMenu": "Account menu",
+    "userManagement": "User Management",
+    "logOut": "Log out",
+    "modeAdmin": "Admin",
+    "adminModeEnable": "Switch to admin mode",
+    "adminModeDisable": "Switch to dashboard mode",
+    "bellLabel": "Notifications",
+    "bellTitle": "Notifications",
+    "bellClearAll": "Clear all",
+    "bellEmpty": "Nothing new 🎉",
+    "bellNewReport": "New report",
+    "bellRunFailed": "Run failed",
+    "mobileMenu": "Menu",
+    "themeToLight": "Switch to light mode",
+    "themeToDark": "Switch to dark mode",
+    "bell_show_started": "Your show just started recording",
+    "bell_show_finished": "Your show is ready to read",
+    "bell_audio_ready": "Audio is ready to listen"
   },
   "language": {
     "switchTo": "Sprache: Deutsch",
@@ -67,19 +71,19 @@
     "sampleReportDisclosure": "Example output from a curated source and agent.",
     "sourceAdded": "Source added",
     "sourceSaved": "Source saved",
-    "sourceSavedWithoutAgent": "Source saved. No agent or playbook was created.",
+    "sourceSavedWithoutAgent": "Source saved. No agent or subscription was created.",
     "yourLibrary": "Your library",
     "addToLibrary": "Add to library",
     "starterLoadError": "Starter picks could not be loaded.",
     "starterLoadRetry": "Try again",
     "savedEmptyTitle": "Your library is ready for your first source",
     "savedEmptyDescription": "Sources you add will appear here.",
-    "addSource": "Add another source",
+    "addSource": "Add source",
     "nextActionLabel": "Next up",
     "nextActionHint": "Start by adding a source",
     "howItWorks": "How it works",
     "howStep1": "Add a source",
-    "howStep2": "Create analysts",
+    "howStep2": "Create agents",
     "howStep3": "Get reports",
     "browseMarketplace": "Browse marketplace",
     "backToLibrary": "Back to library",
@@ -89,7 +93,6 @@
     "noEpisodes": "No scanned episodes/items yet",
     "noRuns": "No discussion runs yet",
     "recentEpisodes": "Recent episodes preview",
-    "recentRuns": "Recent runs",
     "episodesPreview": "Episodes preview",
     "episodes": "Episodes: {{count}}",
     "clone": "Clone",
@@ -98,7 +101,7 @@
     "analyzingCount": "{{count}} agent(s) analyzing",
     "lastRun": "Last run: {{date}}",
     "notYetAnalyzed": "Not yet analyzed",
-    "noWorkflowCta": "No analysis workflows for this source yet. Add it to a playbook to start generating reports.",
+    "noWorkflowCta": "No analysis workflows for this source yet. Add it to a subscription to start generating reports.",
     "reportsTab": "Reports",
     "runsTab": "History",
     "episodesTab": "Episodes",
@@ -122,16 +125,17 @@
     "resendEmail": "Re-send email notification",
     "resendSuccess": "Notification sent to {{count}} recipient(s)",
     "resendFailed": "Failed to send notification",
-    "resendNoRecipients": "No recipients configured for this playbook",
+    "resendNoRecipients": "No recipients configured for this subscription",
     "analysisStarted": "Analysis started",
-    "expertsWatching": "Watched by",
+    "expertsWatching": "Followed by",
     "tabNameRequired": "Tab name cannot be empty",
     "reportSingular": "report",
     "reportPlural": "reports",
-    "alreadyWatching": "Already watching",
+    "alreadyWatching": "Already following",
     "youtubeTranscriptNote": "Full transcripts may be unavailable for this source when running from a datacenter IP — show notes only as fallback.",
-    "agentFollowLabel": "Agents follow",
-    "recentItems": "Latest items",
+    "followAgentCta": "Follow with an agent",
+    "agentFollows": "{{name}} follows",
+    "agentsFollowCount": "{{count}} agents follow",
     "manageSource": "Manage source",
     "removeFromLibrary": "Remove from library",
     "addAgent": "Add agent",
@@ -141,17 +145,20 @@
     "coverUnavailable": "Cover unavailable",
     "reportsAvailable": "{{count}} reports available",
     "latestReportAt": "Latest report: {{date}}",
-    "openReports": "Open {{count}} reports",
     "noReportsYet": "No reports yet",
     "reportsWillAppearHere": "Results will appear here after an analysis.",
-    "sourceReportsAvailableHint": "Open to view reports for this source",
     "removeAgentFromSource": "Remove agent from this source",
     "removeAgentConfirm": "Remove {{name}} from this source?",
     "removeAgentConfirmDescription": "The agent remains available and is not deleted.",
     "agentRemovedFromSource": "Agent removed from this source.",
     "removeAgentFromSourceFailed": "Could not remove the agent from this source.",
     "addSourceFailed": "Failed to add source.",
-    "removeSourceFailed": "Failed to remove source."
+    "removeSourceFailed": "Failed to remove source.",
+    "deleteTab": "Delete tab",
+    "deleteTabConfirm": "Delete tab \"{{name}}\"?",
+    "deleteTabConfirmDescription": "Its sources move back to the main library.",
+    "deleteSourceConfirm": "Delete \"{{name}}\"?",
+    "deleteSourceConfirmDescription": "This removes the source and its agent connections permanently."
   },
   "feed": {
     "groupToday": "Today",
@@ -202,28 +209,17 @@
     "listening": "Summarizing",
     "listenAriaLabel": "Summarize this source",
     "listeningAriaLabel": "Summarizing this source",
-    "stopListening": "Stop summarizing",
-    "stopListeningConfirm": "Stop summarizing?",
-    "stopListeningYes": "Yes, stop",
     "dialogTitleNew": "Which agents should follow {{title}}?",
-    "dialogTitleEdit": "Which agents should follow {{title}}?",
-    "dialogTitleGenericNew": "Set up summarizer",
-    "dialogTitleGenericEdit": "Update summarizer",
     "thisSource": "this source",
-    "stepSubtitle": "Choose an AI agent to summarize this source and generate reports for you. No agents yet? Create one below.",
-    "stepPickSource": "Pick source",
-    "runPickerTitle": "Which agent should run?",
-    "stepChooseAgent": "Choose agent",
-    "stepSetSchedule": "Set schedule",
-    "advancedSettings": "Advanced settings (schedule & recipients)"
+    "runPickerTitle": "Which agent should run?"
   },
   "agent": {
-    "createNew": "Create new analyst",
+    "createNew": "Create new agent",
     "createNewSub": "Character + AI persona",
-    "emptyHeadline": "No analysts yet",
-    "emptyDesc": "Analysts are AI personas with a system prompt. Each one explores your sources with its own character and point of view.",
-    "emptyCta": "Create your first analyst",
-    "emptySourceHint": "Tip: add a source in the Library first so your analyst has something to read.",
+    "emptyHeadline": "No agents yet",
+    "emptyDesc": "Agents are AI personas with a system prompt. Each one explores your sources with its own character and point of view.",
+    "emptyCta": "Create your first agent",
+    "emptySourceHint": "Tip: add a source in the Library first so your agent has something to read.",
     "selectAgent": "Select agent {{name}}",
     "deleteAgent": "Delete agent {{name}}",
     "deleteConfirmTitle": "Delete this agent?",
@@ -261,9 +257,10 @@
     "curated": "Curated",
     "useAgent": "Use agent",
     "viewDetails": "View details",
-    "curateYourOwn": "Curate your own",
+    "curateYourOwn": "Build your own",
+    "curateWithAi": "Fine-tune with AI",
     "retry": "Try again",
-    "empty": "No matching agents yet. Curate your own to get started.",
+    "empty": "No matching agents yet. Build your own to get started.",
     "connectionSuccess": "Agent connected to this source.",
     "connectedActionsTitle": "Agent connected",
     "connectedActionsDescription": "You can run your first report now or set up a recurring schedule later.",
@@ -315,32 +312,37 @@
     "recipientsLabel": "Recipient emails",
     "intervalPlaceholder": "Interval in minutes",
     "timezonePlaceholder": "Select timezone",
-    "dailyTimeAriaLabel": "Playbook daily time",
-    "timezoneAriaLabel": "Playbook timezone",
-    "intervalAriaLabel": "Playbook interval minutes",
-    "daysOfWeekAriaLabel": "Playbook days of week",
+    "dailyTimeAriaLabel": "Subscription daily time",
+    "timezoneAriaLabel": "Subscription timezone",
+    "intervalAriaLabel": "Subscription interval minutes",
+    "daysOfWeekAriaLabel": "Subscription days of week",
     "days": {
-      "mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu",
-      "fri": "Fri", "sat": "Sat", "sun": "Sun"
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
     }
   },
   "playbook": {
-    "createPlaybook": "Create playbook",
-    "updatePlaybook": "Update playbook",
-    "createNew": "Set up a playbook",
-    "createNewSub": "Source + analyst + schedule",
-    "noPlaybooks": "No playbooks yet.",
-    "emptyHeadline": "No playbooks yet",
-    "emptyDesc": "Playbooks connect a source to an analyst on a schedule and email you reports automatically.",
+    "createPlaybook": "Create subscription",
+    "updatePlaybook": "Update subscription",
+    "createNew": "Set up a subscription",
+    "createNewSub": "Source + agent + schedule",
+    "noPlaybooks": "No subscriptions yet.",
+    "emptyHeadline": "No subscriptions yet",
+    "emptyDesc": "Subscriptions connect a source to an agent on a schedule and email you reports automatically.",
     "emptyCtaNoSources": "Add a source in the Library first",
-    "emptyCtaNoAgents": "Create an analyst in the Agents hub first",
+    "emptyCtaNoAgents": "Create an agent in the Agents hub first",
     "emptyCtaReady": "Follow your first source",
     "notificationsOn": "Email notifications on",
     "notificationsOff": "Email notifications off (muted)",
     "digestFrequency": "Email cadence",
     "digestImmediate": "Every report (immediate)",
-    "digestDaily": "Daily digest",
-    "digestWeekly": "Weekly digest",
+    "digestDaily": "Daily recap",
+    "digestWeekly": "Weekly recap",
     "status": "Status",
     "lastRun": "Last run",
     "nextRun": "Next run",
@@ -353,11 +355,10 @@
     "resume": "Resume",
     "paused": "Paused",
     "active": "Active",
-    "createPlaybooks": "{{count}} playbooks created",
+    "createPlaybooks": "{{count}} subscriptions created",
     "schedule": "Schedule & Recipients",
     "recipients": "Email recipients",
-    "addRecipient": "Add recipient",
-    "scheduleHint": "typical:"
+    "addRecipient": "Add recipient"
   },
   "source": {
     "noSources": "No sources available.",
@@ -388,7 +389,7 @@
     "cloneButton": "Clone",
     "cloningButton": "Cloning…",
     "quickStartHeading": "Quick start from marketplace",
-    "quickStartDesc": "Follow a popular playbook to get your first report instantly.",
+    "quickStartDesc": "Follow a popular subscription to get your first report instantly.",
     "followPlaybook": "Follow"
   },
   "onboarding": {
@@ -396,10 +397,10 @@
     "gettingStartedDesc": "Complete these steps to set up your first automated report.",
     "step1": "Add a source",
     "step1Desc": "Add a video channel, podcast, or website to your library.",
-    "step2": "Create an analyst",
-    "step2Desc": "Set up an AI analyst with a distinct persona and system prompt.",
+    "step2": "Create an agent",
+    "step2Desc": "Set up an AI agent with a distinct persona and system prompt.",
     "step3": "Follow a source",
-    "step3Desc": "Connect a source to an analyst on a schedule to get reports.",
+    "step3Desc": "Connect a source to an agent on a schedule to get reports.",
     "step4": "Receive your first report",
     "step4Desc": "Trigger a manual run or wait for the schedule — your first signal report will appear here.",
     "allDone": "🎉 You're all set! Reports will arrive on schedule.",
@@ -457,7 +458,7 @@
     "argumentReflection": "Argument & reflection",
     "contentAngles": "Content angles",
     "hooks": "Hooks",
-    "bulletDigest": "Bullet digest",
+    "bulletDigest": "Bullet summary",
     "detail": {
       "label": "Report detail level",
       "brief": "Brief",
@@ -498,11 +499,11 @@
     "removeFailed": "Failed to remove symbol"
   },
   "reportChat": {
-    "title": "Ask the analyst",
-    "empty": "Ask a follow-up question about this report — the analyst answers grounded in the report and its sources.",
+    "title": "Ask the agent",
+    "empty": "Ask a follow-up question about this report — the agent answers grounded in the report and its sources.",
     "placeholder": "e.g. Why is the confidence for AAPL so high?",
     "send": "Send",
-    "thinking": "The analyst is thinking…",
+    "thinking": "The agent is thinking…",
     "loadFailed": "Failed to load chat history",
     "askFailed": "Failed to get an answer",
     "disclaimer": "Answers are grounded in this report and its sources. Informational analysis only — not financial advice."
@@ -550,14 +551,14 @@
     "errorFallback": "Something went wrong",
     "resetFailFallback": "Failed to reset password",
     "valueProp1": "📚 Add sources — YouTube channels, podcasts, websites",
-    "valueProp2": "🤖 Create analysts — AI personas with a trading philosophy",
+    "valueProp2": "🤖 Create agents — AI personas with their own point of view",
     "valueProp3": "📬 Get reports — Automated signal reports in your inbox"
   },
   "curator": {
     "retry": "Try again",
-    "back": "← Back",
-    "continue": "Continue →",
-    "reviewAgent": "Review agent →",
+    "back": "Back",
+    "continue": "Continue",
+    "reviewAgent": "Review agent",
     "createAgent": "Create agent",
     "saveChanges": "Save changes",
     "readyTitle": "Your agent is ready 🎉",
@@ -578,7 +579,7 @@
     "starter1": "Summarize new content and highlight the key takeaways",
     "starter2": "Track financial news and flag risks and opportunities",
     "starter3": "Explain new topics in simple terms, like a teacher",
-    "errorStart": "Could not start the curator.",
+    "errorStart": "Could not start the assistant.",
     "errorMessage": "Could not send that answer.",
     "errorFinalize": "Could not save this agent.",
     "stillNeeded": "Still needed: {{fields}}.",
@@ -594,11 +595,11 @@
     "step2": "Choose a persona",
     "step3": "Run",
     "step1Desc": "Search for a podcast or YouTube channel by name — or paste a URL you want to track.",
-    "step2Desc": "Pick an analyst persona — each has a different focus and style.",
-    "step3Desc": "We'll create your source, analyst, and playbook, then run the first analysis now.",
+    "step2Desc": "Pick an agent persona — each has a different focus and style.",
+    "step3Desc": "We'll create your source, agent, and subscription, then run the first analysis now.",
     "detectSource": "Detect source",
     "summarySource": "Source",
-    "summaryPersona": "Analyst",
+    "summaryPersona": "Persona",
     "runNow": "Create & run now",
     "success": "Your first report is running! Check the Feed in a moment.",
     "error": "Something went wrong. Try again or set up manually.",
@@ -608,7 +609,7 @@
     "changeSource": "Choose a different source",
     "sourceSelected": "Source selected: {{title}}",
     "presetQuickStart": "Quick start with a preset:",
-    "curatorBusyTitle": "The curator is working",
+    "curatorBusyTitle": "The assistant is working",
     "curatorBusyDesc": "Keep this window open while it sends or saves your curation. Closing or skipping does not cancel the request.",
     "finishingSetup": "Finishing your setup"
   },
@@ -638,64 +639,160 @@
       "name": "Finance Expert",
       "tagline": "Signals-focused equity analysis and risk-aware market interpretation.",
       "characters": {
-        "conservative-analyst":       { "name": "Conservative Analyst",       "tagline": "Blue-chip focus, high evidence bar, cautious on long/short calls.", "intro": "I keep my powder dry. Hard numbers first — if the evidence isn't concrete, I stay quiet." },
-        "balanced-analyst":           { "name": "Balanced Analyst",           "tagline": "General-purpose, evidence-weighted long/short calls (default).",   "intro": "I weigh both sides before picking a direction. Solid analysis, no drama, always cite the source." },
-        "aggressive-momentum-trader": { "name": "Aggressive Momentum Trader", "tagline": "Fast-moving, hype and sentiment driven, higher signal volume.",     "intro": "I move fast and chase conviction. Sentiment counts — first in wins." },
-        "contrarian-value-investor":  { "name": "Contrarian Value Investor",  "tagline": "Looks for oversold/undervalued names the crowd has given up on.",  "intro": "Everyone's wrong sometimes. I look for the names the crowd gave up on too early." },
-        "quant-data-driven-analyst":  { "name": "Quant / Data-Driven Analyst","tagline": "Numbers-only: requires explicit financial metrics before signaling.","intro": "No numbers, no signal. I only speak when there's something measurable to say." },
-        "short-seller-skeptic":       { "name": "Short-Seller / Skeptic",     "tagline": "Hunts for red flags, overhype, and fraud/accounting concerns.",    "intro": "Show me the red flags. I find trouble before you stumble into it." },
-        "macro-thematic-strategist":  { "name": "Macro / Thematic Strategist","tagline": "Sector rotation and macro-theme driven calls (rates, AI, energy).","intro": "I tie individual names to the big picture — rates, AI cycles, sector rotations." }
+        "conservative-analyst": {
+          "name": "Conservative Analyst",
+          "tagline": "Blue-chip focus, high evidence bar, cautious on long/short calls.",
+          "intro": "I keep my powder dry. Hard numbers first — if the evidence isn't concrete, I stay quiet."
+        },
+        "balanced-analyst": {
+          "name": "Balanced Analyst",
+          "tagline": "General-purpose, evidence-weighted long/short calls (default).",
+          "intro": "I weigh both sides before picking a direction. Solid analysis, no drama, always cite the source."
+        },
+        "aggressive-momentum-trader": {
+          "name": "Aggressive Momentum Trader",
+          "tagline": "Fast-moving, hype and sentiment driven, higher signal volume.",
+          "intro": "I move fast and chase conviction. Sentiment counts — first in wins."
+        },
+        "contrarian-value-investor": {
+          "name": "Contrarian Value Investor",
+          "tagline": "Looks for oversold/undervalued names the crowd has given up on.",
+          "intro": "Everyone's wrong sometimes. I look for the names the crowd gave up on too early."
+        },
+        "quant-data-driven-analyst": {
+          "name": "Quant / Data-Driven Analyst",
+          "tagline": "Numbers-only: requires explicit financial metrics before signaling.",
+          "intro": "No numbers, no signal. I only speak when there's something measurable to say."
+        },
+        "short-seller-skeptic": {
+          "name": "Short-Seller / Skeptic",
+          "tagline": "Hunts for red flags, overhype, and fraud/accounting concerns.",
+          "intro": "Show me the red flags. I find trouble before you stumble into it."
+        },
+        "macro-thematic-strategist": {
+          "name": "Macro / Thematic Strategist",
+          "tagline": "Sector rotation and macro-theme driven calls (rates, AI, energy).",
+          "intro": "I tie individual names to the big picture — rates, AI cycles, sector rotations."
+        }
       }
     },
     "teacher": {
       "name": "Teacher",
       "tagline": "Explains ideas step-by-step for learning and retention.",
       "characters": {
-        "teacher-mentor":               { "name": "Mentor",               "tagline": "Guides learners with coaching-style explanations.",   "intro": "I guide you step by step — think of me as your personal learning companion." },
-        "teacher-classroom-instructor": { "name": "Classroom Instructor", "tagline": "Structured lessons with clear checkpoints.",          "intro": "Clear structure, steady checkpoints. I make complex ideas easy to follow." },
-        "teacher-practical-coach":      { "name": "Practical Coach",      "tagline": "Actionable guidance with hands-on examples.",         "intro": "Skip the theory. I give you hands-on examples you can use right away." }
+        "teacher-mentor": {
+          "name": "Mentor",
+          "tagline": "Guides learners with coaching-style explanations.",
+          "intro": "I guide you step by step — think of me as your personal learning companion."
+        },
+        "teacher-classroom-instructor": {
+          "name": "Classroom Instructor",
+          "tagline": "Structured lessons with clear checkpoints.",
+          "intro": "Clear structure, steady checkpoints. I make complex ideas easy to follow."
+        },
+        "teacher-practical-coach": {
+          "name": "Practical Coach",
+          "tagline": "Actionable guidance with hands-on examples.",
+          "intro": "Skip the theory. I give you hands-on examples you can use right away."
+        }
       }
     },
     "influencer": {
       "name": "Influencer",
       "tagline": "Creates audience-ready narratives and content angles.",
       "characters": {
-        "influencer-trend-scout":          { "name": "Trend Scout",          "tagline": "Finds timely themes and attention hooks.",           "intro": "I sniff out what's trending before the crowd notices. Hooks first, always." },
-        "influencer-storyteller":          { "name": "Storyteller",          "tagline": "Crafts compelling narratives from evidence.",         "intro": "Every data point has a story. I craft the narrative that makes people listen." },
-        "influencer-campaign-strategist":  { "name": "Campaign Strategist",  "tagline": "Builds clear campaign messaging plans.",             "intro": "I turn insights into messaging plans your audience will actually act on." }
+        "influencer-trend-scout": {
+          "name": "Trend Scout",
+          "tagline": "Finds timely themes and attention hooks.",
+          "intro": "I sniff out what's trending before the crowd notices. Hooks first, always."
+        },
+        "influencer-storyteller": {
+          "name": "Storyteller",
+          "tagline": "Crafts compelling narratives from evidence.",
+          "intro": "Every data point has a story. I craft the narrative that makes people listen."
+        },
+        "influencer-campaign-strategist": {
+          "name": "Campaign Strategist",
+          "tagline": "Builds clear campaign messaging plans.",
+          "intro": "I turn insights into messaging plans your audience will actually act on."
+        }
       }
     },
     "trainer": {
       "name": "Trainer",
       "tagline": "Builds repeatable practice routines and performance drills.",
       "characters": {
-        "trainer-drill-sergeant":   { "name": "Drill Sergeant",      "tagline": "Direct training with disciplined repetition.",       "intro": "Repetition is key. I push you until the right habits stick — no excuses." },
-        "trainer-supportive-coach": { "name": "Supportive Coach",    "tagline": "Encouraging feedback with progressive goals.",       "intro": "Progress over perfection. I keep you moving forward with encouragement." },
-        "trainer-exam-prep":        { "name": "Exam Prep Trainer",   "tagline": "Targets likely test points and recall drills.",      "intro": "Focused recall drills on the topics that matter most. Let's get you ready." }
+        "trainer-drill-sergeant": {
+          "name": "Drill Sergeant",
+          "tagline": "Direct training with disciplined repetition.",
+          "intro": "Repetition is key. I push you until the right habits stick — no excuses."
+        },
+        "trainer-supportive-coach": {
+          "name": "Supportive Coach",
+          "tagline": "Encouraging feedback with progressive goals.",
+          "intro": "Progress over perfection. I keep you moving forward with encouragement."
+        },
+        "trainer-exam-prep": {
+          "name": "Exam Prep Trainer",
+          "tagline": "Targets likely test points and recall drills.",
+          "intro": "Focused recall drills on the topics that matter most. Let's get you ready."
+        }
       }
     },
     "philosopher": {
       "name": "Philosopher",
       "tagline": "Interprets ideas through reasoning, assumptions, and ethics.",
       "characters": {
-        "philosopher-socratic-guide":   { "name": "Socratic Guide",   "tagline": "Uses questions to reveal assumptions.",              "intro": "I answer your questions with better questions. Assumptions deserve scrutiny." },
-        "philosopher-critical-thinker": { "name": "Critical Thinker", "tagline": "Stress-tests logic and evidence quality.",           "intro": "I stress-test every argument. If the logic doesn't hold, I'll find the crack." },
-        "philosopher-ethics-analyst":   { "name": "Ethics Analyst",   "tagline": "Balances decisions with ethical consequences.",      "intro": "Decisions have consequences beyond the obvious. I keep the bigger picture honest." }
+        "philosopher-socratic-guide": {
+          "name": "Socratic Guide",
+          "tagline": "Uses questions to reveal assumptions.",
+          "intro": "I answer your questions with better questions. Assumptions deserve scrutiny."
+        },
+        "philosopher-critical-thinker": {
+          "name": "Critical Thinker",
+          "tagline": "Stress-tests logic and evidence quality.",
+          "intro": "I stress-test every argument. If the logic doesn't hold, I'll find the crack."
+        },
+        "philosopher-ethics-analyst": {
+          "name": "Ethics Analyst",
+          "tagline": "Balances decisions with ethical consequences.",
+          "intro": "Decisions have consequences beyond the obvious. I keep the bigger picture honest."
+        }
       }
     },
     "summarizer": {
       "name": "Summarizer",
       "tagline": "Distills complex inputs into concise decision-ready takeaways.",
       "characters": {
-        "summarizer-executive-briefer":  { "name": "Executive Briefer",  "tagline": "Top-line brief for fast executive decisions.",     "intro": "Top-line only. I give you the signal without the noise — fast." },
-        "summarizer-research-digestor":  { "name": "Research Digestor",  "tagline": "Turns noisy inputs into focused research notes.",  "intro": "Dense inputs, focused output. I turn chaos into a clean research note." },
-        "summarizer-action-planner":     { "name": "Action Planner",     "tagline": "Converts insights into prioritized action items.", "intro": "Insights are useless unless they drive action. I turn findings into next steps." }
+        "summarizer-executive-briefer": {
+          "name": "Executive Briefer",
+          "tagline": "Top-line brief for fast executive decisions.",
+          "intro": "Top-line only. I give you the signal without the noise — fast."
+        },
+        "summarizer-research-digestor": {
+          "name": "Research Digestor",
+          "tagline": "Turns noisy inputs into focused research notes.",
+          "intro": "Dense inputs, focused output. I turn chaos into a clean research note."
+        },
+        "summarizer-action-planner": {
+          "name": "Action Planner",
+          "tagline": "Converts insights into prioritized action items.",
+          "intro": "Insights are useless unless they drive action. I turn findings into next steps."
+        }
       }
     }
   },
   "studio": {
     "title": "Studio",
     "newDiscussion": "New Discussion",
+    "editDiscussion": "Edit discussion",
+    "saveDiscussion": "Save changes",
+    "materialLocked": "Topic and material selection are locked for this discussion.",
+    "materialSummary": "{{reports}} reports and {{transcripts}} transcripts remain selected.",
+    "expertChangesFutureRuns": "Expert changes apply to future runs only.",
+    "failedToLoadDiscussion": "Failed to load discussion",
+    "failedToCreateDiscussion": "Failed to create discussion",
+    "failedToUpdateDiscussion": "Failed to update discussion",
     "emptyTitle": "Start your first discussion",
     "emptyDesc": "Pick two or more agents and let them debate their findings. The transcript becomes a new source in your Library.",
     "formatLabel": "Discussion format",
@@ -717,6 +814,12 @@
     "audioRendering": "Rendering audio…",
     "transcript": "Transcript",
     "audioPlayer": "Audio",
+    "onAir": "On air",
+    "audioWaiting": "Waiting for the first turn to be voiced…",
+    "audioUnavailable": "No audio is available for this run yet.",
+    "audioQueueProgress": "Clip {{current}} of {{total}}",
+    "audioAutoplayBlocked": "Autoplay was blocked by your browser.",
+    "startListening": "Start listening",
     "noRuns": "No runs yet — click \"Run now\" to generate the first discussion.",
     "runFailed": "This run failed: {{message}}",
     "runPending": "This run hasn't produced any turns yet.",
@@ -726,10 +829,15 @@
     "wizardStepMaterial": "Material",
     "wizardStep3": "Start",
     "wizardStepTopic": "Topic",
-    "expertsStepLabel": "Pick at least 2 experts",
+    "wizardStepStory": "Story",
+    "wizardStepGuests": "Guests",
+    "wizardStepGoLive": "Go Live",
+    "buildAgent": "Build an agent",
+    "failedToRefreshAgents": "Couldn't refresh your agents. Please try again.",
+    "expertsStepLabel": "Choose at least 2 guests",
     "publicAgents": "Public agents",
     "cloningAgents": "Adding selected agents to your library…",
-    "topicStepIntro": "Choose what the discussion should be grounded in.",
+    "topicStepIntro": "Set the story for your discussion.",
     "grounding_reports_title": "Reports",
     "grounding_reports_desc": "Experts discuss based on their analysis reports.",
     "grounding_reports_hint": "In the \"Material\" step you'll pick the specific reports per expert — or let the latest ones be used automatically.",
@@ -810,5 +918,115 @@
     "discussThisSource": "Discuss this source",
     "preselectBanner": "Starting a discussion about: {{context}}",
     "startFromScratch": "Start from scratch"
+  },
+  "adminAgents": {
+    "title": "Agents overview",
+    "subtitle": "Runtime and configuration for all agents across users",
+    "empty": "No agents yet",
+    "searchPlaceholder": "Search agent or owner",
+    "kpi": {
+      "agents": "Active / total agents",
+      "runs30d": "Runs (30d)",
+      "successRate": "Success rate (30d)",
+      "failed24h": "Failures (24h)",
+      "reports30d": "Reports (30d)",
+      "tokens30d": "Tokens (30d)",
+      "cost30d": "Cost (30d)",
+      "avgDuration": "Avg. run time (30d)"
+    },
+    "col": {
+      "agent": "Agent",
+      "subscriptions": "Subscriptions",
+      "sources": "Sources",
+      "runs30d": "Runs 30d",
+      "lastRun": "Last run",
+      "reports": "Reports",
+      "tokens30d": "Tokens 30d",
+      "cost30d": "Cost 30d",
+      "review": "Review",
+      "discussions": "Discussions"
+    },
+    "status": {
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "runFailed": "failed",
+    "reports30dTooltip": "{{count}} in the last 30 days",
+    "pause": "Pause",
+    "resume": "Resume",
+    "delete": "Delete",
+    "deleteConfirm": "Delete agent?",
+    "deleteConfirmDescription": "Removes the agent with all runs, reports and subscriptions. Cannot be undone.",
+    "paused": "Agent paused",
+    "resumed": "Agent resumed",
+    "deleted": "Agent deleted",
+    "actionFailed": "Action failed"
+  },
+  "adminDashboard": {
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "loadError": "Could not load the overview"
+  },
+  "adminFeed": {
+    "title": "Reports overview",
+    "subtitle": "Report pipeline across all users",
+    "latestReports": "Latest reports",
+    "review": "Review",
+    "unread": "Unread",
+    "kpi": {
+      "reports30d": "Reports (30d)",
+      "unreadRate": "Unread rate (30d)",
+      "reviewQueue": "Review queue",
+      "tokens30d": "Tokens (30d)",
+      "cost30d": "Cost (30d)",
+      "avgTokens": "Avg. tokens / report"
+    },
+    "col": {
+      "report": "Report",
+      "model": "Model",
+      "tokens": "Tokens",
+      "cost": "Cost",
+      "status": "Status",
+      "created": "Created"
+    }
+  },
+  "adminLibrary": {
+    "title": "Sources overview",
+    "subtitle": "Source and crawl health across all users",
+    "stale": "Stale",
+    "unfollowed": "No agents",
+    "kpi": {
+      "sources": "Active / total sources",
+      "items30d": "New items (30d)",
+      "stale": "Stale sources",
+      "unfollowed": "Sources without agents"
+    },
+    "col": {
+      "source": "Source",
+      "agents": "Agents",
+      "items30d": "Items 30d",
+      "lastItem": "Last item",
+      "status": "Status"
+    }
+  },
+  "adminStudio": {
+    "title": "Discussions overview",
+    "subtitle": "Studio discussions across all users",
+    "runFailed": "failed",
+    "kpi": {
+      "discussions": "Discussions",
+      "runs30d": "Runs (30d)",
+      "failed30d": "Failures (30d)",
+      "turns30d": "Turns (30d)",
+      "audio30d": "Audio runs (30d)"
+    },
+    "col": {
+      "discussion": "Discussion",
+      "participants": "Participants",
+      "runs": "Runs",
+      "turns": "Turns",
+      "audio": "Audio",
+      "lastRun": "Last run"
+    }
   }
 }

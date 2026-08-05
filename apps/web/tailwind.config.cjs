@@ -33,6 +33,16 @@ module.exports = {
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))'
+        },
+        // Aurora "Leaf Green" (design.json tertiary) — semantic positive/success accents
+        leaf: {
+          100: '#def0e4',
+          200: '#bfe3cb',
+          400: '#7cbb92',
+          500: '#5ca875',
+          600: '#478b5e',
+          700: '#38704c',
+          950: '#0f2418'
         }
       }
     }

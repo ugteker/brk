@@ -26,6 +26,7 @@ export interface DiscussionParticipantDto {
   role: 'speaker' | 'host';
   voiceId: string;
   speakerOrder: number;
+  active: boolean;
   /** Explicit report IDs picked for this participant; empty means "use latest reports". */
   reportIds: string[];
 }
@@ -153,6 +154,18 @@ export interface CreateDiscussionPayload {
   }>;
 }
 
+export interface UpdateDiscussionPayload {
+  name?: string;
+  format?: 'free_form' | 'structured' | 'hosted' | 'hybrid';
+  formatConfig?: Partial<Omit<DiscussionFormatConfigDto, 'grounding'>>;
+  participants?: Array<{
+    agentId: string;
+    role: 'speaker' | 'host';
+    voiceId: string;
+    speakerOrder: number;
+  }>;
+}
+
 export async function listTranscriptOptions(): Promise<TranscriptOptionDto[]> {
   const res = await fetch(`${BASE}/transcript-options`, { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to list transcript options');
@@ -173,6 +186,17 @@ export async function createDiscussion(payload: CreateDiscussionPayload): Promis
     body: JSON.stringify(payload)
   });
   if (!res.ok) throw new Error('Failed to create discussion');
+  return res.json();
+}
+
+export async function updateDiscussion(id: string, payload: UpdateDiscussionPayload): Promise<DiscussionDto> {
+  const res = await fetch(`${BASE}/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error('Failed to update discussion');
   return res.json();
 }
 

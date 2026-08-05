@@ -70,6 +70,11 @@ export async function ensureSqliteSchemaCompatibility(): Promise<void> {
         'ALTER TABLE "DiscussionParticipant" ADD COLUMN "reportIdsJson" TEXT NOT NULL DEFAULT \'[]\''
       );
     }
+    if (!participantColumnNames.has('active')) {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "DiscussionParticipant" ADD COLUMN "active" BOOLEAN NOT NULL DEFAULT true'
+      );
+    }
   }
 
   const discussionRunTableRows = await prisma.$queryRawUnsafe<SqliteTableNameRow[]>(

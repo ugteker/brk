@@ -2,16 +2,21 @@ import { Spin } from 'antd';
 import { useRef, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useSafeNavigate } from './utils/useSafeNavigate';
-import { AgentsPage } from './pages/AgentsPage';
+import { FeedPage } from './pages/feed/FeedPage';
+import { LibraryPage } from './pages/library/LibraryPage';
+import { AdminAgentsPage } from './pages/admin/AdminAgentsPage';
+import { AdminFeedDashboard } from './pages/admin/AdminFeedDashboard';
+import { AdminLibraryDashboard } from './pages/admin/AdminLibraryDashboard';
+import { AdminStudioDashboard } from './pages/admin/AdminStudioDashboard';
 import { AuthPage } from './pages/AuthPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { AppDataProvider, useAppData, type DiscussionEventNotice } from './context/AppDataContext';
 import { RealtimeProvider, useRealtimeSubscription } from './context/RealtimeContext';
 import { AppShell } from './components/AppShell';
-import { StudioHub } from './pages/StudioHub';
-import { DiscussionDetail } from './pages/DiscussionDetail';
-import { NewDiscussionWizard } from './pages/NewDiscussionWizard';
+import { StudioHub } from './pages/studio/StudioHub';
+import { DiscussionDetail } from './pages/studio/DiscussionDetail';
+import { NewDiscussionWizard } from './pages/studio/NewDiscussionWizard';
 import { getDiscussion, listDiscussionRuns } from './api/discussions';
 
 // Route guard for admin-only pages (Agents, Playbooks, User Management). Non-admins are
@@ -26,6 +31,13 @@ function RequireAdmin({ children }: { children: ReactNode }) {
 function AdminUsersRoute() {
   const navigate = useSafeNavigate();
   return <AdminUsersPage onBack={() => navigate('/')} />;
+}
+
+// In admin mode the hub pages show admin dashboards instead of repeating the user-mode content.
+function AdminSwitch({ admin, children }: { admin: ReactNode; children: ReactNode }) {
+  const { isAdmin } = useAuth();
+  const { adminMode } = useAppData();
+  return isAdmin && adminMode ? <>{admin}</> : <>{children}</>;
 }
 
 // Subscribes global app data to the topics this task scopes for cross-tab/cross-device
@@ -98,13 +110,13 @@ function AnimatedRoutes() {
   return (
     <div key={location.pathname} className="ct-page-enter">
       <Routes>
-        <Route path="/" element={<AgentsPage hub="feed" />} />
-        <Route path="/library" element={<AgentsPage hub="sources" />} />
-        <Route path="/agents" element={<RequireAdmin><AgentsPage hub="agents" /></RequireAdmin>} />
-        <Route path="/playbooks" element={<RequireAdmin><AgentsPage hub="playbooks" /></RequireAdmin>} />
+        <Route path="/" element={<AdminSwitch admin={<AdminFeedDashboard />}><FeedPage /></AdminSwitch>} />
+        <Route path="/library" element={<AdminSwitch admin={<AdminLibraryDashboard />}><LibraryPage /></AdminSwitch>} />
+        <Route path="/agents" element={<RequireAdmin><AdminAgentsPage /></RequireAdmin>} />
         <Route path="/admin/users" element={<RequireAdmin><AdminUsersRoute /></RequireAdmin>} />
-        <Route path="/studio" element={<StudioHub />} />
+        <Route path="/studio" element={<AdminSwitch admin={<AdminStudioDashboard />}><StudioHub /></AdminSwitch>} />
         <Route path="/studio/new" element={<NewDiscussionWizard />} />
+        <Route path="/studio/:discussionId/edit" element={<NewDiscussionWizard />} />
         <Route path="/studio/:discussionId" element={<DiscussionDetail />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -149,4 +161,3 @@ export function App() {
     </BrowserRouter>
   );
 }
-

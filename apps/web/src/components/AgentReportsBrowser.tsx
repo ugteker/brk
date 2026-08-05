@@ -113,7 +113,7 @@ export function AgentReportsBrowser({ agentId, agentName, reports, collapsible, 
   // so re-clicking the same tag collapses it, and clicking a different tag (even on another
   // report) closes whichever chart was previously open.
   const [expandedChartKey, setExpandedChartKey] = useState<string | null>(null);
-  // Only one report's "Ask the analyst" chat is open at a time.
+  // Only one report's "Ask the agent" chat is open at a time.
   const [openChatReportId, setOpenChatReportId] = useState<string | null>(null);
   // The user's watched symbols (uppercase). Star toggles on signal tags follow/unfollow a symbol;
   // followed symbols trigger an email alert whenever they appear in any new report.

@@ -127,11 +127,25 @@ one dedicated scheduler process for background jobs), sharing one SQLite DB in W
   react-router-dom v7, wraps the tree in `AppDataProvider` (inside `AuthGate`).
 - **`context/`** — `AppDataContext` supplies agents/sources/playbooks/marketplace data +
   refresh functions to all pages, so pages don't each own duplicate load/refresh logic.
-- **`pages/AgentsPage.tsx`** — **known large monolith** (~5000 lines): app shell, the
-  Feed/Sources/Agents/Playbooks hub tabs, wizards, and admin swap all live here. This is
-  the biggest refactoring debt in the codebase; when making changes here, read only the
-  relevant tab/section rather than the whole file, and prefer extracting a tab into its
-  own component over adding more to the monolith.
+- **`pages/`** — organized by the app's main areas, each an independent route page:
+  - **`feed/`** — `FeedPage` (`/`, default landing): latest reports across playbooks,
+    full-report drawer, jump-offs to Library/Studio. Plus `FeedTab.tsx`.
+  - **`library/`** — `LibraryPage` (`/library`): source library, source detail
+    (`?source=` deep link), follow wizard + companion modals. Plus `LibraryTab.tsx`,
+    `AgentPickerModal.tsx`.
+  - **`admin/`** — `AdminPage` (`/agents`, `/playbooks`, admin-only): agent/playbook
+    management, curation, marketplace. Plus `AdminWorkspace.tsx`.
+  - **`studio/`** — `StudioHub`, `DiscussionDetail`, `NewDiscussionWizard`
+    (`/studio/*`): synthetic multi-agent discussions.
+  - **`shared/`** — pieces genuinely used by multiple pages: `ReportDrawer`,
+    `FollowWizardModal`, `ScheduleEditModal`, `useReportsFeed`, `useScheduleDraft`,
+    `types.ts`, `helpers.tsx`. Keep this folder small — a component used by one page
+    belongs in that page's folder.
+  Each page owns its own state/handlers; cross-page jumps go through the URL
+  (`navigate('/library?source=…')`), and the `?agentId=&symbol=` email deep link is
+  handled on every page via `hooks/useSymbolView`. This structure replaced the former
+  `AgentsPage.tsx`/`HubPage.tsx` monolith — don't reintroduce a page that renders
+  multiple areas.
 - **`realtime/`** — `useAgentStream` hook wrapping native `EventSource` (auto-reconnect)
   for the SSE run/report updates.
 - UI is Ant Design (v6) + a few legacy shadcn primitives + Tailwind; dark theme must work

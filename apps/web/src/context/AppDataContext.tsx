@@ -2,7 +2,7 @@
  * AppDataContext — shared agent/source/playbook data for all route-level components.
  *
  * Provides agents, sources, playbooks and their load states to any descendant component.
- * AgentsPage and future hub-level components consume this context instead of managing
+ * The hub pages (Feed/Library/Admin) consume this context instead of managing
  * their own top-level data state.
  */
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -11,12 +11,8 @@ import { listAgents, type AgentSummary } from '../api/agents';
 import { listSources, type SourceRecord, saveSource, removeSavedSource } from '../api/sources';
 import { listPlaybooks, type PlaybookRecord } from '../api/playbooks';
 import {
-  listMarketplaceAgents,
   listMarketplaceSources,
-  listMarketplacePlaybooks,
-  type MarketplaceAgentListItem,
-  type MarketplaceSourceListItem,
-  type MarketplacePlaybookListItem
+  type MarketplaceSourceListItem
 } from '../api/marketplace';
 import { listCatalog, type CatalogDemo, type CatalogSource } from '../api/catalog';
 
@@ -56,12 +52,8 @@ export interface AppDataContextValue {
   sourcesLoadState: LoadState;
   playbooks: PlaybookRecord[];
   playbooksLoadState: LoadState;
-  marketplaceAgents: MarketplaceAgentListItem[];
   marketplaceSources: MarketplaceSourceListItem[];
-  marketplacePlaybooks: MarketplacePlaybookListItem[];
-  marketplaceAgentCount: number;
   marketplaceSourceCount: number;
-  marketplacePlaybookCount: number;
   catalog: CatalogSource[];
   catalogDemos: CatalogDemo[];
   catalogLoadState: LoadState;
@@ -104,12 +96,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [sourcesLoadState, setSourcesLoadState] = useState<LoadState>('idle');
   const [playbooks, setPlaybooks] = useState<PlaybookRecord[]>([]);
   const [playbooksLoadState, setPlaybooksLoadState] = useState<LoadState>('idle');
-  const [marketplaceAgents, setMarketplaceAgents] = useState<MarketplaceAgentListItem[]>([]);
   const [marketplaceSources, setMarketplaceSources] = useState<MarketplaceSourceListItem[]>([]);
-  const [marketplacePlaybooks, setMarketplacePlaybooks] = useState<MarketplacePlaybookListItem[]>([]);
-  const [marketplaceAgentCount, setMarketplaceAgentCount] = useState(0);
   const [marketplaceSourceCount, setMarketplaceSourceCount] = useState(0);
-  const [marketplacePlaybookCount, setMarketplacePlaybookCount] = useState(0);
   const [catalog, setCatalog] = useState<CatalogSource[]>([]);
   const [catalogDemos, setCatalogDemos] = useState<CatalogDemo[]>([]);
   const [catalogLoadState, setCatalogLoadState] = useState<LoadState>('idle');
@@ -167,17 +155,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // Marketplace data is best-effort and never blocks main data or triggers a sign-out —
   // failures here just leave the marketplace lists empty.
   async function refreshMarketplace() {
-    const [mkAgents, mkSources, mkPlaybooks] = await Promise.all([
-      listMarketplaceAgents().catch(() => [] as MarketplaceAgentListItem[]),
-      listMarketplaceSources().catch(() => [] as MarketplaceSourceListItem[]),
-      listMarketplacePlaybooks().catch(() => [] as MarketplacePlaybookListItem[])
-    ]);
-    setMarketplaceAgents(mkAgents);
+    const mkSources = await listMarketplaceSources().catch(() => [] as MarketplaceSourceListItem[]);
     setMarketplaceSources(mkSources);
-    setMarketplacePlaybooks(mkPlaybooks);
-    setMarketplaceAgentCount(mkAgents.length);
     setMarketplaceSourceCount(mkSources.length);
-    setMarketplacePlaybookCount(mkPlaybooks.length);
   }
 
   async function refreshCatalog(locale = 'en') {
@@ -268,8 +248,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     agents, agentsLoadState,
     sources, sourcesLoadState,
     playbooks, playbooksLoadState,
-    marketplaceAgents, marketplaceSources, marketplacePlaybooks,
-    marketplaceAgentCount, marketplaceSourceCount, marketplacePlaybookCount,
+    marketplaceSources,
+    marketplaceSourceCount,
     catalog,     catalogDemos,
     catalogLoadState,
     refreshAgents, refreshSources, refreshPlaybooks, refreshMarketplace,

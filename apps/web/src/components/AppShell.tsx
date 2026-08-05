@@ -3,7 +3,6 @@ import {
   AudioOutlined,
   BellOutlined,
   DatabaseOutlined,
-  DashboardOutlined,
   DollarOutlined,
   FileTextOutlined,
   GlobalOutlined,
@@ -41,9 +40,8 @@ const COMMON_NAV_ITEMS = [
 
 // Only shown to admins with admin mode switched on (via the account menu toggle).
 const ADMIN_NAV_ITEMS = [
-  { path: '/admin/users', key: 'admin-users', icon: <TeamOutlined />, labelKey: 'nav.userManagement' },
   { path: '/agents', key: 'agents', icon: <RobotOutlined />, labelKey: 'nav.agents' },
-  { path: '/playbooks', key: 'playbooks', icon: <DashboardOutlined />, labelKey: 'nav.playbooks' }
+  { path: '/admin/users', key: 'admin-users', icon: <TeamOutlined />, labelKey: 'nav.userManagement' }
 ];
 
 function headerStyle(theme: 'light' | 'dark', isScrolled: boolean): CSSProperties {
@@ -51,7 +49,10 @@ function headerStyle(theme: 'light' | 'dark', isScrolled: boolean): CSSPropertie
     position: 'sticky',
     top: 0,
     zIndex: 20,
-    background: theme === 'dark' ? 'rgba(18,18,24,0.68)' : 'rgba(255,255,255,0.72)',
+    // Faint aurora bleed across the whole header, matching the D1 nav rail.
+    background: theme === 'dark'
+      ? 'radial-gradient(90% 160% at 12% 0%, rgba(167,139,250,0.12), transparent 55%), radial-gradient(90% 160% at 88% 100%, rgba(59,130,246,0.08), transparent 55%), rgba(18,18,24,0.68)'
+      : 'radial-gradient(90% 160% at 12% 0%, rgba(196,181,253,0.22), transparent 55%), radial-gradient(90% 160% at 88% 100%, rgba(147,197,253,0.16), transparent 55%), rgba(255,255,255,0.72)',
     backdropFilter: 'blur(18px) saturate(160%)',
     WebkitBackdropFilter: 'blur(18px) saturate(160%)',
     borderBottom: theme === 'dark' ? '1px solid rgba(179,127,235,0.35)' : '1px solid rgba(114,46,209,0.28)',
@@ -75,31 +76,40 @@ const navRailStyle = (theme: 'light' | 'dark'): CSSProperties => ({
   alignItems: 'center',
   padding: 6,
   borderRadius: 999,
-  background: theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.035)'
+  // Aurora glass: violet/blue light bleeding through a translucent pane.
+  background: theme === 'dark'
+    ? 'radial-gradient(120% 180% at 15% 0%, rgba(167,139,250,0.28), transparent 55%), radial-gradient(120% 180% at 85% 100%, rgba(59,130,246,0.18), transparent 55%), rgba(255,255,255,0.06)'
+    : 'radial-gradient(120% 180% at 15% 0%, rgba(196,181,253,0.5), transparent 55%), radial-gradient(120% 180% at 85% 100%, rgba(147,197,253,0.4), transparent 55%), rgba(255,255,255,0.45)',
+  backdropFilter: 'blur(20px) saturate(170%)',
+  WebkitBackdropFilter: 'blur(20px) saturate(170%)',
+  border: theme === 'dark' ? '1px solid rgba(196,181,253,0.4)' : '1px solid rgba(139,92,246,0.35)',
+  boxShadow: theme === 'dark'
+    ? 'inset 0 1px 0 rgba(255,255,255,0.3), 0 0 0 1px rgba(124,58,237,0.15), 0 12px 36px rgba(91,33,182,0.35)'
+    : 'inset 0 1px 0 rgba(255,255,255,1), 0 0 0 1px rgba(124,58,237,0.1), 0 12px 36px rgba(91,33,182,0.18)'
 });
 
-function navButtonStyle(isActive: boolean, isStudio: boolean, theme: 'light' | 'dark'): CSSProperties {
-  const studioActiveShadow = '0 2px 8px rgba(114,46,209,0.4), 0 0 0 1px rgba(114,46,209,0.2)';
-  const defaultActiveShadow =
-    theme === 'dark'
-      ? '0 2px 8px rgba(24,144,255,0.45), 0 0 0 1px rgba(24,144,255,0.25)'
-      : '0 2px 8px rgba(24,144,255,0.35), 0 0 0 1px rgba(24,144,255,0.15)';
-
-  return {
+function navButtonStyle(isActive: boolean, theme: 'light' | 'dark'): CSSProperties {
+  const style: CSSProperties = {
     fontWeight: isActive ? 600 : 400,
     borderRadius: 999,
-    paddingLeft: 16,
-    paddingRight: 16,
-    boxShadow: isActive ? (isStudio ? studioActiveShadow : defaultActiveShadow) : 'none',
-    transition: 'background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease',
-    ...(isStudio
-      ? isActive
-        ? { background: '#722ed1', borderColor: '#722ed1' }
-        : theme === 'dark'
-          ? { color: '#b37feb', background: 'rgba(114,46,209,0.16)' }
-          : { color: '#722ed1', background: '#f9f0ff' }
-      : {})
+    height: 40,
+    paddingLeft: 20,
+    paddingRight: 20,
+    border: '1px solid transparent',
+    color: isActive ? (theme === 'dark' ? '#fff' : '#4c1d95') : theme === 'dark' ? '#e9e5f5' : '#4c4560',
+    transition: 'background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease'
   };
+  if (isActive) {
+    // Glowing aurora capsule for the active tab (matches the approved D1 mockup).
+    style.background = theme === 'dark'
+      ? 'radial-gradient(140% 200% at 50% -30%, rgba(255,255,255,0.4), transparent 60%), linear-gradient(135deg, rgba(139,92,246,0.5), rgba(99,102,241,0.4))'
+      : 'radial-gradient(140% 200% at 50% -30%, #fff, transparent 60%), linear-gradient(135deg, rgba(196,181,253,0.75), rgba(165,180,252,0.6))';
+    style.borderColor = theme === 'dark' ? 'rgba(221,214,254,0.7)' : 'rgba(114,46,209,0.4)';
+    style.boxShadow = theme === 'dark'
+      ? 'inset 0 1px 0 rgba(255,255,255,0.45), 0 0 22px rgba(139,92,246,0.6)'
+      : 'inset 0 1px 0 rgba(255,255,255,1), 0 0 22px rgba(139,92,246,0.4)';
+  }
+  return style;
 }
 
 const actionClusterStyle: CSSProperties = {
@@ -118,7 +128,6 @@ function activeKey(pathname: string): string {
   if (pathname.startsWith('/studio')) return 'studio';
   if (pathname === '/library') return 'library';
   if (pathname === '/agents') return 'agents';
-  if (pathname === '/playbooks') return 'playbooks';
   if (pathname.startsWith('/admin/users')) return 'admin-users';
   return 'feed';
 }
@@ -157,7 +166,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const current = activeKey(pathname);
   type BellNotice = { id: string; kind: 'run_failed' | 'new_report' | 'show_started' | 'show_finished' | 'audio_ready'; agentName: string; message: string; timestamp: string };
   const combinedNotices: BellNotice[] = [
-    ...failedRunNotices.map((n) => ({ id: n.runId, kind: 'run_failed' as const, agentName: n.agentName, message: n.errorMessage ?? 'Run failed', timestamp: n.timestamp })),
+    ...failedRunNotices.map((n) => ({ id: n.runId, kind: 'run_failed' as const, agentName: n.agentName, message: n.errorMessage ?? t('nav.bellRunFailed'), timestamp: n.timestamp })),
     ...newReportNotices.map((n) => ({ id: n.reportId, kind: 'new_report' as const, agentName: n.agentName, message: n.summary, timestamp: n.timestamp })),
     ...discussionNotices.map((n) => ({
       id: n.id,
@@ -173,17 +182,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const userMenuItems = [
     ...(user ? [{ key: 'user-label', label: <span className="font-medium">{user.displayName ?? user.email}</span>, disabled: true }] : []),
     ...(user ? [{ type: 'divider' as const }] : []),
-    // Quick access to open the admin Agents & Playbooks area for admins
-    ...(isAdmin ? [{ key: 'admin-open-area', label: t('nav.adminArea'), icon: <TeamOutlined />, onClick: () => setAdminMode(true) }] : []),
     {
       key: 'theme-toggle',
-      label: theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
+      label: theme === 'dark' ? t('nav.themeToLight') : t('nav.themeToDark'),
       icon: theme === 'dark' ? <SunOutlined /> : <MoonOutlined />,
       onClick: () => toggleTheme()
     },
     {
       key: 'language-toggle',
-      label: i18n.language.startsWith('de') ? 'Switch to English' : 'Auf Deutsch wechseln',
+      label: t('language.switchTo'),
       icon: <GlobalOutlined />,
       onClick: () => i18n.changeLanguage(i18n.language.startsWith('de') ? 'en' : 'de')
     },
@@ -272,15 +279,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             <nav style={navRailStyle(theme)}>
               {navItems.map((item) => {
                 const isActive = current === item.key;
-                const isStudio = item.key === 'studio';
                 return (
                   <Button
                     key={item.key}
-                    type={isActive ? 'primary' : 'text'}
+                    type="text"
                     icon={item.icon}
                     onClick={() => navigate(item.path)}
                     size="middle"
-                    style={navButtonStyle(isActive, isStudio, theme)}
+                    style={navButtonStyle(isActive, theme)}
                   >
                     {t(item.labelKey)}
                   </Button>
@@ -367,7 +373,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Button
                 shape="circle"
                 icon={<MenuOutlined />}
-                aria-label={t('nav.mobileMenu') || 'Menu'}
+                aria-label={t('nav.mobileMenu')}
                 style={circleActionStyle}
                 onClick={() => setMobileMenuOpen(true)}
               />
@@ -383,8 +389,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <nav
         aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-violet-200 bg-white/95 px-2 pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.1)] backdrop-blur-lg dark:border-violet-900 dark:bg-slate-950/95 sm:hidden"
-        style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
+        className="aurora-glass fixed inset-x-0 bottom-0 z-30 flex px-2 pt-2 sm:hidden"
+        style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))', borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderBottom: 'none' }}
       >
         {COMMON_NAV_ITEMS.map((item) => {
           const isActive = current === item.key;
@@ -396,10 +402,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               aria-current={isActive ? 'page' : undefined}
               onClick={() => navigate(item.path)}
               className={`h-auto flex-1 !rounded-lg !px-1 !py-1.5 text-xs ${
-                isActive
-                  ? '!bg-violet-100 !text-violet-700 dark:!bg-violet-950/70 dark:!text-violet-200'
-                  : 'text-muted-foreground'
+                isActive ? '!text-violet-700 dark:!text-white' : 'text-muted-foreground'
               }`}
+              style={isActive ? {
+                background: theme === 'dark'
+                  ? 'radial-gradient(140% 200% at 50% -30%, rgba(255,255,255,0.4), transparent 60%), linear-gradient(135deg, rgba(139,92,246,0.5), rgba(99,102,241,0.4))'
+                  : 'radial-gradient(140% 200% at 50% -30%, #fff, transparent 60%), linear-gradient(135deg, rgba(196,181,253,0.75), rgba(165,180,252,0.6))',
+                boxShadow: theme === 'dark' ? '0 0 16px rgba(139,92,246,0.55)' : '0 0 16px rgba(139,92,246,0.35)'
+              } : undefined}
             >
               <span className="mt-0.5 block text-[11px]">{t(item.labelKey)}</span>
             </Button>
@@ -412,7 +422,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
         placement="right"
-        title={t('nav.mobileMenu') || 'Menu'}
+        title={t('nav.mobileMenu')}
         width={280}
         styles={{ body: { padding: '8px 0' } }}
       >

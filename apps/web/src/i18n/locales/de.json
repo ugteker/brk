@@ -7,6 +7,7 @@
     "delete": "Löschen",
     "remove": "Entfernen",
     "edit": "Bearbeiten",
+    "moreActions": "Weitere Aktionen",
     "create": "Erstellen",
     "update": "Aktualisieren",
     "close": "Schließen",
@@ -26,10 +27,10 @@
     "dashboard": "Dashboard",
     "feed": "Feed",
     "feedEmpty": "Noch keine Berichte",
-    "feedEmptyDesc": "Sobald deine Playbooks die erste Analyse durchgeführt haben, erscheinen die Berichte hier.",
+    "feedEmptyDesc": "Sobald deine Abos die erste Analyse durchgeführt haben, erscheinen die Berichte hier.",
     "library": "Bibliothek",
     "agents": "Agenten",
-    "playbooks": "Playbooks",
+    "playbooks": "Abos",
     "accountMenu": "Kontomenü",
     "userManagement": "Benutzerverwaltung",
     "logOut": "Abmelden",
@@ -41,6 +42,10 @@
     "bellClearAll": "Alle löschen",
     "bellEmpty": "Nichts Neues 🎉",
     "bellNewReport": "Neuer Bericht",
+    "bellRunFailed": "Lauf fehlgeschlagen",
+    "mobileMenu": "Menü",
+    "themeToLight": "Zum hellen Modus wechseln",
+    "themeToDark": "Zum dunklen Modus wechseln",
     "bell_show_started": "Deine Show hat gerade begonnen",
     "bell_show_finished": "Deine Show ist fertig zum Lesen",
     "bell_audio_ready": "Audio ist bereit zum Anhören"
@@ -66,19 +71,19 @@
     "sampleReportDisclosure": "Beispielausgabe aus einer kuratierten Quelle und einem Agenten.",
     "sourceAdded": "Quelle hinzugefügt",
     "sourceSaved": "Quelle gespeichert",
-    "sourceSavedWithoutAgent": "Quelle gespeichert. Es wurde kein Agent oder Playbook erstellt.",
+    "sourceSavedWithoutAgent": "Quelle gespeichert. Es wurde kein Agent oder Abo erstellt.",
     "yourLibrary": "Deine Bibliothek",
     "addToLibrary": "Zur Bibliothek hinzufügen",
     "starterLoadError": "Die Starter-Auswahl konnte nicht geladen werden.",
     "starterLoadRetry": "Erneut versuchen",
     "savedEmptyTitle": "Deine Bibliothek ist bereit für die erste Quelle",
     "savedEmptyDescription": "Quellen, die du hinzufügst, erscheinen hier.",
-    "addSource": "Weitere Quelle hinzufügen",
+    "addSource": "Quelle hinzufügen",
     "nextActionLabel": "Nächster Schritt",
     "nextActionHint": "Füge zuerst eine Quelle hinzu",
     "howItWorks": "So funktioniert es",
     "howStep1": "Quelle hinzufügen",
-    "howStep2": "Analysten erstellen",
+    "howStep2": "Agenten erstellen",
     "howStep3": "Berichte erhalten",
     "browseMarketplace": "Marketplace durchsuchen",
     "backToLibrary": "Zurück zur Bibliothek",
@@ -88,7 +93,6 @@
     "noEpisodes": "Noch keine Folgen / Elemente gefunden.",
     "noRuns": "Noch keine Diskussionsläufe vorhanden.",
     "recentEpisodes": "Vorschau neueste Folgen",
-    "recentRuns": "Letzte Läufe",
     "episodesPreview": "Folgen-Vorschau",
     "episodes": "Folgen: {{count}}",
     "clone": "Klonen",
@@ -97,7 +101,7 @@
     "analyzingCount": "{{count}} Agent(en) analysiert",
     "lastRun": "Letzter Lauf: {{date}}",
     "notYetAnalyzed": "Noch nicht analysiert",
-    "noWorkflowCta": "Noch kein Analyse-Workflow für diese Quelle. Füge sie einem Playbook hinzu, um Berichte zu erstellen.",
+    "noWorkflowCta": "Noch kein Analyse-Workflow für diese Quelle. Füge sie einem Abo hinzu, um Berichte zu erstellen.",
     "reportsTab": "Berichte",
     "runsTab": "Verlauf",
     "episodesTab": "Episoden",
@@ -121,16 +125,17 @@
     "resendEmail": "E-Mail-Benachrichtigung erneut senden",
     "resendSuccess": "Benachrichtigung an {{count}} Empfänger gesendet",
     "resendFailed": "Benachrichtigung konnte nicht gesendet werden",
-    "resendNoRecipients": "Für dieses Playbook sind keine Empfänger konfiguriert",
+    "resendNoRecipients": "Für dieses Abo sind keine Empfänger konfiguriert",
     "analysisStarted": "Analyse gestartet",
-    "expertsWatching": "Beobachtet von",
+    "expertsWatching": "Gefolgt von",
     "tabNameRequired": "Tab-Name darf nicht leer sein",
     "reportSingular": "Bericht",
     "reportPlural": "Berichte",
-    "alreadyWatching": "Beobachtet bereits",
+    "alreadyWatching": "Folgt bereits",
     "youtubeTranscriptNote": "Vollständige Transkripte können für diese Quelle vom Datacenter-IP nicht verfügbar sein — Fallback auf Shownotes.",
-    "agentFollowLabel": "Agenten folgen",
-    "recentItems": "Neueste Inhalte",
+    "followAgentCta": "Agent folgen lassen",
+    "agentFollows": "{{name}} folgt",
+    "agentsFollowCount": "{{count}} Agenten folgen",
     "manageSource": "Quelle verwalten",
     "removeFromLibrary": "Aus Bibliothek entfernen",
     "addAgent": "Agent hinzufügen",
@@ -140,17 +145,20 @@
     "coverUnavailable": "Cover nicht verfügbar",
     "reportsAvailable": "{{count}} Berichte verfügbar",
     "latestReportAt": "Letzter Bericht: {{date}}",
-    "openReports": "{{count}} Berichte öffnen",
     "noReportsYet": "Noch keine Berichte",
     "reportsWillAppearHere": "Ergebnisse erscheinen hier nach einer Analyse.",
-    "sourceReportsAvailableHint": "Öffnen, um Berichte zu dieser Quelle zu sehen",
     "removeAgentFromSource": "Agent von dieser Quelle entfernen",
     "removeAgentConfirm": "{{name}} von dieser Quelle entfernen?",
     "removeAgentConfirmDescription": "Der Agent bleibt erhalten und wird nicht gelöscht.",
     "agentRemovedFromSource": "Agent wurde von dieser Quelle entfernt.",
     "removeAgentFromSourceFailed": "Agent konnte nicht von dieser Quelle entfernt werden.",
     "addSourceFailed": "Quelle konnte nicht hinzugefügt werden.",
-    "removeSourceFailed": "Quelle konnte nicht entfernt werden."
+    "removeSourceFailed": "Quelle konnte nicht entfernt werden.",
+    "deleteTab": "Tab löschen",
+    "deleteTabConfirm": "Tab \"{{name}}\" löschen?",
+    "deleteTabConfirmDescription": "Die Quellen wandern zurück in die Haupt-Bibliothek.",
+    "deleteSourceConfirm": "„{{name}}“ löschen?",
+    "deleteSourceConfirmDescription": "Entfernt die Quelle und ihre Agenten-Verbindungen dauerhaft."
   },
   "feed": {
     "groupToday": "Heute",
@@ -201,28 +209,17 @@
     "listening": "Wird zusammengefasst",
     "listenAriaLabel": "Diese Quelle zusammenfassen",
     "listeningAriaLabel": "Fasst diese Quelle zusammen",
-    "stopListening": "Nicht mehr zusammenfassen",
-    "stopListeningConfirm": "Zusammenfassen beenden?",
-    "stopListeningYes": "Ja, beenden",
     "dialogTitleNew": "Welche Agenten sollen {{title}} folgen?",
-    "dialogTitleEdit": "Welche Agenten sollen {{title}} folgen?",
-    "dialogTitleGenericNew": "Zusammenfassung einrichten",
-    "dialogTitleGenericEdit": "Zusammenfassung aktualisieren",
     "thisSource": "diese Quelle",
-    "stepSubtitle": "Wähle einen KI-Agenten, der diese Quelle zusammenfasst und Berichte erstellt. Noch kein Agent? Erstelle einen unten.",
-    "stepPickSource": "Quelle wählen",
-    "runPickerTitle": "Welcher Agent soll starten?",
-    "stepChooseAgent": "Agent wählen",
-    "stepSetSchedule": "Zeitplan festlegen",
-    "advancedSettings": "Erweiterte Einstellungen (Zeitplan & Empfänger)"
+    "runPickerTitle": "Welcher Agent soll starten?"
   },
   "agent": {
-    "createNew": "Neuen Analysten erstellen",
+    "createNew": "Neuen Agenten erstellen",
     "createNewSub": "Charakter + KI-Persona",
-    "emptyHeadline": "Noch keine Analysten",
-    "emptyDesc": "Analysten sind KI-Personas mit einem System-Prompt. Jeder erkundet deine Quellen mit einem eigenen Charakter und Blickwinkel.",
-    "emptyCta": "Ersten Analysten erstellen",
-    "emptySourceHint": "Tipp: Füge zuerst eine Quelle in der Bibliothek hinzu, damit dein Analyst etwas zu lesen hat.",
+    "emptyHeadline": "Noch keine Agenten",
+    "emptyDesc": "Agenten sind KI-Personas mit einem System-Prompt. Jeder erkundet deine Quellen mit einem eigenen Charakter und Blickwinkel.",
+    "emptyCta": "Ersten Agenten erstellen",
+    "emptySourceHint": "Tipp: Füge zuerst eine Quelle in der Bibliothek hinzu, damit dein Agent etwas zu lesen hat.",
     "selectAgent": "Agent {{name}} auswählen",
     "deleteAgent": "Agent {{name}} löschen",
     "deleteConfirmTitle": "Diesen Agenten löschen?",
@@ -261,8 +258,9 @@
     "useAgent": "Agent verwenden",
     "viewDetails": "Details ansehen",
     "curateYourOwn": "Eigenen Agent bauen",
+    "curateWithAi": "Mit KI verfeinern",
     "retry": "Erneut versuchen",
-    "empty": "Noch keine passenden Agenten. Kuratiere deinen eigenen, um zu starten.",
+    "empty": "Noch keine passenden Agenten. Baue deinen eigenen, um zu starten.",
     "connectionSuccess": "Agent wurde mit dieser Quelle verbunden.",
     "connectedActionsTitle": "Agent verbunden",
     "connectedActionsDescription": "Du kannst jetzt den ersten Bericht ausführen oder später einen wiederkehrenden Zeitplan festlegen.",
@@ -315,24 +313,29 @@
     "intervalPlaceholder": "Intervall in Minuten",
     "timezonePlaceholder": "Zeitzone auswählen",
     "dailyTimeAriaLabel": "Planungsuhrzeit",
-    "timezoneAriaLabel": "Zeitzone des Playbooks",
+    "timezoneAriaLabel": "Zeitzone des Abos",
     "intervalAriaLabel": "Intervall in Minuten",
     "daysOfWeekAriaLabel": "Wochentage",
     "days": {
-      "mon": "Mo", "tue": "Di", "wed": "Mi", "thu": "Do",
-      "fri": "Fr", "sat": "Sa", "sun": "So"
+      "mon": "Mo",
+      "tue": "Di",
+      "wed": "Mi",
+      "thu": "Do",
+      "fri": "Fr",
+      "sat": "Sa",
+      "sun": "So"
     }
   },
   "playbook": {
-    "createPlaybook": "Playbook erstellen",
-    "updatePlaybook": "Playbook aktualisieren",
-    "createNew": "Playbook einrichten",
-    "createNewSub": "Quelle + Analyst + Zeitplan",
-    "noPlaybooks": "Noch keine Playbooks.",
-    "emptyHeadline": "Noch keine Playbooks",
-    "emptyDesc": "Playbooks verbinden eine Quelle mit einem Analysten nach einem Zeitplan und senden dir automatisch Berichte per E-Mail.",
+    "createPlaybook": "Abo erstellen",
+    "updatePlaybook": "Abo aktualisieren",
+    "createNew": "Abo einrichten",
+    "createNewSub": "Quelle + Agent + Zeitplan",
+    "noPlaybooks": "Noch keine Abos.",
+    "emptyHeadline": "Noch keine Abos",
+    "emptyDesc": "Abos verbinden eine Quelle mit einem Agenten nach einem Zeitplan und senden dir automatisch Berichte per E-Mail.",
     "emptyCtaNoSources": "Zuerst eine Quelle in der Bibliothek hinzufügen",
-    "emptyCtaNoAgents": "Zuerst einen Analysten im Agenten-Hub erstellen",
+    "emptyCtaNoAgents": "Zuerst einen Agenten im Agenten-Hub erstellen",
     "emptyCtaReady": "Erste Quelle folgen",
     "notificationsOn": "E-Mail-Benachrichtigungen aktiv",
     "notificationsOff": "E-Mail-Benachrichtigungen stumm",
@@ -352,11 +355,10 @@
     "resume": "Fortsetzen",
     "paused": "Pausiert",
     "active": "Aktiv",
-    "createPlaybooks": "{{count}} Playbooks erstellt",
+    "createPlaybooks": "{{count}} Abos erstellt",
     "schedule": "Zeitplan & Empfänger",
     "recipients": "E-Mail-Empfänger",
-    "addRecipient": "Empfänger hinzufügen",
-    "scheduleHint": "typisch:"
+    "addRecipient": "Empfänger hinzufügen"
   },
   "source": {
     "noSources": "Keine Quellen verfügbar.",
@@ -387,7 +389,7 @@
     "cloneButton": "Klonen",
     "cloningButton": "Wird geklont…",
     "quickStartHeading": "Schnellstart vom Marktplatz",
-    "quickStartDesc": "Folge einem beliebten Playbook, um sofort deinen ersten Bericht zu erhalten.",
+    "quickStartDesc": "Folge einem beliebten Abo, um sofort deinen ersten Bericht zu erhalten.",
     "followPlaybook": "Folgen"
   },
   "onboarding": {
@@ -395,10 +397,10 @@
     "gettingStartedDesc": "Schließe diese Schritte ab, um deinen ersten automatischen Bericht einzurichten.",
     "step1": "Quelle hinzufügen",
     "step1Desc": "Füge einen Videokanal, Podcast oder eine Website zu deiner Bibliothek hinzu.",
-    "step2": "Analysten erstellen",
-    "step2Desc": "Richte einen KI-Analysten mit eigener Persona und System-Prompt ein.",
+    "step2": "Agenten erstellen",
+    "step2Desc": "Richte einen KI-Agenten mit eigener Persona und System-Prompt ein.",
     "step3": "Quelle folgen",
-    "step3Desc": "Verbinde eine Quelle mit einem Analysten und einem Zeitplan für Berichte.",
+    "step3Desc": "Verbinde eine Quelle mit einem Agenten und einem Zeitplan für Berichte.",
     "step4": "Ersten Bericht erhalten",
     "step4Desc": "Starte einen manuellen Lauf oder warte auf den Zeitplan — dein erster Signal-Bericht erscheint hier.",
     "allDone": "🎉 Alles eingerichtet! Berichte kommen planmäßig.",
@@ -497,11 +499,11 @@
     "removeFailed": "Symbol konnte nicht entfernt werden"
   },
   "reportChat": {
-    "title": "Analyst fragen",
-    "empty": "Stelle eine Rückfrage zu diesem Report — der Analyst antwortet auf Basis des Reports und seiner Quellen.",
+    "title": "Agent fragen",
+    "empty": "Stelle eine Rückfrage zu diesem Report — der Agent antwortet auf Basis des Reports und seiner Quellen.",
     "placeholder": "z. B. Warum ist die Konfidenz für AAPL so hoch?",
     "send": "Senden",
-    "thinking": "Der Analyst denkt nach…",
+    "thinking": "Der Agent denkt nach…",
     "loadFailed": "Chat-Verlauf konnte nicht geladen werden",
     "askFailed": "Antwort konnte nicht abgerufen werden",
     "disclaimer": "Antworten basieren auf diesem Report und seinen Quellen. Nur informative Analyse — keine Finanzberatung."
@@ -549,14 +551,14 @@
     "errorFallback": "Etwas ist schiefgelaufen",
     "resetFailFallback": "Passwort zurücksetzen fehlgeschlagen",
     "valueProp1": "📚 Quellen hinzufügen — YouTube-Kanäle, Podcasts, Websites",
-    "valueProp2": "🤖 Analysten erstellen — KI-Personas mit Handelsphilosophie",
+    "valueProp2": "🤖 Agenten erstellen — KI-Personas mit eigenem Blickwinkel",
     "valueProp3": "📬 Berichte erhalten — Automatische Signalberichte per E-Mail"
   },
   "curator": {
     "retry": "Erneut versuchen",
-    "back": "← Zurück",
-    "continue": "Weiter →",
-    "reviewAgent": "Agent ansehen →",
+    "back": "Zurück",
+    "continue": "Weiter",
+    "reviewAgent": "Agent ansehen",
     "createAgent": "Agent erstellen",
     "saveChanges": "Änderungen speichern",
     "readyTitle": "Dein Agent ist bereit 🎉",
@@ -577,7 +579,7 @@
     "starter1": "Fasse neue Inhalte zusammen und hebe die wichtigsten Punkte hervor",
     "starter2": "Verfolge Finanznachrichten und markiere Risiken und Chancen",
     "starter3": "Erkläre neue Themen einfach – wie ein Lehrer",
-    "errorStart": "Der Kurator konnte nicht gestartet werden.",
+    "errorStart": "Der Assistent konnte nicht gestartet werden.",
     "errorMessage": "Deine Antwort konnte nicht gesendet werden.",
     "errorFinalize": "Der Agent konnte nicht gespeichert werden.",
     "stillNeeded": "Fehlt noch: {{fields}}.",
@@ -593,11 +595,11 @@
     "step2": "Persona wählen",
     "step3": "Starten",
     "step1Desc": "Suche einen Podcast oder YouTube-Kanal per Name — oder füge eine URL ein, die du verfolgen möchtest.",
-    "step2Desc": "Wähle eine Analysten-Persona — jede hat einen anderen Fokus und Stil.",
-    "step3Desc": "Wir erstellen deine Quelle, deinen Analysten und dein Playbook und starten die erste Analyse jetzt.",
+    "step2Desc": "Wähle eine Agenten-Persona — jede hat einen anderen Fokus und Stil.",
+    "step3Desc": "Wir erstellen deine Quelle, deinen Agenten und dein Abo und starten die erste Analyse jetzt.",
     "detectSource": "Quelle erkennen",
     "summarySource": "Quelle",
-    "summaryPersona": "Analyst",
+    "summaryPersona": "Persona",
     "runNow": "Erstellen & jetzt ausführen",
     "success": "Dein erster Bericht läuft! Schau gleich in den Feed.",
     "error": "Etwas ist schiefgelaufen. Versuche es erneut oder richte es manuell ein.",
@@ -637,64 +639,160 @@
       "name": "Finanzexperte",
       "tagline": "Signalbasierte Aktienanalyse und risikobewusste Marktinterpretation.",
       "characters": {
-        "conservative-analyst":       { "name": "Konservativer Analyst",       "tagline": "Blue-Chip-Fokus, hohe Beweishürde, vorsichtig bei Long/Short.",    "intro": "Ich halte mein Pulver trocken. Erst harte Zahlen — ohne konkrete Belege schweige ich." },
-        "balanced-analyst":           { "name": "Ausgewogener Analyst",        "tagline": "Ausgewogene, beweisbasierte Long/Short-Entscheidungen (Standard).", "intro": "Ich wäge beide Seiten ab, bevor ich eine Richtung wähle. Solide Analyse, kein Drama." },
-        "aggressive-momentum-trader": { "name": "Aggressiver Momentum-Trader", "tagline": "Schnell, stimmungsgetrieben, hohes Signalvolumen.",                "intro": "Ich bewege mich schnell und verfolge Überzeugung. Stimmung zählt — wer zuerst kommt, gewinnt." },
-        "contrarian-value-investor":  { "name": "Konträrer Value-Investor",    "tagline": "Sucht nach überkauften Namen, die die Masse zu früh aufgegeben hat.","intro": "Manchmal liegen alle falsch. Ich suche nach Namen, die die Masse zu früh aufgegeben hat." },
-        "quant-data-driven-analyst":  { "name": "Quant / Datenbasierter Analyst","tagline": "Nur Zahlen: erfordert explizite Finanzkennzahlen vor dem Signal.", "intro": "Keine Zahlen, kein Signal. Ich spreche nur, wenn es etwas Messbares zu sagen gibt." },
-        "short-seller-skeptic":       { "name": "Short-Seller / Skeptiker",    "tagline": "Sucht nach Red Flags, Übertreibungen und Bilanzproblemen.",        "intro": "Zeig mir die Warnsignale. Ich finde Probleme, bevor du darüber stolperst." },
-        "macro-thematic-strategist":  { "name": "Makro / Thematischer Stratege","tagline": "Sektorrotation und makrothematische Calls (Zinsen, KI, Energie).","intro": "Ich verbinde einzelne Werte mit dem großen Bild — Zinsen, KI-Zyklen, Sektorrotationen." }
+        "conservative-analyst": {
+          "name": "Konservativer Analyst",
+          "tagline": "Blue-Chip-Fokus, hohe Beweishürde, vorsichtig bei Long/Short.",
+          "intro": "Ich halte mein Pulver trocken. Erst harte Zahlen — ohne konkrete Belege schweige ich."
+        },
+        "balanced-analyst": {
+          "name": "Ausgewogener Analyst",
+          "tagline": "Ausgewogene, beweisbasierte Long/Short-Entscheidungen (Standard).",
+          "intro": "Ich wäge beide Seiten ab, bevor ich eine Richtung wähle. Solide Analyse, kein Drama."
+        },
+        "aggressive-momentum-trader": {
+          "name": "Aggressiver Momentum-Trader",
+          "tagline": "Schnell, stimmungsgetrieben, hohes Signalvolumen.",
+          "intro": "Ich bewege mich schnell und verfolge Überzeugung. Stimmung zählt — wer zuerst kommt, gewinnt."
+        },
+        "contrarian-value-investor": {
+          "name": "Konträrer Value-Investor",
+          "tagline": "Sucht nach überkauften Namen, die die Masse zu früh aufgegeben hat.",
+          "intro": "Manchmal liegen alle falsch. Ich suche nach Namen, die die Masse zu früh aufgegeben hat."
+        },
+        "quant-data-driven-analyst": {
+          "name": "Quant / Datenbasierter Analyst",
+          "tagline": "Nur Zahlen: erfordert explizite Finanzkennzahlen vor dem Signal.",
+          "intro": "Keine Zahlen, kein Signal. Ich spreche nur, wenn es etwas Messbares zu sagen gibt."
+        },
+        "short-seller-skeptic": {
+          "name": "Short-Seller / Skeptiker",
+          "tagline": "Sucht nach Red Flags, Übertreibungen und Bilanzproblemen.",
+          "intro": "Zeig mir die Warnsignale. Ich finde Probleme, bevor du darüber stolperst."
+        },
+        "macro-thematic-strategist": {
+          "name": "Makro / Thematischer Stratege",
+          "tagline": "Sektorrotation und makrothematische Calls (Zinsen, KI, Energie).",
+          "intro": "Ich verbinde einzelne Werte mit dem großen Bild — Zinsen, KI-Zyklen, Sektorrotationen."
+        }
       }
     },
     "teacher": {
       "name": "Lehrer",
       "tagline": "Erklärt Ideen Schritt für Schritt zum Lernen und Behalten.",
       "characters": {
-        "teacher-mentor":               { "name": "Mentor",              "tagline": "Begleitet Lernende mit Coaching-Erklärungen.",         "intro": "Ich führe dich Schritt für Schritt — stell dir mich als deinen persönlichen Lernbegleiter vor." },
-        "teacher-classroom-instructor": { "name": "Klassenlehrer",       "tagline": "Strukturierte Lektionen mit klaren Checkpoints.",      "intro": "Klare Struktur, stetige Checkpoints. Ich mache komplexe Ideen leicht verständlich." },
-        "teacher-practical-coach":      { "name": "Praxis-Coach",        "tagline": "Handlungsorientierte Anleitungen mit praktischen Beispielen.", "intro": "Keine Theorie. Ich gebe dir praktische Beispiele, die du sofort nutzen kannst." }
+        "teacher-mentor": {
+          "name": "Mentor",
+          "tagline": "Begleitet Lernende mit Coaching-Erklärungen.",
+          "intro": "Ich führe dich Schritt für Schritt — stell dir mich als deinen persönlichen Lernbegleiter vor."
+        },
+        "teacher-classroom-instructor": {
+          "name": "Klassenlehrer",
+          "tagline": "Strukturierte Lektionen mit klaren Checkpoints.",
+          "intro": "Klare Struktur, stetige Checkpoints. Ich mache komplexe Ideen leicht verständlich."
+        },
+        "teacher-practical-coach": {
+          "name": "Praxis-Coach",
+          "tagline": "Handlungsorientierte Anleitungen mit praktischen Beispielen.",
+          "intro": "Keine Theorie. Ich gebe dir praktische Beispiele, die du sofort nutzen kannst."
+        }
       }
     },
     "influencer": {
       "name": "Influencer",
       "tagline": "Erstellt publikumsgerechte Narrative und Content-Winkel.",
       "characters": {
-        "influencer-trend-scout":         { "name": "Trend Scout",         "tagline": "Findet aktuelle Themen und Aufmerksamkeitshaken.",    "intro": "Ich spüre auf, was trendet, bevor die Masse es merkt. Hooks zuerst, immer." },
-        "influencer-storyteller":         { "name": "Geschichtenerzähler", "tagline": "Gestaltet überzeugende Narrative aus Belegen.",        "intro": "Jeder Datenpunkt hat eine Geschichte. Ich gestalte die Narrative, die Menschen zuhören lässt." },
-        "influencer-campaign-strategist": { "name": "Kampagnenstratege",   "tagline": "Entwickelt klare Kampagnenbotschaften.",              "intro": "Ich verwandle Erkenntnisse in Botschaftspläne, auf die dein Publikum wirklich reagiert." }
+        "influencer-trend-scout": {
+          "name": "Trend Scout",
+          "tagline": "Findet aktuelle Themen und Aufmerksamkeitshaken.",
+          "intro": "Ich spüre auf, was trendet, bevor die Masse es merkt. Hooks zuerst, immer."
+        },
+        "influencer-storyteller": {
+          "name": "Geschichtenerzähler",
+          "tagline": "Gestaltet überzeugende Narrative aus Belegen.",
+          "intro": "Jeder Datenpunkt hat eine Geschichte. Ich gestalte die Narrative, die Menschen zuhören lässt."
+        },
+        "influencer-campaign-strategist": {
+          "name": "Kampagnenstratege",
+          "tagline": "Entwickelt klare Kampagnenbotschaften.",
+          "intro": "Ich verwandle Erkenntnisse in Botschaftspläne, auf die dein Publikum wirklich reagiert."
+        }
       }
     },
     "trainer": {
       "name": "Trainer",
       "tagline": "Entwickelt wiederholbare Übungsroutinen und Leistungsdrills.",
       "characters": {
-        "trainer-drill-sergeant":   { "name": "Drillsergeant",     "tagline": "Direktes Training mit disziplinierter Wiederholung.",  "intro": "Wiederholung ist der Schlüssel. Ich treibe dich, bis die richtigen Gewohnheiten sitzen." },
-        "trainer-supportive-coach": { "name": "Unterstützender Coach","tagline": "Ermutigendes Feedback mit schrittweisen Zielen.",   "intro": "Fortschritt vor Perfektion. Ich halte dich mit Ermutigung in Bewegung." },
-        "trainer-exam-prep":        { "name": "Prüfungscoach",     "tagline": "Zielt auf wahrscheinliche Prüfungsthemen und Abrufdrills.", "intro": "Gezielte Abrufdrills zu den wichtigsten Themen. Lass uns dich vorbereiten." }
+        "trainer-drill-sergeant": {
+          "name": "Drillsergeant",
+          "tagline": "Direktes Training mit disziplinierter Wiederholung.",
+          "intro": "Wiederholung ist der Schlüssel. Ich treibe dich, bis die richtigen Gewohnheiten sitzen."
+        },
+        "trainer-supportive-coach": {
+          "name": "Unterstützender Coach",
+          "tagline": "Ermutigendes Feedback mit schrittweisen Zielen.",
+          "intro": "Fortschritt vor Perfektion. Ich halte dich mit Ermutigung in Bewegung."
+        },
+        "trainer-exam-prep": {
+          "name": "Prüfungscoach",
+          "tagline": "Zielt auf wahrscheinliche Prüfungsthemen und Abrufdrills.",
+          "intro": "Gezielte Abrufdrills zu den wichtigsten Themen. Lass uns dich vorbereiten."
+        }
       }
     },
     "philosopher": {
       "name": "Philosoph",
       "tagline": "Interpretiert Ideen durch Argumentation, Annahmen und Ethik.",
       "characters": {
-        "philosopher-socratic-guide":   { "name": "Sokratischer Führer", "tagline": "Nutzt Fragen, um Annahmen aufzudecken.",             "intro": "Ich beantworte deine Fragen mit besseren Fragen. Annahmen verdienen Prüfung." },
-        "philosopher-critical-thinker": { "name": "Kritischer Denker",  "tagline": "Stresst Logik und Beweisqualität.",                  "intro": "Ich teste jedes Argument. Wenn die Logik nicht stimmt, finde ich den Riss." },
-        "philosopher-ethics-analyst":   { "name": "Ethik-Analyst",      "tagline": "Wägt Entscheidungen mit ethischen Konsequenzen ab.", "intro": "Entscheidungen haben Konsequenzen jenseits des Offensichtlichen. Ich halte das große Bild ehrlich." }
+        "philosopher-socratic-guide": {
+          "name": "Sokratischer Führer",
+          "tagline": "Nutzt Fragen, um Annahmen aufzudecken.",
+          "intro": "Ich beantworte deine Fragen mit besseren Fragen. Annahmen verdienen Prüfung."
+        },
+        "philosopher-critical-thinker": {
+          "name": "Kritischer Denker",
+          "tagline": "Stresst Logik und Beweisqualität.",
+          "intro": "Ich teste jedes Argument. Wenn die Logik nicht stimmt, finde ich den Riss."
+        },
+        "philosopher-ethics-analyst": {
+          "name": "Ethik-Analyst",
+          "tagline": "Wägt Entscheidungen mit ethischen Konsequenzen ab.",
+          "intro": "Entscheidungen haben Konsequenzen jenseits des Offensichtlichen. Ich halte das große Bild ehrlich."
+        }
       }
     },
     "summarizer": {
       "name": "Zusammenfasser",
       "tagline": "Destilliert komplexe Eingaben in prägnante, entscheidungsreife Erkenntnisse.",
       "characters": {
-        "summarizer-executive-briefer":  { "name": "Executive-Briefer",   "tagline": "Kurzübersicht für schnelle Führungsentscheidungen.",  "intro": "Nur das Wesentliche. Ich gebe dir das Signal ohne das Rauschen — schnell." },
-        "summarizer-research-digestor":  { "name": "Forschungsdestillat", "tagline": "Verwandelt unstrukturierte Eingaben in Forschungsnotizen.", "intro": "Viele Eingaben, fokussierter Output. Ich verwandle Chaos in eine klare Forschungsnotiz." },
-        "summarizer-action-planner":     { "name": "Aktionsplaner",       "tagline": "Wandelt Erkenntnisse in priorisierte Maßnahmen um.", "intro": "Erkenntnisse sind nutzlos, bis sie zu Handlungen werden. Ich verwandle Befunde in nächste Schritte." }
+        "summarizer-executive-briefer": {
+          "name": "Executive-Briefer",
+          "tagline": "Kurzübersicht für schnelle Führungsentscheidungen.",
+          "intro": "Nur das Wesentliche. Ich gebe dir das Signal ohne das Rauschen — schnell."
+        },
+        "summarizer-research-digestor": {
+          "name": "Forschungsdestillat",
+          "tagline": "Verwandelt unstrukturierte Eingaben in Forschungsnotizen.",
+          "intro": "Viele Eingaben, fokussierter Output. Ich verwandle Chaos in eine klare Forschungsnotiz."
+        },
+        "summarizer-action-planner": {
+          "name": "Aktionsplaner",
+          "tagline": "Wandelt Erkenntnisse in priorisierte Maßnahmen um.",
+          "intro": "Erkenntnisse sind nutzlos, bis sie zu Handlungen werden. Ich verwandle Befunde in nächste Schritte."
+        }
       }
     }
   },
   "studio": {
     "title": "Studio",
     "newDiscussion": "Neue Diskussion",
+    "editDiscussion": "Diskussion bearbeiten",
+    "saveDiscussion": "Änderungen speichern",
+    "materialLocked": "Thema und Materialauswahl sind für diese Diskussion gesperrt.",
+    "materialSummary": "{{reports}} Berichte und {{transcripts}} Transkripte bleiben ausgewählt.",
+    "expertChangesFutureRuns": "Expertenänderungen gelten nur für zukünftige Läufe.",
+    "failedToLoadDiscussion": "Diskussion konnte nicht geladen werden",
+    "failedToCreateDiscussion": "Diskussion konnte nicht erstellt werden",
+    "failedToUpdateDiscussion": "Diskussion konnte nicht aktualisiert werden",
     "emptyTitle": "Starte deine erste Diskussion",
     "emptyDesc": "Wähle zwei oder mehr Agenten aus und lass sie ihre Erkenntnisse diskutieren. Das Transkript wird als neue Quelle in deiner Bibliothek gespeichert.",
     "formatLabel": "Diskussionsformat",
@@ -716,6 +814,12 @@
     "audioRendering": "Audio wird gerendert…",
     "transcript": "Transkript",
     "audioPlayer": "Audio",
+    "onAir": "Auf Sendung",
+    "audioWaiting": "Warte darauf, dass der erste Beitrag vertont wird…",
+    "audioUnavailable": "Für diesen Lauf ist noch kein Audio verfügbar.",
+    "audioQueueProgress": "Clip {{current}} von {{total}}",
+    "audioAutoplayBlocked": "Autoplay wurde von deinem Browser blockiert.",
+    "startListening": "Wiedergabe starten",
     "noRuns": "Noch keine Läufe — klicke auf \"Jetzt ausführen\" um die erste Diskussion zu starten.",
     "runFailed": "Dieser Lauf ist fehlgeschlagen: {{message}}",
     "runPending": "Dieser Lauf hat noch keine Redebeiträge erzeugt.",
@@ -725,10 +829,15 @@
     "wizardStepMaterial": "Material",
     "wizardStep3": "Start",
     "wizardStepTopic": "Thema",
-    "expertsStepLabel": "Wähle mindestens 2 Experten",
+    "wizardStepStory": "Story",
+    "wizardStepGuests": "Gäste",
+    "wizardStepGoLive": "Auf Sendung",
+    "buildAgent": "Einen Agenten bauen",
+    "failedToRefreshAgents": "Deine Agenten konnten nicht geladen werden. Bitte versuche es erneut.",
+    "expertsStepLabel": "Wähle mindestens 2 Gäste",
     "publicAgents": "Öffentliche Agenten",
     "cloningAgents": "Ausgewählte Agenten werden übernommen…",
-    "topicStepIntro": "Wähle, worauf sich die Diskussion stützen soll.",
+    "topicStepIntro": "Lege die Story für deine Diskussion fest.",
     "grounding_reports_title": "Berichte",
     "grounding_reports_desc": "Die Experten diskutieren auf Basis ihrer Analyse-Berichte.",
     "grounding_reports_hint": "Im Schritt „Material\" wählst du später die konkreten Berichte je Experte aus — oder lässt automatisch die aktuellsten verwenden.",
@@ -809,5 +918,115 @@
     "discussThisSource": "Diese Quelle diskutieren",
     "preselectBanner": "Diskussion wird gestartet über: {{context}}",
     "startFromScratch": "Von vorne beginnen"
+  },
+  "adminAgents": {
+    "title": "Agenten-Übersicht",
+    "subtitle": "Laufzeit und Konfiguration aller Agenten über alle Nutzer",
+    "empty": "Noch keine Agenten",
+    "searchPlaceholder": "Agent oder Besitzer suchen",
+    "kpi": {
+      "agents": "Aktive / alle Agenten",
+      "runs30d": "Läufe (30 T.)",
+      "successRate": "Erfolgsquote (30 T.)",
+      "failed24h": "Fehlschläge (24 h)",
+      "reports30d": "Berichte (30 T.)",
+      "tokens30d": "Tokens (30 T.)",
+      "cost30d": "Kosten (30 T.)",
+      "avgDuration": "Ø Laufdauer (30 T.)"
+    },
+    "col": {
+      "agent": "Agent",
+      "subscriptions": "Abos",
+      "sources": "Quellen",
+      "runs30d": "Läufe 30 T.",
+      "lastRun": "Letzter Lauf",
+      "reports": "Berichte",
+      "tokens30d": "Tokens 30 T.",
+      "cost30d": "Kosten 30 T.",
+      "review": "Review",
+      "discussions": "Diskussionen"
+    },
+    "status": {
+      "active": "Aktiv",
+      "paused": "Pausiert"
+    },
+    "runFailed": "fehlgeschlagen",
+    "reports30dTooltip": "{{count}} in den letzten 30 Tagen",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "delete": "Löschen",
+    "deleteConfirm": "Agent löschen?",
+    "deleteConfirmDescription": "Entfernt den Agenten mit allen Läufen, Berichten und Abos. Kann nicht rückgängig gemacht werden.",
+    "paused": "Agent pausiert",
+    "resumed": "Agent fortgesetzt",
+    "deleted": "Agent gelöscht",
+    "actionFailed": "Aktion fehlgeschlagen"
+  },
+  "adminDashboard": {
+    "refresh": "Aktualisieren",
+    "retry": "Erneut versuchen",
+    "loadError": "Übersicht konnte nicht geladen werden"
+  },
+  "adminFeed": {
+    "title": "Berichts-Übersicht",
+    "subtitle": "Berichts-Pipeline über alle Nutzer",
+    "latestReports": "Neueste Berichte",
+    "review": "Review",
+    "unread": "Ungelesen",
+    "kpi": {
+      "reports30d": "Berichte (30 T.)",
+      "unreadRate": "Ungelesen-Quote (30 T.)",
+      "reviewQueue": "Review-Warteschlange",
+      "tokens30d": "Tokens (30 T.)",
+      "cost30d": "Kosten (30 T.)",
+      "avgTokens": "Ø Tokens / Bericht"
+    },
+    "col": {
+      "report": "Bericht",
+      "model": "Modell",
+      "tokens": "Tokens",
+      "cost": "Kosten",
+      "status": "Status",
+      "created": "Erstellt"
+    }
+  },
+  "adminLibrary": {
+    "title": "Quellen-Übersicht",
+    "subtitle": "Quellen- und Crawl-Zustand über alle Nutzer",
+    "stale": "Stale",
+    "unfollowed": "Keine Agenten",
+    "kpi": {
+      "sources": "Aktive / alle Quellen",
+      "items30d": "Neue Items (30 T.)",
+      "stale": "Stale Quellen",
+      "unfollowed": "Quellen ohne Agenten"
+    },
+    "col": {
+      "source": "Quelle",
+      "agents": "Agenten",
+      "items30d": "Items 30 T.",
+      "lastItem": "Letztes Item",
+      "status": "Status"
+    }
+  },
+  "adminStudio": {
+    "title": "Diskussions-Übersicht",
+    "subtitle": "Studio-Diskussionen über alle Nutzer",
+    "runFailed": "fehlgeschlagen",
+    "kpi": {
+      "discussions": "Diskussionen",
+      "runs30d": "Läufe (30 T.)",
+      "failed30d": "Fehlschläge (30 T.)",
+      "turns30d": "Turns (30 T.)",
+      "audio30d": "Audio-Läufe (30 T.)"
+    },
+    "col": {
+      "discussion": "Diskussion",
+      "participants": "Teilnehmer",
+      "runs": "Läufe",
+      "turns": "Turns",
+      "audio": "Audio",
+      "lastRun": "Letzter Lauf"
+    }
   }
 }

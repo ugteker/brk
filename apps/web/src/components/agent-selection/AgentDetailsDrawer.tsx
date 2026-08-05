@@ -156,7 +156,7 @@ export function AgentDetailsDrawer({ open, loading, match, source, onClose, onUs
                 <div className="mt-2 space-y-2">
                   {match.reasons.length > 0 ? match.reasons.map((reason) => (
                     <div key={`${reason.code}:${reason.value}`} className="flex items-start gap-2 text-sm text-foreground/85">
-                      <CheckCircleOutlined className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <CheckCircleOutlined className="mt-0.5 shrink-0 text-leaf-600 dark:text-leaf-400" />
                       <span>{formatReason(reason.code, reason.value, t)}</span>
                     </div>
                   )) : (

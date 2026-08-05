@@ -155,8 +155,8 @@ agent, playbook, or run. Advanced runtime configuration is outside the guided se
   via antd `ConfigProvider` algorithm (not just Tailwind `.dark`).
 - **Testing**: TDD convention; in-memory fake repositories for API tests;
   `createTestAuthDeps()`/`authCookieHeader()` for protected-route tests.
-- **`apps/web/src/pages/AgentsPage.tsx` is a large monolith** containing much of the
-  app shell, hubs, wizards, and admin swap — biggest refactoring debt.
+- **Web pages are organized by area** (`apps/web/src/pages/feed|library|admin|studio|shared`),
+  one independent route page per area (formerly the `AgentsPage.tsx`/`HubPage.tsx` monolith).
 - Windows dev: stop dev servers before `prisma generate`/`db push` (DLL file lock).
   Web preview serves a static build — rebuild + restart after web changes.
 - **Known limitation**: YouTube auto-generated (ASR) captions are IP-blocked from
@@ -175,8 +175,8 @@ agent, playbook, or run. Advanced runtime configuration is outside the guided se
 - All new Library UI strings and controls are i18n-ready (en/de).
 
 ### Layout & information architecture
-5. **Real routing** ✅ Done: react-router-dom v7 — BrowserRouter + routes (`/`, `/library`, `/agents`, `/playbooks`, `/studio`, `*`→redirect). `AgentsPage` accepts `hub` prop; `setActiveHub()` calls `navigate()`. nginx already supports SPA routing.
-6. **Split `AgentsPage.tsx`** ✅ Done: extracted `AppDataContext` providing agents/sources/playbooks/marketplace data + refresh functions to all children. `App.tsx` wraps with `AppDataProvider` inside `AuthGate`. AgentsPage now pulls data from context; old inline load useEffects and duplicate refresh functions removed. Build clean.
+5. **Real routing** ✅ Done: react-router-dom v7 — BrowserRouter + routes (`/`, `/library`, `/agents`, `/playbooks`, `/studio`, `*`→redirect). `HubPage` (formerly `AgentsPage`) accepts `hub` prop; `setActiveHub()` calls `navigate()`. nginx already supports SPA routing.
+6. **Split `AgentsPage.tsx`** ✅ Done: extracted `AppDataContext` providing agents/sources/playbooks/marketplace data + refresh functions to all children. `App.tsx` wraps with `AppDataProvider` inside `AuthGate`. Later fully decomposed into `pages/hub/` (HubPage orchestrator + components + hooks) and renamed to `HubPage`.
 7. **Dashboard = outcomes, not config** ✅ Done: added "Feed" tab (default landing, key `feed`) showing latest reports across all playbooks in a card list with the report's key takeaways/entities, character/playbook name, date. Clicking a card navigates to that report in the playbooks hub. Empty state with CTA to Library.
 8. **Unify "Summarize" and Playbook wizards** ✅ Done: added "Advanced settings" expandable section in follow-source wizard step 1 (schedule + recipients). When collapsed, sane defaults are used automatically.
 
