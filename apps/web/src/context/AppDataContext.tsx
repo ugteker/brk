@@ -2,7 +2,7 @@
  * AppDataContext — shared agent/source/playbook data for all route-level components.
  *
  * Provides agents, sources, playbooks and their load states to any descendant component.
- * AgentsPage and future hub-level components consume this context instead of managing
+ * HubPage and future hub-level components consume this context instead of managing
  * their own top-level data state.
  */
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';

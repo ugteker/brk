@@ -127,11 +127,15 @@ one dedicated scheduler process for background jobs), sharing one SQLite DB in W
   react-router-dom v7, wraps the tree in `AppDataProvider` (inside `AuthGate`).
 - **`context/`** — `AppDataContext` supplies agents/sources/playbooks/marketplace data +
   refresh functions to all pages, so pages don't each own duplicate load/refresh logic.
-- **`pages/AgentsPage.tsx`** — **known large monolith** (~5000 lines): app shell, the
-  Feed/Sources/Agents/Playbooks hub tabs, wizards, and admin swap all live here. This is
-  the biggest refactoring debt in the codebase; when making changes here, read only the
-  relevant tab/section rather than the whole file, and prefer extracting a tab into its
-  own component over adding more to the monolith.
+- **`pages/hub/`** — the four hub tabs (Feed `/`, Library `/library`, Agents `/agents`,
+  Playbooks `/playbooks`), all rendered by **`HubPage.tsx`** (~1700-line orchestrator:
+  state, effects, handlers, composition; formerly the ~4800-line `AgentsPage.tsx`
+  monolith). Extracted pieces live alongside it: `FeedTab.tsx`, `types.ts`,
+  `helpers.tsx`, `components/` (LibraryTab, AdminWorkspace, FollowWizardModal,
+  ReportDrawer, AgentPickerModal, ScheduleEditModal) and `hooks/` (useHubNavigation,
+  useReportsFeed, useScheduleDraft). React Router keeps ONE HubPage instance mounted
+  across all four routes; the active hub is derived from the URL. When changing hub
+  behavior, prefer editing/extending the extracted component over growing HubPage.
 - **`realtime/`** — `useAgentStream` hook wrapping native `EventSource` (auto-reconnect)
   for the SSE run/report updates.
 - UI is Ant Design (v6) + a few legacy shadcn primitives + Tailwind; dark theme must work

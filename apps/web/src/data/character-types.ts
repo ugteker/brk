@@ -3,7 +3,7 @@ import type { CharacterType } from '../api/agents';
 /**
  * Single source of truth for a character type's pill/tag color and emoji, so the same
  * persona always renders with the same identity across every view (Agents hub, Reports,
- * Studio, etc). Previously `AgentsPage.tsx` and `AgentReportsBrowser.tsx` each maintained
+ * Studio, etc). Previously the hub page (`HubPage.tsx`) and `AgentReportsBrowser.tsx` each maintained
  * their own copy of this map and had drifted out of sync (every color disagreed except
  * `summarizer`) - this is now the only place either should be defined.
  */

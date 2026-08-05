@@ -2,7 +2,7 @@ import { Spin } from 'antd';
 import { useRef, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useSafeNavigate } from './utils/useSafeNavigate';
-import { AgentsPage } from './pages/AgentsPage';
+import { HubPage } from './pages/hub/HubPage';
 import { AuthPage } from './pages/AuthPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
@@ -98,10 +98,10 @@ function AnimatedRoutes() {
   return (
     <div key={location.pathname} className="ct-page-enter">
       <Routes>
-        <Route path="/" element={<AgentsPage hub="feed" />} />
-        <Route path="/library" element={<AgentsPage hub="sources" />} />
-        <Route path="/agents" element={<RequireAdmin><AgentsPage hub="agents" /></RequireAdmin>} />
-        <Route path="/playbooks" element={<RequireAdmin><AgentsPage hub="playbooks" /></RequireAdmin>} />
+        <Route path="/" element={<HubPage hub="feed" />} />
+        <Route path="/library" element={<HubPage hub="sources" />} />
+        <Route path="/agents" element={<RequireAdmin><HubPage hub="agents" /></RequireAdmin>} />
+        <Route path="/playbooks" element={<RequireAdmin><HubPage hub="playbooks" /></RequireAdmin>} />
         <Route path="/admin/users" element={<RequireAdmin><AdminUsersRoute /></RequireAdmin>} />
         <Route path="/studio" element={<StudioHub />} />
         <Route path="/studio/new" element={<NewDiscussionWizard />} />
