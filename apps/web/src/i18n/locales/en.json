@@ -7,6 +7,7 @@
     "delete": "Delete",
     "remove": "Remove",
     "edit": "Edit",
+    "moreActions": "More actions",
     "create": "Create",
     "update": "Update",
     "close": "Close",
@@ -30,25 +31,25 @@
     "library": "Library",
     "agents": "Agents",
     "playbooks": "Playbooks",
-  "adminArea": "Agents & Playbooks",
-  "accountMenu": "Account menu",
-  "userManagement": "User Management",
-  "logOut": "Log out",
-  "modeAdmin": "Admin",
-  "adminModeEnable": "Switch to admin mode",
-  "adminModeDisable": "Switch to dashboard mode",
-  "bellLabel": "Notifications",
-  "bellTitle": "Notifications",
-  "bellClearAll": "Clear all",
-  "bellEmpty": "Nothing new 🎉",
-  "bellNewReport": "New report",
-  "bellRunFailed": "Run failed",
-  "mobileMenu": "Menu",
-  "themeToLight": "Switch to light mode",
-  "themeToDark": "Switch to dark mode",
-  "bell_show_started": "Your show just started recording",
-  "bell_show_finished": "Your show is ready to read",
-  "bell_audio_ready": "Audio is ready to listen"
+    "adminArea": "Agents & Playbooks",
+    "accountMenu": "Account menu",
+    "userManagement": "User Management",
+    "logOut": "Log out",
+    "modeAdmin": "Admin",
+    "adminModeEnable": "Switch to admin mode",
+    "adminModeDisable": "Switch to dashboard mode",
+    "bellLabel": "Notifications",
+    "bellTitle": "Notifications",
+    "bellClearAll": "Clear all",
+    "bellEmpty": "Nothing new 🎉",
+    "bellNewReport": "New report",
+    "bellRunFailed": "Run failed",
+    "mobileMenu": "Menu",
+    "themeToLight": "Switch to light mode",
+    "themeToDark": "Switch to dark mode",
+    "bell_show_started": "Your show just started recording",
+    "bell_show_finished": "Your show is ready to read",
+    "bell_audio_ready": "Audio is ready to listen"
   },
   "language": {
     "switchTo": "Sprache: Deutsch",
@@ -78,7 +79,7 @@
     "starterLoadRetry": "Try again",
     "savedEmptyTitle": "Your library is ready for your first source",
     "savedEmptyDescription": "Sources you add will appear here.",
-    "addSource": "Add another source",
+    "addSource": "Add source",
     "nextActionLabel": "Next up",
     "nextActionHint": "Start by adding a source",
     "howItWorks": "How it works",
@@ -93,7 +94,6 @@
     "noEpisodes": "No scanned episodes/items yet",
     "noRuns": "No discussion runs yet",
     "recentEpisodes": "Recent episodes preview",
-    "recentRuns": "Recent runs",
     "episodesPreview": "Episodes preview",
     "episodes": "Episodes: {{count}}",
     "clone": "Clone",
@@ -134,8 +134,9 @@
     "reportPlural": "reports",
     "alreadyWatching": "Already watching",
     "youtubeTranscriptNote": "Full transcripts may be unavailable for this source when running from a datacenter IP — show notes only as fallback.",
-    "agentFollowLabel": "Agents follow",
-    "recentItems": "Latest items",
+    "followAgentCta": "Follow with an agent",
+    "agentFollows": "{{name}} follows",
+    "agentsFollowCount": "{{count}} agents follow",
     "manageSource": "Manage source",
     "removeFromLibrary": "Remove from library",
     "addAgent": "Add agent",
@@ -145,17 +146,18 @@
     "coverUnavailable": "Cover unavailable",
     "reportsAvailable": "{{count}} reports available",
     "latestReportAt": "Latest report: {{date}}",
-    "openReports": "Open {{count}} reports",
     "noReportsYet": "No reports yet",
     "reportsWillAppearHere": "Results will appear here after an analysis.",
-    "sourceReportsAvailableHint": "Open to view reports for this source",
     "removeAgentFromSource": "Remove agent from this source",
     "removeAgentConfirm": "Remove {{name}} from this source?",
     "removeAgentConfirmDescription": "The agent remains available and is not deleted.",
     "agentRemovedFromSource": "Agent removed from this source.",
     "removeAgentFromSourceFailed": "Could not remove the agent from this source.",
     "addSourceFailed": "Failed to add source.",
-    "removeSourceFailed": "Failed to remove source."
+    "removeSourceFailed": "Failed to remove source.",
+    "deleteTab": "Delete tab",
+    "deleteTabConfirm": "Delete tab \"{{name}}\"?",
+    "deleteTabConfirmDescription": "Its sources move back to the main library."
   },
   "feed": {
     "groupToday": "Today",
@@ -325,8 +327,13 @@
     "intervalAriaLabel": "Playbook interval minutes",
     "daysOfWeekAriaLabel": "Playbook days of week",
     "days": {
-      "mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu",
-      "fri": "Fri", "sat": "Sat", "sun": "Sun"
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
     }
   },
   "playbook": {
@@ -643,58 +650,146 @@
       "name": "Finance Expert",
       "tagline": "Signals-focused equity analysis and risk-aware market interpretation.",
       "characters": {
-        "conservative-analyst":       { "name": "Conservative Analyst",       "tagline": "Blue-chip focus, high evidence bar, cautious on long/short calls.", "intro": "I keep my powder dry. Hard numbers first — if the evidence isn't concrete, I stay quiet." },
-        "balanced-analyst":           { "name": "Balanced Analyst",           "tagline": "General-purpose, evidence-weighted long/short calls (default).",   "intro": "I weigh both sides before picking a direction. Solid analysis, no drama, always cite the source." },
-        "aggressive-momentum-trader": { "name": "Aggressive Momentum Trader", "tagline": "Fast-moving, hype and sentiment driven, higher signal volume.",     "intro": "I move fast and chase conviction. Sentiment counts — first in wins." },
-        "contrarian-value-investor":  { "name": "Contrarian Value Investor",  "tagline": "Looks for oversold/undervalued names the crowd has given up on.",  "intro": "Everyone's wrong sometimes. I look for the names the crowd gave up on too early." },
-        "quant-data-driven-analyst":  { "name": "Quant / Data-Driven Analyst","tagline": "Numbers-only: requires explicit financial metrics before signaling.","intro": "No numbers, no signal. I only speak when there's something measurable to say." },
-        "short-seller-skeptic":       { "name": "Short-Seller / Skeptic",     "tagline": "Hunts for red flags, overhype, and fraud/accounting concerns.",    "intro": "Show me the red flags. I find trouble before you stumble into it." },
-        "macro-thematic-strategist":  { "name": "Macro / Thematic Strategist","tagline": "Sector rotation and macro-theme driven calls (rates, AI, energy).","intro": "I tie individual names to the big picture — rates, AI cycles, sector rotations." }
+        "conservative-analyst": {
+          "name": "Conservative Analyst",
+          "tagline": "Blue-chip focus, high evidence bar, cautious on long/short calls.",
+          "intro": "I keep my powder dry. Hard numbers first — if the evidence isn't concrete, I stay quiet."
+        },
+        "balanced-analyst": {
+          "name": "Balanced Analyst",
+          "tagline": "General-purpose, evidence-weighted long/short calls (default).",
+          "intro": "I weigh both sides before picking a direction. Solid analysis, no drama, always cite the source."
+        },
+        "aggressive-momentum-trader": {
+          "name": "Aggressive Momentum Trader",
+          "tagline": "Fast-moving, hype and sentiment driven, higher signal volume.",
+          "intro": "I move fast and chase conviction. Sentiment counts — first in wins."
+        },
+        "contrarian-value-investor": {
+          "name": "Contrarian Value Investor",
+          "tagline": "Looks for oversold/undervalued names the crowd has given up on.",
+          "intro": "Everyone's wrong sometimes. I look for the names the crowd gave up on too early."
+        },
+        "quant-data-driven-analyst": {
+          "name": "Quant / Data-Driven Analyst",
+          "tagline": "Numbers-only: requires explicit financial metrics before signaling.",
+          "intro": "No numbers, no signal. I only speak when there's something measurable to say."
+        },
+        "short-seller-skeptic": {
+          "name": "Short-Seller / Skeptic",
+          "tagline": "Hunts for red flags, overhype, and fraud/accounting concerns.",
+          "intro": "Show me the red flags. I find trouble before you stumble into it."
+        },
+        "macro-thematic-strategist": {
+          "name": "Macro / Thematic Strategist",
+          "tagline": "Sector rotation and macro-theme driven calls (rates, AI, energy).",
+          "intro": "I tie individual names to the big picture — rates, AI cycles, sector rotations."
+        }
       }
     },
     "teacher": {
       "name": "Teacher",
       "tagline": "Explains ideas step-by-step for learning and retention.",
       "characters": {
-        "teacher-mentor":               { "name": "Mentor",               "tagline": "Guides learners with coaching-style explanations.",   "intro": "I guide you step by step — think of me as your personal learning companion." },
-        "teacher-classroom-instructor": { "name": "Classroom Instructor", "tagline": "Structured lessons with clear checkpoints.",          "intro": "Clear structure, steady checkpoints. I make complex ideas easy to follow." },
-        "teacher-practical-coach":      { "name": "Practical Coach",      "tagline": "Actionable guidance with hands-on examples.",         "intro": "Skip the theory. I give you hands-on examples you can use right away." }
+        "teacher-mentor": {
+          "name": "Mentor",
+          "tagline": "Guides learners with coaching-style explanations.",
+          "intro": "I guide you step by step — think of me as your personal learning companion."
+        },
+        "teacher-classroom-instructor": {
+          "name": "Classroom Instructor",
+          "tagline": "Structured lessons with clear checkpoints.",
+          "intro": "Clear structure, steady checkpoints. I make complex ideas easy to follow."
+        },
+        "teacher-practical-coach": {
+          "name": "Practical Coach",
+          "tagline": "Actionable guidance with hands-on examples.",
+          "intro": "Skip the theory. I give you hands-on examples you can use right away."
+        }
       }
     },
     "influencer": {
       "name": "Influencer",
       "tagline": "Creates audience-ready narratives and content angles.",
       "characters": {
-        "influencer-trend-scout":          { "name": "Trend Scout",          "tagline": "Finds timely themes and attention hooks.",           "intro": "I sniff out what's trending before the crowd notices. Hooks first, always." },
-        "influencer-storyteller":          { "name": "Storyteller",          "tagline": "Crafts compelling narratives from evidence.",         "intro": "Every data point has a story. I craft the narrative that makes people listen." },
-        "influencer-campaign-strategist":  { "name": "Campaign Strategist",  "tagline": "Builds clear campaign messaging plans.",             "intro": "I turn insights into messaging plans your audience will actually act on." }
+        "influencer-trend-scout": {
+          "name": "Trend Scout",
+          "tagline": "Finds timely themes and attention hooks.",
+          "intro": "I sniff out what's trending before the crowd notices. Hooks first, always."
+        },
+        "influencer-storyteller": {
+          "name": "Storyteller",
+          "tagline": "Crafts compelling narratives from evidence.",
+          "intro": "Every data point has a story. I craft the narrative that makes people listen."
+        },
+        "influencer-campaign-strategist": {
+          "name": "Campaign Strategist",
+          "tagline": "Builds clear campaign messaging plans.",
+          "intro": "I turn insights into messaging plans your audience will actually act on."
+        }
       }
     },
     "trainer": {
       "name": "Trainer",
       "tagline": "Builds repeatable practice routines and performance drills.",
       "characters": {
-        "trainer-drill-sergeant":   { "name": "Drill Sergeant",      "tagline": "Direct training with disciplined repetition.",       "intro": "Repetition is key. I push you until the right habits stick — no excuses." },
-        "trainer-supportive-coach": { "name": "Supportive Coach",    "tagline": "Encouraging feedback with progressive goals.",       "intro": "Progress over perfection. I keep you moving forward with encouragement." },
-        "trainer-exam-prep":        { "name": "Exam Prep Trainer",   "tagline": "Targets likely test points and recall drills.",      "intro": "Focused recall drills on the topics that matter most. Let's get you ready." }
+        "trainer-drill-sergeant": {
+          "name": "Drill Sergeant",
+          "tagline": "Direct training with disciplined repetition.",
+          "intro": "Repetition is key. I push you until the right habits stick — no excuses."
+        },
+        "trainer-supportive-coach": {
+          "name": "Supportive Coach",
+          "tagline": "Encouraging feedback with progressive goals.",
+          "intro": "Progress over perfection. I keep you moving forward with encouragement."
+        },
+        "trainer-exam-prep": {
+          "name": "Exam Prep Trainer",
+          "tagline": "Targets likely test points and recall drills.",
+          "intro": "Focused recall drills on the topics that matter most. Let's get you ready."
+        }
       }
     },
     "philosopher": {
       "name": "Philosopher",
       "tagline": "Interprets ideas through reasoning, assumptions, and ethics.",
       "characters": {
-        "philosopher-socratic-guide":   { "name": "Socratic Guide",   "tagline": "Uses questions to reveal assumptions.",              "intro": "I answer your questions with better questions. Assumptions deserve scrutiny." },
-        "philosopher-critical-thinker": { "name": "Critical Thinker", "tagline": "Stress-tests logic and evidence quality.",           "intro": "I stress-test every argument. If the logic doesn't hold, I'll find the crack." },
-        "philosopher-ethics-analyst":   { "name": "Ethics Analyst",   "tagline": "Balances decisions with ethical consequences.",      "intro": "Decisions have consequences beyond the obvious. I keep the bigger picture honest." }
+        "philosopher-socratic-guide": {
+          "name": "Socratic Guide",
+          "tagline": "Uses questions to reveal assumptions.",
+          "intro": "I answer your questions with better questions. Assumptions deserve scrutiny."
+        },
+        "philosopher-critical-thinker": {
+          "name": "Critical Thinker",
+          "tagline": "Stress-tests logic and evidence quality.",
+          "intro": "I stress-test every argument. If the logic doesn't hold, I'll find the crack."
+        },
+        "philosopher-ethics-analyst": {
+          "name": "Ethics Analyst",
+          "tagline": "Balances decisions with ethical consequences.",
+          "intro": "Decisions have consequences beyond the obvious. I keep the bigger picture honest."
+        }
       }
     },
     "summarizer": {
       "name": "Summarizer",
       "tagline": "Distills complex inputs into concise decision-ready takeaways.",
       "characters": {
-        "summarizer-executive-briefer":  { "name": "Executive Briefer",  "tagline": "Top-line brief for fast executive decisions.",     "intro": "Top-line only. I give you the signal without the noise — fast." },
-        "summarizer-research-digestor":  { "name": "Research Digestor",  "tagline": "Turns noisy inputs into focused research notes.",  "intro": "Dense inputs, focused output. I turn chaos into a clean research note." },
-        "summarizer-action-planner":     { "name": "Action Planner",     "tagline": "Converts insights into prioritized action items.", "intro": "Insights are useless unless they drive action. I turn findings into next steps." }
+        "summarizer-executive-briefer": {
+          "name": "Executive Briefer",
+          "tagline": "Top-line brief for fast executive decisions.",
+          "intro": "Top-line only. I give you the signal without the noise — fast."
+        },
+        "summarizer-research-digestor": {
+          "name": "Research Digestor",
+          "tagline": "Turns noisy inputs into focused research notes.",
+          "intro": "Dense inputs, focused output. I turn chaos into a clean research note."
+        },
+        "summarizer-action-planner": {
+          "name": "Action Planner",
+          "tagline": "Converts insights into prioritized action items.",
+          "intro": "Insights are useless unless they drive action. I turn findings into next steps."
+        }
       }
     }
   },

@@ -1,4 +1,4 @@
-import { Badge, Button, Card, Dropdown, Empty, Input, Modal, Skeleton, Tabs, Tag, Typography } from 'antd';
+import { Badge, Button, Card, Dropdown, Empty, Input, Modal, Popconfirm, Skeleton, Tabs, Tag, Typography } from 'antd';
 import { ArrowLeftOutlined, AudioOutlined, CaretRightOutlined, CheckCircleOutlined, CompassOutlined, DatabaseOutlined, DeleteOutlined, EditOutlined, FieldTimeOutlined, LinkOutlined, LoadingOutlined, MailOutlined, MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReadOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
 import { AgentRunsBrowser } from '../../components/AgentRunsBrowser';
 import { EntityActions } from '../../components/EntityActions';
@@ -7,6 +7,7 @@ import { ListenIdleButton } from '../../components/ListenButtons';
 import { LibraryOverview } from '../../components/library/LibraryOverview';
 import { SourceSearchPicker } from '../../components/SourceSearchPicker';
 import { TouchSafeTooltip } from '../../components/TouchSafeTooltip';
+import { DEFAULT_LIBRARY_TAB_ID } from '../shared/types';
 import { getCharacterTypeEmoji, getCharacterTypeIconBg } from '../../data/character-types';
 import { getAgentDisplayLabel } from '../../utils/agent-label';
 import { extractYoutubeVideoId, getYoutubeThumbnailUrl } from '../../utils/youtube';
@@ -16,7 +17,7 @@ import type { DigestFrequency } from '../../api/playbooks';
 const { Title, Text } = Typography;
 
 export function LibraryTab({ ctx }: { ctx: any }) {
-  const { activeLibraryTabId, activeSourceTab, agents, autoDetectedSource, catalogLoadState, cloningPublicationId, closeSourceDialog, commitEditingLibraryTab, createLibraryTab, deletePlaybook, detectTimerRef, editingLibraryTabId, editingLibraryTabName, editingSource, filteredMarketplaceSources, filteredSources, getSourceEpisodeCount, getSourceKindLabel, highlightedAgentIdBySourceId, i18n, isPostSourceAgentGuidancePending, isSourceCreateOpen, isSourceDetecting, isSourceSaving, libraryGuidanceSeen, libraryTabs, linkedAgentsBySourceId, marketplaceSourceCount, markLibraryGuidanceSeen, materialAudioByItemKey, materialAudioLoadingItemKey, message, navigate, normaliseUrl, normalizedSourceSearch, onCloneMarketplaceSource, onCreateDetectedSource, onDeleteSource, onDetectSourceFromUrl, onDiscussSource, onEditSource, onFollowSource, onLibraryTabClick, onOpenScheduleEdit, onPickSearchedSource, onPlaySyntheticMaterialAudio, onRemoveAgentFromSource, onResendReportEmail, onRunSourceEpisode, onSaveStarterSource, onSourceUrlChange, onTogglePlaybookEnabled, openMaterialAudioItemKey, openReportDrawer, openSourceInLibrary, parseSyntheticRunId, playbooks, publishSource, recentlyConnectedAgent, refreshCatalog, refreshMarketplaceCounts, refreshPlaybooks, removeCatalogSource, resendingReportId, runningAgentId, selectedSourceId, setActiveLibraryTabId, setActiveSourceTab, setAutoDetectedSource, setEditingLibraryTabName, setEditingSource, setIsSourceCreateOpen, setRecentlyUpdatedSourceId, setSelectedSourceId, setShowSourcesMarketplace, setSourceUrlDraft, setSourcesSearch, shareSource, showSourcesMarketplace, sourceDetailLoading, sourceDetailReports, sourceDetailRuns, sources, sourcesLoadState, sourceUrlDraft, sourcesSearch, starterSources, startEditingLibraryTab, t, togglingPlaybookId, updatePlaybook, user } = ctx;
+  const { activeLibraryTabId, activeSourceTab, agents, autoDetectedSource, catalogLoadState, cloningPublicationId, closeSourceDialog, commitEditingLibraryTab, createLibraryTab, deleteLibraryTab, deletePlaybook, detectTimerRef, editingLibraryTabId, editingLibraryTabName, editingSource, filteredMarketplaceSources, filteredSources, getSourceEpisodeCount, getSourceKindLabel, highlightedAgentIdBySourceId, i18n, isPostSourceAgentGuidancePending, isSourceCreateOpen, isSourceDetecting, isSourceSaving, libraryGuidanceSeen, libraryTabs, linkedAgentsBySourceId, marketplaceSourceCount, markLibraryGuidanceSeen, materialAudioByItemKey, materialAudioLoadingItemKey, message, navigate, normaliseUrl, normalizedSourceSearch, onCloneMarketplaceSource, onCreateDetectedSource, onDeleteSource, onDetectSourceFromUrl, onDiscussSource, onEditSource, onFollowSource, onLibraryTabClick, onOpenScheduleEdit, onPickSearchedSource, onPlaySyntheticMaterialAudio, onRemoveAgentFromSource, onResendReportEmail, onRunSourceEpisode, onSaveStarterSource, onSourceUrlChange, onTogglePlaybookEnabled, openMaterialAudioItemKey, openReportDrawer, openSourceInLibrary, parseSyntheticRunId, playbooks, publishSource, recentlyConnectedAgent, refreshCatalog, refreshMarketplaceCounts, refreshPlaybooks, removeCatalogSource, resendingReportId, runningAgentId, selectedSourceId, setActiveLibraryTabId, setActiveSourceTab, setAutoDetectedSource, setEditingLibraryTabName, setEditingSource, setIsSourceCreateOpen, setRecentlyUpdatedSourceId, setSelectedSourceId, setShowSourcesMarketplace, setSourceUrlDraft, setSourcesSearch, shareSource, showSourcesMarketplace, sourceDetailLoading, sourceDetailReports, sourceDetailRuns, sources, sourcesLoadState, sourceUrlDraft, sourcesSearch, starterSources, startEditingLibraryTab, t, togglingPlaybookId, updatePlaybook, user } = ctx;
 
   return (
                   <Card
@@ -59,25 +60,22 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                        if (tab) startEditingLibraryTab(tab);
                      }}
                    >
+                     {libraryTabs.length <= 1 ? null : (
                      <Tabs
                        activeKey={activeLibraryTabId}
                        onChange={(key) => {
+                         if (key === '__add__') return;
                          setActiveLibraryTabId(key);
                          setShowSourcesMarketplace(false);
                        }}
-                       onTabClick={onLibraryTabClick}
-                       tabBarExtraContent={
-                         <TouchSafeTooltip title={t('library.tabTooltip')}>
-                           <Button
-                             aria-label={t('library.createTab')}
-                             size="small"
-                             shape="circle"
-                             icon={<PlusOutlined />}
-                             onClick={createLibraryTab}
-                           />
-                         </TouchSafeTooltip>
-                       }
-                       items={libraryTabs.map((tab: any) => ({
+                       onTabClick={(key, event) => {
+                         if (key === '__add__') {
+                           createLibraryTab();
+                           return;
+                         }
+                         onLibraryTabClick(key, event);
+                       }}
+                       items={[...libraryTabs.map((tab: any) => ({
                          key: tab.id,
                          label:
                            editingLibraryTabId === tab.id ? (
@@ -96,22 +94,50 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                              <span className="inline-flex items-center gap-1">
                                {tab.name}
                                {tab.id === activeLibraryTabId ? (
-                                 <button
-                                   type="button"
-                                   aria-label={t('library.renameTab')}
-                                   onClick={(event) => {
-                                     event.stopPropagation();
-                                     startEditingLibraryTab(tab);
-                                   }}
-                                   className="text-xs text-gray-500 hover:text-gray-700"
-                                 >
-                                   ✎
-                                 </button>
+                                 <>
+                                   <button
+                                     type="button"
+                                     aria-label={t('library.renameTab')}
+                                     onClick={(event) => {
+                                       event.stopPropagation();
+                                       startEditingLibraryTab(tab);
+                                     }}
+                                     className="text-xs text-gray-500 hover:text-gray-700"
+                                   >
+                                     ✎
+                                   </button>
+                                   {tab.id !== DEFAULT_LIBRARY_TAB_ID ? (
+                                     <Popconfirm
+                                       title={t('library.deleteTabConfirm', { name: tab.name })}
+                                       description={t('library.deleteTabConfirmDescription')}
+                                       okText={t('common.delete')}
+                                       cancelText={t('common.cancel')}
+                                       onConfirm={() => deleteLibraryTab(tab.id)}
+                                     >
+                                       <button
+                                         type="button"
+                                         aria-label={t('library.deleteTab')}
+                                         onClick={(event) => event.stopPropagation()}
+                                         className="text-xs text-gray-500 hover:text-red-500"
+                                       >
+                                         ✕
+                                       </button>
+                                     </Popconfirm>
+                                   ) : null}
+                                 </>
                                ) : null}
                              </span>
                            )
-                       }))}
+                       })), {
+                         key: '__add__',
+                         label: (
+                           <span aria-label={t('library.createTab')} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                             <PlusOutlined />
+                           </span>
+                         )
+                       }]}
                      />
+                     )}
                    </div>
 
                    {/* Search row — always visible */}
@@ -122,15 +148,25 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                        onChange={(event) => setSourcesSearch(event.currentTarget.value)}
                        placeholder="Search title, URL, or preview episode"
                        prefix={<SearchOutlined />}
-                       className="min-w-0 flex-1 sm:w-auto sm:flex-none"
-                       style={{ maxWidth: 420 }}
+                       className="min-w-0 flex-1"
                      />
                      <div className="flex shrink-0 items-center justify-end gap-2">
+                       {!showSourcesMarketplace && libraryTabs.length <= 1 ? (
+                         <TouchSafeTooltip title={t('library.tabTooltip')}>
+                           <Button
+                             aria-label={t('library.createTab')}
+                             type="text"
+                             icon={<PlusOutlined />}
+                             onClick={createLibraryTab}
+                           >
+                             <span className="hidden md:inline">{t('library.tabTooltip')}</span>
+                           </Button>
+                         </TouchSafeTooltip>
+                       ) : null}
                        {!showSourcesMarketplace ? (
-                         <TouchSafeTooltip title={t('library.addSource')}>
                            <Button
                              type="primary"
-                             shape="circle"
+                             shape="round"
                              icon={<PlusOutlined />}
                              aria-label={t('library.addSource')}
                              onClick={() => {
@@ -139,8 +175,9 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                                setSourceUrlDraft('');
                                setAutoDetectedSource(null);
                              }}
-                           />
-                         </TouchSafeTooltip>
+                           >
+                             <span className="hidden sm:inline">{t('library.addSource')}</span>
+                           </Button>
                        ) : null}
                      </div>
                    </div>
@@ -295,23 +332,17 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                                  onClick={(event) => onFollowSource(selectedSource, event)}
                                />
                              </TouchSafeTooltip>
-                             {sourceDetailReports.length > 0 ? (
-                               <TouchSafeTooltip title={t('studio.discussThisSource')}>
-                                 <Button
-                                   aria-label={t('studio.discussThisSource')}
-                                   shape="circle"
-                                   icon={<AudioOutlined />}
-                                   onClick={() => onDiscussSource(selectedSource)}
-                                 />
-                               </TouchSafeTooltip>
-                             ) : null}
                              <Dropdown
                                trigger={['click']}
                                menu={{
                                  items: [
+                                   ...(sourceDetailReports.length > 0
+                                     ? [{ key: 'discuss', label: t('studio.discussThisSource'), icon: <AudioOutlined /> }]
+                                     : []),
                                    { key: 'edit', label: t('common.edit'), icon: <EditOutlined /> }
                                  ],
                                  onClick: ({ key }) => {
+                                   if (key === 'discuss') onDiscussSource(selectedSource);
                                    if (key === 'edit') onEditSource(selectedSource);
                                  }
                                }}
@@ -593,32 +624,6 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                                                        />
                                                      </TouchSafeTooltip>
                                                    ) : null}
-                                                   {episodeReport ? (
-                                                     <TouchSafeTooltip title={t('library.resendEmail')}>
-                                                       <Button
-                                                         size="small"
-                                                         shape="circle"
-                                                         aria-label={t('library.resendEmail')}
-                                                         icon={<MailOutlined />}
-                                                         loading={resendingReportId === episodeReport.id}
-                                                         onClick={() => void onResendReportEmail(episodeReport)}
-                                                       />
-                                                     </TouchSafeTooltip>
-                                                   ) : null}
-                                                   {ep.link ? (
-                                                     <TouchSafeTooltip title={t('library.openLink')}>
-                                                       <Button
-                                                         size="small"
-                                                         shape="circle"
-                                                         aria-label={t('library.openLink')}
-                                                         icon={<LinkOutlined />}
-                                                         href={ep.link}
-                                                         target="_blank"
-                                                         rel="noopener noreferrer"
-                                                         onClick={(e) => e.stopPropagation()}
-                                                       />
-                                                     </TouchSafeTooltip>
-                                                   ) : null}
                                                    {linkedAgent && !episodeReport ? (
                                                      <TouchSafeTooltip title={t('library.runAnalysisNow')}>
                                                        <Button
@@ -630,6 +635,29 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                                                          onClick={() => void onRunSourceEpisode({ title: ep.title, link: ep.link!, pubDate: ep.pubDate })}
                                                        />
                                                      </TouchSafeTooltip>
+                                                   ) : null}
+                                                   {episodeReport || ep.link ? (
+                                                     <Dropdown
+                                                       trigger={['click']}
+                                                       menu={{
+                                                         items: [
+                                                           ...(episodeReport ? [{ key: 'resend', label: t('library.resendEmail'), icon: <MailOutlined /> }] : []),
+                                                           ...(ep.link ? [{ key: 'openLink', label: t('library.openLink'), icon: <LinkOutlined /> }] : [])
+                                                         ],
+                                                         onClick: ({ key }) => {
+                                                           if (key === 'resend' && episodeReport) void onResendReportEmail(episodeReport);
+                                                           if (key === 'openLink' && ep.link) window.open(ep.link, '_blank', 'noopener,noreferrer');
+                                                         }
+                                                       }}
+                                                     >
+                                                       <Button
+                                                         size="small"
+                                                         shape="circle"
+                                                         aria-label={t('common.moreActions')}
+                                                         icon={<MoreOutlined />}
+                                                         loading={episodeReport ? resendingReportId === episodeReport.id : false}
+                                                       />
+                                                     </Dropdown>
                                                    ) : null}
                                                  </div>
                                                </li>

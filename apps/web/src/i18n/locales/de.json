@@ -7,6 +7,7 @@
     "delete": "Löschen",
     "remove": "Entfernen",
     "edit": "Bearbeiten",
+    "moreActions": "Weitere Aktionen",
     "create": "Erstellen",
     "update": "Aktualisieren",
     "close": "Schließen",
@@ -77,7 +78,7 @@
     "starterLoadRetry": "Erneut versuchen",
     "savedEmptyTitle": "Deine Bibliothek ist bereit für die erste Quelle",
     "savedEmptyDescription": "Quellen, die du hinzufügst, erscheinen hier.",
-    "addSource": "Weitere Quelle hinzufügen",
+    "addSource": "Quelle hinzufügen",
     "nextActionLabel": "Nächster Schritt",
     "nextActionHint": "Füge zuerst eine Quelle hinzu",
     "howItWorks": "So funktioniert es",
@@ -92,7 +93,6 @@
     "noEpisodes": "Noch keine Folgen / Elemente gefunden.",
     "noRuns": "Noch keine Diskussionsläufe vorhanden.",
     "recentEpisodes": "Vorschau neueste Folgen",
-    "recentRuns": "Letzte Läufe",
     "episodesPreview": "Folgen-Vorschau",
     "episodes": "Folgen: {{count}}",
     "clone": "Klonen",
@@ -133,8 +133,9 @@
     "reportPlural": "Berichte",
     "alreadyWatching": "Beobachtet bereits",
     "youtubeTranscriptNote": "Vollständige Transkripte können für diese Quelle vom Datacenter-IP nicht verfügbar sein — Fallback auf Shownotes.",
-    "agentFollowLabel": "Agenten folgen",
-    "recentItems": "Neueste Inhalte",
+    "followAgentCta": "Agent folgen lassen",
+    "agentFollows": "{{name}} folgt",
+    "agentsFollowCount": "{{count}} Agenten folgen",
     "manageSource": "Quelle verwalten",
     "removeFromLibrary": "Aus Bibliothek entfernen",
     "addAgent": "Agent hinzufügen",
@@ -144,17 +145,18 @@
     "coverUnavailable": "Cover nicht verfügbar",
     "reportsAvailable": "{{count}} Berichte verfügbar",
     "latestReportAt": "Letzter Bericht: {{date}}",
-    "openReports": "{{count}} Berichte öffnen",
     "noReportsYet": "Noch keine Berichte",
     "reportsWillAppearHere": "Ergebnisse erscheinen hier nach einer Analyse.",
-    "sourceReportsAvailableHint": "Öffnen, um Berichte zu dieser Quelle zu sehen",
     "removeAgentFromSource": "Agent von dieser Quelle entfernen",
     "removeAgentConfirm": "{{name}} von dieser Quelle entfernen?",
     "removeAgentConfirmDescription": "Der Agent bleibt erhalten und wird nicht gelöscht.",
     "agentRemovedFromSource": "Agent wurde von dieser Quelle entfernt.",
     "removeAgentFromSourceFailed": "Agent konnte nicht von dieser Quelle entfernt werden.",
     "addSourceFailed": "Quelle konnte nicht hinzugefügt werden.",
-    "removeSourceFailed": "Quelle konnte nicht entfernt werden."
+    "removeSourceFailed": "Quelle konnte nicht entfernt werden.",
+    "deleteTab": "Tab löschen",
+    "deleteTabConfirm": "Tab \"{{name}}\" löschen?",
+    "deleteTabConfirmDescription": "Die Quellen wandern zurück in die Haupt-Bibliothek."
   },
   "feed": {
     "groupToday": "Heute",
@@ -324,8 +326,13 @@
     "intervalAriaLabel": "Intervall in Minuten",
     "daysOfWeekAriaLabel": "Wochentage",
     "days": {
-      "mon": "Mo", "tue": "Di", "wed": "Mi", "thu": "Do",
-      "fri": "Fr", "sat": "Sa", "sun": "So"
+      "mon": "Mo",
+      "tue": "Di",
+      "wed": "Mi",
+      "thu": "Do",
+      "fri": "Fr",
+      "sat": "Sa",
+      "sun": "So"
     }
   },
   "playbook": {
@@ -642,58 +649,146 @@
       "name": "Finanzexperte",
       "tagline": "Signalbasierte Aktienanalyse und risikobewusste Marktinterpretation.",
       "characters": {
-        "conservative-analyst":       { "name": "Konservativer Analyst",       "tagline": "Blue-Chip-Fokus, hohe Beweishürde, vorsichtig bei Long/Short.",    "intro": "Ich halte mein Pulver trocken. Erst harte Zahlen — ohne konkrete Belege schweige ich." },
-        "balanced-analyst":           { "name": "Ausgewogener Analyst",        "tagline": "Ausgewogene, beweisbasierte Long/Short-Entscheidungen (Standard).", "intro": "Ich wäge beide Seiten ab, bevor ich eine Richtung wähle. Solide Analyse, kein Drama." },
-        "aggressive-momentum-trader": { "name": "Aggressiver Momentum-Trader", "tagline": "Schnell, stimmungsgetrieben, hohes Signalvolumen.",                "intro": "Ich bewege mich schnell und verfolge Überzeugung. Stimmung zählt — wer zuerst kommt, gewinnt." },
-        "contrarian-value-investor":  { "name": "Konträrer Value-Investor",    "tagline": "Sucht nach überkauften Namen, die die Masse zu früh aufgegeben hat.","intro": "Manchmal liegen alle falsch. Ich suche nach Namen, die die Masse zu früh aufgegeben hat." },
-        "quant-data-driven-analyst":  { "name": "Quant / Datenbasierter Analyst","tagline": "Nur Zahlen: erfordert explizite Finanzkennzahlen vor dem Signal.", "intro": "Keine Zahlen, kein Signal. Ich spreche nur, wenn es etwas Messbares zu sagen gibt." },
-        "short-seller-skeptic":       { "name": "Short-Seller / Skeptiker",    "tagline": "Sucht nach Red Flags, Übertreibungen und Bilanzproblemen.",        "intro": "Zeig mir die Warnsignale. Ich finde Probleme, bevor du darüber stolperst." },
-        "macro-thematic-strategist":  { "name": "Makro / Thematischer Stratege","tagline": "Sektorrotation und makrothematische Calls (Zinsen, KI, Energie).","intro": "Ich verbinde einzelne Werte mit dem großen Bild — Zinsen, KI-Zyklen, Sektorrotationen." }
+        "conservative-analyst": {
+          "name": "Konservativer Analyst",
+          "tagline": "Blue-Chip-Fokus, hohe Beweishürde, vorsichtig bei Long/Short.",
+          "intro": "Ich halte mein Pulver trocken. Erst harte Zahlen — ohne konkrete Belege schweige ich."
+        },
+        "balanced-analyst": {
+          "name": "Ausgewogener Analyst",
+          "tagline": "Ausgewogene, beweisbasierte Long/Short-Entscheidungen (Standard).",
+          "intro": "Ich wäge beide Seiten ab, bevor ich eine Richtung wähle. Solide Analyse, kein Drama."
+        },
+        "aggressive-momentum-trader": {
+          "name": "Aggressiver Momentum-Trader",
+          "tagline": "Schnell, stimmungsgetrieben, hohes Signalvolumen.",
+          "intro": "Ich bewege mich schnell und verfolge Überzeugung. Stimmung zählt — wer zuerst kommt, gewinnt."
+        },
+        "contrarian-value-investor": {
+          "name": "Konträrer Value-Investor",
+          "tagline": "Sucht nach überkauften Namen, die die Masse zu früh aufgegeben hat.",
+          "intro": "Manchmal liegen alle falsch. Ich suche nach Namen, die die Masse zu früh aufgegeben hat."
+        },
+        "quant-data-driven-analyst": {
+          "name": "Quant / Datenbasierter Analyst",
+          "tagline": "Nur Zahlen: erfordert explizite Finanzkennzahlen vor dem Signal.",
+          "intro": "Keine Zahlen, kein Signal. Ich spreche nur, wenn es etwas Messbares zu sagen gibt."
+        },
+        "short-seller-skeptic": {
+          "name": "Short-Seller / Skeptiker",
+          "tagline": "Sucht nach Red Flags, Übertreibungen und Bilanzproblemen.",
+          "intro": "Zeig mir die Warnsignale. Ich finde Probleme, bevor du darüber stolperst."
+        },
+        "macro-thematic-strategist": {
+          "name": "Makro / Thematischer Stratege",
+          "tagline": "Sektorrotation und makrothematische Calls (Zinsen, KI, Energie).",
+          "intro": "Ich verbinde einzelne Werte mit dem großen Bild — Zinsen, KI-Zyklen, Sektorrotationen."
+        }
       }
     },
     "teacher": {
       "name": "Lehrer",
       "tagline": "Erklärt Ideen Schritt für Schritt zum Lernen und Behalten.",
       "characters": {
-        "teacher-mentor":               { "name": "Mentor",              "tagline": "Begleitet Lernende mit Coaching-Erklärungen.",         "intro": "Ich führe dich Schritt für Schritt — stell dir mich als deinen persönlichen Lernbegleiter vor." },
-        "teacher-classroom-instructor": { "name": "Klassenlehrer",       "tagline": "Strukturierte Lektionen mit klaren Checkpoints.",      "intro": "Klare Struktur, stetige Checkpoints. Ich mache komplexe Ideen leicht verständlich." },
-        "teacher-practical-coach":      { "name": "Praxis-Coach",        "tagline": "Handlungsorientierte Anleitungen mit praktischen Beispielen.", "intro": "Keine Theorie. Ich gebe dir praktische Beispiele, die du sofort nutzen kannst." }
+        "teacher-mentor": {
+          "name": "Mentor",
+          "tagline": "Begleitet Lernende mit Coaching-Erklärungen.",
+          "intro": "Ich führe dich Schritt für Schritt — stell dir mich als deinen persönlichen Lernbegleiter vor."
+        },
+        "teacher-classroom-instructor": {
+          "name": "Klassenlehrer",
+          "tagline": "Strukturierte Lektionen mit klaren Checkpoints.",
+          "intro": "Klare Struktur, stetige Checkpoints. Ich mache komplexe Ideen leicht verständlich."
+        },
+        "teacher-practical-coach": {
+          "name": "Praxis-Coach",
+          "tagline": "Handlungsorientierte Anleitungen mit praktischen Beispielen.",
+          "intro": "Keine Theorie. Ich gebe dir praktische Beispiele, die du sofort nutzen kannst."
+        }
       }
     },
     "influencer": {
       "name": "Influencer",
       "tagline": "Erstellt publikumsgerechte Narrative und Content-Winkel.",
       "characters": {
-        "influencer-trend-scout":         { "name": "Trend Scout",         "tagline": "Findet aktuelle Themen und Aufmerksamkeitshaken.",    "intro": "Ich spüre auf, was trendet, bevor die Masse es merkt. Hooks zuerst, immer." },
-        "influencer-storyteller":         { "name": "Geschichtenerzähler", "tagline": "Gestaltet überzeugende Narrative aus Belegen.",        "intro": "Jeder Datenpunkt hat eine Geschichte. Ich gestalte die Narrative, die Menschen zuhören lässt." },
-        "influencer-campaign-strategist": { "name": "Kampagnenstratege",   "tagline": "Entwickelt klare Kampagnenbotschaften.",              "intro": "Ich verwandle Erkenntnisse in Botschaftspläne, auf die dein Publikum wirklich reagiert." }
+        "influencer-trend-scout": {
+          "name": "Trend Scout",
+          "tagline": "Findet aktuelle Themen und Aufmerksamkeitshaken.",
+          "intro": "Ich spüre auf, was trendet, bevor die Masse es merkt. Hooks zuerst, immer."
+        },
+        "influencer-storyteller": {
+          "name": "Geschichtenerzähler",
+          "tagline": "Gestaltet überzeugende Narrative aus Belegen.",
+          "intro": "Jeder Datenpunkt hat eine Geschichte. Ich gestalte die Narrative, die Menschen zuhören lässt."
+        },
+        "influencer-campaign-strategist": {
+          "name": "Kampagnenstratege",
+          "tagline": "Entwickelt klare Kampagnenbotschaften.",
+          "intro": "Ich verwandle Erkenntnisse in Botschaftspläne, auf die dein Publikum wirklich reagiert."
+        }
       }
     },
     "trainer": {
       "name": "Trainer",
       "tagline": "Entwickelt wiederholbare Übungsroutinen und Leistungsdrills.",
       "characters": {
-        "trainer-drill-sergeant":   { "name": "Drillsergeant",     "tagline": "Direktes Training mit disziplinierter Wiederholung.",  "intro": "Wiederholung ist der Schlüssel. Ich treibe dich, bis die richtigen Gewohnheiten sitzen." },
-        "trainer-supportive-coach": { "name": "Unterstützender Coach","tagline": "Ermutigendes Feedback mit schrittweisen Zielen.",   "intro": "Fortschritt vor Perfektion. Ich halte dich mit Ermutigung in Bewegung." },
-        "trainer-exam-prep":        { "name": "Prüfungscoach",     "tagline": "Zielt auf wahrscheinliche Prüfungsthemen und Abrufdrills.", "intro": "Gezielte Abrufdrills zu den wichtigsten Themen. Lass uns dich vorbereiten." }
+        "trainer-drill-sergeant": {
+          "name": "Drillsergeant",
+          "tagline": "Direktes Training mit disziplinierter Wiederholung.",
+          "intro": "Wiederholung ist der Schlüssel. Ich treibe dich, bis die richtigen Gewohnheiten sitzen."
+        },
+        "trainer-supportive-coach": {
+          "name": "Unterstützender Coach",
+          "tagline": "Ermutigendes Feedback mit schrittweisen Zielen.",
+          "intro": "Fortschritt vor Perfektion. Ich halte dich mit Ermutigung in Bewegung."
+        },
+        "trainer-exam-prep": {
+          "name": "Prüfungscoach",
+          "tagline": "Zielt auf wahrscheinliche Prüfungsthemen und Abrufdrills.",
+          "intro": "Gezielte Abrufdrills zu den wichtigsten Themen. Lass uns dich vorbereiten."
+        }
       }
     },
     "philosopher": {
       "name": "Philosoph",
       "tagline": "Interpretiert Ideen durch Argumentation, Annahmen und Ethik.",
       "characters": {
-        "philosopher-socratic-guide":   { "name": "Sokratischer Führer", "tagline": "Nutzt Fragen, um Annahmen aufzudecken.",             "intro": "Ich beantworte deine Fragen mit besseren Fragen. Annahmen verdienen Prüfung." },
-        "philosopher-critical-thinker": { "name": "Kritischer Denker",  "tagline": "Stresst Logik und Beweisqualität.",                  "intro": "Ich teste jedes Argument. Wenn die Logik nicht stimmt, finde ich den Riss." },
-        "philosopher-ethics-analyst":   { "name": "Ethik-Analyst",      "tagline": "Wägt Entscheidungen mit ethischen Konsequenzen ab.", "intro": "Entscheidungen haben Konsequenzen jenseits des Offensichtlichen. Ich halte das große Bild ehrlich." }
+        "philosopher-socratic-guide": {
+          "name": "Sokratischer Führer",
+          "tagline": "Nutzt Fragen, um Annahmen aufzudecken.",
+          "intro": "Ich beantworte deine Fragen mit besseren Fragen. Annahmen verdienen Prüfung."
+        },
+        "philosopher-critical-thinker": {
+          "name": "Kritischer Denker",
+          "tagline": "Stresst Logik und Beweisqualität.",
+          "intro": "Ich teste jedes Argument. Wenn die Logik nicht stimmt, finde ich den Riss."
+        },
+        "philosopher-ethics-analyst": {
+          "name": "Ethik-Analyst",
+          "tagline": "Wägt Entscheidungen mit ethischen Konsequenzen ab.",
+          "intro": "Entscheidungen haben Konsequenzen jenseits des Offensichtlichen. Ich halte das große Bild ehrlich."
+        }
       }
     },
     "summarizer": {
       "name": "Zusammenfasser",
       "tagline": "Destilliert komplexe Eingaben in prägnante, entscheidungsreife Erkenntnisse.",
       "characters": {
-        "summarizer-executive-briefer":  { "name": "Executive-Briefer",   "tagline": "Kurzübersicht für schnelle Führungsentscheidungen.",  "intro": "Nur das Wesentliche. Ich gebe dir das Signal ohne das Rauschen — schnell." },
-        "summarizer-research-digestor":  { "name": "Forschungsdestillat", "tagline": "Verwandelt unstrukturierte Eingaben in Forschungsnotizen.", "intro": "Viele Eingaben, fokussierter Output. Ich verwandle Chaos in eine klare Forschungsnotiz." },
-        "summarizer-action-planner":     { "name": "Aktionsplaner",       "tagline": "Wandelt Erkenntnisse in priorisierte Maßnahmen um.", "intro": "Erkenntnisse sind nutzlos, bis sie zu Handlungen werden. Ich verwandle Befunde in nächste Schritte." }
+        "summarizer-executive-briefer": {
+          "name": "Executive-Briefer",
+          "tagline": "Kurzübersicht für schnelle Führungsentscheidungen.",
+          "intro": "Nur das Wesentliche. Ich gebe dir das Signal ohne das Rauschen — schnell."
+        },
+        "summarizer-research-digestor": {
+          "name": "Forschungsdestillat",
+          "tagline": "Verwandelt unstrukturierte Eingaben in Forschungsnotizen.",
+          "intro": "Viele Eingaben, fokussierter Output. Ich verwandle Chaos in eine klare Forschungsnotiz."
+        },
+        "summarizer-action-planner": {
+          "name": "Aktionsplaner",
+          "tagline": "Wandelt Erkenntnisse in priorisierte Maßnahmen um.",
+          "intro": "Erkenntnisse sind nutzlos, bis sie zu Handlungen werden. Ich verwandle Befunde in nächste Schritte."
+        }
       }
     }
   },

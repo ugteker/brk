@@ -162,67 +162,52 @@ export function SavedSourceGrid({
             <div className="flex flex-1 flex-col p-4">
               <div className="min-w-0">
                 <div className="text-base font-semibold leading-snug text-foreground">{title}</div>
-                {source.type !== 'synthetic_discussion' ? (
-                  <Text type="secondary" className="mt-1 block truncate text-xs">
-                    {source.value}
-                  </Text>
-                ) : null}
               </div>
-              <div className="mt-4 text-xs">
+              <div className="mt-3 flex-1 text-xs">
                 {previewItems.length > 0 ? (
-                  <>
-                    <div className="mb-1 font-medium text-muted-foreground">
-                      {source.type === 'synthetic_discussion' ? t('library.recentRuns') : t('library.recentItems')}
-                    </div>
-                    <ul className="space-y-1 text-foreground">
+                    <ul className="space-y-1 text-foreground/80">
                       {previewItems.map((item) => (
                         <li key={`${source.id}:${item.link ?? item.title}`} className="truncate">
-                          ▶ {item.title}
+                          {item.title}
                         </li>
                       ))}
                     </ul>
-                  </>
                 ) : (
                   <Text type="secondary">
                     {source.type === 'synthetic_discussion' ? t('library.noRuns') : t('library.noEpisodes')}
                   </Text>
                 )}
               </div>
-              <div className="mt-4" onClick={(event) => event.stopPropagation()}>
-                <Button
-                  type="text"
-                  block
-                  className={`h-auto rounded-lg border px-3 py-2 text-left ${
-                    hasReports
-                      ? 'border-violet-200 bg-violet-50/70 hover:!border-violet-300 hover:!bg-violet-100/70 dark:border-violet-500/30 dark:bg-violet-950/30 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/50'
-                      : 'border-dashed border-border bg-muted/30 hover:!border-violet-300 hover:!bg-violet-50/50 dark:hover:!border-violet-400/50 dark:hover:!bg-violet-950/30'
-                  }`}
-                  aria-label={hasReports ? t('library.openReports', { count: reportCount }) : t('library.noReportsYet')}
-                  onClick={() => onOpenSource(source)}
-                >
-                  <span className="flex items-center gap-2">
-                    <CheckCircleOutlined className={hasReports ? 'text-leaf-500 dark:text-leaf-400' : 'text-muted-foreground'} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold text-foreground">
-                        {hasReports ? t('library.reportsAvailable', { count: reportCount }) : t('library.noReportsYet')}
-                      </span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {hasReports ? t('library.sourceReportsAvailableHint') : t('library.reportsWillAppearHere')}
-                      </span>
-                    </span>
-                    {hasReports ? <span className="text-base text-violet-500 dark:text-violet-300">›</span> : null}
-                  </span>
-                </Button>
-              </div>
-              {onAddAgent ? (
-                <div className="mt-4 border-t border-border pt-4" onClick={(event) => event.stopPropagation()}>
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">{t('library.agentFollowLabel')}</div>
-                  <div className="rounded-lg border border-slate-200/80 bg-slate-50/60 p-3 dark:border-slate-700/80 dark:bg-slate-800/40">
-                    <div className="flex flex-wrap items-start gap-3">
-                      {linkedAgents.map((agent) => {
+              <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
+                {hasReports ? (
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircleOutlined className="text-leaf-500 dark:text-leaf-400" />
+                    <span className="font-semibold text-foreground">{t('library.reportsAvailable', { count: reportCount })}</span>
+                  </div>
+                ) : null}
+                {onAddAgent ? (
+                  linkedAgents.length === 0 ? (
+                    <div className="flex min-w-0 items-center gap-2" onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-violet-400/60 bg-transparent px-3 py-1 text-xs text-violet-700 transition-colors hover:border-violet-500 hover:bg-violet-50 dark:text-violet-300 dark:hover:border-violet-300 dark:hover:bg-violet-500/15 dark:hover:text-white"
+                        onClick={() => void onAddAgent(source)}
+                      >
+                        <PlusOutlined /> {t('library.followAgentCta')}
+                      </button>
+                      {!hasReports ? <span className="min-w-0 truncate">{t('library.reportsWillAppearHere')}</span> : null}
+                    </div>
+                  ) : (
+                  <div className="flex min-w-0 items-center gap-2" onClick={(event) => event.stopPropagation()}>
+                    {hasReports ? <span aria-hidden className="text-muted-foreground/60">·</span> : null}
+                    <div className="flex items-center">
+                      {linkedAgents.map((agent, index) => {
                         const canRemove = source.ownerUserId === currentUserId && Boolean(onRemoveAgent);
                         return (
-                          <div key={agent.playbookId} className="group relative w-[72px]">
+                          <div
+                            key={agent.playbookId}
+                            className={`group relative hover:z-10 focus-within:z-10 ${index > 0 ? '-ml-2' : ''}`}
+                          >
                             <TouchSafeTooltip
                               title={(
                                 <div>
@@ -232,28 +217,19 @@ export function SavedSourceGrid({
                                 </div>
                               )}
                             >
-                              <Button
-                                type="text"
+                              <button
+                                type="button"
                                 aria-label={agent.label}
-                                className="h-auto w-[72px] p-0"
+                                className={`flex h-7 w-7 cursor-default items-center justify-center rounded-full border-0 p-0 text-sm ring-2 transition-all ${
+                                  getCharacterTypeIconBg(agent.characterType)
+                                } ${
+                                  highlightedAgentId === agent.agentId
+                                    ? 'animate-pulse ring-violet-400'
+                                    : 'ring-card'
+                                }`}
                               >
-                                <span className="flex flex-col items-center gap-1 text-center">
-                                  <span
-                                    className={`flex h-10 w-10 items-center justify-center rounded-full text-lg transition-all ${
-                                      getCharacterTypeIconBg(agent.characterType)
-                                    } ${
-                                      highlightedAgentId === agent.agentId
-                                        ? 'animate-pulse ring-2 ring-violet-400 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-800'
-                                        : ''
-                                    }`}
-                                  >
-                                    {getCharacterTypeEmoji(agent.characterType)}
-                                  </span>
-                                  <span className="line-clamp-2 min-h-[2.5em] w-full whitespace-normal break-words text-[10px] leading-tight [overflow-wrap:anywhere]">
-                                    {agent.label}
-                                  </span>
-                                </span>
-                              </Button>
+                                {getCharacterTypeEmoji(agent.characterType)}
+                              </button>
                             </TouchSafeTooltip>
                             {canRemove ? (
                               <TouchSafeTooltip title={t('library.removeAgentFromSource')}>
@@ -271,7 +247,7 @@ export function SavedSourceGrid({
                                     size="small"
                                     aria-label={t('library.removeAgentFromSource')}
                                     icon={<CloseOutlined />}
-                                    className="absolute -right-1 -top-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                                    className="absolute -right-1.5 -top-1.5 !h-5 !w-5 !min-w-0 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
                                     onClick={(event) => event.stopPropagation()}
                                   />
                                 </Popconfirm>
@@ -281,23 +257,30 @@ export function SavedSourceGrid({
                         );
                       })}
                       <TouchSafeTooltip title={t('library.addAgent')}>
-                        <Button
-                          type="dashed"
-                          shape="circle"
-                          size="large"
+                        <button
+                          type="button"
                           aria-label={t('library.addAgent')}
-                          icon={<PlusOutlined />}
-                          className="border-2 border-dashed border-violet-400 bg-violet-50 text-violet-700 shadow-sm transition-colors hover:border-violet-500 hover:bg-violet-100 hover:text-violet-800 dark:border-violet-500 dark:bg-violet-950/50 dark:text-violet-300"
+                          className="-ml-2 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-dashed border-violet-400 bg-violet-50 text-xs text-violet-700 shadow-sm ring-2 ring-card transition-colors hover:border-violet-500 hover:bg-violet-100 hover:text-violet-800 dark:border-violet-400/60 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:border-violet-300 dark:hover:bg-violet-500/25 dark:hover:text-white"
                           onClick={(event) => {
                             event.stopPropagation();
                             void onAddAgent(source);
                           }}
-                        />
+                        >
+                          <PlusOutlined />
+                        </button>
                       </TouchSafeTooltip>
                     </div>
+                    <span className="min-w-0 truncate">
+                      {linkedAgents.length === 1
+                        ? t('library.agentFollows', { name: linkedAgents[0].label })
+                        : t('library.agentsFollowCount', { count: linkedAgents.length })}
+                    </span>
                   </div>
-                </div>
-              ) : null}
+                  )
+                ) : !hasReports ? (
+                  <span>{t('library.noReportsYet')}</span>
+                ) : null}
+              </div>
             </div>
           </Card>
         );

@@ -241,6 +241,24 @@ export function LibraryPage() {
     setEditingLibraryTabName(tab.name);
   }
 
+  function deleteLibraryTab(tabId: string) {
+    if (tabId === DEFAULT_LIBRARY_TAB_ID) return;
+    setLibraryTabs((current) => current.filter((tab) => tab.id !== tabId));
+    // Sources assigned to the deleted tab fall back to the default library
+    setSourceLibraryBySourceId((current) => {
+      const next: Record<string, string> = {};
+      for (const [sourceId, assigned] of Object.entries(current)) {
+        next[sourceId] = assigned === tabId ? DEFAULT_LIBRARY_TAB_ID : assigned;
+      }
+      return next;
+    });
+    if (activeLibraryTabId === tabId) setActiveLibraryTabId(DEFAULT_LIBRARY_TAB_ID);
+    if (editingLibraryTabId === tabId) {
+      setEditingLibraryTabId(null);
+      setEditingLibraryTabName('');
+    }
+  }
+
   function onLibraryTabClick(tabId: string) {
     const now = Date.now();
     if (lastLibraryTabClick && lastLibraryTabClick.tabId === tabId && now - lastLibraryTabClick.at <= 350) {
@@ -1324,7 +1342,7 @@ export function LibraryPage() {
 
   const libraryTabCtx = {
     activeLibraryTabId, activeSourceTab, agents, autoDetectedSource, catalogLoadState, cloneMarketplaceSource, cloningPublicationId,
-    closeSourceDialog, commitEditingLibraryTab, createLibraryTab, deletePlaybook, detectTimerRef, editingLibraryTabId,
+    closeSourceDialog, commitEditingLibraryTab, createLibraryTab, deleteLibraryTab, deletePlaybook, detectTimerRef, editingLibraryTabId,
     editingLibraryTabName, editingSource, filteredMarketplaceSources, filteredSources, getSourceEpisodeCount, getSourceKindLabel,
     highlightedAgentIdBySourceId, i18n, isPostSourceAgentGuidancePending, isSourceCreateOpen, isSourceDetecting, isSourceSaving,
     libraryGuidanceSeen, libraryTabs, linkedAgentsBySourceId, marketplaceSourceCount, markLibraryGuidanceSeen,
