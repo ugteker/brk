@@ -916,16 +916,21 @@ export function LibraryTab({ ctx }: { ctx: any }) {
                      footer={(_, { OkBtn }) => (
                        <div className="flex items-center justify-between gap-2">
                          {editingSource && editingSource.ownerUserId === user?.id ? (
-                           <Button
-                             danger
-                             icon={<DeleteOutlined />}
-                             onClick={() => {
+                           <Popconfirm
+                             title={t('library.deleteSourceConfirm', { name: editingSource.title || editingSource.url })}
+                             description={t('library.deleteSourceConfirmDescription')}
+                             okText={t('common.delete')}
+                             okButtonProps={{ danger: true }}
+                             cancelText={t('common.cancel')}
+                             onConfirm={() => {
                                void onDeleteSource(editingSource);
                                closeSourceDialog();
                              }}
                            >
-                             Remove source
-                           </Button>
+                             <Button danger icon={<DeleteOutlined />}>
+                               Remove source
+                             </Button>
+                           </Popconfirm>
                          ) : <span />}
                          <OkBtn />
                        </div>

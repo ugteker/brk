@@ -157,7 +157,9 @@
     "removeSourceFailed": "Failed to remove source.",
     "deleteTab": "Delete tab",
     "deleteTabConfirm": "Delete tab \"{{name}}\"?",
-    "deleteTabConfirmDescription": "Its sources move back to the main library."
+    "deleteTabConfirmDescription": "Its sources move back to the main library.",
+    "deleteSourceConfirm": "Delete \"{{name}}\"?",
+    "deleteSourceConfirmDescription": "This removes the source and its agent connections permanently."
   },
   "feed": {
     "groupToday": "Today",

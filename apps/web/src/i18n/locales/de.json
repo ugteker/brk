@@ -156,7 +156,9 @@
     "removeSourceFailed": "Quelle konnte nicht entfernt werden.",
     "deleteTab": "Tab löschen",
     "deleteTabConfirm": "Tab \"{{name}}\" löschen?",
-    "deleteTabConfirmDescription": "Die Quellen wandern zurück in die Haupt-Bibliothek."
+    "deleteTabConfirmDescription": "Die Quellen wandern zurück in die Haupt-Bibliothek.",
+    "deleteSourceConfirm": "„{{name}}“ löschen?",
+    "deleteSourceConfirmDescription": "Entfernt die Quelle und ihre Agenten-Verbindungen dauerhaft."
   },
   "feed": {
     "groupToday": "Heute",
