@@ -107,8 +107,12 @@ function RealtimeDataBridge({ children }: { children: ReactNode }) {
 
 function AnimatedRoutes() {
   const location = useLocation();
+  // Mirrors AppShell's isDiscussionRoom: the room is a fixed chat viewport, so this
+  // wrapper must pass the height chain through instead of growing with content.
+  const fillsViewport =
+    location.pathname !== '/studio/new' && /^\/studio\/[^/]+$/.test(location.pathname);
   return (
-    <div key={location.pathname} className="ct-page-enter">
+    <div key={location.pathname} className={fillsViewport ? 'ct-page-enter ct-page-enter--fill' : 'ct-page-enter'}>
       <Routes>
         <Route path="/" element={<AdminSwitch admin={<AdminFeedDashboard />}><FeedPage /></AdminSwitch>} />
         <Route path="/library" element={<AdminSwitch admin={<AdminLibraryDashboard />}><LibraryPage /></AdminSwitch>} />

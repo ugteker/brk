@@ -4,7 +4,8 @@ import { DiscussionRepository } from './repository';
 const participantRow = { id: 'p1', discussionId: 'd1', agentId: 'a1', role: 'speaker', voiceId: 'alloy', speakerOrder: 0, reportIdsJson: '[]', active: true };
 const discRow = { id: 'd1', ownerUserId: 'u1', name: 'Test', description: '', format: 'free_form', formatConfigJson: '{}', scheduleJson: null, syntheticSourceId: null, createdAt: new Date(), updatedAt: new Date(), participants: [participantRow] };
 const turnRow = { id: 't1', discussionRunId: 'r1', participantId: 'p1', turnIndex: 0, segmentLabel: null, content: 'Hello', audioUrl: null, createdAt: new Date() };
-const runRow = { id: 'r1', discussionId: 'd1', status: 'pending', triggeredBy: 'manual', errorMessage: null, startedAt: null, completedAt: null, syntheticSourceItemId: null, audioUrl: null, createdAt: new Date(), evidenceSnapshotJson: null, turns: [] };
+const questionRow = { id: 'q1', discussionRunId: 'r1', content: 'What about risk?', createdAt: new Date(), answeredByTurnId: null, answeredAt: null };
+const runRow = { id: 'r1', discussionId: 'd1', status: 'pending', triggeredBy: 'manual', errorMessage: null, startedAt: null, completedAt: null, syntheticSourceItemId: null, audioUrl: null, createdAt: new Date(), evidenceSnapshotJson: null, turns: [], questions: [] };
 
 function makeDb(overrides: any = {}) {
   const db: any = {
@@ -34,6 +35,14 @@ function makeDb(overrides: any = {}) {
       create: vi.fn().mockResolvedValue(turnRow),
       update: vi.fn().mockResolvedValue(turnRow),
       ...overrides.discussionTurn
+    },
+    discussionLiveQuestion: {
+      create: vi.fn().mockResolvedValue(questionRow),
+      findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn().mockResolvedValue(questionRow),
+      count: vi.fn().mockResolvedValue(0),
+      update: vi.fn().mockResolvedValue(questionRow),
+      ...overrides.discussionLiveQuestion
     }
   };
   db.$transaction = vi.fn().mockImplementation((fn: any) => fn(db));
@@ -78,6 +87,148 @@ describe('DiscussionRepository', () => {
     expect(run).not.toBeNull();
     expect(run!.turns).toHaveLength(1);
     expect(run!.turns[0].content).toBe('Hello');
+    expect(run!.questions).toEqual([]);
+  });
+
+  it('maps legacy runs without an included questions relation to an empty array', async () => {
+    const db = makeDb({
+      discussionRun: {
+        findUnique: vi.fn().mockResolvedValue({ ...runRow, questions: undefined, turns: [] })
+      }
+    });
+    const repo = new DiscussionRepository(db as any);
+
+    expect((await repo.getRunWithTurns('r1'))!.questions).toEqual([]);
+  });
+
+  it('includes questions in FIFO order when getting a run', async () => {
+    const db = makeDb();
+    const repo = new DiscussionRepository(db as any);
+
+    await repo.getRunWithTurns('r1');
+
+    expect(db.discussionRun.findUnique).toHaveBeenCalledWith({
+      where: { id: 'r1' },
+      include: {
+        turns: { orderBy: { turnIndex: 'asc' } },
+        questions: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }
+      }
+    });
+  });
+
+  it('submits a question transactionally while the run is live and below the limit', async () => {
+    const db = makeDb({
+      discussionRun: {
+        findUnique: vi.fn().mockResolvedValue({ ...runRow, status: 'running' })
+      },
+      discussionLiveQuestion: {
+        count: vi.fn().mockResolvedValue(9)
+      }
+    });
+    const realtime = { append: vi.fn().mockResolvedValue(undefined) };
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    const result = await repo.submitLiveQuestion('r1', 'What about risk?');
+
+    expect(result).toEqual({ ok: true, question: expect.objectContaining({ id: 'q1' }) });
+    expect(db.$transaction).toHaveBeenCalled();
+    expect(db.discussionLiveQuestion.create).toHaveBeenCalledWith({
+      data: { discussionRunId: 'r1', content: 'What about risk?' }
+    });
+    expect(realtime.append).toHaveBeenCalledWith(db, {
+      userId: 'u1',
+      topic: 'discussion.changed',
+      entityId: 'd1'
+    });
+  });
+
+  it('rejects question submission when the run is not live or already has ten questions', async () => {
+    const doneDb = makeDb({
+      discussionRun: { findUnique: vi.fn().mockResolvedValue({ ...runRow, status: 'done' }) }
+    });
+    const fullDb = makeDb({
+      discussionRun: { findUnique: vi.fn().mockResolvedValue({ ...runRow, status: 'running' }) },
+      discussionLiveQuestion: { count: vi.fn().mockResolvedValue(10) }
+    });
+
+    await expect(new DiscussionRepository(doneDb as any).submitLiveQuestion('r1', 'Question')).resolves.toEqual({
+      ok: false,
+      reason: 'run_not_live'
+    });
+    await expect(new DiscussionRepository(fullDb as any).submitLiveQuestion('r1', 'Question')).resolves.toEqual({
+      ok: false,
+      reason: 'question_limit_reached'
+    });
+  });
+
+  it('gets the oldest unanswered FIFO question', async () => {
+    const db = makeDb();
+    const repo = new DiscussionRepository(db as any);
+
+    await repo.getOldestUnansweredLiveQuestion('r1');
+
+    expect(db.discussionLiveQuestion.findFirst).toHaveBeenCalledWith({
+      where: { discussionRunId: 'r1', answeredAt: null },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+    });
+  });
+
+  it('marks a question answered only by a turn from the same run and emits realtime', async () => {
+    const db = makeDb({
+      discussionTurn: { findUnique: vi.fn().mockResolvedValue(turnRow) }
+    });
+    const realtime = { append: vi.fn().mockResolvedValue(undefined) };
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await repo.markLiveQuestionAnswered('q1', 't1');
+
+    expect(db.discussionLiveQuestion.update).toHaveBeenCalledWith({
+      where: { id: 'q1' },
+      data: { answeredByTurnId: 't1', answeredAt: expect.any(Date) }
+    });
+    expect(realtime.append).toHaveBeenCalled();
+  });
+
+  it('rejects marking a question with a turn from another run', async () => {
+    const db = makeDb({
+      discussionTurn: {
+        findUnique: vi.fn().mockResolvedValue({ ...turnRow, discussionRunId: 'r2' })
+      }
+    });
+    const repo = new DiscussionRepository(db as any);
+
+    await expect(repo.markLiveQuestionAnswered('q1', 't1')).rejects.toThrow('invariant_violation');
+    expect(db.discussionLiveQuestion.update).not.toHaveBeenCalled();
+  });
+
+  it('does not complete a run while unanswered questions remain', async () => {
+    const db = makeDb({
+      discussionRun: { findUnique: vi.fn().mockResolvedValue({ ...runRow, status: 'running' }) },
+      discussionLiveQuestion: { count: vi.fn().mockResolvedValue(1) }
+    });
+    const repo = new DiscussionRepository(db as any);
+
+    await expect(repo.completeRunIfNoUnansweredQuestions('r1')).resolves.toBe(false);
+    expect(db.discussionRun.update).not.toHaveBeenCalled();
+  });
+
+  it('atomically closes a running run to submissions when no unanswered questions remain', async () => {
+    const db = makeDb({
+      discussionRun: { findUnique: vi.fn().mockResolvedValue({ ...runRow, status: 'running' }) }
+    });
+    const realtime = { append: vi.fn().mockResolvedValue(undefined) };
+    const repo = new DiscussionRepository(db as any, realtime);
+
+    await expect(repo.completeRunIfNoUnansweredQuestions('r1')).resolves.toBe(true);
+    expect(db.discussionRun.update).toHaveBeenCalledWith({
+      where: { id: 'r1' },
+      data: { questionsClosedAt: expect.any(Date) }
+    });
+    expect(realtime.append).toHaveBeenCalledWith(db.tx, {
+      userId: 'u1',
+      topic: 'discussion.changed',
+      entityId: 'd1'
+    });
   });
 
   it('createTurn returns turn record', async () => {

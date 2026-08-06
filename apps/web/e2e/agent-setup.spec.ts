@@ -14,6 +14,46 @@ test('@smoke app load shows dashboard on mobile viewport', async ({ page }) => {
   await expect(page.getByText('Agent Dashboard')).toBeVisible();
 });
 
+test('@smoke Studio Live Room keeps audio and questions outside the scrolling transcript', async () => {
+  const detail = await readFile(resolve(process.cwd(), 'src/pages/studio/DiscussionDetail.tsx'), 'utf8');
+  const voiceBar = await readFile(resolve(process.cwd(), 'src/pages/studio/LiveVoiceBar.tsx'), 'utf8');
+  const shell = await readFile(resolve(process.cwd(), 'src/components/AppShell.tsx'), 'utf8');
+  const styles = await readFile(resolve(process.cwd(), 'src/index.css'), 'utf8');
+
+  expect(detail).not.toContain('<Tabs');
+  expect(detail.indexOf('<LiveVoiceBar')).toBeLessThan(detail.indexOf('className="studio-conversation"'));
+  expect(detail.indexOf('className="studio-conversation"')).toBeLessThan(detail.indexOf('className="studio-question-composer"'));
+  expect(detail).not.toContain('scrollIntoView');
+  expect(detail).toContain('conversation.scrollTo');
+  expect(detail).toContain('submitDiscussionQuestion(discussionId, liveRun, content)');
+  expect(detail).toContain('disabled={composerDisabled}');
+  expect(shell).toContain("pathname !== '/studio/new'");
+  expect(shell).toContain("flex: '1 1 0', minHeight: 0, overflow: 'hidden'");
+  // The route-transition wrapper must pass the height chain through on the room route,
+  // otherwise .studio-live-room's height:100% collapses and the transcript can't scroll.
+  const app = await readFile(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  expect(app).toContain("'ct-page-enter ct-page-enter--fill'");
+  expect(styles).toMatch(/\.ct-page-enter--fill\s*\{[\s\S]*height: 100%;/);
+  expect(styles).toContain('.studio-live-room');
+  expect(styles).toContain('height: 100%;');
+  expect(styles).toMatch(/\.studio-conversation\s*\{[\s\S]*overflow-y: auto;/);
+  expect(voiceBar).toContain('source.start(startTime, offset)');
+  expect(voiceBar).toContain('if (!buffer) break');
+  expect(voiceBar).toContain('!audioAvailable');
+  expect(voiceBar).toContain("t('studio.audioNotConfigured')");
+});
+
+test('@smoke Studio new-show entry is explicit and touch sized', async () => {
+  const hub = await readFile(resolve(process.cwd(), 'src/pages/studio/StudioHub.tsx'), 'utf8');
+  const styles = await readFile(resolve(process.cwd(), 'src/index.css'), 'utf8');
+
+  expect(hub).toContain('className="studio-new-discussion-button"');
+  expect(hub).toContain("onClick={() => navigate('/studio/new')}");
+  expect(hub).toContain("aria-label={t('studio.newDiscussion')}");
+  expect(hub).toMatch(/<StudioPrimaryButton[\s\S]*>\s*\{t\('studio\.newDiscussion'\)\}/);
+  expect(styles).toMatch(/\.studio-new-discussion-button\s*\{[\s\S]*min-height: 44px;/);
+});
+
 
 test('@smoke curator attributes a source-inspired opening', async () => {
   const curator = await readFile(resolve(process.cwd(), 'src/components/AgentCurator.tsx'), 'utf8');

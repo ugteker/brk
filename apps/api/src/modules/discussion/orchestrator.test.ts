@@ -25,7 +25,9 @@ function makeMockRepo() {
       { id: 't1', discussionRunId: 'r1', participantId: 'p1', turnIndex: 0, segmentLabel: null, content: 'Hello', audioUrl: null, createdAt: new Date() }
     ]}),
     updateRun: vi.fn().mockResolvedValue(undefined),
-    createTurn: vi.fn().mockResolvedValue({ id: 't1', turnIndex: 0 }),
+    createTurn: vi.fn().mockImplementation(
+      async (_runId: string, _participantId: string, turnIndex: number) => ({ id: `t${turnIndex + 1}`, turnIndex })
+    ),
     setSyntheticSourceId: vi.fn().mockResolvedValue(undefined),
     setRunEvidenceSnapshot: vi.fn().mockResolvedValue(undefined),
     createDiscussion: vi.fn(),
@@ -35,6 +37,10 @@ function makeMockRepo() {
     createRun: vi.fn(),
     listRuns: vi.fn(),
     updateTurnAudioUrl: vi.fn(),
+    submitLiveQuestion: vi.fn(),
+    getOldestUnansweredLiveQuestion: vi.fn().mockResolvedValue(null),
+    markLiveQuestionAnswered: vi.fn().mockResolvedValue(undefined),
+    completeRunIfNoUnansweredQuestions: vi.fn().mockResolvedValue(true)
   };
 }
 
@@ -115,8 +121,76 @@ describe('DiscussionOrchestrator', () => {
     const orchestrator = makeOrchestrator({ repo });
     await orchestrator.run('d1', 'r1');
     expect(repo.createTurn).toHaveBeenCalled();
-    const lastCall = repo.updateRun.mock.calls.at(-1)!;
-    expect(lastCall[1]).toMatchObject({ status: 'done' });
+    expect(repo.completeRunIfNoUnansweredQuestions).toHaveBeenCalledWith('r1');
+  });
+
+  it('adds one clearly delimited audience question to a turn and marks it answered afterward', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    const question = {
+      id: 'q1',
+      discussionRunId: 'r1',
+      content: 'What is the largest downside?',
+      createdAt: new Date(),
+      answeredByTurnId: null,
+      answeredAt: null
+    };
+    repo.getOldestUnansweredLiveQuestion
+      .mockResolvedValueOnce(question)
+      .mockResolvedValue(null);
+    const orchestrator = makeOrchestrator({ repo });
+
+    await orchestrator.run('d1', 'r1');
+
+    const firstPrompt = mockClaude.messages.create.mock.calls[0][0].messages.at(-1).content as string;
+    expect(firstPrompt).toContain('--- AUDIENCE QUESTION ---');
+    expect(firstPrompt).toContain(question.content);
+    expect(firstPrompt).toContain('--- END AUDIENCE QUESTION ---');
+    expect(repo.markLiveQuestionAnswered).toHaveBeenCalledWith('q1', 't1');
+    expect(repo.createTurn.mock.invocationCallOrder[0]).toBeLessThan(repo.markLiveQuestionAnswered.mock.invocationCallOrder[0]);
+  });
+
+  it('continues round-robin after base turns while accepted questions remain', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion.mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: { totalTurnTarget: 2 }
+    });
+    const extraQuestion = {
+      id: 'q-extra',
+      discussionRunId: 'r1',
+      content: 'One final question',
+      createdAt: new Date(),
+      answeredByTurnId: null,
+      answeredAt: null
+    };
+    repo.getOldestUnansweredLiveQuestion
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(extraQuestion)
+      .mockResolvedValue(null);
+    repo.completeRunIfNoUnansweredQuestions
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    repo.getRunWithTurns.mockResolvedValue({
+      id: 'r1',
+      status: 'done',
+      turns: [
+        { id: 't1', discussionRunId: 'r1', participantId: 'p1', turnIndex: 0, segmentLabel: null, content: 'Base 1', audioUrl: null, createdAt: new Date() },
+        { id: 't2', discussionRunId: 'r1', participantId: 'p2', turnIndex: 1, segmentLabel: null, content: 'Base 2', audioUrl: null, createdAt: new Date() },
+        { id: 't3', discussionRunId: 'r1', participantId: 'p1', turnIndex: 2, segmentLabel: null, content: 'Extra answer', audioUrl: null, createdAt: new Date() }
+      ],
+      questions: []
+    });
+    const orchestrator = makeOrchestrator({ repo });
+
+    await orchestrator.run('d1', 'r1');
+
+    expect(repo.createTurn).toHaveBeenCalledTimes(3);
+    expect(repo.createTurn.mock.calls.map((call: unknown[]) => call[1])).toEqual(['p1', 'p2', 'p1']);
+    expect(repo.markLiveQuestionAnswered).toHaveBeenCalledWith('q-extra', 't3');
+    expect(mockSyntheticSource.ensureSyntheticSource.mock.calls.at(-1)![2]).toContain('Extra answer');
   });
 
   it('skips inactive participants when starting a future run', async () => {
@@ -146,7 +220,7 @@ describe('DiscussionOrchestrator', () => {
     await orchestrator.run('d1', 'r1');
 
     expect(ttsClients.openai.renderTurn).toHaveBeenCalledTimes(4);
-    expect(repo.updateRun.mock.calls.at(-1)![1]).toMatchObject({ status: 'done' });
+    expect(repo.completeRunIfNoUnansweredQuestions).toHaveBeenCalledWith('r1');
   });
 
   it('marks run as error if Claude throws', async () => {
@@ -161,9 +235,14 @@ describe('DiscussionOrchestrator', () => {
 
   it('calls syntheticSource.ensureSyntheticSource on success', async () => {
     vi.clearAllMocks();
-    const orchestrator = makeOrchestrator();
+    const repo = makeMockRepo();
+    const orchestrator = makeOrchestrator({ repo });
     await orchestrator.run('d1', 'r1');
     expect(mockSyntheticSource.ensureSyntheticSource).toHaveBeenCalled();
+    const doneCallOrder = repo.updateRun.mock.calls
+      .map((call, index) => ({ call, order: repo.updateRun.mock.invocationCallOrder[index] }))
+      .find(({ call }) => call[1].status === 'done')!.order;
+    expect(mockSyntheticSource.ensureSyntheticSource.mock.invocationCallOrder[0]).toBeLessThan(doneCallOrder);
   });
 
   it('marks error if discussion not found', async () => {
@@ -239,8 +318,7 @@ describe('DiscussionOrchestrator', () => {
         expect.objectContaining({ participantId: 'p2', reportIds: ['r-a2-1'], origin: 'fallback' })
       ])
     }));
-    const lastCall = repo.updateRun.mock.calls.at(-1)!;
-    expect(lastCall[1]).toMatchObject({ status: 'done' });
+    expect(repo.completeRunIfNoUnansweredQuestions).toHaveBeenCalledWith('r1');
   });
 
   it('includes bounded transcript excerpts and records source item ids for resolved reports', async () => {
@@ -277,8 +355,7 @@ describe('DiscussionOrchestrator', () => {
     const snapshot = snapshotCall[1];
     const p2Snapshot = snapshot.participants.find((p: any) => p.participantId === 'p2');
     expect(p2Snapshot.transcriptWarnings.length).toBeGreaterThan(0);
-    const lastUpdateRunCall = repo.updateRun.mock.calls.at(-1)!;
-    expect(lastUpdateRunCall[1]).toMatchObject({ status: 'done' });
+    expect(repo.completeRunIfNoUnansweredQuestions).toHaveBeenCalledWith('r1');
   });
 
   it('rejects the run with a clear validation error before generating turns when a participant resolves no report', async () => {
@@ -434,8 +511,7 @@ describe('DiscussionOrchestrator', () => {
     // The agenda question reaches the prompt via the director context.
     const firstPrompt = claude.messages.create.mock.calls[0][0].messages.at(-1).content as string;
     expect(firstPrompt).toContain('What does AI regulation mean for open-source models?');
-    const lastCall = repo.updateRun.mock.calls.at(-1)!;
-    expect(lastCall[1]).toMatchObject({ status: 'done' });
+    expect(repo.completeRunIfNoUnansweredQuestions).toHaveBeenCalledWith('r1');
   });
 
   it('shares the picked transcript with every participant in a transcript-grounded discussion', async () => {
@@ -472,8 +548,7 @@ describe('DiscussionOrchestrator', () => {
         expect.objectContaining({ participantId: 'p2', origin: 'none', sourceItemIds: ['item-9'] })
       ])
     }));
-    const lastCall = repo.updateRun.mock.calls.at(-1)!;
-    expect(lastCall[1]).toMatchObject({ status: 'done' });
+    expect(repo.completeRunIfNoUnansweredQuestions).toHaveBeenCalledWith('r1');
   });
 
   it('rejects a transcript-grounded run with a clear error when no transcript was selected', async () => {
@@ -543,8 +618,7 @@ describe('DiscussionOrchestrator', () => {
         expect.objectContaining({ participantId: 'p2', reportIds: [], origin: 'none' })
       ])
     }));
-    const lastCall = repo.updateRun.mock.calls.at(-1)!;
-    expect(lastCall[1]).toMatchObject({ status: 'done' });
+    expect(repo.completeRunIfNoUnansweredQuestions).toHaveBeenCalledWith('r1');
   });
 
   it('rejects a material-grounded run with a clear error when the pool is empty', async () => {
@@ -609,7 +683,6 @@ describe('DiscussionOrchestrator', () => {
         transcriptWarnings: expect.arrayContaining([expect.stringContaining('r-a2-1')])
       })
     }));
-    const lastCall = repo.updateRun.mock.calls.at(-1)!;
-    expect(lastCall[1]).toMatchObject({ status: 'done' });
+    expect(repo.completeRunIfNoUnansweredQuestions).toHaveBeenCalledWith('r1');
   });
 });

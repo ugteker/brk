@@ -2,11 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Button,
   Card,
-  List,
+  Drawer,
+  Input,
   Select,
   Space,
   Spin,
-  Tabs,
   Tag,
   Tooltip,
   Typography,
@@ -16,7 +16,9 @@ import {
   ArrowLeftOutlined,
   AudioOutlined,
   EditOutlined,
-  PlayCircleOutlined
+  MoreOutlined,
+  PlayCircleOutlined,
+  SendOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { getAgentDisplayLabel } from '../../utils/agent-label';
@@ -32,14 +34,17 @@ import {
   triggerAudioRender,
   triggerDiscussionRun,
   getDiscussionCapabilities,
+  submitDiscussionQuestion,
   type DiscussionCapabilities,
   type DiscussionDto,
+  type DiscussionLiveQuestionDto,
   type DiscussionRunDto,
   type DiscussionRunEvidenceSnapshotDto,
   type DiscussionTurnDto
 } from '../../api/discussions';
 import { useAppData } from '../../context/AppDataContext';
 import { useRealtimeSubscription } from '../../context/RealtimeContext';
+import { LiveVoiceBar } from './LiveVoiceBar';
 
 const { Text, Paragraph } = Typography;
 
@@ -136,79 +141,18 @@ function TurnBubble({ turn, participant }: { turn: DiscussionTurnDto; participan
   );
 }
 
-/** Plays completed turn clips in order. Browsers may reject programmatic playback, in which
- * case the explicit listener-start button keeps the live queue usable. */
-function OnAirQueue({
-  runId,
-  turns,
-  fallbackUrl,
-  isLive,
-  waitingMessage
-}: {
-  runId: string | null;
-  turns: DiscussionTurnDto[];
-  fallbackUrl: string | null | undefined;
-  isLive: boolean;
-  waitingMessage: string;
-}) {
+function UserQuestion({ question }: { question: DiscussionLiveQuestionDto }) {
   const { t } = useTranslation();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const urls: string[] = [];
-  for (const turn of [...turns].sort((a, b) => a.turnIndex - b.turnIndex)) {
-    if (!turn.audioUrl) break;
-    urls.push(turn.audioUrl);
-  }
-  const [queueIndex, setQueueIndex] = useState(0);
-  const [needsStart, setNeedsStart] = useState(false);
-  const currentUrl = urls[queueIndex] ?? (urls.length === 0 ? fallbackUrl ?? null : null);
-
-  useEffect(() => {
-    setQueueIndex(0);
-    setNeedsStart(false);
-  }, [runId]);
-
-  useEffect(() => {
-    if (!currentUrl || !audioRef.current) return;
-    audioRef.current.play()
-      .then(() => setNeedsStart(false))
-      .catch(() => setNeedsStart(true));
-  }, [currentUrl]);
-
-  if (!currentUrl) {
-    return (
-      <Space>
-        {isLive && <Spin size="small" />}
-        <Text type="secondary">{isLive ? waitingMessage : t('studio.audioUnavailable')}</Text>
-      </Space>
-    );
-  }
-
-  const startListening = () => {
-    audioRef.current?.play()
-      .then(() => setNeedsStart(false))
-      .catch(() => setNeedsStart(true));
-  };
-
   return (
-    <Space direction="vertical" style={{ width: '100%' }}>
-      <Text strong>{t('studio.onAir')}</Text>
-      <audio
-        ref={audioRef}
-        src={currentUrl}
-        controls
-        style={{ width: '100%' }}
-        onEnded={() => setQueueIndex((index) => index + 1)}
-      />
-      {urls.length > 1 && (
-        <Text type="secondary">{t('studio.audioQueueProgress', { current: Math.min(queueIndex + 1, urls.length), total: urls.length })}</Text>
+    <div className="studio-user-question">
+      <div className="studio-user-question-label">{t('studio.yourLiveQuestion')}</div>
+      <div>{question.content}</div>
+      {!question.answeredByTurnId && (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {t('studio.questionQueued')}
+        </Text>
       )}
-      {needsStart && (
-        <Space direction="vertical">
-          <Text type="secondary">{t('studio.audioAutoplayBlocked')}</Text>
-          <Button type="primary" onClick={startListening}>{t('studio.startListening')}</Button>
-        </Space>
-      )}
-    </Space>
+    </div>
   );
 }
 
@@ -248,15 +192,13 @@ function StudioPanel({
 }) {
   return (
     <div
+      className="studio-participant-stage"
       style={{
         display: 'flex',
         gap: 20,
         justifyContent: 'center',
         flexWrap: 'wrap',
-        padding: '14px 12px',
-        marginBottom: 16,
-        borderRadius: 12,
-        background: 'linear-gradient(135deg, rgba(114,46,209,0.07), rgba(22,119,255,0.07))'
+        padding: '10px 12px'
       }}
     >
       {participants.map(({ id, info }) => {
@@ -470,7 +412,12 @@ export function DiscussionDetail() {
   // subscription below instead of a per-run EventSource (`/api/discussions/:id/runs/:runId/stream`,
   // now removed).
   const [liveTurns, setLiveTurns] = useState<DiscussionTurnDto[]>([]);
+  const [liveQuestions, setLiveQuestions] = useState<DiscussionLiveQuestionDto[]>([]);
+  const [liveQuestionsOpen, setLiveQuestionsOpen] = useState(true);
   const [liveStatus, setLiveStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [submittingQuestion, setSubmittingQuestion] = useState(false);
 
   // Refetches the tracked live run and merges its turns (by turn id) into local state, then
   // maps its status onto the UI's running/done/error states. 'pending' is treated the same
@@ -484,6 +431,8 @@ export function DiscussionDetail() {
         for (const turn of run.turns) byId.set(turn.id, turn);
         return [...byId.values()].sort((a, b) => a.turnIndex - b.turnIndex);
       });
+      setLiveQuestions(run.questions ?? []);
+      setLiveQuestionsOpen(run.questionsClosedAt == null);
       setLiveStatus(run.status === 'pending' ? 'running' : run.status);
     } catch {
       setLiveStatus('error');
@@ -494,6 +443,8 @@ export function DiscussionDetail() {
     if (!liveRun) return;
     setLiveStatus('running');
     setLiveTurns([]);
+    setLiveQuestions([]);
+    setLiveQuestionsOpen(true);
     refreshLiveRun(liveRun);
   }, [liveRun, refreshLiveRun]);
 
@@ -523,12 +474,27 @@ export function DiscussionDetail() {
   }, []);
 
   // Keep the newest live turn in view while the discussion is generating.
-  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const conversationRef = useRef<HTMLDivElement | null>(null);
+  const [followingLive, setFollowingLive] = useState(true);
   useEffect(() => {
-    if (liveStatus === 'running' && liveTurns.length > 0) {
-      transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const conversation = conversationRef.current;
+    if (liveStatus === 'running' && followingLive && conversation) {
+      conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
     }
-  }, [liveTurns.length, liveStatus]);
+  }, [followingLive, liveTurns.length, liveQuestions.length, liveStatus]);
+
+  function handleConversationScroll() {
+    const conversation = conversationRef.current;
+    if (!conversation) return;
+    setFollowingLive(conversation.scrollHeight - conversation.scrollTop - conversation.clientHeight < 48);
+  }
+
+  function returnToLive() {
+    const conversation = conversationRef.current;
+    if (!conversation) return;
+    setFollowingLive(true);
+    conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
+  }
 
   const loadData = useCallback(async () => {
     if (!discussionId) return;
@@ -540,12 +506,17 @@ export function DiscussionDetail() {
       if (runList.length > 0 && !selectedRunId) {
         setSelectedRunId(runList[0].id);
       }
+      const running = runList.find((run) => run.status === 'pending' || run.status === 'running');
+      if (running && !liveRun) {
+        setLiveRun(running.id);
+        setSelectedRunId(running.id);
+      }
     } catch {
-      message.error('Failed to load discussion');
+      message.error(t('studio.failedToLoadDiscussion'));
     } finally {
       setLoading(false);
     }
-  }, [discussionId, selectedRunId]);
+  }, [discussionId, liveRun, selectedRunId]);
 
   useEffect(() => {
     loadData();
@@ -571,7 +542,7 @@ export function DiscussionDetail() {
       setLiveRun(run.id);
       setSelectedRunId(run.id);
     } catch {
-      message.error('Failed to start run');
+      message.error(t('studio.failedToStartRun'));
     } finally {
       setTriggering(false);
     }
@@ -599,6 +570,7 @@ export function DiscussionDetail() {
           return;
         }
       }
+
       message.warning(t('studio.audioFailed'));
     } catch (error) {
       message.error(
@@ -608,6 +580,21 @@ export function DiscussionDetail() {
       );
     } finally {
       setRenderingAudio(false);
+    }
+  }
+
+  async function handleQuestionSubmit() {
+    const content = question.trim();
+    if (!discussionId || !liveRun || !content) return;
+    setSubmittingQuestion(true);
+    try {
+      const submitted = await submitDiscussionQuestion(discussionId, liveRun, content);
+      setLiveQuestions((current) => current.some((item) => item.id === submitted.id) ? current : [...current, submitted]);
+      setQuestion('');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('studio.questionFailed'));
+    } finally {
+      setSubmittingQuestion(false);
     }
   }
 
@@ -637,9 +624,11 @@ export function DiscussionDetail() {
   const selectedRun = runs.find((r) => r.id === selectedRunId);
   const displayTurns: DiscussionTurnDto[] =
     liveRun && liveRun === selectedRunId ? liveTurns : selectedRun?.turns ?? [];
+  const displayQuestions: DiscussionLiveQuestionDto[] =
+    liveRun && liveRun === selectedRunId ? liveQuestions : selectedRun?.questions ?? [];
   const isLive = liveStatus === 'running' && liveRun === selectedRunId;
+  const questionsOpen = isLive && liveQuestionsOpen;
   const hasCompleteTurnAudio = displayTurns.length > 0 && displayTurns.every((turn) => turn.audioUrl);
-  const hasAudio = Boolean(selectedRun?.audioUrl) || displayTurns.some((turn) => turn.audioUrl);
   const turnTarget = discussion.formatConfig.totalTurnTarget ?? 12;
   // Participants in speaking order for the studio panel and round-robin prediction of the
   // next speaker (mirrors the orchestrator's contexts[turn % contexts.length]).
@@ -647,58 +636,199 @@ export function DiscussionDetail() {
   const orderedParticipants = activeParticipants
     .slice()
     .sort((a, b) => a.speakerOrder - b.speakerOrder)
-    .map((p) => ({ id: p.id, info: participantInfoMap[p.id] ?? { name: 'Agent', characterType: null, index: 0 } }));
+    .map((p) => ({ id: p.id, info: participantInfoMap[p.id] ?? { name: t('studio.agentFallback'), characterType: null, index: 0 } }));
   const thinkingParticipant =
-    isLive && orderedParticipants.length > 0 && displayTurns.length < turnTarget
+    isLive && orderedParticipants.length > 0
       ? orderedParticipants[displayTurns.length % orderedParticipants.length]
       : null;
   const activeParticipantId =
     thinkingParticipant?.id ?? (isLive && displayTurns.length > 0 ? displayTurns[displayTurns.length - 1].participantId : null);
+  const speakerNames = Object.fromEntries(
+    Object.entries(participantInfoMap).map(([id, info]) => [id, info.name])
+  );
+
+  const questionLimitReached = displayQuestions.length >= 10;
+  const composerDisabled = !questionsOpen || questionLimitReached;
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
+    <div className="studio-live-room">
+      <header className="studio-live-header">
+        <Tooltip title={t('studio.title')}>
           <Button
             type="text"
+            shape="circle"
             icon={<ArrowLeftOutlined />}
+            aria-label={t('studio.title')}
             onClick={() => navigate('/studio')}
-            style={{ marginBottom: 8, paddingLeft: 0 }}
-          >
-            {t('studio.title')}
-          </Button>
-          <h2 className="m-0 break-words text-[clamp(1.25rem,6vw,1.5rem)]">
-            <AudioOutlined style={{ marginRight: 8 }} />
-            {discussion.name}
-          </h2>
-          <Space style={{ marginTop: 4 }} size={4}>
-            <Text type="secondary" style={{ fontSize: 13 }}>
-              {t(`studio.format_${discussion.format}`)} · {activeParticipants.length}{' '}
-              {t('studio.participants')}
-            </Text>
-          </Space>
+          />
+        </Tooltip>
+        <div className="studio-live-title">
+          <h1>{discussion.name}</h1>
+          <Text type="secondary">
+            {isLive
+              ? t('studio.liveProgress', { current: Math.min(displayTurns.length, turnTarget), target: turnTarget })
+              : t(`studio.format_${discussion.format}`)}
+          </Text>
         </div>
-        <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
-          <Tooltip title={t('studio.editDiscussion')}>
-            <Button
-              aria-label={t('studio.editDiscussion')}
-              icon={<EditOutlined />}
-              onClick={() => navigate(`/studio/${discussion.id}/edit`)}
-            />
-          </Tooltip>
+        <Tooltip title={t('studio.more')}>
           <Button
-            className="flex-1 sm:flex-none"
-            icon={<PlayCircleOutlined />}
-            type="primary"
-            loading={triggering}
-            onClick={handleRunNow}
-          >
-            {runs.length === 0 ? t('studio.runNow') : t('studio.runAgain')}
-          </Button>
-          {ttsAvailable && selectedRunId && !hasCompleteTurnAudio && (
-            <Tooltip title={selectedRun?.status !== 'done' ? t('studio.renderAudioNeedsRun') : undefined}>
+            type="text"
+            shape="circle"
+            icon={<MoreOutlined />}
+            aria-label={t('studio.more')}
+            onClick={() => setMoreOpen(true)}
+          />
+        </Tooltip>
+      </header>
+
+      <StudioPanel participants={orderedParticipants} activeParticipantId={activeParticipantId} />
+
+      <LiveVoiceBar
+        runId={selectedRunId}
+        runStatus={isLive ? 'running' : selectedRun?.status}
+        runStartedAt={selectedRun?.startedAt ?? selectedRun?.createdAt}
+        turns={displayTurns}
+        fallbackUrl={selectedRun?.audioUrl}
+        speakerNames={speakerNames}
+        waitingMessage={t(`studio.warmup${warmupIndex}`)}
+        audioAvailable={ttsAvailable}
+      />
+
+      <div
+        ref={conversationRef}
+        className="studio-conversation"
+        role="log"
+        aria-live="polite"
+        aria-label={t('studio.transcript')}
+        tabIndex={0}
+        onScroll={handleConversationScroll}
+      >
+        {isLive && (
+          <div className="studio-generation-status">
+            <Spin size="small" />
+            <Text type="secondary">
+              {displayTurns.length === 0
+                ? t(`studio.warmup${warmupIndex}`)
+                : t('studio.turnProgress', { current: Math.min(displayTurns.length, turnTarget), target: turnTarget })}
+            </Text>
+          </div>
+        )}
+
+        {displayTurns.length === 0 && displayQuestions.length === 0 && !isLive ? (
+          <div className="studio-room-empty">
+            <AudioOutlined />
+            <Text type={selectedRun?.status === 'error' ? 'danger' : 'secondary'}>
+              {selectedRun?.status === 'error'
+                ? t('studio.runFailed', { message: selectedRun.errorMessage ?? t('studio.unknownError') })
+                : t('studio.noRuns')}
+            </Text>
+            {!selectedRun && (
+              <Button type="primary" icon={<PlayCircleOutlined />} loading={triggering} onClick={handleRunNow}>
+                {t('studio.runNow')}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <>
+            {displayTurns.map((turn) => (
+              <React.Fragment key={turn.id}>
+                {displayQuestions
+                  .filter((item) => item.answeredByTurnId === turn.id)
+                  .map((item) => <UserQuestion key={item.id} question={item} />)}
+                <TurnBubble
+                  turn={turn}
+                  participant={
+                    participantInfoMap[turn.participantId] ?? {
+                      name: t('studio.agentFallback'),
+                      characterType: null,
+                      index: 0
+                    }
+                  }
+                />
+              </React.Fragment>
+            ))}
+            {displayQuestions
+              .filter((item) => !item.answeredByTurnId)
+              .map((item) => <UserQuestion key={item.id} question={item} />)}
+            {isLive && thinkingParticipant && (
+              <TypingIndicator participant={thinkingParticipant.info} label={t('studio.speakerThinking')} />
+            )}
+            {!isLive && selectedRun?.status === 'done' && displayTurns.length > 0 && (
+              <div className="studio-finished">
+                <Text type="secondary">{t('studio.discussionFinished')}</Text>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {!followingLive && isLive && (
+        <Button className="studio-new-messages" size="small" onClick={returnToLive}>
+          {t('studio.newMessages')}
+        </Button>
+      )}
+
+      <form
+        className="studio-question-composer"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleQuestionSubmit();
+        }}
+      >
+        <Input
+          value={question}
+          maxLength={500}
+          disabled={composerDisabled}
+          placeholder={
+            questionLimitReached
+              ? t('studio.questionLimitReached')
+              : questionsOpen
+                ? t('studio.questionPlaceholder')
+                : t('studio.questionLiveOnly')
+          }
+          aria-label={t('studio.questionPlaceholder')}
+          onChange={(event) => setQuestion(event.target.value)}
+          suffix={
+            <Button
+              type="primary"
+              shape="circle"
+              htmlType="submit"
+              icon={<SendOutlined />}
+              loading={submittingQuestion}
+              disabled={composerDisabled || !question.trim()}
+              aria-label={t('studio.sendQuestion')}
+            />
+          }
+        />
+        {questionsOpen && (
+          <Text type="secondary" className="studio-question-count">
+            {t('studio.questionsRemaining', { count: Math.max(0, 10 - displayQuestions.length) })}
+          </Text>
+        )}
+      </form>
+
+      <Drawer
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        title={t('studio.discussionOptions')}
+        width={420}
+      >
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          <Space wrap>
+            <Button
+              type="primary"
+              icon={<PlayCircleOutlined />}
+              loading={triggering}
+              disabled={isLive}
+              onClick={handleRunNow}
+            >
+              {runs.length === 0 ? t('studio.runNow') : t('studio.runAgain')}
+            </Button>
+            <Button icon={<EditOutlined />} onClick={() => navigate(`/studio/${discussion.id}/edit`)}>
+              {t('studio.editDiscussion')}
+            </Button>
+            {ttsAvailable && selectedRunId && !hasCompleteTurnAudio && (
               <Button
-                className="flex-1 sm:flex-none"
                 loading={renderingAudio}
                 disabled={selectedRun?.status !== 'done'}
                 onClick={handleRenderAudio}
@@ -706,195 +836,62 @@ export function DiscussionDetail() {
               >
                 {t('studio.renderAudio')}
               </Button>
-            </Tooltip>
-          )}
-        </div>
-      </div>
+            )}
+          </Space>
 
-      <Card size="small" style={{ marginBottom: 16 }} title={t('studio.detailsTitle')}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 24px', fontSize: 13 }}>
-          <span>
-            <Text type="secondary">{t('studio.detailsFormat')}: </Text>
-            {t(`studio.format_${discussion.format}`)}
-          </span>
-          <span>
-            <Text type="secondary">{t('studio.detailsLanguage')}: </Text>
-            {(discussion.formatConfig.language ?? 'en') === 'de' ? t('studio.languageGerman') : t('studio.languageEnglish')}
-          </span>
-          {ttsAvailable && (
-            <span>
-              <Text type="secondary">{t('studio.detailsVoiceService')}: </Text>
-              {(() => {
-                const chosen = discussion.formatConfig.ttsProvider;
-                const effective =
-                  chosen === 'google' || chosen === 'openai'
-                    ? chosen
-                    : capabilities.ttsProviders.includes('google')
-                      ? 'google'
-                      : capabilities.ttsProviders.includes('openai')
-                        ? 'openai'
-                        : null;
-                if (!effective) return t('studio.voiceApiAuto');
-                const label = effective === 'google' ? t('studio.voiceApiGoogle') : t('studio.voiceApiOpenai');
-                return chosen === 'google' || chosen === 'openai' ? label : `${t('studio.voiceApiAuto')} · ${label}`;
-              })()}
-            </span>
+          {runs.length > 0 && (
+            <div>
+              <Text strong>{t('studio.runHistory')}</Text>
+              <Select
+                value={selectedRunId ?? undefined}
+                onChange={setSelectedRunId}
+                style={{ width: '100%', marginTop: 8 }}
+                options={runs.map((run, index) => ({
+                  value: run.id,
+                  label: t('studio.runHistoryItem', {
+                    number: runs.length - index,
+                    date: new Date(run.createdAt).toLocaleDateString()
+                  })
+                }))}
+              />
+            </div>
           )}
-          <span>
-            <Text type="secondary">{t('studio.detailsCreated')}: </Text>
-            {new Date(discussion.createdAt).toLocaleDateString()}
-          </span>
-        </div>
-        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          <Text type="secondary" style={{ fontSize: 13 }}>{t('studio.detailsSpeakers')}: </Text>
-          {activeParticipants.map((p) => {
-            const info = participantInfoMap[p.id];
-            return (
-              <Tag key={p.id} style={{ margin: 0 }}>
-                {getCharacterTypeEmoji(info?.characterType ?? null)} {info?.name ?? p.agentId} · {p.voiceId}
-              </Tag>
-            );
-          })}
-        </div>
-      </Card>
 
-      {runs.length === 0 && !liveRun ? (
-        <Card>
-          <Text type="secondary">{t('studio.noRuns')}</Text>
-        </Card>
-      ) : (
-        <Tabs
-          items={[
-            {
-              key: 'audio',
-              label: t('studio.onAir'),
-              children: (
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <OnAirQueue
-                    runId={selectedRunId}
-                    turns={displayTurns}
-                    fallbackUrl={selectedRun?.audioUrl}
-                    isLive={isLive}
-                    waitingMessage={t(`studio.warmup${warmupIndex}`)}
-                  />
-                  {ttsAvailable && selectedRun?.status === 'done' && !hasCompleteTurnAudio && (
-                    <Button
-                      size="small"
-                      loading={renderingAudio}
-                      onClick={handleRenderAudio}
-                      icon={<AudioOutlined />}
-                    >
-                      {t('studio.renderAudio')}
-                    </Button>
-                  )}
-                  {!ttsAvailable && !hasAudio && (
-                    <Text type="secondary">{t('studio.audioNotConfigured')}</Text>
-                  )}
-                </Space>
-              )
-            },
-            {
-              key: 'transcript',
-              label: t('studio.transcript'),
-              children: (
-                <div>
-                  {runs.length > 1 && (
-                    <Select
-                      value={selectedRunId ?? undefined}
-                      onChange={setSelectedRunId}
-                      style={{ width: 260, marginBottom: 16 }}
-                      options={runs.map((r, i) => ({
-                        value: r.id,
-                        label: `Run ${i + 1} — ${new Date(r.createdAt).toLocaleDateString()}`
-                      }))}
-                    />
-                  )}
-                  {isLive && (
-                    <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Spin size="small" />
-                      <Text type="secondary">
-                        {displayTurns.length === 0
-                          ? t(`studio.warmup${warmupIndex}`)
-                          : t('studio.turnProgress', { current: displayTurns.length, target: turnTarget })}
-                      </Text>
-                    </div>
-                  )}
-                  {isLive && orderedParticipants.length > 0 && (
-                    <StudioPanel participants={orderedParticipants} activeParticipantId={activeParticipantId} />
-                  )}
-                  {displayTurns.length === 0 && !isLive ? (
-                    selectedRun?.status === 'error' ? (
-                      <Text type="danger">
-                        {t('studio.runFailed', { message: selectedRun.errorMessage ?? 'Unknown error' })}
-                      </Text>
-                    ) : selectedRun?.status === 'pending' || selectedRun?.status === 'running' ? (
-                      <Text type="secondary">{t('studio.runPending')}</Text>
-                    ) : (
-                      <Text type="secondary">{t('studio.noRuns')}</Text>
-                    )
-                  ) : (
-                    <>
-                      <List
-                        dataSource={displayTurns}
-                        renderItem={(turn) => (
-                          <TurnBubble
-                            key={turn.id}
-                            turn={turn}
-                            participant={
-                              participantInfoMap[turn.participantId] ?? {
-                                name: 'Agent',
-                                characterType: null,
-                                index: 0
-                              }
-                            }
-                          />
-                        )}
-                      />
-                      {isLive && thinkingParticipant && displayTurns.length > 0 && (
-                        <TypingIndicator
-                          participant={thinkingParticipant.info}
-                          label={t('studio.speakerThinking')}
-                        />
-                      )}
-                      {!isLive && selectedRun?.status === 'done' && displayTurns.length > 0 && (
-                        <div style={{ textAlign: 'center', margin: '16px 0 8px' }}>
-                          <Text type="secondary" style={{ fontSize: 13 }}>
-                            🏁 {t('studio.discussionFinished')}
-                          </Text>
-                          {ttsAvailable && !selectedRun.audioUrl && !hasCompleteTurnAudio && (
-                            <div style={{ marginTop: 8 }}>
-                              <Button
-                                size="small"
-                                loading={renderingAudio}
-                                onClick={handleRenderAudio}
-                                icon={<AudioOutlined />}
-                              >
-                                {t('studio.renderAudio')}
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <div ref={transcriptEndRef} />
-                    </>
-                  )}
-                </div>
-              )
-            },
-            {
-              key: 'evidence',
-              label: t('studio.evidencePanel'),
-              children: (
+          <div className="studio-detail-grid">
+            <div><Text type="secondary">{t('studio.detailsFormat')}</Text><strong>{t(`studio.format_${discussion.format}`)}</strong></div>
+            <div><Text type="secondary">{t('studio.detailsLanguage')}</Text><strong>{(discussion.formatConfig.language ?? 'en') === 'de' ? t('studio.languageGerman') : t('studio.languageEnglish')}</strong></div>
+            <div><Text type="secondary">{t('studio.detailsCreated')}</Text><strong>{new Date(discussion.createdAt).toLocaleDateString()}</strong></div>
+            <div><Text type="secondary">{t('studio.participants')}</Text><strong>{activeParticipants.length}</strong></div>
+          </div>
+
+          <div>
+            <Text strong>{t('studio.detailsSpeakers')}</Text>
+            <div className="studio-speaker-tags">
+              {activeParticipants.map((participant) => {
+                const info = participantInfoMap[participant.id];
+                return (
+                  <Tag key={participant.id}>
+                    {getCharacterTypeEmoji(info?.characterType ?? null)} {info?.name ?? participant.agentId}
+                  </Tag>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedRun && (
+            <div>
+              <Text strong>{t('studio.evidencePanel')}</Text>
+              <div style={{ marginTop: 8 }}>
                 <EvidencePanel
-                  evidenceSnapshot={selectedRun?.evidenceSnapshot ?? null}
+                  evidenceSnapshot={selectedRun.evidenceSnapshot ?? null}
                   legacyAgenda={discussion.description}
                   participantInfoMap={participantInfoMap}
                 />
-              )
-            }
-          ]}
-        />
-      )}
+              </div>
+            </div>
+          )}
+        </Space>
+      </Drawer>
     </div>
   );
 }

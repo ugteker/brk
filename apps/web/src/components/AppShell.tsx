@@ -164,6 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   const current = activeKey(pathname);
+  const isDiscussionRoom = pathname !== '/studio/new' && /^\/studio\/[^/]+$/.test(pathname);
   type BellNotice = { id: string; kind: 'run_failed' | 'new_report' | 'show_started' | 'show_finished' | 'audio_ready'; agentName: string; message: string; timestamp: string };
   const combinedNotices: BellNotice[] = [
     ...failedRunNotices.map((n) => ({ id: n.runId, kind: 'run_failed' as const, agentName: n.agentName, message: n.errorMessage ?? t('nav.bellRunFailed'), timestamp: n.timestamp })),
@@ -237,7 +238,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
+    <Layout
+      style={{
+        minHeight: '100vh',
+        height: isDiscussionRoom ? '100dvh' : undefined,
+        overflow: isDiscussionRoom ? 'hidden' : undefined,
+        background: 'transparent'
+      }}
+    >
       <Header style={headerStyle(theme, isScrolled)}>
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 flex-wrap">
           {/* Logo */}
@@ -383,7 +391,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </Header>
-      <Content className="p-[clamp(12px,3vw,24px)] pb-24 sm:pb-6">
+      <Content
+        className={
+          isDiscussionRoom
+            ? 'min-h-0 overflow-hidden p-[clamp(8px,2vw,16px)] pb-20 sm:pb-4'
+            : 'p-[clamp(12px,3vw,24px)] pb-24 sm:pb-6'
+        }
+        style={isDiscussionRoom ? { flex: '1 1 0', minHeight: 0, overflow: 'hidden' } : undefined}
+      >
         {children}
       </Content>
 

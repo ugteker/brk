@@ -124,6 +124,15 @@ export interface DiscussionTurn {
   createdAt: Date;
 }
 
+export interface DiscussionLiveQuestion {
+  id: string;
+  discussionRunId: string;
+  content: string;
+  createdAt: Date;
+  answeredByTurnId: string | null;
+  answeredAt: Date | null;
+}
+
 export interface DiscussionRun {
   id: string;
   discussionId: string;
@@ -134,8 +143,10 @@ export interface DiscussionRun {
   completedAt: Date | null;
   syntheticSourceItemId: string | null;
   audioUrl: string | null;
+  questionsClosedAt: Date | null;
   createdAt: Date;
   turns: DiscussionTurn[];
+  questions: DiscussionLiveQuestion[];
   /** Null for legacy runs created before this snapshot existed, or for runs that failed
    * validation before any resolution/evidence was recorded. */
   evidenceSnapshot: DiscussionRunEvidenceSnapshot | null;

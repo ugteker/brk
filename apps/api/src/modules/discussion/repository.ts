@@ -7,13 +7,14 @@ import type {
   CreateDiscussionInput,
   UpdateDiscussionInput,
   DiscussionTrigger,
-  DiscussionRunEvidenceSnapshot
+  DiscussionRunEvidenceSnapshot,
+  DiscussionLiveQuestion
 } from './types';
 import type { RealtimeEventWriter } from '../realtime/types';
 
 type DiscussionDb = Pick<
   PrismaClient,
-  'discussion' | 'discussionParticipant' | 'discussionRun' | 'discussionTurn' | 'realtimeEvent' | '$transaction'
+  'discussion' | 'discussionParticipant' | 'discussionRun' | 'discussionTurn' | 'discussionLiveQuestion' | 'realtimeEvent' | '$transaction'
 >;
 
 /** Used when a caller doesn't wire a real RealtimeEventWriter (e.g. legacy tests); keeps
@@ -46,6 +47,17 @@ function mapTurn(row: any): DiscussionTurn {
   };
 }
 
+function mapLiveQuestion(row: any): DiscussionLiveQuestion {
+  return {
+    id: row.id,
+    discussionRunId: row.discussionRunId,
+    content: row.content,
+    createdAt: row.createdAt,
+    answeredByTurnId: row.answeredByTurnId ?? null,
+    answeredAt: row.answeredAt ?? null
+  };
+}
+
 function mapRun(row: any): DiscussionRun {
   return {
     id: row.id,
@@ -57,8 +69,10 @@ function mapRun(row: any): DiscussionRun {
     completedAt: row.completedAt ?? null,
     syntheticSourceItemId: row.syntheticSourceItemId ?? null,
     audioUrl: row.audioUrl ?? null,
+    questionsClosedAt: row.questionsClosedAt ?? null,
     createdAt: row.createdAt,
     turns: (row.turns ?? []).map(mapTurn),
+    questions: (row.questions ?? []).map(mapLiveQuestion),
     evidenceSnapshot: row.evidenceSnapshotJson ? JSON.parse(row.evidenceSnapshotJson) : null
   };
 }
@@ -218,7 +232,7 @@ export class DiscussionRepository {
     const row = await (this.db as any).$transaction(async (tx: any) => {
       const created = await tx.discussionRun.create({
         data: { discussionId, triggeredBy, status: 'pending' },
-        include: { turns: true }
+        include: { turns: true, questions: true }
       });
       const discussion = await tx.discussion.findUnique({ where: { id: discussionId }, select: { ownerUserId: true } });
       if (!discussion) {
@@ -236,7 +250,10 @@ export class DiscussionRepository {
   async getRunWithTurns(runId: string): Promise<DiscussionRun | null> {
     const row = await (this.db as any).discussionRun.findUnique({
       where: { id: runId },
-      include: { turns: { orderBy: { turnIndex: 'asc' } } }
+      include: {
+        turns: { orderBy: { turnIndex: 'asc' } },
+        questions: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }
+      }
     });
     return row ? mapRun(row) : null;
   }
@@ -244,7 +261,10 @@ export class DiscussionRepository {
   async listRuns(discussionId: string): Promise<DiscussionRun[]> {
     const rows = await (this.db as any).discussionRun.findMany({
       where: { discussionId },
-      include: { turns: { orderBy: { turnIndex: 'asc' } } },
+      include: {
+        turns: { orderBy: { turnIndex: 'asc' } },
+        questions: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }
+      },
       orderBy: { createdAt: 'desc' }
     });
     return rows.map(mapRun);
@@ -303,6 +323,117 @@ export class DiscussionRepository {
         throw new Error(`invariant_violation: discussion run ${updated.discussionRunId} references missing discussion ${run.discussionId}`);
       }
       await this.realtime.append(tx, { userId: discussion.ownerUserId, topic: 'discussion.changed', entityId: run.discussionId });
+    });
+  }
+
+  async submitLiveQuestion(
+    runId: string,
+    content: string
+  ): Promise<
+    | { ok: true; question: DiscussionLiveQuestion }
+    | { ok: false; reason: 'run_not_found' | 'run_not_live' | 'question_limit_reached' }
+  > {
+    return (this.db as any).$transaction(async (tx: any) => {
+      const run = await tx.discussionRun.findUnique({ where: { id: runId } });
+      if (!run) return { ok: false, reason: 'run_not_found' } as const;
+      if ((run.status !== 'pending' && run.status !== 'running') || run.questionsClosedAt) {
+        return { ok: false, reason: 'run_not_live' } as const;
+      }
+      const submittedCount = await tx.discussionLiveQuestion.count({
+        where: { discussionRunId: runId }
+      });
+      if (submittedCount >= 10) {
+        return { ok: false, reason: 'question_limit_reached' } as const;
+      }
+      const created = await tx.discussionLiveQuestion.create({
+        data: { discussionRunId: runId, content }
+      });
+      const discussion = await tx.discussion.findUnique({
+        where: { id: run.discussionId },
+        select: { ownerUserId: true }
+      });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${runId} references missing discussion ${run.discussionId}`);
+      }
+      await this.realtime.append(tx, {
+        userId: discussion.ownerUserId,
+        topic: 'discussion.changed',
+        entityId: run.discussionId
+      });
+      return { ok: true, question: mapLiveQuestion(created) } as const;
+    });
+  }
+
+  async getOldestUnansweredLiveQuestion(runId: string): Promise<DiscussionLiveQuestion | null> {
+    const row = await (this.db as any).discussionLiveQuestion.findFirst({
+      where: { discussionRunId: runId, answeredAt: null },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+    });
+    return row ? mapLiveQuestion(row) : null;
+  }
+
+  async markLiveQuestionAnswered(questionId: string, turnId: string): Promise<void> {
+    await (this.db as any).$transaction(async (tx: any) => {
+      const question = await tx.discussionLiveQuestion.findUnique({ where: { id: questionId } });
+      const turn = await tx.discussionTurn.findUnique({ where: { id: turnId } });
+      if (!question || !turn || question.discussionRunId !== turn.discussionRunId || question.answeredAt) {
+        throw new Error(`invariant_violation: question ${questionId} cannot be answered by turn ${turnId}`);
+      }
+      await tx.discussionLiveQuestion.update({
+        where: { id: questionId },
+        data: { answeredByTurnId: turnId, answeredAt: new Date() }
+      });
+      const run = await tx.discussionRun.findUnique({
+        where: { id: question.discussionRunId },
+        select: { discussionId: true }
+      });
+      if (!run) {
+        throw new Error(`invariant_violation: question ${questionId} references missing run ${question.discussionRunId}`);
+      }
+      const discussion = await tx.discussion.findUnique({
+        where: { id: run.discussionId },
+        select: { ownerUserId: true }
+      });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${question.discussionRunId} references missing discussion ${run.discussionId}`);
+      }
+      await this.realtime.append(tx, {
+        userId: discussion.ownerUserId,
+        topic: 'discussion.changed',
+        entityId: run.discussionId
+      });
+    });
+  }
+
+  async completeRunIfNoUnansweredQuestions(runId: string): Promise<boolean> {
+    return (this.db as any).$transaction(async (tx: any) => {
+      const run = await tx.discussionRun.findUnique({ where: { id: runId } });
+      if (!run) throw new Error(`Discussion run ${runId} not found`);
+      if (run.status === 'done') return true;
+      if (run.status !== 'running') {
+        throw new Error(`Discussion run ${runId} is not running`);
+      }
+      const unansweredCount = await tx.discussionLiveQuestion.count({
+        where: { discussionRunId: runId, answeredAt: null }
+      });
+      if (unansweredCount > 0) return false;
+      await tx.discussionRun.update({
+        where: { id: runId },
+        data: { questionsClosedAt: new Date() }
+      });
+      const discussion = await tx.discussion.findUnique({
+        where: { id: run.discussionId },
+        select: { ownerUserId: true }
+      });
+      if (!discussion) {
+        throw new Error(`invariant_violation: discussion run ${runId} references missing discussion ${run.discussionId}`);
+      }
+      await this.realtime.append(tx, {
+        userId: discussion.ownerUserId,
+        topic: 'discussion.changed',
+        entityId: run.discussionId
+      });
+      return true;
     });
   }
 

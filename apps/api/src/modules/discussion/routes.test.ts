@@ -15,7 +15,7 @@ const discRow = {
 const runRow = {
   id: 'r1', discussionId: 'd1', status: 'pending' as const, triggeredBy: 'manual' as const,
   errorMessage: null, startedAt: null, completedAt: null, syntheticSourceItemId: null, audioUrl: null,
-  createdAt: new Date(), turns: []
+  createdAt: new Date(), turns: [], questions: []
 };
 
 function mockRepo(overrides: Partial<DiscussionRepositoryLike> = {}): DiscussionRepositoryLike {
@@ -32,6 +32,20 @@ function mockRepo(overrides: Partial<DiscussionRepositoryLike> = {}): Discussion
     updateRun: vi.fn().mockResolvedValue(undefined),
     createTurn: vi.fn().mockResolvedValue({ id: 't1', turnIndex: 0 }),
     updateTurnAudioUrl: vi.fn().mockResolvedValue(undefined),
+    submitLiveQuestion: vi.fn().mockResolvedValue({
+      ok: true,
+      question: {
+        id: 'q1',
+        discussionRunId: 'r1',
+        content: 'Audience question',
+        createdAt: new Date(),
+        answeredByTurnId: null,
+        answeredAt: null
+      }
+    }),
+    getOldestUnansweredLiveQuestion: vi.fn().mockResolvedValue(null),
+    markLiveQuestionAnswered: vi.fn().mockResolvedValue(undefined),
+    completeRunIfNoUnansweredQuestions: vi.fn().mockResolvedValue(true),
     ...overrides
   } as any;
 }
@@ -177,6 +191,98 @@ describe('Discussion routes', () => {
     const app = await buildApp();
     const res = await app.inject({ method: 'GET', url: '/api/discussions/d1/runs/r1' });
     expect(res.statusCode).toBe(200);
+  });
+
+  it('POST questions trims content and returns the persisted question', async () => {
+    const submitLiveQuestion = vi.fn().mockResolvedValue({
+      ok: true,
+      question: { id: 'q1', discussionRunId: 'r1', content: 'Audience question' }
+    });
+    const app = await buildApp({ submitLiveQuestion });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/discussions/d1/runs/r1/questions',
+      payload: { content: '  Audience question  ' }
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(submitLiveQuestion).toHaveBeenCalledWith('r1', 'Audience question');
+  });
+
+  it('POST questions returns 400 for a missing or non-string content field', async () => {
+    const app = await buildApp();
+
+    const missing = await app.inject({
+      method: 'POST',
+      url: '/api/discussions/d1/runs/r1/questions',
+      payload: {}
+    });
+    const wrongType = await app.inject({
+      method: 'POST',
+      url: '/api/discussions/d1/runs/r1/questions',
+      payload: { content: 42 }
+    });
+
+    expect(missing.statusCode).toBe(400);
+    expect(wrongType.statusCode).toBe(400);
+  });
+
+  it('POST questions returns 422 for empty or over-500-character trimmed content', async () => {
+    const app = await buildApp();
+
+    const empty = await app.inject({
+      method: 'POST',
+      url: '/api/discussions/d1/runs/r1/questions',
+      payload: { content: '   ' }
+    });
+    const tooLong = await app.inject({
+      method: 'POST',
+      url: '/api/discussions/d1/runs/r1/questions',
+      payload: { content: 'x'.repeat(501) }
+    });
+
+    expect(empty.statusCode).toBe(422);
+    expect(tooLong.statusCode).toBe(422);
+  });
+
+  it('POST questions returns 404 for a non-owner or mismatched run', async () => {
+    const nonOwner = await buildApp({
+      getDiscussion: vi.fn().mockResolvedValue({ ...discRow, ownerUserId: 'other' })
+    });
+    const mismatched = await buildApp({
+      getRunWithTurns: vi.fn().mockResolvedValue({ ...runRow, discussionId: 'other' })
+    });
+
+    expect((await nonOwner.inject({
+      method: 'POST',
+      url: '/api/discussions/d1/runs/r1/questions',
+      payload: { content: 'Question' }
+    })).statusCode).toBe(404);
+    expect((await mismatched.inject({
+      method: 'POST',
+      url: '/api/discussions/d1/runs/r1/questions',
+      payload: { content: 'Question' }
+    })).statusCode).toBe(404);
+  });
+
+  it('POST questions maps inactive runs and the ten-question cap to 409', async () => {
+    const inactive = await buildApp({
+      submitLiveQuestion: vi.fn().mockResolvedValue({ ok: false, reason: 'run_not_live' })
+    });
+    const full = await buildApp({
+      submitLiveQuestion: vi.fn().mockResolvedValue({ ok: false, reason: 'question_limit_reached' })
+    });
+
+    expect((await inactive.inject({
+      method: 'POST',
+      url: '/api/discussions/d1/runs/r1/questions',
+      payload: { content: 'Question' }
+    })).statusCode).toBe(409);
+    expect((await full.inject({
+      method: 'POST',
+      url: '/api/discussions/d1/runs/r1/questions',
+      payload: { content: 'Question' }
+    })).statusCode).toBe(409);
   });
 
   it('POST /api/discussions/:id/runs/:runId/audio returns 501 when tts not configured', async () => {

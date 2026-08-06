@@ -344,7 +344,13 @@ export class DiscussionOrchestrator {
       const segments = this.getSegments(discussion.format, discussion.formatConfig.segments);
       let turnIndex = 0;
 
-      for (let turn = 0; turn < totalTurns; turn++) {
+      let turn = 0;
+      while (true) {
+        const audienceQuestion = await discussionRepository.getOldestUnansweredLiveQuestion(runId);
+        if (turn >= totalTurns && !audienceQuestion) {
+          if (await discussionRepository.completeRunIfNoUnansweredQuestions(runId)) break;
+          continue;
+        }
         const ctx = contexts[turn % contexts.length];
         const segmentIdx = segments ? Math.floor((turn / totalTurns) * segments.length) : -1;
         const segment = segments ? segments[Math.min(segmentIdx, segments.length - 1)] : null;
@@ -353,10 +359,13 @@ export class DiscussionOrchestrator {
         const evidenceSuffix = ctx.transcriptExcerpt
           ? `\n\nRelevant source material excerpts:\n${ctx.transcriptExcerpt}`
           : '';
-        const userPrompt =
+        const baseUserPrompt =
           conversationHistory.length === 0
             ? `${directorPrefix}\n\nYou are speaking first. Begin the discussion as ${ctx.agentName}. Draw on your recent analysis:\n${ctx.recentReportsSummary}${evidenceSuffix}`
             : `${directorPrefix}\n\nIt's ${ctx.agentName}'s turn${segment ? ` (segment: ${segment})` : ''}. Respond to what was just said, staying in character. Your recent analysis:\n${ctx.recentReportsSummary}${evidenceSuffix}`;
+        const userPrompt = audienceQuestion
+          ? `${baseUserPrompt}\n\n--- AUDIENCE QUESTION ---\n${audienceQuestion.content}\n--- END AUDIENCE QUESTION ---\nAddress this audience question directly in this turn.`
+          : baseUserPrompt;
 
         const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
           ...conversationHistory,
@@ -373,6 +382,9 @@ export class DiscussionOrchestrator {
         const rawText = response.content.find((c) => c.type === 'text')?.text ?? '';
         const text = sanitizeDiscussionTurnText(rawText);
         const createdTurn = await discussionRepository.createTurn(runId, ctx.participant.id, turnIndex, text, segment);
+        if (audienceQuestion) {
+          await discussionRepository.markLiveQuestionAnswered(audienceQuestion.id, createdTurn.id);
+        }
         if (ttsClient && this.deps.ttsStorage) {
           void renderDiscussionTurnAudio({
             runId,
@@ -390,6 +402,7 @@ export class DiscussionOrchestrator {
         conversationHistory.push({ role: 'user', content: userPrompt });
         conversationHistory.push({ role: 'assistant', content: text });
         turnIndex++;
+        turn++;
       }
 
       const run = await discussionRepository.getRunWithTurns(runId);

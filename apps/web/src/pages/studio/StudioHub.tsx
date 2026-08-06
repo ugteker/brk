@@ -77,14 +77,14 @@ export function StudioHub() {
           {t('studio.title')}
         </Title>
         {discussions.length > 0 && (
-          <Tooltip title={t('studio.newDiscussion')}>
-            <StudioPrimaryButton
-              shape="circle"
-              icon={<PlusOutlined />}
-              aria-label={t('studio.newDiscussion')}
-              onClick={() => navigate('/studio/new')}
-            />
-          </Tooltip>
+          <StudioPrimaryButton
+            className="studio-new-discussion-button"
+            icon={<PlusOutlined />}
+            aria-label={t('studio.newDiscussion')}
+            onClick={() => navigate('/studio/new')}
+          >
+            {t('studio.newDiscussion')}
+          </StudioPrimaryButton>
         )}
       </div>
 

@@ -312,6 +312,46 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
     return reply.status(200).send(run);
   });
 
+  app.post('/api/discussions/:id/runs/:runId/questions', async (req, reply) => {
+    const { id, runId } = req.params as { id: string; runId: string };
+    const body = req.body as { content?: unknown } | null;
+    if (!body || typeof body.content !== 'string') {
+      return reply.status(400).send({ code: 'invalid_input', message: 'content must be a string' });
+    }
+    const content = body.content.trim();
+    if (content.length === 0) {
+      return reply.status(422).send({ code: 'invalid_content', message: 'content must not be empty' });
+    }
+    if (content.length > 500) {
+      return reply.status(422).send({ code: 'invalid_content', message: 'content must not exceed 500 characters' });
+    }
+    const discussion = await deps.discussionRepository.getDiscussion(id);
+    if (!discussion || discussion.ownerUserId !== req.userId) {
+      return reply.status(404).send({ code: 'not_found', message: 'Discussion not found' });
+    }
+    const run = await deps.discussionRepository.getRunWithTurns(runId);
+    if (!run || run.discussionId !== id) {
+      return reply.status(404).send({ code: 'not_found', message: 'Run not found' });
+    }
+    const result = await deps.discussionRepository.submitLiveQuestion(runId, content);
+    if (!result.ok) {
+      if (result.reason === 'run_not_found') {
+        return reply.status(404).send({ code: 'not_found', message: 'Run not found' });
+      }
+      if (result.reason === 'question_limit_reached') {
+        return reply.status(409).send({
+          code: 'question_limit_reached',
+          message: 'A run accepts at most 10 questions'
+        });
+      }
+      return reply.status(409).send({
+        code: 'run_not_live',
+        message: 'Questions are accepted only while a run is pending or running'
+      });
+    }
+    return reply.status(201).send(result.question);
+  });
+
   // Trigger TTS audio render for a completed run
   app.post('/api/discussions/:id/runs/:runId/audio', async (req, reply) => {
     const { id, runId } = req.params as { id: string; runId: string };
