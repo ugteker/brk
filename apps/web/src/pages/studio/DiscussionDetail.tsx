@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Button,
   Card,
   Drawer,
   Input,
-  Select,
   Space,
   Spin,
   Tag,
@@ -15,7 +15,7 @@ import {
 import {
   ArrowLeftOutlined,
   AudioOutlined,
-  EditOutlined,
+  ControlOutlined,
   MoreOutlined,
   PlayCircleOutlined,
   SendOutlined
@@ -28,16 +28,19 @@ import { useParams, useLocation } from 'react-router-dom';
 import { useSafeNavigate } from '../../utils/useSafeNavigate';
 import {
   getAudioRenderStatus,
+  createDiscussion,
   getDiscussion,
   getDiscussionRun,
   listDiscussionRuns,
   triggerAudioRender,
   triggerDiscussionRun,
+  updateDiscussion,
   getDiscussionCapabilities,
   submitDiscussionQuestion,
   type DiscussionCapabilities,
   type DiscussionDto,
   type DiscussionLiveQuestionDto,
+  type DiscussionPreselect,
   type DiscussionRunDto,
   type DiscussionRunEvidenceSnapshotDto,
   type DiscussionTurnDto
@@ -45,6 +48,14 @@ import {
 import { useAppData } from '../../context/AppDataContext';
 import { useRealtimeSubscription } from '../../context/RealtimeContext';
 import { LiveVoiceBar } from './LiveVoiceBar';
+import {
+  CastingStage,
+  StudioBoard,
+  applyPreselect,
+  draftFromDiscussion,
+  emptyDraft,
+  type ShowDraft
+} from './StudioBoard';
 
 const { Text, Paragraph } = Typography;
 
@@ -375,9 +386,135 @@ function EvidencePanel({
   );
 }
 
+/** /studio/new: the studio in setup mode - the stage casts, the board configures, GO LIVE
+ * creates the show and drops straight into the live room. */
+function SetupRoom() {
+  const { t, i18n } = useTranslation();
+  const navigate = useSafeNavigate();
+  const location = useLocation();
+  const [draft, setDraft] = useState<ShowDraft>(() => {
+    const base = emptyDraft(i18n.language);
+    const preselect = (location.state as { preselect?: DiscussionPreselect } | null)?.preselect;
+    return preselect && preselect.entries.length > 0 ? applyPreselect(base, preselect) : base;
+  });
+  const [preselectLabel, setPreselectLabel] = useState<string | null>(
+    () => (location.state as { preselect?: DiscussionPreselect } | null)?.preselect?.contextLabel ?? null
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [capabilities, setCapabilities] = useState<DiscussionCapabilities>({ tts: false, ttsProviders: [] });
+  const { agents } = useAppData();
+
+  useEffect(() => {
+    getDiscussionCapabilities().then(setCapabilities).catch(() => undefined);
+  }, []);
+
+  const effectiveTtsProvider: 'google' | 'openai' | null =
+    draft.ttsProvider !== 'auto' && capabilities.ttsProviders.includes(draft.ttsProvider)
+      ? draft.ttsProvider
+      : capabilities.ttsProviders.includes('openai')
+        ? 'openai'
+        : capabilities.ttsProviders.includes('google')
+          ? 'google'
+          : null;
+
+  function suggestedName(): string {
+    const name = draft.name.trim();
+    if (name) return name;
+    const q = draft.agenda.trim();
+    if (q) return q.length > 60 ? `${q.slice(0, 57)}…` : q;
+    return draft.cast
+      .map((m) => {
+        const agent = agents.find((a) => a.id === m.agentId);
+        return agent ? getAgentDisplayLabel(agent) : m.agentId;
+      })
+      .join(' × ');
+  }
+
+  async function submit(runNow: boolean) {
+    setSubmitting(true);
+    try {
+      const disc = await createDiscussion({
+        name: suggestedName(),
+        description: draft.agenda.trim() || undefined,
+        format: draft.format,
+        formatConfig: {
+          totalTurnTarget: draft.totalTurnTarget,
+          language: draft.language,
+          turnLength: draft.turnLength,
+          ...(draft.ttsProvider !== 'auto' ? { ttsProvider: draft.ttsProvider } : {}),
+          grounding: {
+            mode: draft.groundingMode,
+            ...(draft.groundingMode === 'material'
+              ? { reportIds: draft.reportIds, artifactIds: draft.transcriptIds }
+              : {})
+          }
+        },
+        participants: draft.cast.map((m, i) => ({ ...m, speakerOrder: i, reportIds: [] }))
+      });
+      if (runNow) {
+        const run = await triggerDiscussionRun(disc.id);
+        navigate(`/studio/${disc.id}`, { state: { liveRunId: run.id } });
+      } else {
+        navigate(`/studio/${disc.id}`);
+      }
+    } catch {
+      message.error(t('studio.failedToCreateDiscussion'));
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="studio-live-room">
+      <header className="studio-live-header">
+        <Tooltip title={t('studio.title')}>
+          <Button
+            type="text"
+            shape="circle"
+            icon={<ArrowLeftOutlined />}
+            aria-label={t('studio.title')}
+            onClick={() => navigate('/studio')}
+          />
+        </Tooltip>
+        <div className="studio-live-title">
+          <h1>{draft.name.trim() || t('studio.newShowTitle')}</h1>
+          <Text type="secondary">{t('studio.standby')}</Text>
+        </div>
+        <span />
+      </header>
+      <CastingStage
+        cast={draft.cast}
+        onChange={(cast) => setDraft((d) => ({ ...d, cast }))}
+        effectiveTtsProvider={effectiveTtsProvider}
+        language={draft.language}
+      />
+      <div className="studio-setup-main">
+        <StudioBoard
+          draft={draft}
+          onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+          capabilities={capabilities}
+          mode="create"
+          submitting={submitting}
+          onGoLive={() => void submit(true)}
+          onSave={() => void submit(false)}
+          preselectLabel={preselectLabel}
+          onClearPreselect={() => {
+            setPreselectLabel(null);
+            setDraft((d) => ({ ...d, cast: [], reportIds: [] }));
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function DiscussionDetail() {
-  const { t } = useTranslation();
   const { discussionId } = useParams<{ discussionId: string }>();
+  if (!discussionId) return <SetupRoom />;
+  return <LiveRoom key={discussionId} discussionId={discussionId} />;
+}
+
+function LiveRoom({ discussionId }: { discussionId: string }) {
+  const { t } = useTranslation();
   const navigate = useSafeNavigate();
   const location = useLocation();
   const { agents, refreshSources } = useAppData();
@@ -415,7 +552,12 @@ export function DiscussionDetail() {
   const [liveQuestions, setLiveQuestions] = useState<DiscussionLiveQuestionDto[]>([]);
   const [liveQuestionsOpen, setLiveQuestionsOpen] = useState(true);
   const [liveStatus, setLiveStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [revealedTurnCount, setRevealedTurnCount] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [consoleOpen, setConsoleOpen] = useState(false);
+  // Console drawer edit state: seeded from the loaded discussion, applied via updateDiscussion.
+  const [editDraft, setEditDraft] = useState<ShowDraft | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [question, setQuestion] = useState('');
   const [submittingQuestion, setSubmittingQuestion] = useState(false);
 
@@ -445,6 +587,7 @@ export function DiscussionDetail() {
     setLiveTurns([]);
     setLiveQuestions([]);
     setLiveQuestionsOpen(true);
+    setRevealedTurnCount(0);
     refreshLiveRun(liveRun);
   }, [liveRun, refreshLiveRun]);
 
@@ -496,12 +639,14 @@ export function DiscussionDetail() {
     conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
   }
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
     if (!discussionId) return;
-    setLoading(true);
+    const silent = options?.silent ?? false;
+    if (!silent) setLoading(true);
     try {
       const [disc, runList] = await Promise.all([getDiscussion(discussionId), listDiscussionRuns(discussionId)]);
       setDiscussion(disc);
+      setEditDraft(draftFromDiscussion(disc));
       setRuns(runList);
       if (runList.length > 0 && !selectedRunId) {
         setSelectedRunId(runList[0].id);
@@ -514,7 +659,7 @@ export function DiscussionDetail() {
     } catch {
       message.error(t('studio.failedToLoadDiscussion'));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [discussionId, liveRun, selectedRunId]);
 
@@ -525,7 +670,7 @@ export function DiscussionDetail() {
   useEffect(() => {
     if (liveStatus === 'done' || liveStatus === 'error') {
       setLiveRun(null);
-      loadData();
+      void loadData({ silent: true });
     }
     if (liveStatus === 'done') {
       // The completed run just (re)created/updated the synthetic library card;
@@ -548,6 +693,33 @@ export function DiscussionDetail() {
     }
   }
 
+  /** Applies console-drawer changes (name, cast, format knobs). Material/agenda stay
+   * locked after creation, mirroring the old edit wizard. */
+  async function handleSaveEdit() {
+    if (!editDraft) return;
+    setSavingEdit(true);
+    try {
+      const disc = await updateDiscussion(discussionId, {
+        name: editDraft.name.trim() || undefined,
+        format: editDraft.format,
+        formatConfig: {
+          totalTurnTarget: editDraft.totalTurnTarget,
+          language: editDraft.language,
+          turnLength: editDraft.turnLength,
+          ...(editDraft.ttsProvider !== 'auto' ? { ttsProvider: editDraft.ttsProvider } : {})
+        },
+        participants: editDraft.cast.map((m, i) => ({ ...m, speakerOrder: i }))
+      });
+      setDiscussion(disc);
+      setEditDraft(draftFromDiscussion(disc));
+      setConsoleOpen(false);
+    } catch {
+      message.error(t('studio.failedToUpdateDiscussion'));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   async function handleRenderAudio() {
     if (!discussionId || !selectedRunId) return;
     const runId = selectedRunId;
@@ -562,7 +734,7 @@ export function DiscussionDetail() {
         const status = await getAudioRenderStatus(discussionId, runId);
         if (status.state === 'done') {
           message.success(t('studio.audioReady'));
-          await loadData();
+          await loadData({ silent: true });
           return;
         }
         if (status.state === 'error') {
@@ -627,6 +799,13 @@ export function DiscussionDetail() {
   const displayQuestions: DiscussionLiveQuestionDto[] =
     liveRun && liveRun === selectedRunId ? liveQuestions : selectedRun?.questions ?? [];
   const isLive = liveStatus === 'running' && liveRun === selectedRunId;
+  const hasAnyTurnAudio = displayTurns.some((turn) => Boolean(turn.audioUrl));
+  const syncTranscriptToAudio = isLive && ttsAvailable && hasAnyTurnAudio;
+  const visibleTurns = syncTranscriptToAudio ? displayTurns.slice(0, revealedTurnCount) : displayTurns;
+  const visibleTurnIds = new Set(visibleTurns.map((turn) => turn.id));
+  const visibleQuestions = displayQuestions.filter(
+    (item) => !item.answeredByTurnId || visibleTurnIds.has(item.answeredByTurnId)
+  );
   const questionsOpen = isLive && liveQuestionsOpen;
   const hasCompleteTurnAudio = displayTurns.length > 0 && displayTurns.every((turn) => turn.audioUrl);
   const turnTarget = discussion.formatConfig.totalTurnTarget ?? 12;
@@ -639,10 +818,10 @@ export function DiscussionDetail() {
     .map((p) => ({ id: p.id, info: participantInfoMap[p.id] ?? { name: t('studio.agentFallback'), characterType: null, index: 0 } }));
   const thinkingParticipant =
     isLive && orderedParticipants.length > 0
-      ? orderedParticipants[displayTurns.length % orderedParticipants.length]
+      ? orderedParticipants[visibleTurns.length % orderedParticipants.length]
       : null;
   const activeParticipantId =
-    thinkingParticipant?.id ?? (isLive && displayTurns.length > 0 ? displayTurns[displayTurns.length - 1].participantId : null);
+    thinkingParticipant?.id ?? (isLive && visibleTurns.length > 0 ? visibleTurns[visibleTurns.length - 1].participantId : null);
   const speakerNames = Object.fromEntries(
     Object.entries(participantInfoMap).map(([id, info]) => [id, info.name])
   );
@@ -666,22 +845,58 @@ export function DiscussionDetail() {
           <h1>{discussion.name}</h1>
           <Text type="secondary">
             {isLive
-              ? t('studio.liveProgress', { current: Math.min(displayTurns.length, turnTarget), target: turnTarget })
+              ? t('studio.liveProgress', { current: Math.min(visibleTurns.length, turnTarget), target: turnTarget })
               : t(`studio.format_${discussion.format}`)}
           </Text>
         </div>
-        <Tooltip title={t('studio.more')}>
-          <Button
-            type="text"
-            shape="circle"
-            icon={<MoreOutlined />}
-            aria-label={t('studio.more')}
-            onClick={() => setMoreOpen(true)}
-          />
-        </Tooltip>
+        <div className="studio-live-header-actions">
+          <Tooltip title={t('studio.console')}>
+            <Button
+              type="text"
+              shape="circle"
+              icon={<ControlOutlined />}
+              aria-label={t('studio.console')}
+              onClick={() => setConsoleOpen(true)}
+            />
+          </Tooltip>
+          <Tooltip title={t('studio.more')}>
+            <Button
+              type="text"
+              shape="circle"
+              icon={<MoreOutlined />}
+              aria-label={t('studio.more')}
+              onClick={() => setMoreOpen(true)}
+            />
+          </Tooltip>
+        </div>
       </header>
 
       <StudioPanel participants={orderedParticipants} activeParticipantId={activeParticipantId} />
+
+      {runs.length > 0 && (
+        <div className="studio-episode-shelf" role="tablist" aria-label={t('studio.runHistory')}>
+          {runs.map((run, index) => {
+            const number = runs.length - index;
+            const runIsLive = liveRun === run.id && liveStatus === 'running';
+            return (
+              <button
+                key={run.id}
+                type="button"
+                role="tab"
+                aria-selected={selectedRunId === run.id}
+                className={`studio-episode-chip ${selectedRunId === run.id ? 'studio-episode-chip-active' : ''}`}
+                onClick={() => setSelectedRunId(run.id)}
+              >
+                {runIsLive ? <span className="studio-episode-live-dot" aria-hidden="true" /> : <PlayCircleOutlined />}
+                <b>{t('studio.episodeChip', { number })}</b>
+                <span>
+                  {runIsLive ? t('studio.episodeLiveNow') : new Date(run.createdAt).toLocaleDateString()}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <LiveVoiceBar
         runId={selectedRunId}
@@ -692,6 +907,9 @@ export function DiscussionDetail() {
         speakerNames={speakerNames}
         waitingMessage={t(`studio.warmup${warmupIndex}`)}
         audioAvailable={ttsAvailable}
+        onActiveTurnIndexChange={(index) => {
+          setRevealedTurnCount((count) => Math.max(count, index + 1));
+        }}
       />
 
       <div
@@ -707,14 +925,14 @@ export function DiscussionDetail() {
           <div className="studio-generation-status">
             <Spin size="small" />
             <Text type="secondary">
-              {displayTurns.length === 0
+              {visibleTurns.length === 0
                 ? t(`studio.warmup${warmupIndex}`)
-                : t('studio.turnProgress', { current: Math.min(displayTurns.length, turnTarget), target: turnTarget })}
+                : t('studio.turnProgress', { current: Math.min(visibleTurns.length, turnTarget), target: turnTarget })}
             </Text>
           </div>
         )}
 
-        {displayTurns.length === 0 && displayQuestions.length === 0 && !isLive ? (
+        {visibleTurns.length === 0 && visibleQuestions.length === 0 && !isLive ? (
           <div className="studio-room-empty">
             <AudioOutlined />
             <Text type={selectedRun?.status === 'error' ? 'danger' : 'secondary'}>
@@ -722,6 +940,11 @@ export function DiscussionDetail() {
                 ? t('studio.runFailed', { message: selectedRun.errorMessage ?? t('studio.unknownError') })
                 : t('studio.noRuns')}
             </Text>
+            {selectedRun?.status === 'error' && (
+              <Button icon={<PlayCircleOutlined />} loading={triggering} onClick={handleRunNow}>
+                {t('studio.tryAgain')}
+              </Button>
+            )}
             {!selectedRun && (
               <Button type="primary" icon={<PlayCircleOutlined />} loading={triggering} onClick={handleRunNow}>
                 {t('studio.runNow')}
@@ -730,9 +953,9 @@ export function DiscussionDetail() {
           </div>
         ) : (
           <>
-            {displayTurns.map((turn) => (
+            {visibleTurns.map((turn) => (
               <React.Fragment key={turn.id}>
-                {displayQuestions
+                {visibleQuestions
                   .filter((item) => item.answeredByTurnId === turn.id)
                   .map((item) => <UserQuestion key={item.id} question={item} />)}
                 <TurnBubble
@@ -747,15 +970,22 @@ export function DiscussionDetail() {
                 />
               </React.Fragment>
             ))}
-            {displayQuestions
+            {visibleQuestions
               .filter((item) => !item.answeredByTurnId)
               .map((item) => <UserQuestion key={item.id} question={item} />)}
             {isLive && thinkingParticipant && (
               <TypingIndicator participant={thinkingParticipant.info} label={t('studio.speakerThinking')} />
             )}
             {!isLive && selectedRun?.status === 'done' && displayTurns.length > 0 && (
-              <div className="studio-finished">
-                <Text type="secondary">{t('studio.discussionFinished')}</Text>
+              <div className="studio-wrapped-card">
+                <div className="studio-wrapped-title">{t('studio.showWrapped')}</div>
+                <Text type="secondary">{t('studio.showWrappedDesc', { count: displayTurns.length })}</Text>
+                <div className="studio-wrapped-actions">
+                  <Button type="primary" icon={<PlayCircleOutlined />} loading={triggering} onClick={handleRunNow}>
+                    {t('studio.newEpisode')}
+                  </Button>
+                  <Button onClick={() => navigate('/studio')}>{t('studio.backToLobby')}</Button>
+                </div>
               </div>
             )}
           </>
@@ -824,9 +1054,6 @@ export function DiscussionDetail() {
             >
               {runs.length === 0 ? t('studio.runNow') : t('studio.runAgain')}
             </Button>
-            <Button icon={<EditOutlined />} onClick={() => navigate(`/studio/${discussion.id}/edit`)}>
-              {t('studio.editDiscussion')}
-            </Button>
             {ttsAvailable && selectedRunId && !hasCompleteTurnAudio && (
               <Button
                 loading={renderingAudio}
@@ -838,24 +1065,6 @@ export function DiscussionDetail() {
               </Button>
             )}
           </Space>
-
-          {runs.length > 0 && (
-            <div>
-              <Text strong>{t('studio.runHistory')}</Text>
-              <Select
-                value={selectedRunId ?? undefined}
-                onChange={setSelectedRunId}
-                style={{ width: '100%', marginTop: 8 }}
-                options={runs.map((run, index) => ({
-                  value: run.id,
-                  label: t('studio.runHistoryItem', {
-                    number: runs.length - index,
-                    date: new Date(run.createdAt).toLocaleDateString()
-                  })
-                }))}
-              />
-            </div>
-          )}
 
           <div className="studio-detail-grid">
             <div><Text type="secondary">{t('studio.detailsFormat')}</Text><strong>{t(`studio.format_${discussion.format}`)}</strong></div>
@@ -891,6 +1100,46 @@ export function DiscussionDetail() {
             </div>
           )}
         </Space>
+      </Drawer>
+
+      <Drawer
+        open={consoleOpen}
+        onClose={() => {
+          setConsoleOpen(false);
+          // Discard unsaved knob changes so reopening shows the persisted state.
+          if (discussion) setEditDraft(draftFromDiscussion(discussion));
+        }}
+        title={t('studio.console')}
+        width={480}
+        className="studio-console-drawer"
+      >
+        {isLive ? (
+          <Alert type="info" showIcon message={t('studio.consoleLockedLive')} />
+        ) : editDraft ? (
+          <div className="studio-console-content">
+            <CastingStage
+              cast={editDraft.cast}
+              onChange={(cast) => setEditDraft((d) => (d ? { ...d, cast } : d))}
+              effectiveTtsProvider={
+                capabilities.ttsProviders.includes('openai')
+                  ? 'openai'
+                  : capabilities.ttsProviders.includes('google')
+                    ? 'google'
+                    : null
+              }
+              language={editDraft.language}
+            />
+            <Alert type="info" showIcon message={t('studio.expertChangesFutureRuns')} />
+            <StudioBoard
+              draft={editDraft}
+              onChange={(patch) => setEditDraft((d) => (d ? { ...d, ...patch } : d))}
+              capabilities={capabilities}
+              mode="edit"
+              submitting={savingEdit}
+              onSave={() => void handleSaveEdit()}
+            />
+          </div>
+        ) : null}
       </Drawer>
     </div>
   );

@@ -48,6 +48,7 @@ import { SyntheticSourceService } from './modules/discussion/synthetic-source';
 import { OpenAITtsClient } from './modules/discussion/tts-client';
 import { GoogleTtsClient } from './modules/discussion/google-tts-client';
 import { FileTtsStorage } from './modules/discussion/tts-storage';
+import { createTtsProxyDispatcher } from './modules/discussion/tts-proxy';
 import OpenAI from 'openai';
 import { logger } from './lib/logger';
 import { RealtimeRepository } from './modules/realtime/repository';
@@ -133,18 +134,30 @@ async function start(role: Role) {
 
   const discussionRepository = new DiscussionRepository(prisma, realtimeEventRepository);
   const syntheticSourceService = new SyntheticSourceService(prisma);
+  const ttsProxyDispatcher = createTtsProxyDispatcher(config.tts.proxyUrl || undefined);
   const discussionTtsClients = isTtsConfigured()
     ? {
         ...(isGoogleTtsConfigured()
           ? {
               google: new GoogleTtsClient({
                 apiKey: config.tts.googleApiKey || undefined,
-                serviceAccount: config.tts.googleCredentials || undefined
+                serviceAccount: config.tts.googleCredentials || undefined,
+                ttsUrl: config.tts.googleTtsUrl,
+                tokenUrl: config.tts.googleTokenUrl,
+                dispatcher: ttsProxyDispatcher
               })
             }
           : {}),
         ...(config.tts.openaiApiKey
-          ? { openai: new OpenAITtsClient(new OpenAI({ apiKey: config.tts.openaiApiKey })) }
+          ? {
+              openai: new OpenAITtsClient(
+                new OpenAI({
+                  apiKey: config.tts.openaiApiKey,
+                  ...(config.tts.openaiBaseUrl ? { baseURL: config.tts.openaiBaseUrl } : {}),
+                  ...(ttsProxyDispatcher ? { fetchOptions: { dispatcher: ttsProxyDispatcher } } : {})
+                })
+              )
+            }
           : {})
       }
     : undefined;
@@ -210,7 +223,10 @@ async function start(role: Role) {
       sourceSearch: createSourceSearch({
         httpGet: defaultHttpGet,
         youtubeHttpGet,
-        youtubeApiKey: process.env.YOUTUBE_API_KEY
+        youtubeApiKey: process.env.YOUTUBE_API_KEY,
+        itunesUrl: config.sourceSearch.itunesUrl,
+        youtubeApiUrl: config.sourceSearch.youtubeApiUrl,
+        youtubeWebUrl: config.sourceSearch.youtubeWebUrl
       }),
       sourceProbe: {
         probeSource: (source, previewLimit) =>

@@ -27,7 +27,7 @@ test('@smoke Studio Live Room keeps audio and questions outside the scrolling tr
   expect(detail).toContain('conversation.scrollTo');
   expect(detail).toContain('submitDiscussionQuestion(discussionId, liveRun, content)');
   expect(detail).toContain('disabled={composerDisabled}');
-  expect(shell).toContain("pathname !== '/studio/new'");
+  expect(shell).toContain("const isDiscussionRoom = /^\\/studio\\/[^/]+$/.test(pathname)");
   expect(shell).toContain("flex: '1 1 0', minHeight: 0, overflow: 'hidden'");
   // The route-transition wrapper must pass the height chain through on the room route,
   // otherwise .studio-live-room's height:100% collapses and the transcript can't scroll.
@@ -52,6 +52,39 @@ test('@smoke Studio new-show entry is explicit and touch sized', async () => {
   expect(hub).toContain("aria-label={t('studio.newDiscussion')}");
   expect(hub).toMatch(/<StudioPrimaryButton[\s\S]*>\s*\{t\('studio\.newDiscussion'\)\}/);
   expect(styles).toMatch(/\.studio-new-discussion-button\s*\{[\s\S]*min-height: 44px;/);
+});
+
+test('@smoke Studio board replaces the wizard: setup mode lives in the room', async () => {
+  const detail = await readFile(resolve(process.cwd(), 'src/pages/studio/DiscussionDetail.tsx'), 'utf8');
+  const board = await readFile(resolve(process.cwd(), 'src/pages/studio/StudioBoard.tsx'), 'utf8');
+  const app = await readFile(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  const styles = await readFile(resolve(process.cwd(), 'src/index.css'), 'utf8');
+
+  // /studio/new renders the room in setup mode; the old edit wizard route redirects.
+  expect(app).toContain('<Route path="/studio/new" element={<DiscussionDetail />} />');
+  expect(app).toContain('<Route path="/studio/:discussionId/edit" element={<RedirectToStudioRoom />} />');
+  expect(app).not.toContain('NewDiscussionWizard');
+
+  // Setup mode: stage casts, board fills the main area, GO LIVE gates on cast + topic.
+  expect(detail).toContain('function SetupRoom()');
+  expect(detail).toContain('<CastingStage');
+  expect(detail).toContain('className="studio-setup-main"');
+  expect(board).toContain("t('studio.boardNeedCast')");
+  expect(board).toContain("draft.cast.length < 2");
+  expect(board).toContain("{ value: 'material'");
+  expect(board).toContain("{ value: 'free'");
+
+  // Live room: episode shelf replaces the buried run-history select; console drawer edits.
+  expect(detail).toContain('className="studio-episode-shelf"');
+  expect(detail).toContain("t('studio.consoleLockedLive')");
+  expect(detail).not.toContain('runHistoryItem');
+
+  // Only the setup main area may scroll in setup mode; the board itself does not.
+  expect(styles).toMatch(/\.studio-setup-main\s*\{[^}]*overflow-y: auto;/);
+  expect(styles).not.toMatch(/\.studio-board\s*\{[^}]*overflow/);
+
+  // Reduced motion covers the stage pulse and typing dots.
+  expect(styles).toMatch(/prefers-reduced-motion[\s\S]*\.speaker-active,\s*\n\s*\.typing-dots span\s*\{\s*\n\s*animation: none;/);
 });
 
 

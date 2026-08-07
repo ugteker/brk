@@ -33,6 +33,15 @@ export const config = {
       },
       get callbackUrl() {
         return process.env.GOOGLE_CALLBACK_URL ?? 'http://localhost:3000/api/auth/google/callback';
+      },
+      get authUrl() {
+        return process.env.GOOGLE_OAUTH_AUTH_URL ?? 'https://accounts.google.com/o/oauth2/v2/auth';
+      },
+      get tokenUrl() {
+        return process.env.GOOGLE_OAUTH_TOKEN_URL ?? 'https://oauth2.googleapis.com/token';
+      },
+      get userInfoUrl() {
+        return process.env.GOOGLE_OAUTH_USERINFO_URL ?? 'https://openidconnect.googleapis.com/v1/userinfo';
       }
     },
     // Optional bootstrap admin account, created on startup if it doesn't exist yet.
@@ -77,6 +86,17 @@ export const config = {
       return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 3;
     }
   },
+  sourceSearch: {
+    get itunesUrl() {
+      return process.env.SOURCE_SEARCH_ITUNES_URL ?? 'https://itunes.apple.com/search';
+    },
+    get youtubeApiUrl() {
+      return process.env.SOURCE_SEARCH_YOUTUBE_API_URL ?? 'https://www.googleapis.com/youtube/v3/search';
+    },
+    get youtubeWebUrl() {
+      return process.env.SOURCE_SEARCH_YOUTUBE_WEB_URL ?? 'https://www.youtube.com/results';
+    }
+  },
   tts: {
     // OpenAI API key used exclusively for text-to-speech podcast rendering of Studio
     // discussions. Leave blank to disable audio rendering (the endpoint answers 501).
@@ -95,6 +115,20 @@ export const config = {
     // no user ever signs in against Google.
     get googleCredentials() {
       return process.env.GOOGLE_TTS_CREDENTIALS ?? '';
+    },
+    get openaiBaseUrl() {
+      return process.env.TTS_OPENAI_BASE_URL ?? '';
+    },
+    get googleTtsUrl() {
+      return process.env.TTS_GOOGLE_TTS_URL ?? 'https://texttospeech.googleapis.com/v1/text:synthesize';
+    },
+    get googleTokenUrl() {
+      return process.env.TTS_GOOGLE_TOKEN_URL ?? 'https://oauth2.googleapis.com/token';
+    },
+    // Optional outbound proxy URL used only for Studio TTS HTTP calls (OpenAI + Google),
+    // useful for local testing behind a corporate firewall.
+    get proxyUrl() {
+      return process.env.TTS_PROXY_URL ?? '';
     },
     // Directory where rendered mp3 files are stored, relative to the API working dir.
     get audioDir() {

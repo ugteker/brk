@@ -436,9 +436,16 @@
 
 .studio-live-header {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
   flex: none;
+}
+
+.studio-live-header-actions {
+  display: flex;
+  gap: 4px;
+  min-width: 40px;
+  justify-content: flex-end;
 }
 
 .studio-live-title {
@@ -468,6 +475,279 @@
   flex: none;
   border-radius: 12px;
   background: linear-gradient(135deg, rgba(114, 46, 209, 0.07), rgba(22, 119, 255, 0.07));
+}
+
+/* Setup mode: the board replaces the transcript as the room's flexible main area.
+   The board itself scrolls only if the viewport is truly too short. */
+.studio-setup-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Casting stage: chairs are buttons (popover on occupied, picker on the dashed empty one). */
+.studio-casting-stage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  padding: 10px 12px;
+}
+
+.studio-chair {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 64px;
+  min-height: 44px;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.studio-chair-role {
+  position: absolute;
+  z-index: 2;
+  top: -4px;
+  right: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.studio-chair-voice {
+  padding: 1px 8px;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.12);
+  color: #7c5cd6;
+  font-size: 10px;
+}
+
+.dark .studio-chair-voice {
+  color: #c4b5fd;
+}
+
+.studio-chair-empty .studio-chair-seat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 2px dashed rgba(139, 92, 246, 0.5);
+  border-radius: 50%;
+  color: #7c5cd6;
+  font-size: 18px;
+}
+
+.dark .studio-chair-empty .studio-chair-seat {
+  color: #c4b5fd;
+}
+
+.studio-chair-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.studio-cast-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--border, rgba(140, 140, 160, 0.35));
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.studio-cast-option:hover {
+  border-color: #722ed1;
+  background: rgba(114, 46, 209, 0.08);
+}
+
+/* Episode shelf: past recordings as chips between stage and voice bar. */
+.studio-episode-shelf {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px;
+}
+
+.studio-episode-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 4px 13px;
+  border: 1px solid var(--border, rgba(140, 140, 160, 0.35));
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.studio-episode-chip span {
+  opacity: 0.65;
+}
+
+.studio-episode-chip-active {
+  border-color: rgba(139, 92, 246, 0.65);
+  background: rgba(114, 46, 209, 0.12);
+  color: #722ed1;
+}
+
+.dark .studio-episode-chip-active {
+  color: #c4b5fd;
+}
+
+.studio-episode-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f5222d;
+  box-shadow: 0 0 0 3px rgba(245, 34, 45, 0.15);
+}
+
+/* The board: the show console. Fills the setup main area; compact enough to avoid its
+   own scrollbar on typical viewports. */
+.studio-board {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 16px;
+  border: 1px solid rgba(139, 92, 246, 0.24);
+  border-radius: 14px;
+  background:
+    radial-gradient(80% 50% at 50% -10%, rgba(139, 92, 246, 0.08), transparent 60%),
+    hsl(var(--card));
+}
+
+.studio-board-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.studio-board-name {
+  flex: 1 1 220px;
+  font-weight: 600;
+}
+
+.studio-board-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.studio-board-section-title .anticon {
+  color: #722ed1;
+}
+
+.dark .studio-board-section-title .anticon {
+  color: #a78bfa;
+}
+
+.studio-board-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.studio-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, rgba(140, 140, 160, 0.35));
+  border-radius: 12px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.studio-preset-emoji {
+  font-size: 19px;
+}
+
+.studio-preset b {
+  font-size: 13px;
+}
+
+.studio-preset span:not(.studio-preset-emoji) {
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.65;
+}
+
+.studio-preset-selected {
+  border-color: rgba(139, 92, 246, 0.65);
+  background: rgba(114, 46, 209, 0.1);
+  box-shadow: 0 0 14px rgba(139, 92, 246, 0.16);
+}
+
+.studio-board-material {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.studio-board-material-summary {
+  display: flex;
+  flex: 1 1 220px;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 13px;
+  border: 1px dashed rgba(139, 92, 246, 0.45);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.studio-board-golive-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: auto;
+}
+
+.studio-board-golive {
+  flex: 1 1 220px;
+  min-height: 48px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.studio-console-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .live-spectrum {
@@ -681,9 +961,29 @@
   font-size: 32px;
 }
 
-.studio-finished {
-  padding: 12px 0 4px;
+/* Peak-end: wrapped card at the end of a finished episode */
+.studio-wrapped-card {
+  margin: 16px auto 8px;
+  max-width: 380px;
+  padding: 20px 24px;
   text-align: center;
+  border-radius: 16px;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  background:
+    radial-gradient(120% 160% at 50% -40%, rgba(139, 92, 246, 0.22), transparent 65%),
+    rgba(139, 92, 246, 0.06);
+}
+.studio-wrapped-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.studio-wrapped-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 14px;
 }
 
 .studio-question-composer {
@@ -826,11 +1126,17 @@
 @media (prefers-reduced-motion: reduce) {
   .turn-in-left,
   .turn-in-right,
-  .on-air-ring {
+  .on-air-ring,
+  .speaker-active,
+  .typing-dots span {
     animation: none;
   }
-  .on-air-ring {
+  .on-air-ring,
+  .speaker-active {
     box-shadow: 0 0 0 3px var(--speaker-color, #722ed1);
+  }
+  .typing-dots span {
+    opacity: 0.7;
   }
 }
 

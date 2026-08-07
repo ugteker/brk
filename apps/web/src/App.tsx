@@ -1,6 +1,6 @@
 import { Spin } from 'antd';
 import { useRef, type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useSafeNavigate } from './utils/useSafeNavigate';
 import { FeedPage } from './pages/feed/FeedPage';
 import { LibraryPage } from './pages/library/LibraryPage';
@@ -16,7 +16,6 @@ import { RealtimeProvider, useRealtimeSubscription } from './context/RealtimeCon
 import { AppShell } from './components/AppShell';
 import { StudioHub } from './pages/studio/StudioHub';
 import { DiscussionDetail } from './pages/studio/DiscussionDetail';
-import { NewDiscussionWizard } from './pages/studio/NewDiscussionWizard';
 import { getDiscussion, listDiscussionRuns } from './api/discussions';
 
 // Route guard for admin-only pages (Agents, Playbooks, User Management). Non-admins are
@@ -34,6 +33,12 @@ function AdminUsersRoute() {
 }
 
 // In admin mode the hub pages show admin dashboards instead of repeating the user-mode content.
+/** Old edit-wizard deep links land in the studio room, whose console drawer owns editing now. */
+function RedirectToStudioRoom() {
+  const { discussionId } = useParams<{ discussionId: string }>();
+  return <Navigate to={`/studio/${discussionId}`} replace />;
+}
+
 function AdminSwitch({ admin, children }: { admin: ReactNode; children: ReactNode }) {
   const { isAdmin } = useAuth();
   const { adminMode } = useAppData();
@@ -109,8 +114,8 @@ function AnimatedRoutes() {
   const location = useLocation();
   // Mirrors AppShell's isDiscussionRoom: the room is a fixed chat viewport, so this
   // wrapper must pass the height chain through instead of growing with content.
-  const fillsViewport =
-    location.pathname !== '/studio/new' && /^\/studio\/[^/]+$/.test(location.pathname);
+  // /studio/new is the same room in setup mode.
+  const fillsViewport = /^\/studio\/[^/]+$/.test(location.pathname);
   return (
     <div key={location.pathname} className={fillsViewport ? 'ct-page-enter ct-page-enter--fill' : 'ct-page-enter'}>
       <Routes>
@@ -119,8 +124,8 @@ function AnimatedRoutes() {
         <Route path="/agents" element={<RequireAdmin><AdminAgentsPage /></RequireAdmin>} />
         <Route path="/admin/users" element={<RequireAdmin><AdminUsersRoute /></RequireAdmin>} />
         <Route path="/studio" element={<AdminSwitch admin={<AdminStudioDashboard />}><StudioHub /></AdminSwitch>} />
-        <Route path="/studio/new" element={<NewDiscussionWizard />} />
-        <Route path="/studio/:discussionId/edit" element={<NewDiscussionWizard />} />
+        <Route path="/studio/new" element={<DiscussionDetail />} />
+        <Route path="/studio/:discussionId/edit" element={<RedirectToStudioRoom />} />
         <Route path="/studio/:discussionId" element={<DiscussionDetail />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

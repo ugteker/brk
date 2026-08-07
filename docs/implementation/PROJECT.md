@@ -239,6 +239,7 @@ Notes: the API exposes a read-only catalog listing at `GET /api/catalog` (see `a
 | Task 65: Studio Live Room + audience questions | ✅ Done | Replaced the discussion detail's header/details/tabs with the approved **Live Room**: compact title, always-visible participant stage and audio bar, one independently scrolling conversation frame, bottom live-question composer, and a single More drawer for history, evidence, metadata, edit/rerun, and audio rendering. The AppShell gives only `/studio/:discussionId` a fixed `100dvh` workspace; `/studio/new` and edit retain normal scrolling. Added persisted owner-only live questions (`DiscussionLiveQuestion` migration), max 10 per run, 500-character validation, FIFO processing, realtime updates, and atomic queue closure so accepted questions cannot be lost at run completion. The orchestrator injects at most one audience question into the next AI turn and adds round-robin answer turns when questions remain after the configured target. Questions render inline before their answers; queued questions and composer state update live. English/German copy, reduced-motion-safe visuals, detector pass, focused API tests, API/web builds, and 22/22 web smoke tests completed. AI/TTS tests use injected stubs; no live OpenAI or Anthropic call is required. |
 | Task 66: Bounded Studio chat + gapless Live Spectrum | ✅ Done | Fixed the Live Room height contract so the document stays stationary while only the keyboard/touch-accessible conversation viewport scrolls; auto-follow now targets that viewport, preserves manual reading position, and exposes a translated New messages return control. Replaced per-turn native audio resets with a dependency-free Web Audio player that decodes the contiguous turn prefix and schedules clips on one timeline, starting from the first decoded turn without speaker overlap. Live mode shows a real analyser spectrum, active speaker, elapsed session time, buffering, pause/resume, volume, retry, and Go live; completed mode adds logical duration and seeking. The audio bar remains visible when TTS is disabled or rendering fails, with disabled controls and a warning while chat/questions remain usable. The Studio header's new-show action now has an explicit label, 44px touch target, accessible name, and direct `/studio/new` navigation; the wizard itself remains a separate redesign. English/German copy added. Web build, Impeccable detector, and 23/23 smoke tests passed. |
 | Task 67: Live Room transcript viewport fix (broken height chain) | ✅ Done | Task 66's fixed-chat-viewport layout never actually worked on desktop: the transcript rendered as a plain growing page with no internal scrolling, and the page itself couldn't scroll either (clipped by the AppShell `<Content>`'s `overflow: hidden`). Root cause: `App.tsx`'s `AnimatedRoutes` wraps every route in a `.ct-page-enter` transition div with **no height**, so `.studio-live-room`'s `height: 100%` resolved against an auto-height parent and collapsed — the room grew to full content height and was clipped. Fix (2 lines): `AnimatedRoutes` now adds a `ct-page-enter--fill` class on the discussion-room route (same regex as AppShell's `isDiscussionRoom`), and `index.css` gained `.ct-page-enter--fill { height: 100%; min-height: 0; }` completing the height chain. Extended the existing Live Room smoke test to guard the wrapper class + CSS rule so the chain can't silently break again. Web build clean, Impeccable detector clean, 23/23 smoke tests green. |
+| Task 68: Studio Board — wizard replaced by in-studio console | ✅ Done | The `NewDiscussionWizard` (4-step settings form) is gone; show setup now happens **inside the studio room**. `/studio/new` renders a Setup Room: the participant stage becomes a casting surface (`CastingStage` in new `pages/studio/StudioBoard.tsx` — empty chairs open an agent picker with owned + marketplace clone-on-pick + inline AgentCurator; occupied chairs get a popover for voice/host-role/remove), and the main area is the **Studio Board** console: show name, EN/DE toggle, 4 preset pills (Debate/Explainer/Interview/Deep Dive → format/turns/turnLength), a topic section with a 📚 Material / 💬 Freie Frage source toggle (maps to `grounding.mode`), material picker as a modal summary line, fine-tuning collapse, and a big GO LIVE button that gates on ≥2 cast + topic. `/studio/:id/edit` redirects to the room; the live room gained an **episode shelf** (chips replacing the buried run-history select) and a **console drawer** (locked while live, edit-mode board otherwise, material locked post-creation as before). Peak-end: finished episodes close with a "That's a wrap 🎉" card (new episode / back to lobby) and error runs get a retry button. Hub cards now show real cast names/initials (via AppDataContext) and aurora format pills; hardcoded error strings i18n'd. Reduced-motion coverage extended to `.speaker-active` and `.typing-dots`. 48 orphaned wizard i18n keys removed per locale (EN+DE synced). Preselect deep links from Feed/Library port over via `applyPreselect`. No backend changes. Web build clean, Impeccable detector clean, smoke tests updated for the new structure: 24/24 green. |
 
 
 
@@ -340,3 +341,36 @@ original spec.
 - Removed six unused shadcn-style UI primitives and their direct dependencies (`@radix-ui/react-slot`, `@radix-ui/react-switch`, `class-variance-authority`).
 - Removed unused `github-copilot-resources` API dependency.
 - Inlined the single-use playbook run trigger into `main.ts`; removed factory and its wrapper-only test.
+
+## 2026-08-07 TTS proxy support for local Tinyproxy testing
+
+- Added optional `TTS_PROXY_URL` backend config (`apps/api/src/config.ts`, `apps/api/.env.example`) scoped to Studio TTS outbound calls only.
+- Added `createTtsProxyDispatcher()` (`apps/api/src/modules/discussion/tts-proxy.ts`) reusing the same resilient proxy pattern as YouTube: invalid URL logs a warning and disables proxying instead of breaking startup.
+- Wired proxy dispatcher into both discussion TTS providers in `main.ts`:
+  - Google TTS (`GoogleTtsClient`) now accepts optional dispatcher and applies it to both OAuth token exchange and synthesize requests.
+  - OpenAI TTS client now receives `fetchOptions.dispatcher` when `TTS_PROXY_URL` is set.
+- Added focused tests:
+  - `apps/api/src/modules/discussion/tts-proxy.test.ts`
+  - `apps/api/src/modules/discussion/google-tts-client.test.ts` dispatcher assertions for API-key and service-account flows.
+
+## 2026-08-07 Outbound API URL env overrides
+
+- Replaced hardcoded outbound endpoint constants with env-backed config getters for runtime API calls:
+  - Google OAuth endpoints (`GOOGLE_OAUTH_AUTH_URL`, `GOOGLE_OAUTH_TOKEN_URL`, `GOOGLE_OAUTH_USERINFO_URL`) now flow through `config.auth.google.*`.
+  - Source-search provider endpoints (`SOURCE_SEARCH_ITUNES_URL`, `SOURCE_SEARCH_YOUTUBE_API_URL`, `SOURCE_SEARCH_YOUTUBE_WEB_URL`) now flow through `config.sourceSearch.*`.
+  - TTS endpoint overrides added: `TTS_OPENAI_BASE_URL`, `TTS_GOOGLE_TTS_URL`, `TTS_GOOGLE_TOKEN_URL`.
+- `main.ts` wires the new config:
+  - OpenAI TTS client gets `baseURL` when `TTS_OPENAI_BASE_URL` is set.
+  - Google TTS client gets `ttsUrl` + `tokenUrl`.
+  - Source-search wiring passes provider URL overrides into `createSourceSearch(...)`.
+- `apps/api/.env.example` updated with all new variables plus note that SDK-native `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL` already exist.
+- Added targeted tests for URL override behavior:
+  - `modules/auth/google-oauth.test.ts`
+  - `modules/source/search.test.ts`
+  - `modules/discussion/google-tts-client.test.ts`
+
+## 2026-08-07 Env files re-chaptered by external source
+
+- Reorganized `apps/api/.env`, `.env.example`, and `.env-prod` into consistent provider chapters with big headers and one-line capability notes.
+- Chapter model now groups settings by external systems: Claude, Google, OpenAI, YouTube, iTunes, Resend, Residential Proxy; non-external app/runtime settings are grouped under Platform/App.
+- Change is structural/documentation-focused only (ordering/comments), preserving existing key names and file-specific value semantics.

@@ -164,7 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   const current = activeKey(pathname);
-  const isDiscussionRoom = pathname !== '/studio/new' && /^\/studio\/[^/]+$/.test(pathname);
+  const isDiscussionRoom = /^\/studio\/[^/]+$/.test(pathname);
   type BellNotice = { id: string; kind: 'run_failed' | 'new_report' | 'show_started' | 'show_finished' | 'audio_ready'; agentName: string; message: string; timestamp: string };
   const combinedNotices: BellNotice[] = [
     ...failedRunNotices.map((n) => ({ id: n.runId, kind: 'run_failed' as const, agentName: n.agentName, message: n.errorMessage ?? t('nav.bellRunFailed'), timestamp: n.timestamp })),

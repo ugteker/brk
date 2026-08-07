@@ -37,6 +37,7 @@ interface LiveVoiceBarProps {
   speakerNames: Record<string, string>;
   waitingMessage: string;
   audioAvailable: boolean;
+  onActiveTurnIndexChange?: (index: number) => void;
 }
 
 function formatTime(seconds: number): string {
@@ -67,7 +68,8 @@ export function LiveVoiceBar({
   fallbackUrl,
   speakerNames,
   waitingMessage,
-  audioAvailable
+  audioAvailable,
+  onActiveTurnIndexChange
 }: LiveVoiceBarProps) {
   const { t } = useTranslation();
   const isLive = runStatus === 'pending' || runStatus === 'running';
@@ -86,6 +88,7 @@ export function LiveVoiceBar({
   const pendingOffsetRef = useRef(0);
   const generationRef = useRef(0);
   const userPausedRef = useRef(false);
+  const announcedIndexRef = useRef(-1);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const [bufferVersion, setBufferVersion] = useState(0);
@@ -181,6 +184,7 @@ export function LiveVoiceBar({
     setCurrentIndex(0);
     setLogicalPosition(0);
     setAudioError(false);
+    announcedIndexRef.current = -1;
 
     if (!audioAvailable || !runId || typeof AudioContext === 'undefined') {
       setAudioError(audioAvailable && Boolean(runId));
@@ -263,13 +267,17 @@ export function LiveVoiceBar({
       );
       if (!clip) return;
       setCurrentIndex((index) => index === clip.index ? index : clip.index);
+      if (announcedIndexRef.current !== clip.index) {
+        announcedIndexRef.current = clip.index;
+        onActiveTurnIndexChange?.(clip.index);
+      }
       setBuffering(false);
       setLogicalPosition(
         cumulativeDuration(clip.index) + clip.offset + context.currentTime - clip.startTime
       );
     }, 200);
     return () => window.clearInterval(timer);
-  }, [cumulativeDuration]);
+  }, [cumulativeDuration, onActiveTurnIndexChange]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
