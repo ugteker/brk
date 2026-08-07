@@ -59,6 +59,9 @@ export interface DiscussionFormatConfigDto {
   turnLength?: 'short' | 'medium' | 'long';
   /** Voice API used to render this discussion as audio. Defaults to 'auto' when unset. */
   ttsProvider?: TtsProviderDto;
+  /** True while the show still awaits its LLM-generated title (set by the create wizard,
+   * cleared by the backend once the first run names the show or the user renames it). */
+  autoTitle?: boolean;
   /** Absent means classic reports grounding. */
   grounding?: DiscussionGroundingConfigDto;
 }
@@ -120,11 +123,22 @@ export interface DiscussionRunDto {
   completedAt: string | null;
   syntheticSourceItemId: string | null;
   audioUrl: string | null;
+  questionsClosedAt: string | null;
   createdAt: string;
   turns: DiscussionTurnDto[];
+  questions: DiscussionLiveQuestionDto[];
   /** Null for runs created before evidence snapshots existed, or runs that failed
    * validation before any resolution was recorded. */
   evidenceSnapshot: DiscussionRunEvidenceSnapshotDto | null;
+}
+
+export interface DiscussionLiveQuestionDto {
+  id: string;
+  discussionRunId: string;
+  content: string;
+  answeredByTurnId: string | null;
+  answeredAt: string | null;
+  createdAt: string;
 }
 
 export interface DiscussionTurnDto {
@@ -226,6 +240,24 @@ export async function listDiscussionRuns(id: string): Promise<DiscussionRunDto[]
 export async function getDiscussionRun(id: string, runId: string): Promise<DiscussionRunDto> {
   const res = await fetch(`${BASE}/${id}/runs/${runId}`, { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to get run');
+  return res.json();
+}
+
+export async function submitDiscussionQuestion(
+  id: string,
+  runId: string,
+  content: string
+): Promise<DiscussionLiveQuestionDto> {
+  const res = await fetch(`${BASE}/${id}/runs/${runId}/questions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ content })
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null) as { message?: string } | null;
+    throw new Error(body?.message ?? 'Failed to submit question');
+  }
   return res.json();
 }
 

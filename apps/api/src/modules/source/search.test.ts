@@ -183,4 +183,25 @@ describe('createSourceSearch', () => {
     expect(results).toEqual([]);
     expect(warnings).toEqual(['podcast_search_failed', 'youtube_search_failed']);
   });
+
+  it('uses custom provider endpoint URLs when configured', async () => {
+    const requestedUrls: string[] = [];
+    const httpGet: HttpGet = async (url) => {
+      requestedUrls.push(url);
+      if (url.includes('itunes-proxy.local')) return ITUNES_RESPONSE;
+      if (url.includes('yt-api-proxy.local')) return YOUTUBE_API_SEARCH_RESPONSE;
+      throw new Error(`Unexpected URL in test: ${url}`);
+    };
+    const search = createSourceSearch({
+      httpGet,
+      youtubeApiKey: 'test-key',
+      itunesUrl: 'https://itunes-proxy.local/search',
+      youtubeApiUrl: 'https://yt-api-proxy.local/search'
+    });
+
+    await search.searchSources('finance');
+
+    expect(requestedUrls.some((url) => url.startsWith('https://itunes-proxy.local/search?'))).toBe(true);
+    expect(requestedUrls.some((url) => url.startsWith('https://yt-api-proxy.local/search?'))).toBe(true);
+  });
 });

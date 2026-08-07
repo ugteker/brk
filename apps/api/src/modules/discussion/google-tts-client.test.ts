@@ -73,6 +73,25 @@ describe('GoogleTtsClient', () => {
     const client = new GoogleTtsClient({ apiKey: 'k', fetchImpl });
     await expect(client.renderTurn('x', 'alloy')).rejects.toThrow(/no audioContent/);
   });
+
+  it('passes dispatcher to fetch when configured', async () => {
+    const fetchImpl = makeFetch();
+    const dispatcher = { id: 'proxy' };
+    const client = new GoogleTtsClient({ apiKey: 'k', fetchImpl, dispatcher });
+    await client.renderTurn('x', 'alloy');
+    expect(fetchImpl.mock.calls[0][1].dispatcher).toBe(dispatcher);
+  });
+
+  it('uses custom synth URL when configured', async () => {
+    const fetchImpl = makeFetch();
+    const client = new GoogleTtsClient({
+      apiKey: 'k',
+      fetchImpl,
+      ttsUrl: 'https://google-tts-proxy.local/v1/text:synthesize'
+    });
+    await client.renderTurn('x', 'alloy');
+    expect(fetchImpl.mock.calls[0][0]).toContain('https://google-tts-proxy.local/v1/text:synthesize');
+  });
 });
 
 describe('GoogleTtsClient with service account (OAuth2, no user sign-in)', () => {
@@ -86,7 +105,7 @@ describe('GoogleTtsClient with service account (OAuth2, no user sign-in)', () =>
 
   function makeSaFetch() {
     return vi.fn().mockImplementation(async (url: string) => {
-      if (url.includes('oauth2.googleapis.com/token')) {
+      if (url.includes('/token')) {
         return { ok: true, status: 200, json: async () => ({ access_token: 'tok-123', expires_in: 3600 }), text: async () => '' };
       }
       return { ok: true, status: 200, json: async () => audio, text: async () => '' };
@@ -104,6 +123,28 @@ describe('GoogleTtsClient with service account (OAuth2, no user sign-in)', () =>
     const ttsCall = fetchImpl.mock.calls.find((c) => (c[0] as string).includes('texttospeech.googleapis.com'))!;
     expect(ttsCall[0]).not.toContain('?key=');
     expect(ttsCall[1].headers.authorization).toBe('Bearer tok-123');
+  });
+
+  it('uses dispatcher for both token exchange and synthesize calls when configured', async () => {
+    const fetchImpl = makeSaFetch();
+    const dispatcher = { id: 'proxy' };
+    const client = new GoogleTtsClient({ serviceAccount, fetchImpl, dispatcher });
+    await client.renderTurn('Hello', 'alloy');
+    for (const call of fetchImpl.mock.calls) {
+      expect(call[1].dispatcher).toBe(dispatcher);
+    }
+  });
+
+  it('uses custom token URL when configured', async () => {
+    const fetchImpl = makeSaFetch();
+    const client = new GoogleTtsClient({
+      serviceAccount,
+      fetchImpl,
+      tokenUrl: 'https://google-oauth-proxy.local/token'
+    });
+    await client.renderTurn('Hello', 'alloy');
+    const tokenCall = fetchImpl.mock.calls.find((c) => (c[0] as string).includes('google-oauth-proxy.local/token'));
+    expect(tokenCall).toBeDefined();
   });
 
   it('caches the access token across calls until expiry', async () => {

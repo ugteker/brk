@@ -1,9 +1,5 @@
 import { config } from '../../config';
 
-const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
-
 export interface GoogleProfile {
   sub: string;
   email: string;
@@ -19,7 +15,7 @@ export function buildGoogleAuthUrl(state: string): string {
     state,
     prompt: 'select_account'
   });
-  return `${GOOGLE_AUTH_URL}?${params.toString()}`;
+  return `${config.auth.google.authUrl}?${params.toString()}`;
 }
 
 export interface GoogleOAuthClient {
@@ -30,7 +26,7 @@ export interface GoogleOAuthClient {
 // so the app doesn't need a heavy OAuth client library.
 export class GoogleOAuthHttpClient implements GoogleOAuthClient {
   async exchangeCodeForProfile(code: string): Promise<GoogleProfile> {
-    const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+    const tokenResponse = await fetch(config.auth.google.tokenUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -48,7 +44,7 @@ export class GoogleOAuthHttpClient implements GoogleOAuthClient {
 
     const tokenBody = (await tokenResponse.json()) as { access_token: string };
 
-    const profileResponse = await fetch(GOOGLE_USERINFO_URL, {
+    const profileResponse = await fetch(config.auth.google.userInfoUrl, {
       headers: { Authorization: `Bearer ${tokenBody.access_token}` }
     });
 

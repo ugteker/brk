@@ -452,32 +452,48 @@ model DiscussionParticipant {
 }
 
 model DiscussionRun {
-  id                    String           @id @default(cuid())
+  id                    String                   @id @default(cuid())
   discussionId          String
-  status                String           @default("pending")
-  triggeredBy           String           @default("manual")
+  status                String                   @default("pending")
+  triggeredBy           String                   @default("manual")
   errorMessage          String?
   startedAt             DateTime?
   completedAt           DateTime?
   syntheticSourceItemId String?
   audioUrl              String?
   evidenceSnapshotJson  String?
-  createdAt             DateTime         @default(now())
-  discussion            Discussion       @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  questionsClosedAt     DateTime?
+  createdAt             DateTime                 @default(now())
+  discussion            Discussion               @relation(fields: [discussionId], references: [id], onDelete: Cascade)
   turns                 DiscussionTurn[]
+  questions             DiscussionLiveQuestion[]
 }
 
 model DiscussionTurn {
-  id              String                @id @default(cuid())
-  discussionRunId String
-  participantId   String
-  turnIndex       Int
-  segmentLabel    String?
-  content         String
-  audioUrl        String?
-  createdAt       DateTime              @default(now())
-  run             DiscussionRun         @relation(fields: [discussionRunId], references: [id], onDelete: Cascade)
-  participant     DiscussionParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  id                String                   @id @default(cuid())
+  discussionRunId   String
+  participantId     String
+  turnIndex         Int
+  segmentLabel      String?
+  content           String
+  audioUrl          String?
+  createdAt         DateTime                 @default(now())
+  run               DiscussionRun            @relation(fields: [discussionRunId], references: [id], onDelete: Cascade)
+  participant       DiscussionParticipant    @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  answeredQuestions DiscussionLiveQuestion[] @relation("QuestionAnsweredByTurn")
+}
+
+model DiscussionLiveQuestion {
+  id               String          @id @default(cuid())
+  discussionRunId  String
+  content          String
+  createdAt        DateTime        @default(now())
+  answeredByTurnId String?
+  answeredAt       DateTime?
+  run              DiscussionRun   @relation(fields: [discussionRunId], references: [id], onDelete: Cascade)
+  answeredByTurn   DiscussionTurn? @relation("QuestionAnsweredByTurn", fields: [answeredByTurnId], references: [id], onDelete: SetNull)
+
+  @@index([discussionRunId, answeredAt, createdAt, id])
 }
 
 model AgentCurationSession {

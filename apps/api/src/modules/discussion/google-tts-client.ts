@@ -2,7 +2,7 @@ import { createSign } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 /** Minimal fetch-shaped dependency so tests can inject a mock without network access. */
-export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{
+export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; dispatcher?: unknown }) => Promise<{
   ok: boolean;
   status: number;
   json(): Promise<unknown>;
@@ -37,7 +37,6 @@ const VOICE_MAP: Record<'en' | 'de', Record<string, string>> = {
 
 const LANGUAGE_CODES: Record<'en' | 'de', string> = { en: 'en-US', de: 'de-DE' };
 
-const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const TTS_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 
 export interface GoogleServiceAccountKey {
@@ -56,7 +55,12 @@ export interface GoogleTtsClientOptions {
   serviceAccount?: GoogleServiceAccountKey | string;
   /** Default language for voice selection when a call doesn't specify one. */
   defaultLanguage?: 'en' | 'de';
+  /** Google TTS synth endpoint URL override (defaults to Google public endpoint). */
+  ttsUrl?: string;
+  /** Google OAuth token endpoint URL override (defaults to Google public endpoint). */
+  tokenUrl?: string;
   fetchImpl?: FetchLike;
+  dispatcher?: unknown;
   /** Injectable clock for token-expiry tests. */
   now?: () => number;
 }
@@ -91,6 +95,9 @@ export class GoogleTtsClient {
   private readonly serviceAccount?: GoogleServiceAccountKey;
   private readonly defaultLanguage: 'en' | 'de';
   private readonly fetchImpl: FetchLike;
+  private readonly dispatcher?: unknown;
+  private readonly ttsUrl: string;
+  private readonly tokenUrl: string;
   private readonly now: () => number;
 
   private cachedToken: { token: string; expiresAtMs: number } | null = null;
@@ -103,6 +110,9 @@ export class GoogleTtsClient {
     this.serviceAccount = options.serviceAccount ? loadServiceAccount(options.serviceAccount) : undefined;
     this.defaultLanguage = options.defaultLanguage ?? 'en';
     this.fetchImpl = options.fetchImpl ?? ((url, init) => fetch(url, init) as any);
+    this.dispatcher = options.dispatcher;
+    this.ttsUrl = options.ttsUrl ?? 'https://texttospeech.googleapis.com/v1/text:synthesize';
+    this.tokenUrl = options.tokenUrl ?? 'https://oauth2.googleapis.com/token';
     this.now = options.now ?? Date.now;
   }
 
@@ -113,7 +123,7 @@ export class GoogleTtsClient {
     // Prefer service-account OAuth2 when configured - API keys are rejected outright by
     // some Google Cloud org policies ("API keys are not supported by this API").
     const headers: Record<string, string> = { 'content-type': 'application/json' };
-    let url = 'https://texttospeech.googleapis.com/v1/text:synthesize';
+    let url = this.ttsUrl;
     if (this.serviceAccount) {
       headers.authorization = `Bearer ${await this.getAccessToken()}`;
     } else {
@@ -127,7 +137,8 @@ export class GoogleTtsClient {
         input: { text },
         voice: { languageCode: LANGUAGE_CODES[lang], name: voiceName },
         audioConfig: { audioEncoding: 'MP3' }
-      })
+      }),
+      ...(this.dispatcher ? { dispatcher: this.dispatcher } : {})
     });
 
     if (!response.ok) {
@@ -155,7 +166,7 @@ export class GoogleTtsClient {
       JSON.stringify({
         iss: sa.client_email,
         scope: TTS_SCOPE,
-        aud: TOKEN_URL,
+        aud: this.tokenUrl,
         iat: nowSec,
         exp: nowSec + 3600
       })
@@ -164,10 +175,11 @@ export class GoogleTtsClient {
     const signature = createSign('RSA-SHA256').update(signingInput).sign(sa.private_key);
     const assertion = `${signingInput}.${base64url(signature)}`;
 
-    const response = await this.fetchImpl(TOKEN_URL, {
+    const response = await this.fetchImpl(this.tokenUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${encodeURIComponent(assertion)}`
+      body: `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${encodeURIComponent(assertion)}`,
+      ...(this.dispatcher ? { dispatcher: this.dispatcher } : {})
     });
 
     if (!response.ok) {

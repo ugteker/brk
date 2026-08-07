@@ -45,6 +45,10 @@ export interface DiscussionFormatConfig {
   turnLength?: 'short' | 'medium' | 'long';
   /** Voice API used when rendering this discussion as audio. Undefined means 'auto'. */
   ttsProvider?: TtsProvider;
+  /** When true, the discussion was created without a user-chosen title: the orchestrator
+   * generates a real show title from the first turn's content on the first run, saves it,
+   * and clears this flag. Stored in formatConfigJson, no schema migration needed. */
+  autoTitle?: boolean;
   /** How this discussion is grounded. Undefined means 'reports' (the original behavior:
    * per-participant report picks with latest-N fallback). Stored in formatConfigJson,
    * no schema migration needed. */
@@ -124,6 +128,15 @@ export interface DiscussionTurn {
   createdAt: Date;
 }
 
+export interface DiscussionLiveQuestion {
+  id: string;
+  discussionRunId: string;
+  content: string;
+  createdAt: Date;
+  answeredByTurnId: string | null;
+  answeredAt: Date | null;
+}
+
 export interface DiscussionRun {
   id: string;
   discussionId: string;
@@ -134,8 +147,10 @@ export interface DiscussionRun {
   completedAt: Date | null;
   syntheticSourceItemId: string | null;
   audioUrl: string | null;
+  questionsClosedAt: Date | null;
   createdAt: Date;
   turns: DiscussionTurn[];
+  questions: DiscussionLiveQuestion[];
   /** Null for legacy runs created before this snapshot existed, or for runs that failed
    * validation before any resolution/evidence was recorded. */
   evidenceSnapshot: DiscussionRunEvidenceSnapshot | null;

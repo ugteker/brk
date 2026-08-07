@@ -112,6 +112,99 @@ export const DISCUSSION_TURN_LENGTH_SETTINGS: Record<'short' | 'medium' | 'long'
 export class DiscussionOrchestrator {
   constructor(private readonly deps: DiscussionOrchestratorDeps) {}
 
+  /** ponytail: in-process lock only - under WEB_CONCURRENCY two workers could double-answer;
+   * upgrade to a DB-level claim on the question row if that ever bites. */
+  private readonly encoreRuns = new Set<string>();
+
+  /** Answers audience questions submitted after a run completed (the audio playback of a
+   * show outlives its generation by minutes, so "live" questions routinely arrive on done
+   * runs). Each unanswered question gets one encore turn from the next round-robin speaker,
+   * grounded in the episode's own transcript - no evidence re-resolution needed. */
+  async answerEncoreQuestions(discussionId: string, runId: string): Promise<void> {
+    if (this.encoreRuns.has(runId)) return;
+    this.encoreRuns.add(runId);
+    try {
+      const { discussionRepository, agentRepository, promptRepository, claudeClient } = this.deps;
+      const discussion = await discussionRepository.getDiscussion(discussionId);
+      const run = await discussionRepository.getRunWithTurns(runId);
+      if (!discussion || !run || run.status !== 'done') return;
+
+      const ttsClient = this.deps.ttsStorage
+        ? resolveDiscussionTtsClient(this.deps.ttsClients, undefined, discussion.formatConfig.ttsProvider)
+        : null;
+      const orderedParticipants = discussion.participants
+        .filter((participant) => participant.active)
+        .sort((a, b) => a.speakerOrder - b.speakerOrder);
+      if (orderedParticipants.length === 0) return;
+
+      const languageInstruction = DISCUSSION_LANGUAGE_INSTRUCTIONS[discussion.formatConfig.language ?? 'en'];
+      const turnLengthSetting = DISCUSSION_TURN_LENGTH_SETTINGS[discussion.formatConfig.turnLength ?? 'medium'];
+      const contexts: ParticipantContext[] = [];
+      for (const p of orderedParticipants) {
+        const agent = await agentRepository.getAgent(p.agentId);
+        const promptVersion = await promptRepository.getLatestPromptVersion(p.agentId);
+        contexts.push({
+          participant: p,
+          agentName: agent?.name ?? `Agent-${p.agentId.slice(0, 6)}`,
+          systemPrompt: [
+            promptVersion?.systemPrompt ?? `You are an AI analyst named ${agent?.name ?? 'Agent'}.`,
+            DISCUSSION_MODE_INSTRUCTION,
+            ...(turnLengthSetting.instruction ? [turnLengthSetting.instruction] : []),
+            ...(languageInstruction ? [languageInstruction] : [])
+          ].join('\n\n'),
+          model: promptVersion?.model ?? DISCUSSION_FALLBACK_MODEL,
+          recentReportsSummary: '',
+          transcriptExcerpt: ''
+        });
+      }
+      const nameOf = (participantId: string) =>
+        contexts.find((c) => c.participant.id === participantId)?.agentName ?? 'Agent';
+
+      const turns = run.turns.slice().sort((a, b) => a.turnIndex - b.turnIndex);
+      while (true) {
+        const question = await discussionRepository.getOldestUnansweredLiveQuestion(runId);
+        if (!question) break;
+        const turnIndex = turns.length;
+        const ctx = contexts[turnIndex % contexts.length];
+        const transcript = turns.map((t) => `${nameOf(t.participantId)}: ${t.content}`).join('\n\n');
+        const userPrompt =
+          `${this.buildDirectorContext(discussion, contexts, null)}\n\n` +
+          `The episode has ended and a listener sent in a question. This is a short Q&A encore.\n\n` +
+          `Episode transcript:\n${transcript}\n\n` +
+          `--- AUDIENCE QUESTION ---\n${question.content}\n--- END AUDIENCE QUESTION ---\n` +
+          `It's ${ctx.agentName}'s turn. Answer this audience question directly, staying in character.`;
+
+        const response = await claudeClient.messages.create({
+          model: ctx.model,
+          max_tokens: turnLengthSetting.maxTokens,
+          system: ctx.systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }]
+        });
+        const text = sanitizeDiscussionTurnText(response.content.find((c) => c.type === 'text')?.text ?? '');
+        const createdTurn = await discussionRepository.createTurn(runId, ctx.participant.id, turnIndex, text, null);
+        await discussionRepository.markLiveQuestionAnswered(question.id, createdTurn.id);
+        if (ttsClient && this.deps.ttsStorage) {
+          void renderDiscussionTurnAudio({
+            runId,
+            turn: createdTurn,
+            voice: ctx.participant.voiceId,
+            language: discussion.formatConfig.language ?? 'en',
+            ttsClient,
+            ttsStorage: this.deps.ttsStorage,
+            repository: discussionRepository
+          }).catch((error) => {
+            logger.warn(`[DiscussionOrchestrator] encore audio render for turn ${createdTurn.id} failed: ${String(error)}`);
+          });
+        }
+        turns.push({ ...createdTurn, content: text });
+      }
+    } catch (error) {
+      logger.warn(`[DiscussionOrchestrator] encore answering for run ${runId} failed: ${String(error)}`);
+    } finally {
+      this.encoreRuns.delete(runId);
+    }
+  }
+
   async run(discussionId: string, runId: string): Promise<void> {
     const {
       discussionRepository,
@@ -344,7 +437,13 @@ export class DiscussionOrchestrator {
       const segments = this.getSegments(discussion.format, discussion.formatConfig.segments);
       let turnIndex = 0;
 
-      for (let turn = 0; turn < totalTurns; turn++) {
+      let turn = 0;
+      while (true) {
+        const audienceQuestion = await discussionRepository.getOldestUnansweredLiveQuestion(runId);
+        if (turn >= totalTurns && !audienceQuestion) {
+          if (await discussionRepository.completeRunIfNoUnansweredQuestions(runId)) break;
+          continue;
+        }
         const ctx = contexts[turn % contexts.length];
         const segmentIdx = segments ? Math.floor((turn / totalTurns) * segments.length) : -1;
         const segment = segments ? segments[Math.min(segmentIdx, segments.length - 1)] : null;
@@ -353,10 +452,13 @@ export class DiscussionOrchestrator {
         const evidenceSuffix = ctx.transcriptExcerpt
           ? `\n\nRelevant source material excerpts:\n${ctx.transcriptExcerpt}`
           : '';
-        const userPrompt =
+        const baseUserPrompt =
           conversationHistory.length === 0
             ? `${directorPrefix}\n\nYou are speaking first. Begin the discussion as ${ctx.agentName}. Draw on your recent analysis:\n${ctx.recentReportsSummary}${evidenceSuffix}`
             : `${directorPrefix}\n\nIt's ${ctx.agentName}'s turn${segment ? ` (segment: ${segment})` : ''}. Respond to what was just said, staying in character. Your recent analysis:\n${ctx.recentReportsSummary}${evidenceSuffix}`;
+        const userPrompt = audienceQuestion
+          ? `${baseUserPrompt}\n\n--- AUDIENCE QUESTION ---\n${audienceQuestion.content}\n--- END AUDIENCE QUESTION ---\nAddress this audience question directly in this turn.`
+          : baseUserPrompt;
 
         const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
           ...conversationHistory,
@@ -373,6 +475,15 @@ export class DiscussionOrchestrator {
         const rawText = response.content.find((c) => c.type === 'text')?.text ?? '';
         const text = sanitizeDiscussionTurnText(rawText);
         const createdTurn = await discussionRepository.createTurn(runId, ctx.participant.id, turnIndex, text, segment);
+        if (turnIndex === 0 && discussion.formatConfig.autoTitle) {
+          // Fire-and-forget: naming the show must never slow down or fail the run.
+          void this.generateShowTitle(discussion, text, contexts.map((c) => c.agentName)).catch((error) => {
+            logger.warn(`[DiscussionOrchestrator] title generation for ${discussionId} failed: ${String(error)}`);
+          });
+        }
+        if (audienceQuestion) {
+          await discussionRepository.markLiveQuestionAnswered(audienceQuestion.id, createdTurn.id);
+        }
         if (ttsClient && this.deps.ttsStorage) {
           void renderDiscussionTurnAudio({
             runId,
@@ -390,6 +501,7 @@ export class DiscussionOrchestrator {
         conversationHistory.push({ role: 'user', content: userPrompt });
         conversationHistory.push({ role: 'assistant', content: text });
         turnIndex++;
+        turn++;
       }
 
       const run = await discussionRepository.getRunWithTurns(runId);
@@ -412,8 +524,40 @@ export class DiscussionOrchestrator {
     }
   }
 
-  private getSegments(format: DiscussionFormat, configSegments?: string[]): string[] | null {
-    if (format === 'free_form') return null;
+  /** Names an auto-titled show from its first spoken turn: one small Claude call, saved via
+   * updateDiscussion (which emits discussion.changed so the live UI picks the title up) and
+   * the autoTitle flag cleared so later runs never rename the show again. */
+  private async generateShowTitle(discussion: Discussion, firstTurnText: string, participantNames: string[]): Promise<void> {
+    const language = discussion.formatConfig.language ?? 'en';
+    const response = await this.deps.claudeClient.messages.create({
+      model: DISCUSSION_FALLBACK_MODEL,
+      max_tokens: 60,
+      system:
+        'You name podcast episodes. Reply with ONLY the title - no quotes, no punctuation wrapper, ' +
+        'no explanation. Max 8 words. Catchy but faithful to the content.' +
+        (language === 'de' ? ' Antworte mit einem deutschen Titel.' : ''),
+      messages: [
+        {
+          role: 'user',
+          content:
+            `Speakers: ${participantNames.join(', ')}\n` +
+            (discussion.description ? `Topic: ${discussion.description}\n` : '') +
+            `Opening turn:\n${firstTurnText}\n\nName this episode.`
+        }
+      ]
+    });
+    const title = (response.content.find((c) => c.type === 'text')?.text ?? '')
+      .trim()
+      .replace(/^["'„“]+|["'„“]+$/g, '')
+      .slice(0, 80);
+    if (!title) return;
+    await this.deps.discussionRepository.updateDiscussion(discussion.id, {
+      name: title,
+      formatConfig: { autoTitle: false }
+    });
+  }
+
+  private getSegments(format: DiscussionFormat, configSegments?: string[]): string[] | null {    if (format === 'free_form') return null;
     if (configSegments?.length) return configSegments;
     return ['opening', 'disagreements', 'common_ground', 'final_call'];
   }

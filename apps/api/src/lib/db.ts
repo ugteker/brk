@@ -86,5 +86,28 @@ export async function ensureSqliteSchemaCompatibility(): Promise<void> {
     if (!runColumnNames.has('evidenceSnapshotJson')) {
       await prisma.$executeRawUnsafe('ALTER TABLE "DiscussionRun" ADD COLUMN "evidenceSnapshotJson" TEXT');
     }
+    if (!runColumnNames.has('questionsClosedAt')) {
+      await prisma.$executeRawUnsafe('ALTER TABLE "DiscussionRun" ADD COLUMN "questionsClosedAt" DATETIME');
+    }
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "DiscussionLiveQuestion" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "discussionRunId" TEXT NOT NULL,
+        "content" TEXT NOT NULL,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "answeredByTurnId" TEXT,
+        "answeredAt" DATETIME,
+        CONSTRAINT "DiscussionLiveQuestion_discussionRunId_fkey"
+          FOREIGN KEY ("discussionRunId") REFERENCES "DiscussionRun" ("id")
+          ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT "DiscussionLiveQuestion_answeredByTurnId_fkey"
+          FOREIGN KEY ("answeredByTurnId") REFERENCES "DiscussionTurn" ("id")
+          ON DELETE SET NULL ON UPDATE CASCADE
+      )
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS "DiscussionLiveQuestion_discussionRunId_answeredAt_createdAt_id_idx"
+      ON "DiscussionLiveQuestion"("discussionRunId", "answeredAt", "createdAt", "id")
+    `);
   }
 }

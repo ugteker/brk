@@ -28,6 +28,12 @@ export interface SourceSearchDeps {
   youtubeApiKey?: string;
   /** Max results per provider (default 8). */
   limit?: number;
+  /** Optional provider endpoint override (defaults to iTunes search endpoint). */
+  itunesUrl?: string;
+  /** Optional provider endpoint override (defaults to YouTube Data API search endpoint). */
+  youtubeApiUrl?: string;
+  /** Optional provider endpoint override (defaults to YouTube web search endpoint). */
+  youtubeWebUrl?: string;
 }
 
 const DEFAULT_LIMIT = 8;
@@ -40,8 +46,8 @@ interface ItunesResult {
   artworkUrl100?: string;
 }
 
-async function searchPodcasts(httpGet: HttpGet, query: string, limit: number): Promise<SourceSearchResultItem[]> {
-  const url = `https://itunes.apple.com/search?media=podcast&limit=${limit}&term=${encodeURIComponent(query)}`;
+async function searchPodcasts(httpGet: HttpGet, query: string, limit: number, itunesUrl: string): Promise<SourceSearchResultItem[]> {
+  const url = `${itunesUrl}?media=podcast&limit=${limit}&term=${encodeURIComponent(query)}`;
   const raw = await httpGet(url);
   const parsed = JSON.parse(raw) as { results?: ItunesResult[] };
   return (parsed.results ?? [])
@@ -73,8 +79,14 @@ function pickThumbnail(thumbnails: Record<string, { url?: string } | undefined> 
   return null;
 }
 
-async function searchYoutubeChannelsViaApi(httpGet: HttpGet, query: string, apiKey: string, limit: number): Promise<SourceSearchResultItem[]> {
-  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&maxResults=${limit}&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
+async function searchYoutubeChannelsViaApi(
+  httpGet: HttpGet,
+  query: string,
+  apiKey: string,
+  limit: number,
+  youtubeApiUrl: string
+): Promise<SourceSearchResultItem[]> {
+  const url = `${youtubeApiUrl}?part=snippet&type=channel&maxResults=${limit}&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
   const raw = await httpGet(url);
   const parsed = JSON.parse(raw) as { items?: YoutubeApiSearchItem[] };
   const results: SourceSearchResultItem[] = [];
@@ -139,10 +151,15 @@ export function extractYtInitialData(html: string): unknown {
   throw new Error('ytInitialData JSON is truncated');
 }
 
-async function searchYoutubeChannelsViaScraping(httpGet: HttpGet, query: string, limit: number): Promise<SourceSearchResultItem[]> {
+async function searchYoutubeChannelsViaScraping(
+  httpGet: HttpGet,
+  query: string,
+  limit: number,
+  youtubeWebUrl: string
+): Promise<SourceSearchResultItem[]> {
   // sp=EgIQAg%3D%3D is YouTube's "channels only" search filter (the value itself contains
   // base64 padding "==", so it appears double-encoded in the final URL).
-  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=${encodeURIComponent('EgIQAg%3D%3D')}`;
+  const url = `${youtubeWebUrl}?search_query=${encodeURIComponent(query)}&sp=${encodeURIComponent('EgIQAg%3D%3D')}`;
   const html = await httpGet(url, {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
     'Accept-Language': 'en-US,en;q=0.9'
@@ -168,13 +185,16 @@ async function searchYoutubeChannelsViaScraping(httpGet: HttpGet, query: string,
 export function createSourceSearch(deps: SourceSearchDeps): SourceSearchLike {
   const limit = deps.limit ?? DEFAULT_LIMIT;
   const youtubeHttpGet = deps.youtubeHttpGet ?? deps.httpGet;
+  const itunesUrl = deps.itunesUrl ?? 'https://itunes.apple.com/search';
+  const youtubeApiUrl = deps.youtubeApiUrl ?? 'https://www.googleapis.com/youtube/v3/search';
+  const youtubeWebUrl = deps.youtubeWebUrl ?? 'https://www.youtube.com/results';
   return {
     async searchSources(query: string): Promise<SourceSearchResult> {
       const [podcasts, channels] = await Promise.allSettled([
-        searchPodcasts(deps.httpGet, query, limit),
+        searchPodcasts(deps.httpGet, query, limit, itunesUrl),
         deps.youtubeApiKey
-          ? searchYoutubeChannelsViaApi(youtubeHttpGet, query, deps.youtubeApiKey, limit)
-          : searchYoutubeChannelsViaScraping(youtubeHttpGet, query, limit)
+          ? searchYoutubeChannelsViaApi(youtubeHttpGet, query, deps.youtubeApiKey, limit, youtubeApiUrl)
+          : searchYoutubeChannelsViaScraping(youtubeHttpGet, query, limit, youtubeWebUrl)
       ]);
 
       const results: SourceSearchResultItem[] = [];
