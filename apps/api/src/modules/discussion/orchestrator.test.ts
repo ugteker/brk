@@ -685,4 +685,38 @@ describe('DiscussionOrchestrator', () => {
     }));
     expect(repo.completeRunIfNoUnansweredQuestions).toHaveBeenCalledWith('r1');
   });
+
+  it('generates a show title after the first turn when autoTitle is set, clearing the flag', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getDiscussion.mockResolvedValue({
+      ...mockDiscussion,
+      formatConfig: { totalTurnTarget: 2, autoTitle: true }
+    });
+    const claude = {
+      messages: {
+        create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: '"NVDA: Bull vs Bear"' }], usage: { input_tokens: 1, output_tokens: 1 } })
+      }
+    };
+    const orchestrator = makeOrchestrator({ repo, claude });
+
+    await orchestrator.run('d1', 'r1');
+    await vi.waitFor(() => expect(repo.updateDiscussion).toHaveBeenCalled());
+
+    expect(repo.updateDiscussion).toHaveBeenCalledWith('d1', expect.objectContaining({
+      name: 'NVDA: Bull vs Bear',
+      formatConfig: expect.objectContaining({ autoTitle: false })
+    }));
+  });
+
+  it('does not rename the show when autoTitle is absent', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    const orchestrator = makeOrchestrator({ repo });
+
+    await orchestrator.run('d1', 'r1');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(repo.updateDiscussion).not.toHaveBeenCalled();
+  });
 });

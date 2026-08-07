@@ -382,6 +382,12 @@ export class DiscussionOrchestrator {
         const rawText = response.content.find((c) => c.type === 'text')?.text ?? '';
         const text = sanitizeDiscussionTurnText(rawText);
         const createdTurn = await discussionRepository.createTurn(runId, ctx.participant.id, turnIndex, text, segment);
+        if (turnIndex === 0 && discussion.formatConfig.autoTitle) {
+          // Fire-and-forget: naming the show must never slow down or fail the run.
+          void this.generateShowTitle(discussion, text, contexts.map((c) => c.agentName)).catch((error) => {
+            logger.warn(`[DiscussionOrchestrator] title generation for ${discussionId} failed: ${String(error)}`);
+          });
+        }
         if (audienceQuestion) {
           await discussionRepository.markLiveQuestionAnswered(audienceQuestion.id, createdTurn.id);
         }
@@ -425,8 +431,40 @@ export class DiscussionOrchestrator {
     }
   }
 
-  private getSegments(format: DiscussionFormat, configSegments?: string[]): string[] | null {
-    if (format === 'free_form') return null;
+  /** Names an auto-titled show from its first spoken turn: one small Claude call, saved via
+   * updateDiscussion (which emits discussion.changed so the live UI picks the title up) and
+   * the autoTitle flag cleared so later runs never rename the show again. */
+  private async generateShowTitle(discussion: Discussion, firstTurnText: string, participantNames: string[]): Promise<void> {
+    const language = discussion.formatConfig.language ?? 'en';
+    const response = await this.deps.claudeClient.messages.create({
+      model: DISCUSSION_FALLBACK_MODEL,
+      max_tokens: 60,
+      system:
+        'You name podcast episodes. Reply with ONLY the title - no quotes, no punctuation wrapper, ' +
+        'no explanation. Max 8 words. Catchy but faithful to the content.' +
+        (language === 'de' ? ' Antworte mit einem deutschen Titel.' : ''),
+      messages: [
+        {
+          role: 'user',
+          content:
+            `Speakers: ${participantNames.join(', ')}\n` +
+            (discussion.description ? `Topic: ${discussion.description}\n` : '') +
+            `Opening turn:\n${firstTurnText}\n\nName this episode.`
+        }
+      ]
+    });
+    const title = (response.content.find((c) => c.type === 'text')?.text ?? '')
+      .trim()
+      .replace(/^["'„“]+|["'„“]+$/g, '')
+      .slice(0, 80);
+    if (!title) return;
+    await this.deps.discussionRepository.updateDiscussion(discussion.id, {
+      name: title,
+      formatConfig: { autoTitle: false }
+    });
+  }
+
+  private getSegments(format: DiscussionFormat, configSegments?: string[]): string[] | null {    if (format === 'free_form') return null;
     if (configSegments?.length) return configSegments;
     return ['opening', 'disagreements', 'common_ground', 'final_call'];
   }

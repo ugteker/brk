@@ -162,10 +162,13 @@ export class DiscussionRepository {
       const data: any = {};
       if (input.name !== undefined) data.name = input.name;
       if (input.format !== undefined) data.format = input.format;
-      if (input.formatConfig !== undefined) {
-        const { grounding: _grounding, ...editableFormatConfig } = input.formatConfig as Discussion['formatConfig'];
+      if (input.formatConfig !== undefined || input.name !== undefined) {
+        const { grounding: _grounding, ...editableFormatConfig } = (input.formatConfig ?? {}) as Discussion['formatConfig'];
         const currentFormatConfig = existing.formatConfigJson ? JSON.parse(existing.formatConfigJson) : {};
-        data.formatConfigJson = JSON.stringify({ ...currentFormatConfig, ...editableFormatConfig });
+        const merged = { ...currentFormatConfig, ...editableFormatConfig };
+        // Any explicit rename ends auto-titling, otherwise the next run would overwrite it.
+        if (input.name !== undefined && merged.autoTitle) merged.autoTitle = false;
+        data.formatConfigJson = JSON.stringify(merged);
       }
       if ('scheduleJson' in input) data.scheduleJson = input.scheduleJson;
       if (Object.keys(data).length > 0) {

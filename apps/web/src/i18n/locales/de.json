@@ -839,6 +839,8 @@
     "liveFor": "Seit {{time}} live",
     "recordingTime": "{{current}} von {{total}}",
     "goLive": "GO LIVE",
+    "goOnAir": "On Air",
+    "autoNameHint": "Deine Show benennt sich selbst – der Titel entsteht live aus dem Gespräch.",
     "retryAudio": "Audio erneut laden",
     "mute": "Stummschalten",
     "unmute": "Ton einschalten",
@@ -906,8 +908,10 @@
     "discussThisSource": "Diese Quelle diskutieren",
     "preselectBanner": "Diskussion wird gestartet über: {{context}}",
     "startFromScratch": "Von vorne beginnen",
-    "castPickerTitle": "Gast einladen",
+    "castPickerTitle": "Gäste einladen",
     "castYourAgents": "Deine Agenten",
+    "seatSelected": "{{count}} auf die Bühne setzen",
+    "castStageTitle": "Besetze deine Show – wer ist on air?",
     "removeFromStage": "Von der Bühne nehmen",
     "inviteGuest": "Gast einladen",
     "newShowTitle": "Neue Show",
@@ -935,7 +939,9 @@
     "preset_interview": "Interview",
     "preset_interview_desc": "Ein Host fragt, ein Experte antwortet.",
     "preset_deepdive": "Deep Dive",
-    "preset_deepdive_desc": "Lang & gründlich durch alle Details."
+    "preset_deepdive_desc": "Lang & gründlich durch alle Details.",
+    "preset_roundtable": "Roundtable",
+    "preset_roundtable_desc": "Freie Runde mit Struktur-Momenten."
   },
   "adminAgents": {
     "title": "Agenten-Übersicht",

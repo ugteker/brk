@@ -627,18 +627,37 @@
 }
 
 /* The board: the show console. Fills the setup main area; compact enough to avoid its
-   own scrollbar on typical viewports. */
+   own scrollbar on typical viewports. Styled as a broadcast mixing console: brushed
+   panel, inset section rails, engraved labels, LED "On Air" switch. */
 .studio-board {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   gap: 14px;
-  padding: 14px 16px 16px;
-  border: 1px solid rgba(139, 92, 246, 0.24);
-  border-radius: 14px;
+  padding: 16px 18px 18px;
+  border: 1px solid rgba(139, 92, 246, 0.28);
+  border-radius: 16px;
   background:
-    radial-gradient(80% 50% at 50% -10%, rgba(139, 92, 246, 0.08), transparent 60%),
+    radial-gradient(80% 50% at 50% -10%, rgba(139, 92, 246, 0.1), transparent 60%),
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(139, 92, 246, 0.015) 3px 4px),
     hsl(var(--card));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 30px -18px rgba(76, 29, 149, 0.45);
+}
+
+/* Each config block reads as an inset rail on the console surface. */
+.studio-board > div:not(.studio-board-row):not(.studio-board-golive-row) {
+  padding: 12px 14px;
+  border: 1px solid rgba(139, 92, 246, 0.14);
+  border-radius: 12px;
+  background: rgba(139, 92, 246, 0.035);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.dark .studio-board > div:not(.studio-board-row):not(.studio-board-golive-row) {
+  background: rgba(139, 92, 246, 0.05);
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 .studio-board-row {
@@ -653,13 +672,22 @@
   font-weight: 600;
 }
 
+.studio-board-autoname {
+  flex: 1 1 220px;
+  font-size: 12.5px;
+  font-style: italic;
+}
+
 .studio-board-section-title {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  opacity: 0.85;
 }
 
 .studio-board-section-title .anticon {
@@ -741,7 +769,85 @@
   flex: 1 1 220px;
   min-height: 48px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #dc2626, #991b1b) !important;
+  border: none;
+  box-shadow: 0 0 18px rgba(220, 38, 38, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.studio-board-golive:not(:disabled):hover {
+  box-shadow: 0 0 26px rgba(220, 38, 38, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.studio-board-golive:disabled {
+  filter: saturate(0.15);
+  box-shadow: none;
+}
+
+/* The red LED dot inside the On Air switch. */
+.studio-onair-led {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+  animation: onair-led 1.6s ease-in-out infinite;
+}
+
+.studio-board-golive:disabled .studio-onair-led {
+  animation: none;
+  opacity: 0.4;
+  box-shadow: none;
+}
+
+@keyframes onair-led {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-onair-led { animation: none; }
+}
+
+/* Casting stage as the setup flow's step one: framed like a spotlighted stage so it
+   can't be missed as the first decision. */
+.studio-casting-callout {
+  flex: none;
+  padding: 12px 14px 6px;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 14px;
+  background:
+    radial-gradient(70% 60% at 50% 0%, rgba(139, 92, 246, 0.12), transparent 65%),
+    hsl(var(--card));
+}
+
+/* Nothing cast yet: this is the required next action - glow the frame and pulse the chair. */
+.studio-casting-callout-empty {
+  border-color: rgba(139, 92, 246, 0.55);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.18);
+}
+
+.studio-casting-callout-empty .studio-chair-empty .studio-chair-seat {
+  animation: chair-beckon 2s ease-in-out infinite;
+}
+
+@keyframes chair-beckon {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.45); }
+  50% { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-casting-callout-empty .studio-chair-empty .studio-chair-seat { animation: none; }
+}
+
+/* Multi-select state in the agent picker. */
+.studio-cast-option-selected {
+  border-color: rgba(139, 92, 246, 0.7) !important;
+  background: rgba(114, 46, 209, 0.12) !important;
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.4);
 }
 
 .studio-console-content {
@@ -1128,11 +1234,13 @@
   .turn-in-right,
   .on-air-ring,
   .speaker-active,
+  .speaker-voice,
   .typing-dots span {
     animation: none;
   }
   .on-air-ring,
-  .speaker-active {
+  .speaker-active,
+  .speaker-voice {
     box-shadow: 0 0 0 3px var(--speaker-color, #722ed1);
   }
   .typing-dots span {
@@ -1165,6 +1273,11 @@
 .speaker-active {
   box-shadow: 0 0 0 3px var(--speaker-color, #722ed1);
   animation: speaker-pulse 1.8s ease-in-out infinite;
+}
+/* Amplitude-driven variant: ring width follows the real voice level (--voice-level 0..1,
+ * updated per animation frame by LiveVoiceBar's analyser loop). */
+.speaker-voice {
+  box-shadow: 0 0 0 calc(2px + var(--voice-level, 0) * 14px) color-mix(in srgb, var(--speaker-color, #722ed1) 65%, transparent);
 }
 @keyframes speaker-pulse {
   0%, 100% { box-shadow: 0 0 0 3px var(--speaker-color, #722ed1); }

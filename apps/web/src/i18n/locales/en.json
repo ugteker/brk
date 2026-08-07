@@ -839,6 +839,8 @@
     "liveFor": "Live for {{time}}",
     "recordingTime": "{{current}} of {{total}}",
     "goLive": "GO LIVE",
+    "goOnAir": "On Air",
+    "autoNameHint": "Your show names itself — the title emerges live from the conversation.",
     "retryAudio": "Retry audio",
     "mute": "Mute",
     "unmute": "Unmute",
@@ -906,8 +908,10 @@
     "discussThisSource": "Discuss this source",
     "preselectBanner": "Starting a discussion about: {{context}}",
     "startFromScratch": "Start from scratch",
-    "castPickerTitle": "Invite a guest",
+    "castPickerTitle": "Invite guests",
     "castYourAgents": "Your agents",
+    "seatSelected": "Seat {{count}} on stage",
+    "castStageTitle": "Cast your show — who's on air?",
     "removeFromStage": "Remove from stage",
     "inviteGuest": "Invite guest",
     "newShowTitle": "New show",
@@ -935,7 +939,9 @@
     "preset_interview": "Interview",
     "preset_interview_desc": "A host asks, an expert answers.",
     "preset_deepdive": "Deep dive",
-    "preset_deepdive_desc": "Long and thorough through every detail."
+    "preset_deepdive_desc": "Long and thorough through every detail.",
+    "preset_roundtable": "Roundtable",
+    "preset_roundtable_desc": "Free-flowing with structured moments."
   },
   "adminAgents": {
     "title": "Agents overview",

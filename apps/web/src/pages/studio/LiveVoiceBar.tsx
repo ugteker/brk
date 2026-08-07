@@ -37,7 +37,12 @@ interface LiveVoiceBarProps {
   speakerNames: Record<string, string>;
   waitingMessage: string;
   audioAvailable: boolean;
+  /** Fired when playback advances into a new turn clip (index into the sorted turn list). */
   onActiveTurnIndexChange?: (index: number) => void;
+  /** Fired once per schedule generation when playback has drained everything it will ever
+   * play for this run (run no longer generating, all fetched clips played out) or the audio
+   * path failed fatally — lets the transcript release any still-hidden turns. */
+  onPlaybackEnded?: () => void;
 }
 
 function formatTime(seconds: number): string {
@@ -69,7 +74,8 @@ export function LiveVoiceBar({
   speakerNames,
   waitingMessage,
   audioAvailable,
-  onActiveTurnIndexChange
+  onActiveTurnIndexChange,
+  onPlaybackEnded
 }: LiveVoiceBarProps) {
   const { t } = useTranslation();
   const isLive = runStatus === 'pending' || runStatus === 'running';
@@ -89,6 +95,7 @@ export function LiveVoiceBar({
   const generationRef = useRef(0);
   const userPausedRef = useRef(false);
   const announcedIndexRef = useRef(-1);
+  const endedGenerationRef = useRef(-1);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const [bufferVersion, setBufferVersion] = useState(0);
@@ -185,6 +192,7 @@ export function LiveVoiceBar({
     setLogicalPosition(0);
     setAudioError(false);
     announcedIndexRef.current = -1;
+    endedGenerationRef.current = -1;
 
     if (!audioAvailable || !runId || typeof AudioContext === 'undefined') {
       setAudioError(audioAvailable && Boolean(runId));
@@ -265,7 +273,22 @@ export function LiveVoiceBar({
       const clip = scheduledRef.current.find(
         (candidate) => context.currentTime >= candidate.startTime && context.currentTime <= candidate.endTime
       );
-      if (!clip) return;
+      if (!clip) {
+        // Drained: run finished generating, every fetched clip was scheduled and has played
+        // out past its end. Fire once per schedule generation (seek/goLive re-arms).
+        if (
+          !isLive &&
+          scheduledRef.current.length > 0 &&
+          nextIndexRef.current >= itemsRef.current.length &&
+          context.state === 'running' &&
+          context.currentTime > scheduledEndRef.current &&
+          endedGenerationRef.current !== generationRef.current
+        ) {
+          endedGenerationRef.current = generationRef.current;
+          onPlaybackEnded?.();
+        }
+        return;
+      }
       setCurrentIndex((index) => index === clip.index ? index : clip.index);
       if (announcedIndexRef.current !== clip.index) {
         announcedIndexRef.current = clip.index;
@@ -277,7 +300,12 @@ export function LiveVoiceBar({
       );
     }, 200);
     return () => window.clearInterval(timer);
-  }, [cumulativeDuration, onActiveTurnIndexChange]);
+  }, [cumulativeDuration, isLive, onActiveTurnIndexChange, onPlaybackEnded]);
+
+  // A fatal audio error means playback will never reach the remaining turns - release them.
+  useEffect(() => {
+    if (audioError) onPlaybackEnded?.();
+  }, [audioError, onPlaybackEnded]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -300,6 +328,12 @@ export function LiveVoiceBar({
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       context.clearRect(0, 0, width, height);
       analyser.getByteFrequencyData(values);
+      // Feed the live amplitude to the CSS layer so the active speaker's ring
+      // pulses with the actual voice (see .speaker-voice).
+      let sum = 0;
+      for (let index = 0; index < values.length; index++) sum += values[index];
+      const level = playing && !reducedMotion ? sum / values.length / 255 : 0;
+      document.documentElement.style.setProperty('--voice-level', level.toFixed(3));
       const bars = Math.min(40, values.length);
       const gap = 3;
       const barWidth = Math.max(2, (width - gap * (bars - 1)) / bars);
@@ -318,7 +352,10 @@ export function LiveVoiceBar({
       if (playing && !reducedMotion) frame = window.requestAnimationFrame(draw);
     };
     draw();
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.documentElement.style.setProperty('--voice-level', '0');
+    };
   }, [bufferVersion, playing]);
 
   const startListening = useCallback(() => {

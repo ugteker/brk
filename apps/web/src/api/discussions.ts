@@ -59,6 +59,9 @@ export interface DiscussionFormatConfigDto {
   turnLength?: 'short' | 'medium' | 'long';
   /** Voice API used to render this discussion as audio. Defaults to 'auto' when unset. */
   ttsProvider?: TtsProviderDto;
+  /** True while the show still awaits its LLM-generated title (set by the create wizard,
+   * cleared by the backend once the first run names the show or the user renames it). */
+  autoTitle?: boolean;
   /** Absent means classic reports grounding. */
   grounding?: DiscussionGroundingConfigDto;
 }

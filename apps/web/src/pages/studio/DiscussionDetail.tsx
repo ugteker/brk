@@ -18,7 +18,8 @@ import {
   ControlOutlined,
   MoreOutlined,
   PlayCircleOutlined,
-  SendOutlined
+  SendOutlined,
+  TeamOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { getAgentDisplayLabel } from '../../utils/agent-label';
@@ -196,10 +197,13 @@ function TypingIndicator({ participant, label }: { participant: ParticipantInfo;
  * with the currently speaking/thinking participant highlighted with a pulsing ring. */
 function StudioPanel({
   participants,
-  activeParticipantId
+  activeParticipantId,
+  voiceReactive
 }: {
   participants: Array<{ id: string; info: ParticipantInfo }>;
   activeParticipantId: string | null;
+  /** When true, the active ring follows the real audio amplitude (--voice-level set by LiveVoiceBar). */
+  voiceReactive?: boolean;
 }) {
   return (
     <div
@@ -218,7 +222,7 @@ function StudioPanel({
         return (
           <div key={id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 64 }}>
             <div
-              className={`flex h-12 w-12 items-center justify-center rounded-full text-xl ${getCharacterTypeIconBg(info.characterType)} ${active ? 'speaker-active on-air-ring' : ''}`}
+              className={`flex h-12 w-12 items-center justify-center rounded-full text-xl ${getCharacterTypeIconBg(info.characterType)} ${active ? `${voiceReactive ? 'speaker-voice' : 'speaker-active'} on-air-ring` : ''}`}
               style={active ? ({ '--speaker-color': color } as React.CSSProperties) : { opacity: 0.75 }}
             >
               {getCharacterTypeEmoji(info.characterType)}
@@ -441,6 +445,9 @@ function SetupRoom() {
           totalTurnTarget: draft.totalTurnTarget,
           language: draft.language,
           turnLength: draft.turnLength,
+          // No title input in the create flow: the backend names the show from the first
+          // turn; suggestedName() above is only the interim fallback shown until then.
+          autoTitle: true,
           ...(draft.ttsProvider !== 'auto' ? { ttsProvider: draft.ttsProvider } : {}),
           grounding: {
             mode: draft.groundingMode,
@@ -481,12 +488,18 @@ function SetupRoom() {
         </div>
         <span />
       </header>
-      <CastingStage
-        cast={draft.cast}
-        onChange={(cast) => setDraft((d) => ({ ...d, cast }))}
-        effectiveTtsProvider={effectiveTtsProvider}
-        language={draft.language}
-      />
+      <div className={`studio-casting-callout ${draft.cast.length === 0 ? 'studio-casting-callout-empty' : ''}`}>
+        <div className="studio-board-section-title">
+          <TeamOutlined />
+          {t('studio.castStageTitle')}
+        </div>
+        <CastingStage
+          cast={draft.cast}
+          onChange={(cast) => setDraft((d) => ({ ...d, cast }))}
+          effectiveTtsProvider={effectiveTtsProvider}
+          language={draft.language}
+        />
+      </div>
       <div className="studio-setup-main">
         <StudioBoard
           draft={draft}
@@ -552,7 +565,11 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
   const [liveQuestions, setLiveQuestions] = useState<DiscussionLiveQuestionDto[]>([]);
   const [liveQuestionsOpen, setLiveQuestionsOpen] = useState(true);
   const [liveStatus, setLiveStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  // Transcript/voice sync: while a run's audio is playing, only turns whose clip has started
+  // are shown. Keyed by run id so the gate survives the run finishing *generation* (voice
+  // usually lags generation) and only lifts when playback itself drains.
   const [revealedTurnCount, setRevealedTurnCount] = useState(0);
+  const [syncRunId, setSyncRunId] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
   // Console drawer edit state: seeded from the loaded discussion, applied via updateDiscussion.
@@ -588,17 +605,25 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
     setLiveQuestions([]);
     setLiveQuestionsOpen(true);
     setRevealedTurnCount(0);
+    setSyncRunId(liveRun);
     refreshLiveRun(liveRun);
   }, [liveRun, refreshLiveRun]);
 
+  const handleActiveTurnIndexChange = useCallback((index: number) => {
+    setRevealedTurnCount((count) => Math.max(count, index + 1));
+  }, []);
+  const handlePlaybackEnded = useCallback(() => {
+    setSyncRunId(null);
+  }, []);
+
   useRealtimeSubscription(['discussion.changed'], (event) => {
     if (!liveRun) return;
-    if (event.topic === 'resync') {
+    if (event.topic === 'resync' || event.entityId === discussionId) {
       refreshLiveRun(liveRun);
-      return;
-    }
-    if (event.entityId === discussionId) {
-      refreshLiveRun(liveRun);
+      // The orchestrator may have just auto-named the show - pick the title up live.
+      if (discussionId) {
+        getDiscussion(discussionId).then(setDiscussion).catch(() => undefined);
+      }
     }
   });
 
@@ -671,6 +696,12 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
     if (liveStatus === 'done' || liveStatus === 'error') {
       setLiveRun(null);
       void loadData({ silent: true });
+      // Run over but no audio ever arrived (TTS configured yet nothing rendered) - the
+      // playback poller will never fire onPlaybackEnded, so release the transcript here.
+      setLiveTurns((turns) => {
+        if (!turns.some((turn) => turn.audioUrl)) setSyncRunId(null);
+        return turns;
+      });
     }
     if (liveStatus === 'done') {
       // The completed run just (re)created/updated the synthetic library card;
@@ -799,8 +830,7 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
   const displayQuestions: DiscussionLiveQuestionDto[] =
     liveRun && liveRun === selectedRunId ? liveQuestions : selectedRun?.questions ?? [];
   const isLive = liveStatus === 'running' && liveRun === selectedRunId;
-  const hasAnyTurnAudio = displayTurns.some((turn) => Boolean(turn.audioUrl));
-  const syncTranscriptToAudio = isLive && ttsAvailable && hasAnyTurnAudio;
+  const syncTranscriptToAudio = ttsAvailable && selectedRunId !== null && selectedRunId === syncRunId;
   const visibleTurns = syncTranscriptToAudio ? displayTurns.slice(0, revealedTurnCount) : displayTurns;
   const visibleTurnIds = new Set(visibleTurns.map((turn) => turn.id));
   const visibleQuestions = displayQuestions.filter(
@@ -820,8 +850,12 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
     isLive && orderedParticipants.length > 0
       ? orderedParticipants[visibleTurns.length % orderedParticipants.length]
       : null;
-  const activeParticipantId =
-    thinkingParticipant?.id ?? (isLive && visibleTurns.length > 0 ? visibleTurns[visibleTurns.length - 1].participantId : null);
+  const lastVisibleSpeakerId = visibleTurns.length > 0 ? visibleTurns[visibleTurns.length - 1].participantId : null;
+  // While audio drives the transcript, the flashing avatar must be whoever is actually
+  // talking (the last revealed turn) - not the round-robin prediction of the NEXT speaker.
+  const activeParticipantId = syncTranscriptToAudio
+    ? lastVisibleSpeakerId
+    : thinkingParticipant?.id ?? (isLive ? lastVisibleSpeakerId : null);
   const speakerNames = Object.fromEntries(
     Object.entries(participantInfoMap).map(([id, info]) => [id, info.name])
   );
@@ -871,7 +905,7 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
         </div>
       </header>
 
-      <StudioPanel participants={orderedParticipants} activeParticipantId={activeParticipantId} />
+      <StudioPanel participants={orderedParticipants} activeParticipantId={activeParticipantId} voiceReactive={syncTranscriptToAudio} />
 
       {runs.length > 0 && (
         <div className="studio-episode-shelf" role="tablist" aria-label={t('studio.runHistory')}>
@@ -907,9 +941,8 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
         speakerNames={speakerNames}
         waitingMessage={t(`studio.warmup${warmupIndex}`)}
         audioAvailable={ttsAvailable}
-        onActiveTurnIndexChange={(index) => {
-          setRevealedTurnCount((count) => Math.max(count, index + 1));
-        }}
+        onActiveTurnIndexChange={handleActiveTurnIndexChange}
+        onPlaybackEnded={handlePlaybackEnded}
       />
 
       <div
@@ -976,7 +1009,7 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
             {isLive && thinkingParticipant && (
               <TypingIndicator participant={thinkingParticipant.info} label={t('studio.speakerThinking')} />
             )}
-            {!isLive && selectedRun?.status === 'done' && displayTurns.length > 0 && (
+            {!isLive && !syncTranscriptToAudio && selectedRun?.status === 'done' && displayTurns.length > 0 && (
               <div className="studio-wrapped-card">
                 <div className="studio-wrapped-title">{t('studio.showWrapped')}</div>
                 <Text type="secondary">{t('studio.showWrappedDesc', { count: displayTurns.length })}</Text>

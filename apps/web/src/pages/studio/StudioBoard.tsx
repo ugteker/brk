@@ -129,13 +129,14 @@ export function applyPreselect(draft: ShowDraft, preselect: DiscussionPreselect)
   };
 }
 
-type PresetKey = 'debate' | 'explainer' | 'interview' | 'deepdive';
+type PresetKey = 'debate' | 'explainer' | 'interview' | 'deepdive' | 'roundtable';
 
 const PRESETS: Record<PresetKey, { emoji: string; format: Format; turns: number; length: 'short' | 'medium' | 'long' }> = {
   debate: { emoji: '⚔️', format: 'free_form', turns: 12, length: 'medium' },
   explainer: { emoji: '💡', format: 'hosted', turns: 8, length: 'long' },
   interview: { emoji: '🎤', format: 'hosted', turns: 10, length: 'medium' },
-  deepdive: { emoji: '🌊', format: 'structured', turns: 16, length: 'long' }
+  deepdive: { emoji: '🌊', format: 'structured', turns: 16, length: 'long' },
+  roundtable: { emoji: '🔁', format: 'hybrid', turns: 12, length: 'medium' }
 };
 
 function activePreset(draft: ShowDraft): PresetKey | null {
@@ -164,7 +165,8 @@ function AgentPickerModal({
 }: {
   open: boolean;
   cast: CastMember[];
-  onPick: (agentId: string) => void;
+  /** Adds one or more agents to the stage in the given order. */
+  onPick: (agentIds: string[]) => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -174,6 +176,12 @@ function AgentPickerModal({
   const [publicLoaded, setPublicLoaded] = useState(false);
   const [cloningId, setCloningId] = useState<string | null>(null);
   const [showCurator, setShowCurator] = useState(false);
+  // Multi-select: own agents toggle in place and are seated together via the footer button.
+  const [selected, setSelected] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!open) setSelected([]);
+  }, [open]);
 
   useEffect(() => {
     if (!open || publicLoaded) return;
@@ -194,7 +202,7 @@ function AgentPickerModal({
     try {
       const result = await cloneMarketplaceAgent(item.publicationId);
       await refreshAgents();
-      onPick(result.agent.id);
+      onPick([result.agent.id]);
     } catch (err) {
       message.error(err instanceof Error ? err.message : t('studio.cloningAgents'));
     } finally {
@@ -205,7 +213,7 @@ function AgentPickerModal({
   async function completeCuration(agent: CuratedAgent) {
     await refreshAgents();
     setShowCurator(false);
-    onPick(agent.id);
+    onPick([agent.id]);
   }
 
   return (
@@ -229,18 +237,31 @@ function AgentPickerModal({
             <div className="space-y-2">
               <Text type="secondary">{t('studio.castYourAgents')}</Text>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {ownedAgents.map((agent) => (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    className="studio-cast-option"
-                    onClick={() => onPick(agent.id)}
-                  >
-                    <AgentAvatar agent={agent} size="h-9 w-9 text-base" />
-                    <span className="min-w-0 truncate font-medium">{getAgentDisplayLabel(agent)}</span>
-                  </button>
-                ))}
+                {ownedAgents.map((agent) => {
+                  const isSelected = selected.includes(agent.id);
+                  return (
+                    <button
+                      key={agent.id}
+                      type="button"
+                      className={`studio-cast-option ${isSelected ? 'studio-cast-option-selected' : ''}`}
+                      aria-pressed={isSelected}
+                      onClick={() =>
+                        setSelected((current) =>
+                          isSelected ? current.filter((id) => id !== agent.id) : [...current, agent.id]
+                        )
+                      }
+                    >
+                      <AgentAvatar agent={agent} size="h-9 w-9 text-base" />
+                      <span className="min-w-0 truncate font-medium">{getAgentDisplayLabel(agent)}</span>
+                    </button>
+                  );
+                })}
               </div>
+              {selected.length > 0 && (
+                <Button type="primary" block onClick={() => onPick(selected)}>
+                  {t('studio.seatSelected', { count: selected.length })}
+                </Button>
+              )}
             </div>
           )}
           <div className="space-y-2">
@@ -360,10 +381,14 @@ export function CastingStage({
         open={pickerOpen}
         cast={cast}
         onClose={() => setPickerOpen(false)}
-        onPick={(agentId) => {
+        onPick={(agentIds) => {
           onChange([
             ...cast,
-            { agentId, role: cast.length === 0 ? 'host' : 'speaker', voiceId: VOICES[cast.length % VOICES.length] }
+            ...agentIds.map((agentId, i) => ({
+              agentId,
+              role: (cast.length + i === 0 ? 'host' : 'speaker') as 'host' | 'speaker',
+              voiceId: VOICES[(cast.length + i) % VOICES.length]
+            }))
           ]);
           setPickerOpen(false);
         }}
@@ -532,13 +557,19 @@ export function StudioBoard({
       )}
 
       <div className="studio-board-row">
-        <Input
-          className="studio-board-name"
-          value={draft.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          placeholder={t('studio.discussionNamePlaceholder')}
-          suffix={<EditOutlined style={{ opacity: 0.45 }} />}
-        />
+        {mode === 'edit' ? (
+          <Input
+            className="studio-board-name"
+            value={draft.name}
+            onChange={(e) => onChange({ name: e.target.value })}
+            placeholder={t('studio.discussionNamePlaceholder')}
+            suffix={<EditOutlined style={{ opacity: 0.45 }} />}
+          />
+        ) : (
+          <Text type="secondary" className="studio-board-autoname">
+            {t('studio.autoNameHint')}
+          </Text>
+        )}
         <Segmented
           value={draft.language}
           onChange={(v) => onChange({ language: v as 'en' | 'de' })}
@@ -655,16 +686,6 @@ export function StudioBoard({
                     ]}
                   />
                 </Form.Item>
-                <Form.Item label={t('studio.formatLabel')}>
-                  <Select
-                    value={draft.format}
-                    onChange={(v) => onChange({ format: v as Format })}
-                    options={(['free_form', 'structured', 'hosted', 'hybrid'] as Format[]).map((f) => ({
-                      value: f,
-                      label: t(`studio.format_${f}`)
-                    }))}
-                  />
-                </Form.Item>
                 {capabilities.ttsProviders.length > 1 && (
                   <Form.Item label={t('studio.voiceApiLabel')} extra={t('studio.voiceApiHint')}>
                     <Select
@@ -693,12 +714,12 @@ export function StudioBoard({
               type="primary"
               size="large"
               className="studio-board-golive"
-              icon={<NotificationOutlined />}
               loading={submitting}
               disabled={Boolean(blocker)}
               onClick={onGoLive}
             >
-              {t('studio.goLive')}
+              <span className="studio-onair-led" aria-hidden="true" />
+              {t('studio.goOnAir')}
             </Button>
           </Tooltip>
           <Button type="text" disabled={Boolean(blocker) || submitting} onClick={onSave}>
