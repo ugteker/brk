@@ -405,6 +405,13 @@ function SetupRoom() {
     () => (location.state as { preselect?: DiscussionPreselect } | null)?.preselect?.contextLabel ?? null
   );
   const [submitting, setSubmitting] = useState(false);
+  // "Entering the studio": while the show is being created, the setup board folds down into
+  // the bottom bar (visually becoming the live room's chat composer) instead of a bare spinner.
+  const [entering, setEntering] = useState(false);
+  // In-place handoff to the live room: navigating would remount the whole page (blank gap),
+  // so instead the URL is swapped via replaceState and LiveRoom renders right here, seeded
+  // with the just-created discussion - the studio reveals where the board folded away.
+  const [handoff, setHandoff] = useState<{ discussion: DiscussionDto; runId: string } | null>(null);
   const [capabilities, setCapabilities] = useState<DiscussionCapabilities>({ tts: false, ttsProviders: [] });
   const { agents } = useAppData();
 
@@ -436,6 +443,10 @@ function SetupRoom() {
 
   async function submit(runNow: boolean) {
     setSubmitting(true);
+    if (runNow) setEntering(true);
+    // The fold animation plays during the network wait; hold navigation briefly so a fast
+    // network doesn't cut it off mid-motion.
+    const minHold = runNow ? new Promise((resolve) => setTimeout(resolve, 700)) : Promise.resolve();
     try {
       const disc = await createDiscussion({
         name: suggestedName(),
@@ -460,18 +471,32 @@ function SetupRoom() {
       });
       if (runNow) {
         const run = await triggerDiscussionRun(disc.id);
-        navigate(`/studio/${disc.id}`, { state: { liveRunId: run.id } });
+        await minHold;
+        window.history.replaceState(null, '', `/studio/${disc.id}`);
+        setHandoff({ discussion: disc, runId: run.id });
       } else {
         navigate(`/studio/${disc.id}`);
       }
     } catch {
       message.error(t('studio.failedToCreateDiscussion'));
       setSubmitting(false);
+      setEntering(false);
     }
   }
 
+  if (handoff) {
+    return (
+      <LiveRoom
+        key={handoff.discussion.id}
+        discussionId={handoff.discussion.id}
+        initialDiscussion={handoff.discussion}
+        initialLiveRunId={handoff.runId}
+      />
+    );
+  }
+
   return (
-    <div className="studio-live-room">
+    <div className={`studio-live-room ${entering ? 'studio-entering' : ''}`}>
       <header className="studio-live-header">
         <Tooltip title={t('studio.title')}>
           <Button
@@ -484,7 +509,7 @@ function SetupRoom() {
         </Tooltip>
         <div className="studio-live-title">
           <h1>{draft.name.trim() || t('studio.newShowTitle')}</h1>
-          <Text type="secondary">{t('studio.standby')}</Text>
+          <Text type="secondary">{entering ? t('studio.enteringStudio') : t('studio.standby')}</Text>
         </div>
         <span />
       </header>
@@ -526,17 +551,27 @@ export function DiscussionDetail() {
   return <LiveRoom key={discussionId} discussionId={discussionId} />;
 }
 
-function LiveRoom({ discussionId }: { discussionId: string }) {
+function LiveRoom({
+  discussionId,
+  initialDiscussion,
+  initialLiveRunId
+}: {
+  discussionId: string;
+  // Handoff seeds from SetupRoom's On Air: skip the loading spinner entirely so the
+  // studio appears in place while the board folds away.
+  initialDiscussion?: DiscussionDto;
+  initialLiveRunId?: string;
+}) {
   const { t } = useTranslation();
   const navigate = useSafeNavigate();
   const location = useLocation();
   const { agents, refreshSources } = useAppData();
 
-  const [discussion, setDiscussion] = useState<DiscussionDto | null>(null);
+  const [discussion, setDiscussion] = useState<DiscussionDto | null>(initialDiscussion ?? null);
   const [runs, setRuns] = useState<DiscussionRunDto[]>([]);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [liveRun, setLiveRun] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(initialLiveRunId ?? null);
+  const [liveRun, setLiveRun] = useState<string | null>(initialLiveRunId ?? null);
+  const [loading, setLoading] = useState(!initialDiscussion);
   const [triggering, setTriggering] = useState(false);
   const [renderingAudio, setRenderingAudio] = useState(false);
   // Rotating "warming up the studio" copy shown while a live run has produced no
@@ -573,7 +608,9 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
   // Console drawer edit state: seeded from the loaded discussion, applied via updateDiscussion.
-  const [editDraft, setEditDraft] = useState<ShowDraft | null>(null);
+  const [editDraft, setEditDraft] = useState<ShowDraft | null>(
+    initialDiscussion ? draftFromDiscussion(initialDiscussion) : null
+  );
   const [savingEdit, setSavingEdit] = useState(false);
   const [question, setQuestion] = useState('');
   const [submittingQuestion, setSubmittingQuestion] = useState(false);
@@ -610,10 +647,35 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
   }, [liveRun, refreshLiveRun]);
 
   const handleActiveTurnIndexChange = useCallback((index: number) => {
+    if (detachTimerRef.current != null) {
+      window.clearTimeout(detachTimerRef.current);
+      detachTimerRef.current = null;
+    }
     setRevealedTurnCount((count) => Math.max(count, index + 1));
   }, []);
+  // Playback drained. If an encore answer is still pending (question submitted while the
+  // show played), stay attached so its turn + clip can arrive and play; otherwise detach.
+  // ponytail: 60s safety timer covers an encore whose audio never renders.
+  const detachTimerRef = useRef<number | null>(null);
   const handlePlaybackEnded = useCallback(() => {
-    setSyncRunId(null);
+    setLiveQuestions((questions) => {
+      if (questions.some((q) => !q.answeredByTurnId)) {
+        if (detachTimerRef.current == null) {
+          detachTimerRef.current = window.setTimeout(() => {
+            detachTimerRef.current = null;
+            setSyncRunId(null);
+            setLiveRun(null);
+          }, 60000);
+        }
+      } else {
+        setSyncRunId(null);
+        setLiveRun(null);
+      }
+      return questions;
+    });
+  }, []);
+  useEffect(() => () => {
+    if (detachTimerRef.current != null) window.clearTimeout(detachTimerRef.current);
   }, []);
 
   useRealtimeSubscription(['discussion.changed'], (event) => {
@@ -689,17 +751,21 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
   }, [discussionId, liveRun, selectedRunId]);
 
   useEffect(() => {
-    loadData();
+    // Handoff already has the discussion in hand - refresh silently, no spinner.
+    loadData({ silent: Boolean(initialDiscussion) });
   }, [discussionId]);
 
   useEffect(() => {
     if (liveStatus === 'done' || liveStatus === 'error') {
-      setLiveRun(null);
       void loadData({ silent: true });
-      // Run over but no audio ever arrived (TTS configured yet nothing rendered) - the
-      // playback poller will never fire onPlaybackEnded, so release the transcript here.
+      // Stay attached to the run while its audio still plays: encore questions target it
+      // and the realtime refetch must keep flowing. Detach immediately when there's no
+      // audio to wait for (error, TTS off, or nothing rendered).
       setLiveTurns((turns) => {
-        if (!turns.some((turn) => turn.audioUrl)) setSyncRunId(null);
+        if (liveStatus === 'error' || !ttsAvailable || !turns.some((turn) => turn.audioUrl)) {
+          setSyncRunId(null);
+          setLiveRun(null);
+        }
         return turns;
       });
     }
@@ -836,7 +902,11 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
   const visibleQuestions = displayQuestions.filter(
     (item) => !item.answeredByTurnId || visibleTurnIds.has(item.answeredByTurnId)
   );
-  const questionsOpen = isLive && liveQuestionsOpen;
+  // Encore window: run finished generating but its audio is still playing - the show is
+  // still "live" for the audience, so the composer stays open (late questions get an
+  // encore answer turn from the backend).
+  const encoreOpen = !isLive && liveStatus === 'done' && liveRun === selectedRunId && syncRunId === selectedRunId;
+  const questionsOpen = (isLive && liveQuestionsOpen) || encoreOpen;
   const hasCompleteTurnAudio = displayTurns.length > 0 && displayTurns.every((turn) => turn.audioUrl);
   const turnTarget = discussion.formatConfig.totalTurnTarget ?? 12;
   // Participants in speaking order for the studio panel and round-robin prediction of the
@@ -864,7 +934,7 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
   const composerDisabled = !questionsOpen || questionLimitReached;
 
   return (
-    <div className="studio-live-room">
+    <div className={`studio-live-room ${initialDiscussion ? 'studio-reveal' : ''}`}>
       <header className="studio-live-header">
         <Tooltip title={t('studio.title')}>
           <Button
@@ -884,15 +954,6 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
           </Text>
         </div>
         <div className="studio-live-header-actions">
-          <Tooltip title={t('studio.console')}>
-            <Button
-              type="text"
-              shape="circle"
-              icon={<ControlOutlined />}
-              aria-label={t('studio.console')}
-              onClick={() => setConsoleOpen(true)}
-            />
-          </Tooltip>
           <Tooltip title={t('studio.more')}>
             <Button
               type="text"
@@ -1038,6 +1099,18 @@ function LiveRoom({ discussionId }: { discussionId: string }) {
           void handleQuestionSubmit();
         }}
       >
+        {/* The setup board folded down into this bar - its control lives here as the
+            command-panel entry to the full console drawer. */}
+        <Tooltip title={t('studio.console')}>
+          <Button
+            type="text"
+            shape="circle"
+            className="studio-composer-console"
+            icon={<ControlOutlined />}
+            aria-label={t('studio.console')}
+            onClick={() => setConsoleOpen(true)}
+          />
+        </Tooltip>
         <Input
           value={question}
           maxLength={500}

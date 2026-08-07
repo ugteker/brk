@@ -843,6 +843,36 @@
   .studio-casting-callout-empty .studio-chair-empty .studio-chair-seat { animation: none; }
 }
 
+/* "Entering the studio": On Air pressed - the setup board folds down toward the bottom
+ * edge (where the live room's chat composer will sit) while the casting callout sheds its
+ * chrome and becomes the live speaker stage. Plays during the create/run network wait. */
+.studio-entering .studio-setup-main {
+  transform-origin: 50% 100%;
+  animation: studio-board-fold 0.7s cubic-bezier(0.55, 0, 0.3, 1) forwards;
+  pointer-events: none;
+}
+@keyframes studio-board-fold {
+  0% { opacity: 1; transform: none; }
+  55% { opacity: 0.85; }
+  100% { opacity: 0; transform: translateY(18%) scaleY(0.08); }
+}
+.studio-entering .studio-casting-callout {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  transition: border-color 0.5s ease, background 0.5s ease, box-shadow 0.5s ease;
+}
+.studio-entering .studio-casting-callout .studio-board-section-title {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-entering .studio-setup-main {
+    animation: none;
+    opacity: 0.4;
+  }
+}
+
 /* Multi-select state in the agent picker. */
 .studio-cast-option-selected {
   border-color: rgba(139, 92, 246, 0.7) !important;
@@ -1094,6 +1124,44 @@
 
 .studio-question-composer {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.studio-question-composer .ant-input-affix-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.studio-question-composer .studio-question-count {
+  flex-basis: 100%;
+}
+
+/* Studio reveal: after the setup board folds away, the live room emerges in place -
+   composer rises from where the board folded to, conversation fades in. */
+.studio-reveal .studio-question-composer {
+  animation: studio-reveal-rise 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+.studio-reveal .studio-conversation,
+.studio-reveal .studio-episode-shelf {
+  animation: studio-reveal-fade 0.6s ease 0.1s both;
+}
+@keyframes studio-reveal-rise {
+  from { opacity: 0; transform: translateY(24px) scaleY(0.6); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes studio-reveal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-reveal .studio-question-composer,
+  .studio-reveal .studio-conversation,
+  .studio-reveal .studio-episode-shelf {
+    animation: none;
+  }
 }
 
 .studio-question-composer .ant-input-affix-wrapper {

@@ -273,7 +273,9 @@ async function start(role: Role) {
       discussionRepository,
       runTrigger: {
         triggerDiscussionRun: (discussionId: string, runId: string) =>
-          discussionOrchestrator.run(discussionId, runId)
+          discussionOrchestrator.run(discussionId, runId),
+        answerEncoreQuestions: (discussionId: string, runId: string) =>
+          discussionOrchestrator.answerEncoreQuestions(discussionId, runId)
       },
       reportRepository,
       latestReportLimit: config.discussion.latestReportLimit,

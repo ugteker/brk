@@ -719,4 +719,50 @@ describe('DiscussionOrchestrator', () => {
 
     expect(repo.updateDiscussion).not.toHaveBeenCalled();
   });
+
+  it('answers encore questions on a done run and marks them answered', async () => {
+    vi.clearAllMocks();
+    const repo = makeMockRepo();
+    repo.getRunWithTurns.mockResolvedValue({
+      id: 'r1',
+      status: 'done',
+      turns: [
+        { id: 't1', discussionRunId: 'r1', participantId: 'p1', turnIndex: 0, segmentLabel: null, content: 'Opening take.', audioUrl: null, createdAt: new Date() },
+        { id: 't2', discussionRunId: 'r1', participantId: 'p2', turnIndex: 1, segmentLabel: null, content: 'Counterpoint.', audioUrl: null, createdAt: new Date() }
+      ]
+    });
+    const question = {
+      id: 'q-late', discussionRunId: 'r1', content: 'What would change your mind?',
+      createdAt: new Date(), answeredByTurnId: null, answeredAt: null
+    };
+    repo.getOldestUnansweredLiveQuestion.mockResolvedValueOnce(question).mockResolvedValue(null);
+    const claude = {
+      messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'Great question - new data would.' }] }) }
+    };
+    const orchestrator = makeOrchestrator({ repo, claude });
+
+    await orchestrator.answerEncoreQuestions('d1', 'r1');
+
+    // Encore turn appended at the next index by the round-robin speaker (2 turns -> p1 again),
+    // grounded in the episode transcript.
+    expect(repo.createTurn).toHaveBeenCalledWith('r1', 'p1', 2, 'Great question - new data would.', null);
+    const prompt = claude.messages.create.mock.calls[0][0].messages[0].content as string;
+    expect(prompt).toContain('Opening take.');
+    expect(prompt).toContain('--- AUDIENCE QUESTION ---');
+    expect(prompt).toContain(question.content);
+    expect(repo.markLiveQuestionAnswered).toHaveBeenCalledWith('q-late', 't3');
+  });
+
+  it('does nothing for encore when the run is not done or nothing is unanswered', async () => {
+    vi.clearAllMocks();
+    const runningRepo = makeMockRepo(); // getRunWithTurns -> status 'running'
+    const orchestrator = makeOrchestrator({ repo: runningRepo });
+    await orchestrator.answerEncoreQuestions('d1', 'r1');
+    expect(runningRepo.createTurn).not.toHaveBeenCalled();
+
+    const doneRepo = makeMockRepo();
+    doneRepo.getRunWithTurns.mockResolvedValue({ id: 'r1', status: 'done', turns: [] });
+    await makeOrchestrator({ repo: doneRepo }).answerEncoreQuestions('d1', 'r1');
+    expect(doneRepo.createTurn).not.toHaveBeenCalled();
+  });
 });

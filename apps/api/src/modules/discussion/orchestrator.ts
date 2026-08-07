@@ -112,6 +112,99 @@ export const DISCUSSION_TURN_LENGTH_SETTINGS: Record<'short' | 'medium' | 'long'
 export class DiscussionOrchestrator {
   constructor(private readonly deps: DiscussionOrchestratorDeps) {}
 
+  /** ponytail: in-process lock only - under WEB_CONCURRENCY two workers could double-answer;
+   * upgrade to a DB-level claim on the question row if that ever bites. */
+  private readonly encoreRuns = new Set<string>();
+
+  /** Answers audience questions submitted after a run completed (the audio playback of a
+   * show outlives its generation by minutes, so "live" questions routinely arrive on done
+   * runs). Each unanswered question gets one encore turn from the next round-robin speaker,
+   * grounded in the episode's own transcript - no evidence re-resolution needed. */
+  async answerEncoreQuestions(discussionId: string, runId: string): Promise<void> {
+    if (this.encoreRuns.has(runId)) return;
+    this.encoreRuns.add(runId);
+    try {
+      const { discussionRepository, agentRepository, promptRepository, claudeClient } = this.deps;
+      const discussion = await discussionRepository.getDiscussion(discussionId);
+      const run = await discussionRepository.getRunWithTurns(runId);
+      if (!discussion || !run || run.status !== 'done') return;
+
+      const ttsClient = this.deps.ttsStorage
+        ? resolveDiscussionTtsClient(this.deps.ttsClients, undefined, discussion.formatConfig.ttsProvider)
+        : null;
+      const orderedParticipants = discussion.participants
+        .filter((participant) => participant.active)
+        .sort((a, b) => a.speakerOrder - b.speakerOrder);
+      if (orderedParticipants.length === 0) return;
+
+      const languageInstruction = DISCUSSION_LANGUAGE_INSTRUCTIONS[discussion.formatConfig.language ?? 'en'];
+      const turnLengthSetting = DISCUSSION_TURN_LENGTH_SETTINGS[discussion.formatConfig.turnLength ?? 'medium'];
+      const contexts: ParticipantContext[] = [];
+      for (const p of orderedParticipants) {
+        const agent = await agentRepository.getAgent(p.agentId);
+        const promptVersion = await promptRepository.getLatestPromptVersion(p.agentId);
+        contexts.push({
+          participant: p,
+          agentName: agent?.name ?? `Agent-${p.agentId.slice(0, 6)}`,
+          systemPrompt: [
+            promptVersion?.systemPrompt ?? `You are an AI analyst named ${agent?.name ?? 'Agent'}.`,
+            DISCUSSION_MODE_INSTRUCTION,
+            ...(turnLengthSetting.instruction ? [turnLengthSetting.instruction] : []),
+            ...(languageInstruction ? [languageInstruction] : [])
+          ].join('\n\n'),
+          model: promptVersion?.model ?? DISCUSSION_FALLBACK_MODEL,
+          recentReportsSummary: '',
+          transcriptExcerpt: ''
+        });
+      }
+      const nameOf = (participantId: string) =>
+        contexts.find((c) => c.participant.id === participantId)?.agentName ?? 'Agent';
+
+      const turns = run.turns.slice().sort((a, b) => a.turnIndex - b.turnIndex);
+      while (true) {
+        const question = await discussionRepository.getOldestUnansweredLiveQuestion(runId);
+        if (!question) break;
+        const turnIndex = turns.length;
+        const ctx = contexts[turnIndex % contexts.length];
+        const transcript = turns.map((t) => `${nameOf(t.participantId)}: ${t.content}`).join('\n\n');
+        const userPrompt =
+          `${this.buildDirectorContext(discussion, contexts, null)}\n\n` +
+          `The episode has ended and a listener sent in a question. This is a short Q&A encore.\n\n` +
+          `Episode transcript:\n${transcript}\n\n` +
+          `--- AUDIENCE QUESTION ---\n${question.content}\n--- END AUDIENCE QUESTION ---\n` +
+          `It's ${ctx.agentName}'s turn. Answer this audience question directly, staying in character.`;
+
+        const response = await claudeClient.messages.create({
+          model: ctx.model,
+          max_tokens: turnLengthSetting.maxTokens,
+          system: ctx.systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }]
+        });
+        const text = sanitizeDiscussionTurnText(response.content.find((c) => c.type === 'text')?.text ?? '');
+        const createdTurn = await discussionRepository.createTurn(runId, ctx.participant.id, turnIndex, text, null);
+        await discussionRepository.markLiveQuestionAnswered(question.id, createdTurn.id);
+        if (ttsClient && this.deps.ttsStorage) {
+          void renderDiscussionTurnAudio({
+            runId,
+            turn: createdTurn,
+            voice: ctx.participant.voiceId,
+            language: discussion.formatConfig.language ?? 'en',
+            ttsClient,
+            ttsStorage: this.deps.ttsStorage,
+            repository: discussionRepository
+          }).catch((error) => {
+            logger.warn(`[DiscussionOrchestrator] encore audio render for turn ${createdTurn.id} failed: ${String(error)}`);
+          });
+        }
+        turns.push({ ...createdTurn, content: text });
+      }
+    } catch (error) {
+      logger.warn(`[DiscussionOrchestrator] encore answering for run ${runId} failed: ${String(error)}`);
+    } finally {
+      this.encoreRuns.delete(runId);
+    }
+  }
+
   async run(discussionId: string, runId: string): Promise<void> {
     const {
       discussionRepository,

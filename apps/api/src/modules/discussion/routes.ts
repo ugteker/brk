@@ -62,6 +62,9 @@ function isValidDiscussionUpdate(input: unknown): input is UpdateDiscussionInput
 
 export interface DiscussionRunTriggerLike {
   triggerDiscussionRun(discussionId: string, runId: string): Promise<void>;
+  /** Answers questions submitted on an already-completed run (audio playback outlives
+   * generation, so late "live" questions are normal). Optional for legacy wiring/tests. */
+  answerEncoreQuestions?(discussionId: string, runId: string): Promise<void>;
 }
 
 export interface DiscussionRoutesDeps {
@@ -346,8 +349,11 @@ export async function registerDiscussionRoutes(app: FastifyInstance, deps: Discu
       }
       return reply.status(409).send({
         code: 'run_not_live',
-        message: 'Questions are accepted only while a run is pending or running'
+        message: 'Questions are not accepted on a failed run'
       });
+    }
+    if (run.status === 'done') {
+      void deps.runTrigger?.answerEncoreQuestions?.(id, runId).catch(() => {});
     }
     return reply.status(201).send(result.question);
   });

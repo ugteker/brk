@@ -916,6 +916,7 @@
     "inviteGuest": "Invite guest",
     "newShowTitle": "New show",
     "standby": "Standby",
+    "enteringStudio": "Going on air…",
     "console": "Console",
     "consoleLockedLive": "Recording in progress - the console unlocks when this episode ends.",
     "episodeChip": "Episode {{number}}",

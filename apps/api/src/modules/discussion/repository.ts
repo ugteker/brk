@@ -339,7 +339,10 @@ export class DiscussionRepository {
     return (this.db as any).$transaction(async (tx: any) => {
       const run = await tx.discussionRun.findUnique({ where: { id: runId } });
       if (!run) return { ok: false, reason: 'run_not_found' } as const;
-      if ((run.status !== 'pending' && run.status !== 'running') || run.questionsClosedAt) {
+      // Done runs still accept questions: playback lags generation by minutes, so from the
+      // audience's perspective the show is live long after the run completed. Late questions
+      // get an "encore" answer turn (orchestrator.answerEncoreQuestions).
+      if (run.status === 'error') {
         return { ok: false, reason: 'run_not_live' } as const;
       }
       const submittedCount = await tx.discussionLiveQuestion.count({

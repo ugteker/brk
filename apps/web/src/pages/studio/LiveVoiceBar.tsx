@@ -161,6 +161,8 @@ export function LiveVoiceBar({
     }
 
     if (!scheduledAny) return;
+    // New clips after a drain (encore answer turns) re-arm end-of-playback detection.
+    endedGenerationRef.current = -1;
     setAudioError(false);
     if (!userPausedRef.current) {
       context.resume()

@@ -142,22 +142,37 @@ describe('DiscussionRepository', () => {
     });
   });
 
-  it('rejects question submission when the run is not live or already has ten questions', async () => {
-    const doneDb = makeDb({
-      discussionRun: { findUnique: vi.fn().mockResolvedValue({ ...runRow, status: 'done' }) }
+  it('rejects question submission when the run failed or already has ten questions', async () => {
+    const errorDb = makeDb({
+      discussionRun: { findUnique: vi.fn().mockResolvedValue({ ...runRow, status: 'error' }) }
     });
     const fullDb = makeDb({
       discussionRun: { findUnique: vi.fn().mockResolvedValue({ ...runRow, status: 'running' }) },
       discussionLiveQuestion: { count: vi.fn().mockResolvedValue(10) }
     });
 
-    await expect(new DiscussionRepository(doneDb as any).submitLiveQuestion('r1', 'Question')).resolves.toEqual({
+    await expect(new DiscussionRepository(errorDb as any).submitLiveQuestion('r1', 'Question')).resolves.toEqual({
       ok: false,
       reason: 'run_not_live'
     });
     await expect(new DiscussionRepository(fullDb as any).submitLiveQuestion('r1', 'Question')).resolves.toEqual({
       ok: false,
       reason: 'question_limit_reached'
+    });
+  });
+
+  it('accepts questions on a done run (encore: playback outlives generation)', async () => {
+    const db = makeDb({
+      discussionRun: {
+        findUnique: vi.fn().mockResolvedValue({ ...runRow, status: 'done', questionsClosedAt: new Date() })
+      },
+      discussionLiveQuestion: { count: vi.fn().mockResolvedValue(0) }
+    });
+    const repo = new DiscussionRepository(db as any);
+
+    await expect(repo.submitLiveQuestion('r1', 'One more thing?')).resolves.toEqual({
+      ok: true,
+      question: expect.objectContaining({ id: 'q1' })
     });
   });
 
