@@ -84,7 +84,7 @@ test('@smoke Studio board replaces the wizard: setup mode lives in the room', as
   expect(styles).not.toMatch(/\.studio-board\s*\{[^}]*overflow/);
 
   // Reduced motion covers the stage pulse and typing dots.
-  expect(styles).toMatch(/prefers-reduced-motion[\s\S]*\.speaker-active,\s*\n\s*\.typing-dots span\s*\{\s*\n\s*animation: none;/);
+  expect(styles).toMatch(/prefers-reduced-motion[\s\S]*\.speaker-active,\s*\n(?:\s*\.speaker-voice,\s*\n)?\s*\.typing-dots span\s*\{\s*\n\s*animation: none;/);
 });
 
 
